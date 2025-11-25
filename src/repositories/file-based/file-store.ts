@@ -143,9 +143,10 @@ function reviver(key: string, value: unknown): unknown {
     typeof value === 'object' &&
     value !== null &&
     '__type' in value &&
-    (value as Record<string, unknown>).__type === 'Date'
+    (value as Record<string, unknown>).__type === 'Date' &&
+    'value' in value
   ) {
-    return new Date((value as { value: string }).value);
+    return new Date((value as Record<string, unknown>).value as string);
   }
   return value;
 }

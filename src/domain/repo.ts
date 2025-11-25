@@ -22,6 +22,7 @@ export interface Repo {
 export type RepoStatus =
   | 'pending'      // Connected but not yet processed
   | 'processing'   // Currently being processed
+  | 'ready'        // Processing complete, wiki is ready
   | 'paused'       // Processing paused by user
   | 'error';       // Processing encountered an error
 

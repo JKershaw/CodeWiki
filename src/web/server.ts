@@ -119,7 +119,7 @@ app.post('/api/repos', async (req: Request, res: Response) => {
       await repos.repos.save(repo);
 
       // Load commits
-      const simpleGit = (await import('simple-git')).default;
+      const { simpleGit } = await import('simple-git');
       const gitRepo = simpleGit(absolutePath);
       const log = await gitRepo.log(['--all']);
 
@@ -138,7 +138,7 @@ app.post('/api/repos', async (req: Request, res: Response) => {
 
         try {
           const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
-          const lines = diffFiles.trim().split('\n').filter(l => l.length > 0);
+          const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
 
           for (const line of lines) {
             const [status, ...pathParts] = line.split('\t');

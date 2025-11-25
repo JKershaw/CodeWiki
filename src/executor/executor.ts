@@ -135,7 +135,7 @@ export class Executor {
       id: uuid(),
       repoId,
       agentType: workItem.agentType,
-      targetCommitId: workItem.targetCommitId ?? undefined,
+      ...(workItem.targetCommitId ? { targetCommitId: workItem.targetCommitId } : {}),
     });
     agentRun.status = 'running';
     await this.repos.agentRuns.save(agentRun);

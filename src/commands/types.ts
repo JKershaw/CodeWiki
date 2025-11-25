@@ -31,6 +31,9 @@ export type CommandHandler<C extends Command, R = void> = (command: C) => Promis
  * Helper to create a successful command result.
  */
 export function success<T>(data?: T): CommandResult<T> {
+  if (data === undefined) {
+    return { success: true } as CommandResult<T>;
+  }
   return { success: true, data };
 }
 

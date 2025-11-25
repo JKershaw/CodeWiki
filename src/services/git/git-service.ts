@@ -1,4 +1,4 @@
-import simpleGit, { SimpleGit, LogResult, DefaultLogFields } from 'simple-git';
+import { simpleGit, type SimpleGit, type LogResult, type DefaultLogFields } from 'simple-git';
 import { join } from 'path';
 import { mkdir, access, rm } from 'fs/promises';
 import { v4 as uuid } from 'uuid';

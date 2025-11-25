@@ -38,9 +38,9 @@ export class AnthropicLLMService extends BaseLLMService {
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: options.maxTokens ?? 2000,
-        system: options.system,
+        ...(options.system ? { system: options.system } : {}),
         messages,
-        stop_sequences: options.stopSequences,
+        ...(options.stopSequences ? { stop_sequences: options.stopSequences } : {}),
       });
 
       const content = response.content

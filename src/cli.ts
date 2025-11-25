@@ -136,7 +136,7 @@ async function processCommand(args: string[]) {
     const repoDir = git.getRepoPath(repo.id);
 
     // For local repos, we'll use simple-git directly on the path
-    const simpleGit = (await import('simple-git')).default;
+    const { simpleGit } = await import('simple-git');
     const gitRepo = simpleGit(absolutePath);
 
     // Get commit log
@@ -160,7 +160,7 @@ async function processCommand(args: string[]) {
 
       try {
         const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
-        const lines = diffFiles.trim().split('\n').filter(l => l.length > 0);
+        const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
 
         for (const line of lines) {
           const [status, ...pathParts] = line.split('\t');
