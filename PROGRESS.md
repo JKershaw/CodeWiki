@@ -12,6 +12,10 @@
 #### 2. Analysis Agents
 - **Code Change Agent** - Analyzes commits and generates wiki content
 - **Research Agent** - Answers questions using wiki knowledge
+- **Narrative Agent** - Detects meta-documents (ADRs, planning docs, READMEs)
+- **Security Agent** - Audits commits for security-relevant changes
+- **Pattern Agent** - Identifies design patterns, conventions, anti-patterns
+- **Dependency Agent** - Tracks dependency changes and implications
 
 #### 3. Infrastructure
 - Anthropic LLM integration
@@ -24,7 +28,7 @@
 - `status` - Show processing status
 - `list` - List repositories
 
-#### 5. Web Interface (Just Completed)
+#### 5. Web Interface
 - Express.js server with REST API routes
 - HTML/CSS/JS frontend with:
   - Repository management (list, add, delete, process)
@@ -35,46 +39,37 @@
 #### 6. E2E Tests
 - Playwright configuration optimized for containerized environments
 - Test suites: smoke, api, wiki, query, repositories
-- **Results**: 13 passed, 12 flaky (pass on retry), 4 failed
-
-### Known Issues
-
-#### Browser Test Failures in Containerized Environment
-4 tests fail due to browser crashes with error:
-```
-browserContext.newPage: Target page, context or browser has been closed
-```
-
-**Root Cause Analysis** (from web research):
-1. `--single-process` flag is problematic - causes browser instability and closing a context closes the entire browser
-2. The combination of sandbox-disabling flags needs tuning
-3. Memory pressure in containerized environments can cause premature tab closure
-
-**Affected Tests**:
-- `tests/e2e/query.spec.ts:60` - can submit a query and see results
-- `tests/e2e/query.spec.ts:113` - can submit query with Enter key
-- `tests/e2e/wiki.spec.ts:43` - wiki sidebar shows categories
-- `tests/e2e/wiki.spec.ts:64` - can click on a wiki page to view content
+- **All 29 tests passing**
 
 ### Bug Fixes Applied
 1. **import.meta.dirname** - Used `fileURLToPath` workaround for ESM
-2. **Date handling in commits** - Added type checks to handle both Date objects and ISO strings from JSON
+2. **Date handling in commits** - Added type checks for Date objects and ISO strings
+3. **Playwright browser stability** - Removed `--single-process` flag, added stability flags
+4. **Test assertions** - Fixed loading state checks and strict mode violations
+5. **TypeScript strict mode** - Fixed all exactOptionalPropertyTypes issues
+6. **simple-git import** - Use named export instead of default
 
-### Pending Work
+### Writer Agent Evaluation
 
-#### Analysis Agents (Option A)
-- [ ] Narrative Agent - Storytelling/changelog generation
-- [ ] Security Agent - Security issue detection
-- [ ] Pattern Agent - Design pattern recognition
-- [ ] Dependency Agent - Dependency tracking
+**Decision: Deferred**
 
-#### Evaluation Needed
-- [ ] Writer Agent (Option C) - Evaluate if needed after agents complete
+The Writer Agent (centralized wiki modification handler) was evaluated and deemed **not strictly necessary** for the current MVP. The executor handles updates adequately.
+
+Benefits of a Writer Agent (for future):
+- Conflict resolution between agents
+- Link/cross-reference management
+- Consistent formatting
+- Queue-based writes at scale
+
+Current handling is sufficient for:
+- Single-threaded processing
+- Basic wiki operations
+- Small to medium wikis
 
 ## Technical Notes
 
 ### Playwright Configuration
-Current flags in `playwright.config.ts`:
+Optimized for containerized environments:
 ```javascript
 args: [
   '--no-sandbox',
@@ -83,33 +78,41 @@ args: [
   '--disable-gpu',
   '--no-first-run',
   '--no-zygote',
-  '--single-process',  // PROBLEMATIC - consider removing
+  // Note: --single-process removed - causes context closure issues
   '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-default-apps',
+  '--disable-sync',
+  '--disable-translate',
+  '--mute-audio',
+  '--hide-scrollbars',
+  '--metrics-recording-only',
 ]
 ```
-
-### Proposed Fix for Browser Tests
-Based on research, try:
-1. Remove `--single-process` (known to cause context/page closure issues)
-2. Keep `--no-zygote`, `--no-sandbox`
-3. Add additional stability flags from chrome-aws-lambda
-4. Add explicit waits and browser state checks in tests
 
 ## File Structure
 ```
 src/
 ├── agents/
-│   ├── analysis/code-change-agent.ts
-│   └── research/research-agent.ts
+│   ├── analysis/
+│   │   ├── code-change-agent.ts
+│   │   ├── narrative-agent.ts
+│   │   ├── security-agent.ts
+│   │   ├── pattern-agent.ts
+│   │   └── dependency-agent.ts
+│   ├── research/research-agent.ts
+│   └── orchestrator/
 ├── domain/
 ├── repositories/
 │   ├── interfaces/
 │   └── file-based/
 ├── services/
+│   ├── git/
+│   └── llm/
 ├── web/
 │   ├── server.ts
 │   └── public/
-└── cli/
+└── cli.ts
 tests/
 └── e2e/
     ├── smoke.spec.ts
@@ -118,3 +121,11 @@ tests/
     ├── query.spec.ts
     └── repositories.spec.ts
 ```
+
+## Next Steps (Future Work)
+1. Register new agents in executor for actual use
+2. Add Meta Agents (Structure, Link, Quality, Consistency)
+3. Add Synthesis Agents (Guide, Overview, History, Convention)
+4. Implement Writer Agent when scaling requires it
+5. Add GitHub OAuth for web authentication
+6. Deploy to production (Heroku)
