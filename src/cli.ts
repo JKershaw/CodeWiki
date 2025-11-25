@@ -17,9 +17,26 @@ import { resolve } from 'path';
 import { createRepositories } from './repositories/index.js';
 import { createGitService } from './services/git/git-service.js';
 import { createMockLLMForCodeAnalysis } from './services/llm/mock-llm-service.js';
+import { createAnthropicLLM } from './services/llm/anthropic-llm-service.js';
+import type { LLMService } from './services/llm/llm-service.js';
 import { createOrchestrator } from './agents/orchestrator/orchestrator.js';
 import { createExecutor } from './executor/executor.js';
 import { createRepo } from './domain/repo.js';
+
+/**
+ * Create the appropriate LLM service based on environment.
+ */
+function createLLM(): LLMService {
+  const apiKey = process.env['ANTHROPIC_API_KEY'];
+
+  if (apiKey) {
+    console.log('🤖 Using Anthropic Claude API\n');
+    return createAnthropicLLM({ apiKey });
+  }
+
+  console.log('🤖 Using mock LLM (set ANTHROPIC_API_KEY for real analysis)\n');
+  return createMockLLMForCodeAnalysis();
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -87,7 +104,7 @@ async function processCommand(args: string[]) {
   // Initialize services
   const repos = createRepositories({ type: 'file' });
   const git = createGitService();
-  const llm = createMockLLMForCodeAnalysis();
+  const llm = createLLM();
 
   // Check if repo already exists
   let repo = await repos.repos.findByFullName(absolutePath);
@@ -169,6 +186,9 @@ async function processCommand(args: string[]) {
   } else {
     console.log(`✓ Found existing repository: ${repo.id}\n`);
   }
+
+  // Register the local repo path so git service can find it
+  git.registerLocalRepo(repo.id, absolutePath);
 
   // Create orchestrator and executor
   const orchestrator = createOrchestrator(repos);

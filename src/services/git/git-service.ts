@@ -10,6 +10,12 @@ import { createCommit } from '../../domain/commit.js';
  */
 export interface GitService {
   /**
+   * Register a local repository path for a repo ID.
+   * Used when working with existing local repos instead of cloning.
+   */
+  registerLocalRepo(repoId: string, localPath: string): void;
+
+  /**
    * Clone a repository to local storage.
    */
   clone(repoUrl: string, repoId: string): Promise<string>;
@@ -59,12 +65,22 @@ export interface GitService {
  */
 export class FileSystemGitService implements GitService {
   private readonly baseDir: string;
+  private readonly localPaths: Map<string, string> = new Map();
 
   constructor(baseDir = '.codewiki-repos') {
     this.baseDir = baseDir;
   }
 
+  registerLocalRepo(repoId: string, localPath: string): void {
+    this.localPaths.set(repoId, localPath);
+  }
+
   getRepoPath(repoId: string): string {
+    // Check for registered local path first
+    const localPath = this.localPaths.get(repoId);
+    if (localPath) {
+      return localPath;
+    }
     return join(this.baseDir, repoId);
   }
 

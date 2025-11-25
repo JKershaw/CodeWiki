@@ -191,7 +191,8 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'claude-3-opus': { input: 15, output: 75 },
   'claude-3-sonnet': { input: 3, output: 15 },
   'claude-3-haiku': { input: 0.25, output: 1.25 },
-  'claude-sonnet-4-5': { input: 3, output: 15 },
+  'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
+  'claude-3-5-haiku-20241022': { input: 0.8, output: 4 },
   'mock': { input: 0, output: 0 },
 };
 
