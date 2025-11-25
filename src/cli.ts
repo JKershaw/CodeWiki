@@ -20,6 +20,7 @@ import { createMockLLMForCodeAnalysis } from './services/llm/mock-llm-service.js
 import { createAnthropicLLM } from './services/llm/anthropic-llm-service.js';
 import type { LLMService } from './services/llm/llm-service.js';
 import { createOrchestrator } from './agents/orchestrator/orchestrator.js';
+import { createResearchAgent } from './agents/research/research-agent.js';
 import { createExecutor } from './executor/executor.js';
 import { createRepo } from './domain/repo.js';
 
@@ -51,6 +52,9 @@ async function main() {
     case 'process':
       await processCommand(args.slice(1));
       break;
+    case 'query':
+      await queryCommand(args.slice(1));
+      break;
     case 'status':
       await statusCommand(args.slice(1));
       break;
@@ -75,15 +79,19 @@ Commands:
   process <repo-path> [iterations]  Process a local Git repository
                                     Default: 10 iterations
 
+  query <repo-path> "<question>"    Ask a question about the codebase
+                                    Searches wiki and synthesizes an answer
+
   status <repo-id>                  Show processing status for a repository
 
   list                              List all connected repositories
 
 Examples:
-  npx tsx src/cli.ts process . 5           # Process current repo, 5 iterations
-  npx tsx src/cli.ts process /path/to/repo # Process repo at path
-  npx tsx src/cli.ts status abc123         # Show status
-  npx tsx src/cli.ts list                  # List repos
+  npx tsx src/cli.ts process . 5                        # Process current repo
+  npx tsx src/cli.ts query . "what is the architecture?"  # Ask about architecture
+  npx tsx src/cli.ts query . "why use CQRS?"            # Ask about decisions
+  npx tsx src/cli.ts status abc123                      # Show status
+  npx tsx src/cli.ts list                               # List repos
 `);
 }
 
@@ -269,6 +277,73 @@ async function listCommand() {
     console.log(`            Status: ${repo.status}`);
     console.log('');
   }
+}
+
+async function queryCommand(args: string[]) {
+  const repoPath = args[0];
+  const question = args.slice(1).join(' ');
+
+  if (!repoPath) {
+    console.error('Error: Repository path is required');
+    console.log('Usage: query <repo-path> "<question>"');
+    process.exit(1);
+  }
+
+  if (!question) {
+    console.error('Error: Question is required');
+    console.log('Usage: query <repo-path> "<question>"');
+    process.exit(1);
+  }
+
+  const absolutePath = resolve(repoPath);
+
+  // Initialize services
+  const repos = createRepositories({ type: 'file' });
+  const llm = createLLM();
+
+  // Find the repository
+  const repo = await repos.repos.findByFullName(absolutePath);
+
+  if (!repo) {
+    console.error(`Repository not found: ${absolutePath}`);
+    console.log('Run "process <repo-path>" first to index the repository.');
+    process.exit(1);
+  }
+
+  // Check if wiki has content
+  const wikiPages = await repos.wikiPages.findByRepo(repo.id);
+  if (wikiPages.length === 0) {
+    console.error('Wiki is empty. Run "process <repo-path>" first to generate wiki content.');
+    process.exit(1);
+  }
+
+  console.log(`\n🔍 Searching wiki for: "${question}"\n`);
+
+  // Create research agent and query
+  const research = createResearchAgent(repos, llm);
+  const result = await research.query(repo.id, question);
+
+  // Display results
+  console.log('━'.repeat(60));
+  console.log('\n📖 Answer:\n');
+  console.log(result.answer);
+  console.log('\n' + '━'.repeat(60));
+
+  console.log(`\n📊 Confidence: ${(result.confidence * 100).toFixed(0)}%`);
+
+  if (result.sources.length > 0) {
+    console.log('\n📚 Sources:');
+    for (const source of result.sources) {
+      console.log(`   • ${source.title} (${source.path})`);
+      console.log(`     Relevance: ${(source.relevance * 100).toFixed(0)}%, Confidence: ${(source.confidence * 100).toFixed(0)}%`);
+    }
+  }
+
+  if (result.costUsd) {
+    console.log(`\n💰 Query cost: $${result.costUsd.toFixed(4)}`);
+  }
+
+  console.log('');
 }
 
 main().catch(error => {
