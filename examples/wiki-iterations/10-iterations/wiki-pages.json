@@ -1,0 +1,152 @@
+[
+  {
+    "id": "44123a2d-7f3f-432d-b919-9fd82d9a3e09",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/adc01766",
+    "title": "Commit adc01766",
+    "content": "# Commit adc01766\n\nUpdate progress documentation with completed work\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `PROGRESS.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "adc01766a9f6b9e6c1618b04aa21fe0b4223255d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.271Z",
+    "updatedAt": "2025-11-25T20:21:31.271Z"
+  },
+  {
+    "id": "d2b2390a-e746-49e6-8451-f542448222f0",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/2de75bb0",
+    "title": "Commit 2de75bb0",
+    "content": "# Commit 2de75bb0\n\nFix all TypeScript errors for strict type checking\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `src/cli.ts`\n- `src/commands/types.ts`\n- `src/domain/repo.ts`\n- `src/executor/executor.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/web/server.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "2de75bb05e52bdea77cfc9f06f3303290153344e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.315Z",
+    "updatedAt": "2025-11-25T20:21:31.315Z"
+  },
+  {
+    "id": "09c0fe7a-d8d0-43f6-ba85-bc9e8def5f07",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/4ec0c546",
+    "title": "Commit 4ec0c546",
+    "content": "# Commit 4ec0c546\n\nAdd analysis agents: Narrative, Security, Pattern, Dependency\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `src/agents/analysis/dependency-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/analysis/narrative-agent.ts`\n- `src/agents/analysis/pattern-agent.ts`\n- `src/agents/analysis/security-agent.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4ec0c5460502ceb808354d1363f7e8496f33323e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.347Z",
+    "updatedAt": "2025-11-25T20:21:31.347Z"
+  },
+  {
+    "id": "06385dd9-2958-4ac8-803f-5b33881e0ffe",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/4d5def60",
+    "title": "Commit 4d5def60",
+    "content": "# Commit 4d5def60\n\nFix Playwright browser stability and test assertions\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `PROGRESS.md`\n- `playwright.config.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4d5def6044fa795f5cd5205b78dc288bf73c3afc"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.385Z",
+    "updatedAt": "2025-11-25T20:21:31.385Z"
+  },
+  {
+    "id": "967c634b-7563-4717-88a0-2e6d24101957",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/60a1d836",
+    "title": "Commit 60a1d836",
+    "content": "# Commit 60a1d836\n\nAdd web interface and E2E tests\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `package.json`\n- `playwright.config.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/web/index.ts`\n- `src/web/public/app.js`\n- `src/web/public/index.html`\n- `src/web/public/styles.css`\n- `src/web/server.ts`\n- `tests/e2e/api.spec.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/repositories.spec.ts`\n- `tests/e2e/smoke.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.428Z",
+    "updatedAt": "2025-11-25T20:21:31.428Z"
+  },
+  {
+    "id": "1c4cef0a-afe7-4de9-8ed7-eea5ed659d47",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/84389967",
+    "title": "Commit 84389967",
+    "content": "# Commit 84389967\n\nAdd Research Agent and MCP server for wiki querying\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `package-lock.json`\n- `package.json`\n- `src/agents/index.ts`\n- `src/agents/research/index.ts`\n- `src/agents/research/research-agent.ts`\n- `src/cli.ts`\n- `src/mcp/index.ts`\n- `src/mcp/server.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "84389967e435d61e9e39d9d51b732370a30098e4"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.472Z",
+    "updatedAt": "2025-11-25T20:21:31.472Z"
+  },
+  {
+    "id": "92ebbd39-fdbb-46a5-ac24-90010fd1983d",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/15782f7c",
+    "title": "Commit 15782f7c",
+    "content": "# Commit 15782f7c\n\nAdd Anthropic Claude integration for real LLM analysis\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `package-lock.json`\n- `package.json`\n- `src/cli.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "15782f7c6bbf978ee9d070e879a73b0801b03472"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.511Z",
+    "updatedAt": "2025-11-25T20:21:31.511Z"
+  },
+  {
+    "id": "91423e1e-3e73-43a8-b909-86fea290d58b",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/c69224ba",
+    "title": "Commit c69224ba",
+    "content": "# Commit c69224ba\n\nAdd core processing pipeline with CLI\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `package.json`\n- `src/agents/analysis/code-change-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/base-agent.ts`\n- `src/agents/index.ts`\n- `src/agents/orchestrator/index.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/cli.ts`\n- `src/executor/executor.ts`\n- `src/executor/index.ts`\n- `src/index.ts`\n- `src/services/git/git-service.ts`\n- `src/services/git/index.ts`\n- `src/services/index.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n- `src/services/llm/mock-llm-service.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "c69224baf050cd8bb45211b4d17cb71653b28d72"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.554Z",
+    "updatedAt": "2025-11-25T20:21:31.554Z"
+  },
+  {
+    "id": "0b2870d8-78b9-4c09-bf2c-14d44f995ab8",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/af17f139",
+    "title": "Commit af17f139",
+    "content": "# Commit af17f139\n\nSet up initial project structure with CQRS architecture\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `.gitignore`\n- `package.json`\n- `src/commands/index.ts`\n- `src/commands/start-processing-repo.ts`\n- `src/commands/types.ts`\n- `src/commands/update-wiki-page.ts`\n- `src/domain/agent-run.ts`\n- `src/domain/commit.ts`\n- `src/domain/conflict.ts`\n- `src/domain/index.ts`\n- `src/domain/learning.ts`\n- `src/domain/repo.ts`\n- `src/domain/wiki-page.ts`\n- `src/domain/work-item.ts`\n- `src/index.ts`\n- `src/queries/get-repo-status.ts`\n- `src/queries/get-wiki-page.ts`\n- `src/queries/index.ts`\n- `src/queries/search-wiki.ts`\n- `src/queries/types.ts`\n- `src/repositories/file-based/file-agent-run-repository.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/repositories/file-based/file-conflict-repository.ts`\n- `src/repositories/file-based/file-learning-repository.ts`\n- `src/repositories/file-based/file-repo-repository.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/repositories/file-based/file-wiki-page-repository.ts`\n- `src/repositories/file-based/file-work-queue-repository.ts`\n- `src/repositories/file-based/index.ts`\n- `src/repositories/index.ts`\n- `src/repositories/interfaces/agent-run-repository.ts`\n- `src/repositories/interfaces/commit-repository.ts`\n- `src/repositories/interfaces/conflict-repository.ts`\n- `src/repositories/interfaces/index.ts`\n- `src/repositories/interfaces/learning-repository.ts`\n- `src/repositories/interfaces/repo-repository.ts`\n- `src/repositories/interfaces/wiki-page-repository.ts`\n- `src/repositories/interfaces/work-queue-repository.ts`\n- `tsconfig.json`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "af17f139216b14a9963812157b3923ef5bde7d66"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.604Z",
+    "updatedAt": "2025-11-25T20:21:31.604Z"
+  },
+  {
+    "id": "919e92d0-b6fa-4cb4-bf01-78cde882ff95",
+    "repoId": "8301b177-ec0a-4037-b1c0-0c24210076ae",
+    "path": "commits/b908ecb1",
+    "title": "Commit b908ecb1",
+    "content": "# Commit b908ecb1\n\nAdd project plan document\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "b908ecb120818e12f51e066a6a8619fc00adbe45"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:31.648Z",
+    "updatedAt": "2025-11-25T20:21:31.648Z"
+  }
+]

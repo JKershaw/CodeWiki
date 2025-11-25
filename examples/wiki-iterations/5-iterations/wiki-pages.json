@@ -1,0 +1,77 @@
+[
+  {
+    "id": "7df69beb-e948-436e-99f5-303277e2aca3",
+    "repoId": "08a1bf4a-d91c-4b7c-9732-d50b504f05c4",
+    "path": "commits/adc01766",
+    "title": "Commit adc01766",
+    "content": "# Commit adc01766\n\nUpdate progress documentation with completed work\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `PROGRESS.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "adc01766a9f6b9e6c1618b04aa21fe0b4223255d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:09.714Z",
+    "updatedAt": "2025-11-25T20:21:09.714Z"
+  },
+  {
+    "id": "b2cbf367-a113-4c05-8113-6fb7cca62840",
+    "repoId": "08a1bf4a-d91c-4b7c-9732-d50b504f05c4",
+    "path": "commits/2de75bb0",
+    "title": "Commit 2de75bb0",
+    "content": "# Commit 2de75bb0\n\nFix all TypeScript errors for strict type checking\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `src/cli.ts`\n- `src/commands/types.ts`\n- `src/domain/repo.ts`\n- `src/executor/executor.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/web/server.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "2de75bb05e52bdea77cfc9f06f3303290153344e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:09.769Z",
+    "updatedAt": "2025-11-25T20:21:09.769Z"
+  },
+  {
+    "id": "353aad76-55d4-40e0-a045-4832c4dc47c7",
+    "repoId": "08a1bf4a-d91c-4b7c-9732-d50b504f05c4",
+    "path": "commits/4ec0c546",
+    "title": "Commit 4ec0c546",
+    "content": "# Commit 4ec0c546\n\nAdd analysis agents: Narrative, Security, Pattern, Dependency\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `src/agents/analysis/dependency-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/analysis/narrative-agent.ts`\n- `src/agents/analysis/pattern-agent.ts`\n- `src/agents/analysis/security-agent.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4ec0c5460502ceb808354d1363f7e8496f33323e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:09.805Z",
+    "updatedAt": "2025-11-25T20:21:09.805Z"
+  },
+  {
+    "id": "f03cb44c-87a3-4153-bc6b-48b2b3acc916",
+    "repoId": "08a1bf4a-d91c-4b7c-9732-d50b504f05c4",
+    "path": "commits/4d5def60",
+    "title": "Commit 4d5def60",
+    "content": "# Commit 4d5def60\n\nFix Playwright browser stability and test assertions\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `PROGRESS.md`\n- `playwright.config.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4d5def6044fa795f5cd5205b78dc288bf73c3afc"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:09.844Z",
+    "updatedAt": "2025-11-25T20:21:09.844Z"
+  },
+  {
+    "id": "241b8c63-36b1-40df-af57-ddb1b675d9bf",
+    "repoId": "08a1bf4a-d91c-4b7c-9732-d50b504f05c4",
+    "path": "commits/60a1d836",
+    "title": "Commit 60a1d836",
+    "content": "# Commit 60a1d836\n\nAdd web interface and E2E tests\n\n## Summary\n\n\n\n## Findings\n\n\n\n## Affected Files\n\n- `package.json`\n- `playwright.config.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/web/index.ts`\n- `src/web/public/app.js`\n- `src/web/public/index.html`\n- `src/web/public/styles.css`\n- `src/web/server.ts`\n- `tests/e2e/api.spec.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/repositories.spec.ts`\n- `tests/e2e/smoke.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T20:21:09.894Z",
+    "updatedAt": "2025-11-25T20:21:09.894Z"
+  }
+]
