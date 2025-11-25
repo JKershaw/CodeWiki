@@ -3,6 +3,24 @@ import type { WorkItem, WorkItemStatus } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import { FileStore } from './file-store.js';
 
+/**
+ * Normalize work item dates from JSON storage.
+ */
+function normalizeWorkItemDates(item: WorkItem): WorkItem {
+  return {
+    ...item,
+    createdAt: item.createdAt instanceof Date
+      ? item.createdAt
+      : new Date(item.createdAt as unknown as string),
+    claimedAt: item.claimedAt
+      ? (item.claimedAt instanceof Date ? item.claimedAt : new Date(item.claimedAt as unknown as string))
+      : null,
+    completedAt: item.completedAt
+      ? (item.completedAt instanceof Date ? item.completedAt : new Date(item.completedAt as unknown as string))
+      : null,
+  };
+}
+
 export class FileWorkQueueRepository implements WorkQueueRepository {
   private store: FileStore<WorkItem>;
 
@@ -11,13 +29,14 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
   }
 
   async findById(id: string): Promise<WorkItem | null> {
-    return this.store.get(id);
+    const item = await this.store.get(id);
+    return item ? normalizeWorkItemDates(item) : null;
   }
 
   async findPending(repoId: string, limit: number): Promise<WorkItem[]> {
-    const pending = await this.store.find(w =>
+    const pending = (await this.store.find(w =>
       w.repoId === repoId && w.status === 'pending'
-    );
+    )).map(normalizeWorkItemDates);
     // Sort by priority (highest first), then by creation time (oldest first)
     pending.sort((a, b) => {
       if (b.priority !== a.priority) return b.priority - a.priority;
@@ -30,12 +49,13 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
     status?: WorkItemStatus;
     agentType?: AgentType;
   }): Promise<WorkItem[]> {
-    return this.store.find(w => {
+    const items = await this.store.find(w => {
       if (w.repoId !== repoId) return false;
       if (options?.status && w.status !== options.status) return false;
       if (options?.agentType && w.agentType !== options.agentType) return false;
       return true;
     });
+    return items.map(normalizeWorkItemDates);
   }
 
   async countPending(repoId: string): Promise<number> {

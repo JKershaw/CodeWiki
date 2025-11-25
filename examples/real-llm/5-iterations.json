@@ -1,0 +1,77 @@
+[
+  {
+    "id": "dd319890-62b6-4bcc-8a0b-d1bda0886915",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/296d345b",
+    "title": "Commit 296d345b",
+    "content": "# Commit 296d345b\n\nEnable multi-agent processing in executor and orchestrator\n\n## Summary\n\nThis commit implements comprehensive multi-agent processing by activating all five analysis agents (code-change, narrative, security, pattern, dependency) in the executor and orchestrator. The orchestrator now generates work for all agents sequentially, with code-change establishing base wiki content first, followed by specialized agents adding their perspectives. The system tracks which agents have processed each commit via a `processedBy` array, enabling incremental multi-agent analysis. Date normalization was added to handle JSON serialization issues.\n\n## Findings\n\n- **ARCHITECTURE** (high): Sequential multi-agent processing pipeline established with code-change agent as foundation, followed by specialized agents (narrative, security, pattern, dependency) that enrich documentation with different perspectives\n- **FEATURE** (high): Per-commit, per-agent tracking enables incremental processing - each commit can be analyzed by multiple agents independently, with progress tracked separately for each agent type\n- **ENHANCEMENT** (medium): Work summary now includes agent-specific coverage metrics (agentCoverage field) allowing visibility into which agents have completed analysis across the codebase\n- **BUG_FIX** (medium): Date normalization function added to handle JSON serialization converting Date objects to ISO strings during file-based storage operations\n- **DESIGN_DECISION** (high): Agent execution order is explicit and intentional - code-change must run first to establish foundational wiki structure before specialized agents contribute their analysis\n- **SCALABILITY** (medium): Orchestrator checks all agents for unprocessed commits and generates work for remaining slots across all agents, distributing work fairly while respecting queue limits\n\n## Affected Files\n\n- `PROGRESS.md`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/executor/executor.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "296d345be67c674f9784914ac65b726cd0c1712d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:01:30.529Z",
+    "updatedAt": "2025-11-25T22:01:30.529Z"
+  },
+  {
+    "id": "29fed078-ed49-4b9f-8ce4-a5912df89163",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/a99a4013",
+    "title": "Commit a99a4013",
+    "content": "# Commit a99a4013\n\nAdd wiki iteration comparison examples\n\n## Summary\n\nThis commit adds example data demonstrating how wiki documentation quality improves with multiple processing iterations. It includes JSON snapshots of wiki pages generated after 1, 2, 5, and 10 iterations of processing the same commits, along with a comparison document. This appears to be documentation/testing infrastructure to validate that the iterative refinement approach actually improves output quality over time.\n\n## Findings\n\n- **PATTERN** (high): The examples show a consistent structure where single iteration produces minimal documentation (confidence 0.5, sparse content) while 10 iterations would presumably generate richer, more interconnected wiki pages. This validates the core hypothesis that iterative processing improves documentation quality. examples/wiki-iterations/\n- **ARCHITECTURE** (medium): All generated wiki pages follow a standardized schema with id, repoId, path (commits/{sha}), title, content (markdown), confidence score, sourceCommits array, links, backlinks, and timestamps. This demonstrates the system's data model in practice. examples/wiki-iterations/1-iteration/wiki-pages.json, examples/wiki-iterations/10-iterations/wiki-pages.json\n- **TESTING** (high): These examples serve as both documentation and test fixtures, showing expected outputs at different iteration counts. The COMPARISON.md likely contains analysis of quality improvements. examples/wiki-iterations/COMPARISON.md\n- **TECHNICAL_DEBT** (low): All initial wiki pages have identical structure with empty Summary and Findings sections, suggesting the first iteration creates placeholders. The confidence of 0.5 across all pages indicates uncertainty that should improve with iterations. examples/wiki-iterations/1-iteration/wiki-pages.json\n- **OBSERVATION** (medium): The 10-iteration example shows processing of 10 distinct commits (adc01766, 2de75bb0, 4ec0c546, etc.), covering different aspects like TypeScript fixes, analysis agents, web interface, and CQRS architecture setup. This provides a realistic sample of the system's commit coverage. examples/wiki-iterations/10-iterations/wiki-pages.json\n\n## Affected Files\n\n- `examples/wiki-iterations/1-iteration/wiki-pages.json`\n- `examples/wiki-iterations/10-iterations/wiki-pages.json`\n- `examples/wiki-iterations/2-iterations/wiki-pages.json`\n- `examples/wiki-iterations/5-iterations/wiki-pages.json`\n- `examples/wiki-iterations/COMPARISON.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a99a401366534bbafb9d20d9fb722523feebe507"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:01:48.303Z",
+    "updatedAt": "2025-11-25T22:01:48.303Z"
+  },
+  {
+    "id": "13f10bea-c979-4a72-9b17-244ea488ce07",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/adc01766",
+    "title": "Commit adc01766",
+    "content": "# Commit adc01766\n\nUpdate progress documentation with completed work\n\n## Summary\n\nThis commit documents the completion of major infrastructure work and bug fixes in the CodeWiki project. The primary changes include: (1) documenting the implementation of four new analysis agents (Narrative, Security, Pattern, Dependency), (2) resolving all 29 E2E tests to passing status by fixing Playwright browser stability issues, (3) documenting six critical bug fixes including TypeScript strict mode compliance, and (4) making an architectural decision to defer the Writer Agent implementation as unnecessary for the current MVP. The documentation also reorganizes the file structure to reflect the expanded agent system and outlines future work for meta and synthesis agents.\n\n## Findings\n\n\n\n## Affected Files\n\n- `PROGRESS.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "adc01766a9f6b9e6c1618b04aa21fe0b4223255d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:02:11.287Z",
+    "updatedAt": "2025-11-25T22:02:11.287Z"
+  },
+  {
+    "id": "b99bb861-9a8a-4cdd-b3c6-7efad94c6229",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/2de75bb0",
+    "title": "Commit 2de75bb0",
+    "content": "# Commit 2de75bb0\n\nFix all TypeScript errors for strict type checking\n\n## Summary\n\nThis commit fixes TypeScript strict type checking errors across 8 files in the codebase. The changes primarily address: (1) incorrect import syntax for simple-git library changing from default import to named import, (2) missing type annotations on lambda functions, (3) conditional property spreading to avoid undefined values in object literals, (4) adding missing 'ready' status to RepoStatus type, and (5) enhanced type guards in JSON parsing. These are defensive programming improvements that make the codebase more type-safe without changing runtime behavior.\n\n## Findings\n\n- **REFACTOR** (medium): Fixed simple-git import pattern from default import to named import across multiple files, suggesting the library's export structure changed or was incorrectly used\n- **TYPE_SAFETY** (medium): Added explicit type annotations to filter callbacks to satisfy strict TypeScript compiler, preventing implicit 'any' types\n- **TYPE_SAFETY** (medium): Replaced conditional property assignment (property: value ?? undefined) with conditional spreading pattern to avoid explicitly setting undefined values in object literals\n- **BUG_FIX** (medium): Added missing 'ready' status to RepoStatus union type, indicating incomplete type definition that likely caused runtime vs compile-time mismatch\n- **TYPE_SAFETY** (medium): Enhanced type guard in JSON reviver function with additional 'in' checks to safely narrow types before accessing properties\n- **TYPE_SAFETY** (low): Modified success() helper to explicitly handle undefined data parameter case, returning proper typed result\n- **PATTERN** (low): Consistent use of object spread with conditional inclusion pattern (...(condition ? { prop: value } : {})) for optional properties throughout the codebase\n\n## Affected Files\n\n- `src/cli.ts`\n- `src/commands/types.ts`\n- `src/domain/repo.ts`\n- `src/executor/executor.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/web/server.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "2de75bb05e52bdea77cfc9f06f3303290153344e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:02:28.146Z",
+    "updatedAt": "2025-11-25T22:02:28.146Z"
+  },
+  {
+    "id": "2270e521-4d31-4917-bbcc-03d4cae7841d",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/4ec0c546",
+    "title": "Commit 4ec0c546",
+    "content": "# Commit 4ec0c546\n\nAdd analysis agents: Narrative, Security, Pattern, Dependency\n\n## Summary\n\nThis commit introduces a multi-agent analysis system for CodeWiki, implementing four specialized agents that analyze different aspects of code changes: DependencyAgent (tracks package dependencies), NarrativeAgent (generates human-readable documentation), PatternAgent (identifies architectural patterns), and SecurityAgent (detects security issues). The implementation follows a common Agent interface pattern with structured LLM prompts, response parsing, and wiki page generation capabilities. This represents a significant architectural decision to use specialized AI agents rather than a monolithic analyzer, enabling more focused and expert analysis of different code dimensions.\n\n## Findings\n\n\n\n## Affected Files\n\n- `src/agents/analysis/dependency-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/analysis/narrative-agent.ts`\n- `src/agents/analysis/pattern-agent.ts`\n- `src/agents/analysis/security-agent.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4ec0c5460502ceb808354d1363f7e8496f33323e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:02:49.465Z",
+    "updatedAt": "2025-11-25T22:02:49.465Z"
+  }
+]

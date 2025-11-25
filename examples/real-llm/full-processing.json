@@ -1,0 +1,513 @@
+[
+  {
+    "id": "dd319890-62b6-4bcc-8a0b-d1bda0886915",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/296d345b",
+    "title": "Commit 296d345b",
+    "content": "# Commit 296d345b\n\nEnable multi-agent processing in executor and orchestrator\n\n## Summary\n\nThis commit implements comprehensive multi-agent processing by activating all five analysis agents (code-change, narrative, security, pattern, dependency) in the executor and orchestrator. The orchestrator now generates work for all agents sequentially, with code-change establishing base wiki content first, followed by specialized agents adding their perspectives. The system tracks which agents have processed each commit via a `processedBy` array, enabling incremental multi-agent analysis. Date normalization was added to handle JSON serialization issues.\n\n## Findings\n\n- **ARCHITECTURE** (high): Sequential multi-agent processing pipeline established with code-change agent as foundation, followed by specialized agents (narrative, security, pattern, dependency) that enrich documentation with different perspectives\n- **FEATURE** (high): Per-commit, per-agent tracking enables incremental processing - each commit can be analyzed by multiple agents independently, with progress tracked separately for each agent type\n- **ENHANCEMENT** (medium): Work summary now includes agent-specific coverage metrics (agentCoverage field) allowing visibility into which agents have completed analysis across the codebase\n- **BUG_FIX** (medium): Date normalization function added to handle JSON serialization converting Date objects to ISO strings during file-based storage operations\n- **DESIGN_DECISION** (high): Agent execution order is explicit and intentional - code-change must run first to establish foundational wiki structure before specialized agents contribute their analysis\n- **SCALABILITY** (medium): Orchestrator checks all agents for unprocessed commits and generates work for remaining slots across all agents, distributing work fairly while respecting queue limits\n\n## Affected Files\n\n- `PROGRESS.md`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/executor/executor.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "296d345be67c674f9784914ac65b726cd0c1712d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:01:30.529Z",
+    "updatedAt": "2025-11-25T22:01:30.529Z"
+  },
+  {
+    "id": "29fed078-ed49-4b9f-8ce4-a5912df89163",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/a99a4013",
+    "title": "Commit a99a4013",
+    "content": "# Commit a99a4013\n\nAdd wiki iteration comparison examples\n\n## Summary\n\nThis commit adds example data demonstrating how wiki documentation quality improves with multiple processing iterations. It includes JSON snapshots of wiki pages generated after 1, 2, 5, and 10 iterations of processing the same commits, along with a comparison document. This appears to be documentation/testing infrastructure to validate that the iterative refinement approach actually improves output quality over time.\n\n## Findings\n\n- **PATTERN** (high): The examples show a consistent structure where single iteration produces minimal documentation (confidence 0.5, sparse content) while 10 iterations would presumably generate richer, more interconnected wiki pages. This validates the core hypothesis that iterative processing improves documentation quality. examples/wiki-iterations/\n- **ARCHITECTURE** (medium): All generated wiki pages follow a standardized schema with id, repoId, path (commits/{sha}), title, content (markdown), confidence score, sourceCommits array, links, backlinks, and timestamps. This demonstrates the system's data model in practice. examples/wiki-iterations/1-iteration/wiki-pages.json, examples/wiki-iterations/10-iterations/wiki-pages.json\n- **TESTING** (high): These examples serve as both documentation and test fixtures, showing expected outputs at different iteration counts. The COMPARISON.md likely contains analysis of quality improvements. examples/wiki-iterations/COMPARISON.md\n- **TECHNICAL_DEBT** (low): All initial wiki pages have identical structure with empty Summary and Findings sections, suggesting the first iteration creates placeholders. The confidence of 0.5 across all pages indicates uncertainty that should improve with iterations. examples/wiki-iterations/1-iteration/wiki-pages.json\n- **OBSERVATION** (medium): The 10-iteration example shows processing of 10 distinct commits (adc01766, 2de75bb0, 4ec0c546, etc.), covering different aspects like TypeScript fixes, analysis agents, web interface, and CQRS architecture setup. This provides a realistic sample of the system's commit coverage. examples/wiki-iterations/10-iterations/wiki-pages.json\n\n## Affected Files\n\n- `examples/wiki-iterations/1-iteration/wiki-pages.json`\n- `examples/wiki-iterations/10-iterations/wiki-pages.json`\n- `examples/wiki-iterations/2-iterations/wiki-pages.json`\n- `examples/wiki-iterations/5-iterations/wiki-pages.json`\n- `examples/wiki-iterations/COMPARISON.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a99a401366534bbafb9d20d9fb722523feebe507"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:01:48.303Z",
+    "updatedAt": "2025-11-25T22:01:48.303Z"
+  },
+  {
+    "id": "13f10bea-c979-4a72-9b17-244ea488ce07",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/adc01766",
+    "title": "Commit adc01766",
+    "content": "# Commit adc01766\n\nUpdate progress documentation with completed work\n\n## Summary\n\nThis commit documents the completion of major infrastructure work and bug fixes in the CodeWiki project. The primary changes include: (1) documenting the implementation of four new analysis agents (Narrative, Security, Pattern, Dependency), (2) resolving all 29 E2E tests to passing status by fixing Playwright browser stability issues, (3) documenting six critical bug fixes including TypeScript strict mode compliance, and (4) making an architectural decision to defer the Writer Agent implementation as unnecessary for the current MVP. The documentation also reorganizes the file structure to reflect the expanded agent system and outlines future work for meta and synthesis agents.\n\n## Findings\n\n\n\n## Affected Files\n\n- `PROGRESS.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "adc01766a9f6b9e6c1618b04aa21fe0b4223255d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:02:11.287Z",
+    "updatedAt": "2025-11-25T22:02:11.287Z"
+  },
+  {
+    "id": "b99bb861-9a8a-4cdd-b3c6-7efad94c6229",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/2de75bb0",
+    "title": "Commit 2de75bb0",
+    "content": "# Commit 2de75bb0\n\nFix all TypeScript errors for strict type checking\n\n## Summary\n\nThis commit fixes TypeScript strict type checking errors across 8 files in the codebase. The changes primarily address: (1) incorrect import syntax for simple-git library changing from default import to named import, (2) missing type annotations on lambda functions, (3) conditional property spreading to avoid undefined values in object literals, (4) adding missing 'ready' status to RepoStatus type, and (5) enhanced type guards in JSON parsing. These are defensive programming improvements that make the codebase more type-safe without changing runtime behavior.\n\n## Findings\n\n- **REFACTOR** (medium): Fixed simple-git import pattern from default import to named import across multiple files, suggesting the library's export structure changed or was incorrectly used\n- **TYPE_SAFETY** (medium): Added explicit type annotations to filter callbacks to satisfy strict TypeScript compiler, preventing implicit 'any' types\n- **TYPE_SAFETY** (medium): Replaced conditional property assignment (property: value ?? undefined) with conditional spreading pattern to avoid explicitly setting undefined values in object literals\n- **BUG_FIX** (medium): Added missing 'ready' status to RepoStatus union type, indicating incomplete type definition that likely caused runtime vs compile-time mismatch\n- **TYPE_SAFETY** (medium): Enhanced type guard in JSON reviver function with additional 'in' checks to safely narrow types before accessing properties\n- **TYPE_SAFETY** (low): Modified success() helper to explicitly handle undefined data parameter case, returning proper typed result\n- **PATTERN** (low): Consistent use of object spread with conditional inclusion pattern (...(condition ? { prop: value } : {})) for optional properties throughout the codebase\n\n## Affected Files\n\n- `src/cli.ts`\n- `src/commands/types.ts`\n- `src/domain/repo.ts`\n- `src/executor/executor.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/web/server.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "2de75bb05e52bdea77cfc9f06f3303290153344e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:02:28.146Z",
+    "updatedAt": "2025-11-25T22:02:28.146Z"
+  },
+  {
+    "id": "2270e521-4d31-4917-bbcc-03d4cae7841d",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/4ec0c546",
+    "title": "Commit 4ec0c546",
+    "content": "# Commit 4ec0c546\n\nAdd analysis agents: Narrative, Security, Pattern, Dependency\n\n## Summary\n\nThis commit introduces a multi-agent analysis system for CodeWiki, implementing four specialized agents that analyze different aspects of code changes: DependencyAgent (tracks package dependencies), NarrativeAgent (generates human-readable documentation), PatternAgent (identifies architectural patterns), and SecurityAgent (detects security issues). The implementation follows a common Agent interface pattern with structured LLM prompts, response parsing, and wiki page generation capabilities. This represents a significant architectural decision to use specialized AI agents rather than a monolithic analyzer, enabling more focused and expert analysis of different code dimensions.\n\n## Findings\n\n\n\n## Affected Files\n\n- `src/agents/analysis/dependency-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/analysis/narrative-agent.ts`\n- `src/agents/analysis/pattern-agent.ts`\n- `src/agents/analysis/security-agent.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4ec0c5460502ceb808354d1363f7e8496f33323e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:02:49.465Z",
+    "updatedAt": "2025-11-25T22:02:49.465Z"
+  },
+  {
+    "id": "10dc0658-95c6-44fd-bc73-69c8ad84e30d",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/4d5def60",
+    "title": "Commit 4d5def60",
+    "content": "# Commit 4d5def60\n\nFix Playwright browser stability and test assertions\n\n## Summary\n\nThis commit addresses critical browser stability issues in Playwright E2E tests running in containerized environments. The primary fix removes the `--single-process` Chrome flag, which was causing browser crashes where closing a context would terminate the entire browser. Additional stability improvements include increased timeouts, more retries, extra Chrome flags for containerized environments, and more resilient test assertions. The commit also adds a comprehensive PROGRESS.md documenting the project's current state, known issues, and technical debt.\n\n## Findings\n\n- **BUG_FIX** (high): Removed `--single-process` Chrome flag that caused \"Target page, context or browser has been closed\" errors in 4 tests. This flag is incompatible with multi-context testing as documented in Playwright issue #1904.\n- **RELIABILITY** (high): Increased timeout from 30s to 60s and retries from 1 to 2 to accommodate slower containerized environments like Claude Code on the web. Added 15s action timeout for individual interactions.\n- **CONFIGURATION** (medium): Added 8 additional Chrome stability flags (--disable-background-networking, --disable-default-apps, --disable-sync, --disable-translate, --mute-audio, --hide-scrollbars, --metrics-recording-only) recommended for headless Chrome in resource-constrained environments.\n- **TEST_RESILIENCE** (medium): Updated test assertions to handle asynchronous loading states better - changed from checking for loading text to waiting for final result indicators (e.g., confidence score appearing), avoiding race conditions.\n- **TEST_RESILIENCE** (medium): Made wiki sidebar test more flexible to handle varying page structures - checks for either categories or page links rather than requiring specific elements, avoiding strict mode violations.\n- **DOCUMENTATION** (high): Added comprehensive PROGRESS.md documenting project architecture (CQRS pattern), completed features (CLI, web UI, E2E tests), test results (13 passed, 12 flaky, 4 failed), and root cause analysis of browser issues.\n- **TECHNICAL_DEBT** (medium): Documents known issues: import.meta.dirname ESM workaround, Date handling inconsistencies between objects and ISO strings, and pending agent implementations.\n- **ARCHITECTURE** (medium): Progress document reveals multi-agent architecture with Code Change Agent and Research Agent completed, with 4 more agents planned (Narrative, Security, Pattern, Dependency).\n\n## Affected Files\n\n- `PROGRESS.md`\n- `playwright.config.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4d5def6044fa795f5cd5205b78dc288bf73c3afc"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:04:30.507Z",
+    "updatedAt": "2025-11-25T22:04:30.507Z"
+  },
+  {
+    "id": "45a3bafa-dd96-4d4a-9ca3-87cfb5303fa3",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/60a1d836",
+    "title": "Commit 60a1d836",
+    "content": "# Commit 60a1d836\n\nAdd web interface and E2E tests\n\n## Summary\n\nThis commit adds a complete web interface for CodeWiki with a REST API server and comprehensive E2E test coverage using Playwright. The web UI provides views for managing repositories, browsing wiki pages, and querying documentation. The implementation includes a backend Express server serving both the API and static frontend assets, along with a full test suite covering API endpoints, repository operations, wiki functionality, and queries. The Playwright configuration is specifically optimized for containerized environments (like Claude Code on the web) with sandbox disabled and single-process mode.\n\n## Findings\n\n- **FEATURE** (high): Web server implementation with Express providing REST API endpoints for repositories, wiki pages, commits, and query operations, exposing the existing CodeWiki functionality through HTTP src/web/server.ts,src/web/index.ts\n- **FEATURE** (high): Frontend SPA with vanilla JavaScript implementing three main views: repository management, wiki browsing with markdown rendering, and natural language query interface src/web/public/app.js,src/web/public/index.html,src/web/public/styles.css\n- **TESTING** (high): Comprehensive E2E test suite using Playwright covering smoke tests, API operations, repository processing, wiki page management, and query functionality tests/e2e/smoke.spec.ts,tests/e2e/api.spec.ts,tests/e2e/repositories.spec.ts,tests/e2e/wiki.spec.ts,tests/e2e/query.spec.ts\n- **CONFIGURATION** (medium): Playwright config optimized for containerized/sandboxed environments with critical flags like --no-sandbox, --single-process, and --disable-dev-shm-usage to run in restricted environments playwright.config.ts\n- **BUG_FIX** (medium): Date handling fix in FileCommitRepository to handle both Date objects and ISO strings from JSON deserialization, preventing sort and filter failures src/repositories/file-based/file-commit-repository.ts\n- **ARCHITECTURE** (high): Clean separation between web interface and core domain logic, with the web layer acting as a thin presentation layer that doesn't modify core functionality src/web/server.ts,src/web/index.ts\n- **DEPLOYMENT** (medium): New npm script \"web\" added for running the web server, separate from CLI and MCP interfaces package.json\n- **TESTING** (medium): Serial test execution (workers: 1) and retry configuration suggesting awareness of potential resource contention or timing issues in containerized environments playwright.config.ts\n\n## Affected Files\n\n- `package.json`\n- `playwright.config.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/web/index.ts`\n- `src/web/public/app.js`\n- `src/web/public/index.html`\n- `src/web/public/styles.css`\n- `src/web/server.ts`\n- `tests/e2e/api.spec.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/repositories.spec.ts`\n- `tests/e2e/smoke.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:04:50.723Z",
+    "updatedAt": "2025-11-25T22:04:50.723Z"
+  },
+  {
+    "id": "4e2106c8-b59c-470e-a99e-42d5bc230113",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/84389967",
+    "title": "Commit 84389967",
+    "content": "# Commit 84389967\n\nAdd Research Agent and MCP server for wiki querying\n\n## Summary\n\nThis commit introduces two major capabilities to the CodeWiki system: a Research Agent for intelligent wiki querying and an MCP (Model Context Protocol) server for exposing wiki functionality. The changes add the `@modelcontextprotocol/sdk` dependency and implement a research agent that can answer questions about the wiki content using AI. This creates a programmatic interface for external tools to query the wiki and enables an autonomous agent to help users find information across the documentation.\n\n## Findings\n\n- **ARCHITECTURE** (high): Introduction of MCP server architecture enables external tools and IDEs to integrate with CodeWiki, following the Model Context Protocol standard for AI tool integration. This is a significant architectural pattern that makes the wiki queryable via standardized protocol. src/mcp/index.ts, src/mcp/server.ts\n- **FEATURE** (high): Research Agent implementation suggests an AI-powered query system that can understand natural language questions about the wiki and provide intelligent answers, likely using the Anthropic SDK already in dependencies. src/agents/research/index.ts, src/agents/research/research-agent.ts\n- **DEPENDENCY** (medium): Addition of @modelcontextprotocol/sdk brings substantial transitive dependencies (ajv, zod, express 5.x, cors, rate-limiting) which increases the project's dependency surface area and potential security/maintenance considerations. package.json, package-lock.json\n- **INTEGRATION** (medium): Changes to CLI and agent index suggest the research agent is being integrated into the main application flow, making it accessible as a command-line tool or service. src/cli.ts, src/agents/index.ts\n- **PATTERN** (medium): The agent architecture is being expanded with specialized agents (research), suggesting a plugin-like pattern where different agent types can be added for different documentation tasks. src/agents/index.ts, src/agents/research/\n- **TECHNICAL_DEBT** (low): The diff shows +0/-0 lines changed which is inconsistent with 8 files being modified - this suggests either new file additions or the diff was truncated, making full analysis incomplete. All affected files\n\n## Affected Files\n\n- `package-lock.json`\n- `package.json`\n- `src/agents/index.ts`\n- `src/agents/research/index.ts`\n- `src/agents/research/research-agent.ts`\n- `src/cli.ts`\n- `src/mcp/index.ts`\n- `src/mcp/server.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "84389967e435d61e9e39d9d51b732370a30098e4"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:05:14.539Z",
+    "updatedAt": "2025-11-25T22:05:14.539Z"
+  },
+  {
+    "id": "3ed9e5dd-a852-4b66-9bea-3bf347b27f92",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/15782f7c",
+    "title": "Commit 15782f7c",
+    "content": "# Commit 15782f7c\n\nAdd Anthropic Claude integration for real LLM analysis\n\n## Summary\n\nThis commit integrates Anthropic's Claude AI service as the primary LLM provider for analyzing git commits in CodeWiki. The change replaces mock/placeholder LLM functionality with a real implementation using the official @anthropic-ai/sdk package. This is a critical milestone that enables actual AI-powered code analysis and documentation generation - the core feature of the system. The implementation follows a service-oriented architecture with proper abstraction through an LLM service interface, making it possible to support multiple LLM providers in the future.\n\n## Findings\n\n- **ARCHITECTURE** (high): Service abstraction pattern implemented with LLMService interface and AnthropicLLMService concrete implementation, enabling provider-agnostic LLM integration and future extensibility for other providers (OpenAI, local models, etc.)\n- **FEATURE** (high): Anthropic Claude integration added as primary AI engine, utilizing SDK v0.52.0 which provides stable API access for commit analysis and documentation generation\n- **DEPENDENCY** (medium): New runtime dependency on @anthropic-ai/sdk (0.52.0) added, which requires API key management and introduces external service dependency that impacts deployment and operational considerations\n- **INTEGRATION** (high): CLI and GitService modified to utilize real LLM analysis instead of mock responses, marking transition from prototype to functional system\n- **CONFIGURATION** (medium): Likely requires environment variable or configuration for Anthropic API key (ANTHROPIC_API_KEY), though not visible in diff - critical for deployment documentation\n- **TECHNICAL_DEBT** (low): Package-lock.json with 5219 lines added suggests complete lockfile generation, ensuring reproducible builds but increasing repository size\n\n## Affected Files\n\n- `package-lock.json`\n- `package.json`\n- `src/cli.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "15782f7c6bbf978ee9d070e879a73b0801b03472"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:05:37.189Z",
+    "updatedAt": "2025-11-25T22:05:37.189Z"
+  },
+  {
+    "id": "86c4bb31-f927-40ca-b946-e68ef480368e",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/c69224ba",
+    "title": "Commit c69224ba",
+    "content": "# Commit c69224ba\n\nAdd core processing pipeline with CLI\n\n## Summary\n\nThis commit establishes the core processing pipeline for CodeWiki, implementing a complete agent-based architecture for analyzing Git commits and generating wiki documentation. It introduces a CLI interface, an orchestrator pattern for managing multiple analysis agents, the first concrete agent (CodeChangeAgent) for commit analysis, service abstractions for Git and LLM operations, and an executor system for applying wiki updates. The architecture follows a clean separation of concerns with agents, services, executors, and a command-line interface for repository analysis.\n\n## Findings\n\n- **ARCHITECTURE** (high): Implements multi-agent orchestration pattern with base agent abstraction, allowing different analysis perspectives on the same commits\n- **DESIGN_PATTERN** (high): Uses dependency injection through AgentContext for testability and flexibility, passing repositories, services, and config to agents\n- **LLM_INTEGRATION** (high): Abstracts LLM interactions with cost tracking and includes mock implementation for testing, showing production readiness\n- **SELF_DOCUMENTING** (high): The CodeChangeAgent uses structured prompts to parse its own output format, creating a self-referential documentation system\n- **CLI** (medium): Adds executable CLI with bin configuration, making the tool installable and usable as a command-line utility\n- **GIT_INTEGRATION** (medium): Implements Git service abstraction for repository operations and diff retrieval, enabling version control integration\n- **EXECUTION_MODEL** (medium): Separates analysis (agents) from application (executor), allowing for review/approval workflows before wiki updates\n- **WIKI_UPDATE_TYPES** (medium): Supports create/update/merge operations with confidence tracking, enabling iterative documentation refinement\n- **PROMPT_ENGINEERING** (medium): Uses structured prompt format with clear sections and formatting instructions for reliable LLM parsing\n- **TECHNICAL_DEBT** (low): Diff truncation at 10KB may lose context for large commits, could implement smart truncation strategies\n- **TECHNICAL_DEBT** (low): Regex-based response parsing is brittle; consider JSON output format from LLM for more reliable parsing\n\n## Affected Files\n\n- `package.json`\n- `src/agents/analysis/code-change-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/base-agent.ts`\n- `src/agents/index.ts`\n- `src/agents/orchestrator/index.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/cli.ts`\n- `src/executor/executor.ts`\n- `src/executor/index.ts`\n- `src/index.ts`\n- `src/services/git/git-service.ts`\n- `src/services/git/index.ts`\n- `src/services/index.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n- `src/services/llm/mock-llm-service.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "c69224baf050cd8bb45211b4d17cb71653b28d72"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:05:59.286Z",
+    "updatedAt": "2025-11-25T22:05:59.286Z"
+  },
+  {
+    "id": "ce5b4f25-a798-4003-853f-6238fec4db1b",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/af17f139",
+    "title": "Commit af17f139",
+    "content": "# Commit af17f139\n\nSet up initial project structure with CQRS architecture\n\n## Summary\n\nThis commit establishes the foundational architecture for CodeWiki using CQRS (Command Query Responsibility Segregation) pattern. The system is designed to generate living documentation from Git repositories by processing commits and maintaining a wiki. The architecture separates commands (state changes) from queries (state reads), implements a repository pattern with file-based storage, and defines core domain models for repos, commits, wiki pages, agent runs, conflicts, learnings, and work items. The structure supports future extensibility with multiple storage backends and agent types.\n\n## Findings\n\n\n\n## Affected Files\n\n- `.gitignore`\n- `package.json`\n- `src/commands/index.ts`\n- `src/commands/start-processing-repo.ts`\n- `src/commands/types.ts`\n- `src/commands/update-wiki-page.ts`\n- `src/domain/agent-run.ts`\n- `src/domain/commit.ts`\n- `src/domain/conflict.ts`\n- `src/domain/index.ts`\n- `src/domain/learning.ts`\n- `src/domain/repo.ts`\n- `src/domain/wiki-page.ts`\n- `src/domain/work-item.ts`\n- `src/index.ts`\n- `src/queries/get-repo-status.ts`\n- `src/queries/get-wiki-page.ts`\n- `src/queries/index.ts`\n- `src/queries/search-wiki.ts`\n- `src/queries/types.ts`\n- `src/repositories/file-based/file-agent-run-repository.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/repositories/file-based/file-conflict-repository.ts`\n- `src/repositories/file-based/file-learning-repository.ts`\n- `src/repositories/file-based/file-repo-repository.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/repositories/file-based/file-wiki-page-repository.ts`\n- `src/repositories/file-based/file-work-queue-repository.ts`\n- `src/repositories/file-based/index.ts`\n- `src/repositories/index.ts`\n- `src/repositories/interfaces/agent-run-repository.ts`\n- `src/repositories/interfaces/commit-repository.ts`\n- `src/repositories/interfaces/conflict-repository.ts`\n- `src/repositories/interfaces/index.ts`\n- `src/repositories/interfaces/learning-repository.ts`\n- `src/repositories/interfaces/repo-repository.ts`\n- `src/repositories/interfaces/wiki-page-repository.ts`\n- `src/repositories/interfaces/work-queue-repository.ts`\n- `tsconfig.json`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "af17f139216b14a9963812157b3923ef5bde7d66"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:06:23.769Z",
+    "updatedAt": "2025-11-25T22:06:23.769Z"
+  },
+  {
+    "id": "8540ee76-cd94-4991-a442-0ed74fcde67e",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "commits/b908ecb1",
+    "title": "Commit b908ecb1",
+    "content": "# Commit b908ecb1\n\nAdd project plan document\n\n## Summary\n\nThis commit establishes the foundational project plan for CodeWiki, a system that generates living documentation from Git repositories by analyzing commit history. The plan defines a comprehensive architecture using CQRS pattern, repository abstraction, and an orchestrator-agent model. Key philosophical decisions include eventual consistency over batch processing, confidence scoring for all content, organic wiki growth, and simplicity in architecture. The system is designed to be consumed by AI coding agents via MCP (Model Context Protocol) to provide contextual understanding of codebases.\n\n## Findings\n\n- **ARCHITECTURAL_DECISION** (high): CQRS layer chosen as the primary boundary between core logic and external interfaces (commands for writes, queries for reads), enabling clean separation of concerns and multiple client types (HTTP, MCP, CLI).\n- **ARCHITECTURAL_DECISION** (high): Repository pattern with dual implementations (MongoDB for production, file-based for local/restricted environments) enables deployment flexibility and testing isolation.\n- **ARCHITECTURAL_DECISION** (high): Two-loop orchestration model: lightweight outer loop (Orchestrator) makes prioritization decisions, inner loop (Executor) executes work with parallelism. This separates \"what to do\" from \"doing it\".\n- **ARCHITECTURAL_DECISION** (high): Single-writer pattern via write queue prevents race conditions and enables conflict resolution, with all wiki modifications funneled through one Writer Agent.\n- **DESIGN_PHILOSOPHY** (high): Eventual consistency preferred over completeness - aims for \"80% wiki in 20 minutes\" rather than \"100% wiki in 10 hours\", prioritizing usefulness over exhaustiveness.\n- **DESIGN_PHILOSOPHY** (medium): Confidence scoring on all wiki content based on commit coverage, agent verification, and recency enables calibrated trust and prioritization.\n- **TECHNICAL_DECISION** (medium): All state in single database, queues as database records rather than external services, prioritizing simplicity and debuggability over distributed complexity.\n- **INTEGRATION** (high): MCP (Model Context Protocol) endpoint exposes wiki knowledge to AI coding agents, enabling them to query for context before starting work.\n- **AGENT_ARCHITECTURE** (high): Multi-agent system with specialized agents: Code Change, Narrative, Security, Technical Debt, Pattern, Dependency for analysis; Writer for modifications; Research for querying; Meta agents for wiki quality; Synthesis agents for higher-order content.\n- **TECHNICAL_DECISION** (medium): Node.js 20.4 chosen as runtime, TypeScript for implementation, Anthropic Claude as LLM, MongoDB as primary datastore.\n- **WORKFLOW** (medium): OAuth-based GitHub integration for repository access, with webhook support for real-time commit processing.\n- **META_STRATEGY** (medium): Self-hosting approach - CodeWiki will generate its own wiki as a demonstration and validation of the system.\n- **FEEDBACK_LOOP** (medium): Learnings from AI coding sessions (mistakes, missed conventions) ingested back into wiki to improve future agent performance.\n\n## Affected Files\n\n\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "b908ecb120818e12f51e066a6a8619fc00adbe45"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:06:56.312Z",
+    "updatedAt": "2025-11-25T22:06:56.312Z"
+  },
+  {
+    "id": "341d1169-cd4f-48c5-9e76-40ed7da736e4",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "decisions/296d345b-this-commit-documents-a-significant-architectural",
+    "title": "This commit documents a significant architectural decision to enable multi-agent processing througho",
+    "content": "# This commit documents a significant architectural decision to enable multi-agent processing througho\n\nThis commit documents a significant architectural decision to enable multi-agent processing throughout the system. The PROGRESS.md file serves as both a changelog and design documentation, explaining the shift from single-agent to multi-agent architecture with clear rationale about processing order and tracking strategy.\n\n## Key Points\n\n- **ARCHITECTURE_DECISION**: Multi-agent processing pipeline established with explicit ordering strategy - code-change agent runs first to establish base wiki content, then specialized agents (narrative, security, pattern, dependency) add their perspectives. This represents a fundamental shift in how commits are analyzed.\n- **DESIGN_RATIONALE**: Per-agent commit tracking via `processedBy` array enables incremental multi-agent processing, allowing each commit to be independently tracked across all five analysis agents.\n- **IMPLEMENTATION_STRATEGY**: Orchestrator generates work items for all agents in sequence, with coverage tracking per agent type. Overall coverage remains based on code-change as primary agent.\n- **TECHNICAL_PATTERN**: Date normalization added to handle JSON serialization edge cases where Date objects may be converted to ISO strings during storage.\n\n## Decisions Made\n\n- **Sequential Agent Processing Order**: Established that code-change agent must run first on every commit to create foundational wiki content, followed by specialized agents that enhance with domain-specific perspectives. This prevents specialized agents from operating without base context.\n- **Per-Agent Tracking Model**: Each commit maintains a `processedBy` array tracking which agents have analyzed it, enabling fine-grained incremental processing and agent-specific coverage metrics.\n- **Five Analysis Agents Active**: System now employs code-change (general), narrative (documentation), security (audit), pattern (conventions), and dependency (changes) agents working in concert.\n- **Coverage Metrics Strategy**: Overall system coverage based on primary code-change agent, with additional per-agent coverage metrics exposed for monitoring specialized agent progress.\n\n## Source Files\n\n- `PROGRESS.md`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/executor/executor.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n\n---\n*Captured from commit 296d345b*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "296d345be67c674f9784914ac65b726cd0c1712d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:07:15.699Z",
+    "updatedAt": "2025-11-25T22:07:15.699Z"
+  },
+  {
+    "id": "2f2e5032-44c0-45b9-8a64-61a80ad11515",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "architecture/a99a4013-this-commit-adds-meta-documentation-comparing-wiki",
+    "title": "This commit adds meta-documentation comparing wiki generation quality across different iteration cou",
+    "content": "# This commit adds meta-documentation comparing wiki generation quality across different iteration cou\n\nThis commit adds meta-documentation comparing wiki generation quality across different iteration counts (1, 2, 5, and 10 iterations). This is experimental/research content demonstrating how iterative refinement improves wiki page quality. The examples serve as both documentation and validation of the system's iterative improvement capabilities.\n\n## Key Points\n\n- **RESEARCH_EXAMPLE**: Comparative analysis of wiki iteration quality with concrete examples showing 1, 2, 5, and 10 iteration outputs. This demonstrates the value proposition of iterative refinement and provides empirical evidence for design decisions.\n- **SYSTEM_VALIDATION**: Example outputs validate that the wiki generation system produces increasingly detailed and structured content with more iterations (from minimal 0.5 confidence stubs to richer documentation).\n- **QUALITY_METRICS**: Demonstrates confidence scoring remains stable (0.5) even with iteration count changes, suggesting confidence is based on source material quality rather than processing depth.\n\n## Decisions Made\n\n- Decision to create comparative examples showing iteration impact on output quality, establishing empirical basis for recommending iteration counts to users\n- Implicit decision that even 1-iteration processing creates structured wiki pages with consistent schema (id, repoId, path, title, content, confidence, sourceCommits, links)\n- Design choice to store examples as JSON snapshots rather than regenerating them, suggesting these serve as regression tests or documentation references\n- The consistent use of 0.5 confidence across all iterations suggests a design decision that confidence reflects source material quality, not processing thoroughness\n\n## Source Files\n\n- `examples/wiki-iterations/1-iteration/wiki-pages.json`\n- `examples/wiki-iterations/10-iterations/wiki-pages.json`\n- `examples/wiki-iterations/2-iterations/wiki-pages.json`\n- `examples/wiki-iterations/5-iterations/wiki-pages.json`\n- `examples/wiki-iterations/COMPARISON.md`\n\n---\n*Captured from commit a99a4013*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a99a401366534bbafb9d20d9fb722523feebe507"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:07:35.770Z",
+    "updatedAt": "2025-11-25T22:07:35.770Z"
+  },
+  {
+    "id": "9c403050-6e0e-4e31-9ec4-4da196d19085",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "history/adc01766-comprehensive-progress-documentation-update-captur",
+    "title": "Comprehensive progress documentation update capturing completed work, architectural decisions, and p",
+    "content": "# Comprehensive progress documentation update capturing completed work, architectural decisions, and p\n\nComprehensive progress documentation update capturing completed work, architectural decisions, and project status. Documents the completion of the MVP analysis agent suite, resolution of all E2E test failures, and a significant architectural decision to defer the Writer Agent. This is a project status changelog with embedded ADR content.\n\n## Key Points\n\n- **CHANGELOG**: Milestone completion: All 29 E2E tests now passing, up from 13 passed/12 flaky/4 failed. Documents resolution of containerized browser testing issues.\n- **CHANGELOG**: Four new analysis agents completed: Narrative, Security, Pattern, and Dependency agents, completing the MVP agent suite.\n- **ADR**: Explicit decision to defer Writer Agent implementation with clear rationale: \"not strictly necessary\" for MVP, adequate handling by executor. Includes analysis of benefits vs. current needs.\n- **TECHNICAL_DECISION**: Playwright configuration optimization: removal of --single-process flag identified as root cause of browser crashes, with additional stability flags added.\n- **CHANGELOG**: Six bug fixes documented including import.meta.dirname workaround, Date handling, and TypeScript strict mode fixes.\n- **PLANNING**: Future work roadmap defined with 6 items including agent registration, meta/synthesis agents, and production deployment.\n\n## Decisions Made\n\n- **Writer Agent Deferral**: Evaluated centralized wiki modification handler and decided to defer implementation. Rationale: executor handles updates adequately for current MVP scope; Writer Agent benefits (conflict resolution, link management, queue-based writes) only needed at scale. Current single-threaded processing sufficient for small-to-medium wikis.\n- **Playwright Stability Fix**: Removed --single-process flag after root cause analysis showed it causes browser instability and context closure in containerized environments. Added 7 additional stability flags based on chrome-aws-lambda best practices.\n- **MVP Agent Suite Complete**: Decision to complete four remaining analysis agents (Narrative, Security, Pattern, Dependency) before moving to meta/synthesis agents. Establishes clear phase boundary.\n\n## Source Files\n\n- `PROGRESS.md`\n\n---\n*Captured from commit adc01766*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "adc01766a9f6b9e6c1618b04aa21fe0b4223255d"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:08:01.522Z",
+    "updatedAt": "2025-11-25T22:08:01.522Z"
+  },
+  {
+    "id": "19b71392-db8f-4323-97ae-18bb402b5b84",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "architecture/4ec0c546-this-commit-introduces-a-system-of-specialized-ana",
+    "title": "This commit introduces a system of specialized analysis agents, representing a significant architect",
+    "content": "# This commit introduces a system of specialized analysis agents, representing a significant architect\n\nThis commit introduces a system of specialized analysis agents, representing a significant architectural decision about how CodeWiki will analyze repository changes. The code itself contains embedded documentation that explains the philosophy and design of the agent system, including their responsibilities, confidence thresholds, and interaction patterns. The commit represents a design decision to use specialized agents rather than a monolithic analyzer.\n\n## Key Points\n\n\n\n## Decisions Made\n\n- Decision to use specialized analysis agents instead of a single monolithic analyzer, allowing for focused expertise and parallel processing\n- Decision to have agents self-document their purpose and confidence criteria in system prompts, making the AI behavior transparent and auditable\n- Decision to make wiki page updates the primary output format, establishing how knowledge flows from code analysis to documentation\n- Decision to implement agent-specific file filtering (e.g., dependency agent only runs on dependency files) to optimize costs and performance\n- Decision to use structured prompt/response patterns with explicit section markers (SUMMARY:, FINDINGS:, etc.) for reliable parsing\n\n## Source Files\n\n- `src/agents/analysis/dependency-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/analysis/narrative-agent.ts`\n- `src/agents/analysis/pattern-agent.ts`\n- `src/agents/analysis/security-agent.ts`\n\n---\n*Captured from commit 4ec0c546*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4ec0c5460502ceb808354d1363f7e8496f33323e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:08:48.023Z",
+    "updatedAt": "2025-11-25T22:08:48.023Z"
+  },
+  {
+    "id": "a61f17f6-71ad-430a-adaa-d5fae9ef6a04",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "planning/4d5def60-this-commit-introduces-comprehensive-meta-document",
+    "title": "This commit introduces comprehensive meta-documentation through a new PROGRESS.md file that captures",
+    "content": "# This commit introduces comprehensive meta-documentation through a new PROGRESS.md file that captures\n\nThis commit introduces comprehensive meta-documentation through a new PROGRESS.md file that captures the current state of the CodeWiki project, documents known issues with detailed root cause analysis, and outlines future work. The commit also includes technical decisions about Playwright configuration and browser stability in containerized environments, backed by research and explicit rationale.\n\n## Key Points\n\n- **PLANNING**: New PROGRESS.md document providing comprehensive project status, completed features, known issues with root cause analysis, and roadmap for future work (PROGRESS.md)\n- **ADR**: Explicit architectural decision to remove --single-process flag from Playwright configuration, documented with rationale and research links (playwright.config.ts, PROGRESS.md lines 74-94)\n- **CHANGELOG**: Documents completion of web interface and E2E test infrastructure with test results (13 passed, 12 flaky, 4 failed) (PROGRESS.md lines 27-37)\n- **DESIGN**: Technical analysis of browser stability issues in containerized environments with proposed fixes (PROGRESS.md lines 39-59)\n- **PLANNING**: Roadmap for four new analysis agents (Narrative, Security, Pattern, Dependency) with evaluation criteria (PROGRESS.md lines 63-69)\n\n## Decisions Made\n\n- Removed --single-process flag from Playwright browser launch options due to instability - causes entire browser to close when context closes, leading to \"Target closed\" errors. Decision backed by GitHub issue research.\n- Increased Playwright timeout from 30s to 60s and retries from 1 to 2 to accommodate containerized environment constraints\n- Added 11 additional Chrome flags for browser stability based on chrome-aws-lambda best practices\n- Documented bug fixes for import.meta.dirname (ESM workaround) and Date handling (type checking for JSON serialization)\n- Established test assertion patterns using .first() to avoid strict mode violations with multiple DOM matches\n- Changed test assertions from exact match expectations to existence checks, acknowledging flakiness in containerized environments\n\n## Source Files\n\n- `PROGRESS.md`\n- `playwright.config.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n\n---\n*Captured from commit 4d5def60*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "4d5def6044fa795f5cd5205b78dc288bf73c3afc"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:09:05.314Z",
+    "updatedAt": "2025-11-25T22:09:05.314Z"
+  },
+  {
+    "id": "bf5e4dca-9154-49df-a23f-d20d7dd51a6f",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "decisions/60a1d836-this-commit-represents-a-significant-architectural",
+    "title": "This commit represents a significant architectural decision to add a web interface to CodeWiki, alon",
+    "content": "# This commit represents a significant architectural decision to add a web interface to CodeWiki, alon\n\nThis commit represents a significant architectural decision to add a web interface to CodeWiki, along with comprehensive E2E testing infrastructure. The commit includes several important technical decisions around containerized deployment, browser automation constraints, and API architecture. The Playwright configuration file contains explicit documentation of environment-specific constraints and workarounds.\n\n## Key Points\n\n- **ADR**: Containerized environment constraints explicitly documented in playwright.config.ts with critical Chrome sandbox disabling decisions and rationale for containerized/web-based development environments like \"Claude Code on the web\".\n- **DESIGN**: Introduction of three-tier architecture: web server (Express), frontend SPA, and REST API layer, representing significant architectural expansion beyond CLI-only interface.\n- **DESIGN**: Date handling robustness improvements to handle both Date objects and ISO strings, indicating cross-boundary serialization concerns between API and persistence layers.\n- **DESIGN**: E2E test organization strategy with separate test files for different concerns (smoke, api, repositories, wiki, query), demonstrating testing architecture principles.\n- **DECISION**: Serial test execution (workers: 1) chosen to avoid resource contention in containerized environments, with explicit retry strategy for flaky tests.\n\n## Decisions Made\n\n- **Containerized Development Support**: Explicitly disabled Chrome sandbox and related security features to enable Playwright testing in containerized environments like web-based IDEs. This is marked as \"CRITICAL\" in the configuration, indicating a fundamental constraint of the deployment environment.\n- **Single-Process Browser Mode**: Chose to run browser tests in single-process mode with disabled GPU and zygote processes, optimizing for resource-constrained containerized environments over performance.\n- **REST API Architecture**: Introduced a complete REST API layer (`/api/repos`, `/api/query`, etc.) as the interface between frontend and backend, establishing clear separation of concerns.\n- **Date Serialization Handling**: Added defensive programming for date handling to support both object instances and JSON-serialized strings, addressing type coercion issues in API boundaries.\n- **Test Execution Strategy**: Implemented serial test execution with retry logic specifically for containerized environments, prioritizing reliability over speed.\n\n## Source Files\n\n- `package.json`\n- `playwright.config.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/web/index.ts`\n- `src/web/public/app.js`\n- `src/web/public/index.html`\n- `src/web/public/styles.css`\n- `src/web/server.ts`\n- `tests/e2e/api.spec.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/repositories.spec.ts`\n- `tests/e2e/smoke.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n\n---\n*Captured from commit 60a1d836*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:09:30.152Z",
+    "updatedAt": "2025-11-25T22:09:30.152Z"
+  },
+  {
+    "id": "44a735e7-c83a-4c1b-b1a0-93e628ad9d79",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "decisions/84389967-this-commit-introduces-a-significant-architectural",
+    "title": "This commit introduces a significant architectural addition: a Research Agent and MCP (Model Context",
+    "content": "# This commit introduces a significant architectural addition: a Research Agent and MCP (Model Context\n\nThis commit introduces a significant architectural addition: a Research Agent and MCP (Model Context Protocol) server for wiki querying. The commit represents an architectural decision to integrate MCP for exposing wiki capabilities, enabling external systems to query the generated documentation. This is a foundational infrastructure change that extends the system's capabilities beyond internal processing.\n\n## Key Points\n\n- **ARCHITECTURE**: Integration of Model Context Protocol SDK (@modelcontextprotocol/sdk) as a core dependency, suggesting a decision to standardize on MCP for tool/service exposure. This represents a protocol adoption decision.\n- **DESIGN**: Creation of dedicated MCP server implementation (src/mcp/server.ts) alongside new Research Agent (src/agents/research/), indicating a deliberate separation between internal analysis agents and external interface layer.\n- **DESIGN**: New agent type (Research Agent) added to the agent system, expanding the agent architecture to include querying/retrieval capabilities alongside existing analysis agents.\n- **INTEGRATION**: CLI integration (src/cli.ts) modified to support the new MCP server, suggesting this is intended to be a user-facing feature accessible via command line.\n- **DEPENDENCY**: MCP SDK brings substantial dependencies (Zod, AJV, Express 5.x, CORS, rate limiting), indicating production-ready external API considerations built into the architecture from the start.\n\n## Decisions Made\n\n- **Protocol Selection**: Adopted Model Context Protocol (MCP) for exposing wiki querying capabilities, rather than building a custom API. This suggests alignment with emerging standards for AI tool integration and interoperability.\n- **Architectural Layer Addition**: Added a distinct service layer (MCP server) separate from the core agent processing, maintaining clean separation of concerns between internal analysis and external interfaces.\n- **Agent Expansion**: Extended the agent architecture to include research/querying capabilities, moving beyond pure analysis agents to include information retrieval patterns.\n- **External Access Strategy**: Made the generated wiki queryable by external systems through standardized protocol, enabling the \"living documentation\" to be actively consumed by AI assistants and other tools.\n\n## Source Files\n\n- `package-lock.json`\n- `package.json`\n- `src/agents/index.ts`\n- `src/agents/research/index.ts`\n- `src/agents/research/research-agent.ts`\n- `src/cli.ts`\n- `src/mcp/index.ts`\n- `src/mcp/server.ts`\n\n---\n*Captured from commit 84389967*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "84389967e435d61e9e39d9d51b732370a30098e4"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:09:54.845Z",
+    "updatedAt": "2025-11-25T22:09:54.845Z"
+  },
+  {
+    "id": "9db930a0-d6fb-42fb-9f7c-3386b782c4de",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "decisions/15782f7c-this-commit-introduces-a-significant-architectural",
+    "title": "This commit introduces a significant architectural decision to integrate real LLM analysis using Ant",
+    "content": "# This commit introduces a significant architectural decision to integrate real LLM analysis using Ant\n\nThis commit introduces a significant architectural decision to integrate real LLM analysis using Anthropic's Claude API, transitioning from mock/stub implementations to production-ready AI analysis. This represents a critical milestone in the system's evolution, enabling actual semantic analysis of code commits.\n\n## Key Points\n\n- **ADR**: Integration of Anthropic Claude SDK as the primary LLM provider for semantic analysis. This establishes a foundational dependency and architectural pattern for AI-driven analysis.\n- **DESIGN**: Introduction of a service abstraction layer (LLMService interface) that enables multiple LLM provider implementations, demonstrating forward-thinking architectural design for provider flexibility.\n- **DECISION**: Choice of Anthropic Claude over other LLM providers (OpenAI, Google, etc.) - implicit decision requiring documentation of rationale.\n- **DESIGN**: Integration point with git-service for commit analysis, establishing the data flow pattern from git operations to LLM analysis.\n- **MILESTONE**: CLI integration suggesting this is now available for end-user interaction, marking transition from development to usable feature.\n\n## Decisions Made\n\n- **LLM Provider Selection**: Chose Anthropic Claude (SDK v0.52.0) as the LLM provider for semantic analysis. Rationale not explicitly documented but suggests preference for Claude's capabilities in code analysis tasks.\n- **Service Abstraction Pattern**: Implemented LLMService interface to abstract LLM provider details, enabling future provider swapping or multi-provider support without affecting consumers.\n- **Real-time Analysis Architecture**: Moved from mock/stub implementations to real API integration, indicating confidence in the analysis pipeline design and readiness for production use.\n- **CLI-first Approach**: Integration through CLI suggests a command-line workflow for analyzing repositories, establishing user interaction patterns.\n- **Dependency Management**: Added significant production dependency (~5219 lines in package-lock.json), committing to the Anthropic ecosystem.\n\n## Source Files\n\n- `package-lock.json`\n- `package.json`\n- `src/cli.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n\n---\n*Captured from commit 15782f7c*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "15782f7c6bbf978ee9d070e879a73b0801b03472"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:10:21.324Z",
+    "updatedAt": "2025-11-25T22:10:21.324Z"
+  },
+  {
+    "id": "99d318ae-9920-46b1-8cde-2d7bc2753525",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "architecture/c69224ba-this-commit-introduces-the-core-processing-pipelin",
+    "title": "This commit introduces the core processing pipeline and CLI for CodeWiki, a system that generates li",
+    "content": "# This commit introduces the core processing pipeline and CLI for CodeWiki, a system that generates li\n\nThis commit introduces the core processing pipeline and CLI for CodeWiki, a system that generates living documentation from Git repositories. The most significant narrative content is embedded in the system prompts and architecture of the CodeChangeAgent, which reveals the philosophical approach: focusing on the \"why\" behind code changes rather than just the \"what\", and establishing patterns for documentation generation (e.g., wiki page naming conventions, confidence scoring methodology).\n\n## Key Points\n\n- **ARCHITECTURAL_PATTERN**: Agent-based architecture established with orchestrator pattern, separation of analysis agents, and executor for wiki updates\n- **DOCUMENTATION_PHILOSOPHY**: System explicitly designed to capture \"why\" not just \"what\" - focuses on architectural decisions, rationale, and connections between code\n- **CONFIDENCE_SCORING**: Established confidence scoring methodology (0.9+ clear docs, 0.7-0.9 reasonable inference, 0.5-0.7 ambiguous, <0.5 needs review) as a core principle\n- **WIKI_CONVENTIONS**: Documentation standards established: lowercase paths with hyphens, grouped content by category (architecture/, components/, guides/), preference for updating over creating\n- **AGENT_EXTENSIBILITY**: Agent interface designed for multiple analysis lenses - base Agent interface allows different specialized agents to analyze same commits differently\n\n## Decisions Made\n\n- Agent-based architecture: Commits are analyzed through multiple \"lenses\" (agents) rather than a monolithic analyzer, allowing specialized analysis types (code-change, narrative, dependency, etc.)\n- LLM-driven analysis: Core analysis uses LLM with structured prompts and response parsing, rather than rule-based heuristics\n- Wiki as primary output: System generates wiki pages rather than inline documentation, allowing documentation to evolve independently from code\n- Confidence-based updates: All wiki updates include confidence deltas, enabling progressive refinement and uncertainty tracking\n- CLI-first approach: System designed as CLI tool first (bin entry, cli.ts), suggesting batch processing model rather than continuous integration\n\n## Source Files\n\n- `package.json`\n- `src/agents/analysis/code-change-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/base-agent.ts`\n- `src/agents/index.ts`\n- `src/agents/orchestrator/index.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/cli.ts`\n- `src/executor/executor.ts`\n- `src/executor/index.ts`\n- `src/index.ts`\n- `src/services/git/git-service.ts`\n- `src/services/git/index.ts`\n- `src/services/index.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n- `src/services/llm/mock-llm-service.ts`\n\n---\n*Captured from commit c69224ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "c69224baf050cd8bb45211b4d17cb71653b28d72"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:10:43.353Z",
+    "updatedAt": "2025-11-25T22:10:43.353Z"
+  },
+  {
+    "id": "4cfe8544-3773-45a6-8a3d-8913492c916f",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "decisions/af17f139-this-commit-establishes-the-foundational-architect",
+    "title": "This commit establishes the foundational architecture for CodeWiki using CQRS (Command Query Respons",
+    "content": "# This commit establishes the foundational architecture for CodeWiki using CQRS (Command Query Respons\n\nThis commit establishes the foundational architecture for CodeWiki using CQRS (Command Query Responsibility Segregation) pattern. While primarily implementation-focused, it contains significant architectural decisions embedded in code structure, comments, and the chosen patterns. The commit message and code organization reveal a clear architectural vision around CQRS, domain-driven design, and repository patterns.\n\n## Key Points\n\n- **ARCHITECTURE**: CQRS pattern chosen as core architectural style - clean separation between commands (state changes) and queries (data retrieval). This is documented in code comments in src/commands/index.ts and src/queries/index.ts.\n- **ARCHITECTURE**: Repository pattern with interface-based abstraction layer allowing multiple storage backends. Initial implementation uses file-based storage with clear path to MongoDB.\n- **ARCHITECTURE**: Domain-driven design approach with rich domain models separated from infrastructure concerns. Eight core domain entities identified: Repo, Commit, WikiPage, WorkItem, AgentRun, Conflict, Learning.\n- **DESIGN**: Agent-based processing model implied by AgentRun and WorkItem domain entities, suggesting autonomous agent execution over commits.\n- **DESIGN**: Built-in conflict detection and resolution system as first-class domain concern.\n- **DESIGN**: Learning capture system for iterative AI improvement.\n- **TECHNICAL**: Local file-based storage in .codewiki-data/ for development/testing with path to production MongoDB.\n\n## Decisions Made\n\n- **CQRS Architecture**: Explicit decision to use CQRS pattern to create \"clean boundary between core logic and external interfaces.\" This enables multiple front-ends (HTTP, MCP, CLI) to share the same command/query layer.\n- **Repository Pattern**: Abstraction layer between domain logic and persistence, documented in code as enabling \"multiple storage backends\" - file-based for development, MongoDB for production.\n- **Domain-Driven Design**: Eight domain entities identified as core to the system, each with factory functions and clear boundaries. This suggests careful domain modeling preceded implementation.\n- **Agent-Based Processing**: Work queue and agent run tracking built into core domain, indicating asynchronous, agent-driven processing model rather than synchronous request-response.\n- **Conflict as First-Class Entity**: Conflicts elevated to domain entity rather than handled as exceptions, suggesting expectation of frequent conflicting interpretations requiring resolution workflows.\n- **Learning System**: Dedicated learning entity suggests intent for AI agents to improve through captured feedback and adjustments.\n\n## Source Files\n\n- `.gitignore`\n- `package.json`\n- `src/commands/index.ts`\n- `src/commands/start-processing-repo.ts`\n- `src/commands/types.ts`\n- `src/commands/update-wiki-page.ts`\n- `src/domain/agent-run.ts`\n- `src/domain/commit.ts`\n- `src/domain/conflict.ts`\n- `src/domain/index.ts`\n- `src/domain/learning.ts`\n- `src/domain/repo.ts`\n- `src/domain/wiki-page.ts`\n- `src/domain/work-item.ts`\n- `src/index.ts`\n- `src/queries/get-repo-status.ts`\n- `src/queries/get-wiki-page.ts`\n- `src/queries/index.ts`\n- `src/queries/search-wiki.ts`\n- `src/queries/types.ts`\n- `src/repositories/file-based/file-agent-run-repository.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/repositories/file-based/file-conflict-repository.ts`\n- `src/repositories/file-based/file-learning-repository.ts`\n- `src/repositories/file-based/file-repo-repository.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/repositories/file-based/file-wiki-page-repository.ts`\n- `src/repositories/file-based/file-work-queue-repository.ts`\n- `src/repositories/file-based/index.ts`\n- `src/repositories/index.ts`\n- `src/repositories/interfaces/agent-run-repository.ts`\n- `src/repositories/interfaces/commit-repository.ts`\n- `src/repositories/interfaces/conflict-repository.ts`\n- `src/repositories/interfaces/index.ts`\n- `src/repositories/interfaces/learning-repository.ts`\n- `src/repositories/interfaces/repo-repository.ts`\n- `src/repositories/interfaces/wiki-page-repository.ts`\n- `src/repositories/interfaces/work-queue-repository.ts`\n- `tsconfig.json`\n\n---\n*Captured from commit af17f139*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "af17f139216b14a9963812157b3923ef5bde7d66"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:11:10.283Z",
+    "updatedAt": "2025-11-25T22:11:10.283Z"
+  },
+  {
+    "id": "d199f71b-8935-4849-ae6d-0a413ac7198a",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "planning/b908ecb1-this-commit-adds-a-comprehensive-project-planning",
+    "title": "This commit adds a comprehensive project planning document (PLAN.md) that establishes the vision, ph",
+    "content": "# This commit adds a comprehensive project planning document (PLAN.md) that establishes the vision, ph\n\nThis commit adds a comprehensive project planning document (PLAN.md) that establishes the vision, philosophy, architecture, and technical decisions for CodeWiki. This is a foundational meta-document that explains the entire \"why\" behind the system - not just what it does, but the reasoning behind architectural choices, design principles, and implementation strategies.\n\n## Key Points\n\n- **PLANNING**: Complete project vision document covering purpose, philosophy, architecture, and implementation strategy\n- **PHILOSOPHY**: Five core principles explicitly stated: eventual consistency, confidence over completeness, organic growth, architectural simplicity, and clean abstractions\n- **ARCHITECTURE**: Detailed architecture explanation including CQRS layer, repository pattern, two-loop orchestrator/executor model, and write queue with conflict resolution\n- **DESIGN**: Component breakdown of all major system parts (web interface, agents, MCP endpoint) with clear responsibilities\n- **ADR**: Implicit architectural decisions: MongoDB vs file-based storage, Node.js runtime choice, single database for all state\n- **DESIGN**: Data model specification showing core collections and their relationships\n\n## Decisions Made\n\n- **Eventual consistency over batch processing**: System prioritizes fast, incremental wiki generation (80% in 20 minutes) over complete sequential processing (100% in 10 hours). Rationale: Immediate usefulness beats delayed perfection.\n- **CQRS architectural boundary**: All external interactions go through command/query layer to separate core logic from interfaces. Rationale: Clean separation makes system easier to reason about and enables multiple interfaces (HTTP, MCP, CLI).\n- **Repository pattern with dual implementations**: MongoDB for production, file-based for development/restricted environments. Rationale: Enables work in environments without database access (like Claude's web environment) while keeping production robust.\n- **Two-loop orchestrator/executor model**: Lightweight orchestrator decides what to do, separate executor runs the work. Rationale: Keeps decision-making fast and re-evaluates priorities frequently rather than committing to rigid queue.\n- **Single write queue with writer agent**: All wiki modifications go through one bottleneck. Rationale: Prevents race conditions and conflicting edits while allowing parallel reads.\n- **Confidence scoring system**: Every wiki entry has confidence based on analysis depth and verification. Rationale: Users and agents can calibrate trust; low-confidence areas get prioritized for processing.\n- **Multiple specialized agents**: Different agents for code changes, narrative, security, technical debt, patterns, dependencies, synthesis, meta-analysis. Rationale: Different lenses reveal different insights; orchestrator balances the work mix.\n- **Self-documenting approach**: CodeWiki will generate its own wiki using AI agents. Rationale: Repository becomes proof-of-concept and demonstrates the system's value.\n\n## Source Files\n\n\n\n---\n*Captured from commit b908ecb1*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "b908ecb120818e12f51e066a6a8619fc00adbe45"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:11:36.274Z",
+    "updatedAt": "2025-11-25T22:11:36.274Z"
+  },
+  {
+    "id": "e2566d47-c7e1-4169-afca-5575fd0df2ad",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "security/overview",
+    "title": "Security Overview",
+    "content": "# Security Overview\n\n## Recent Security Changes\n\n- **b908ecb1** (low): This commit adds a comprehensive project plan document (PLAN.md) for CodeWiki, a system that generat\n\n## Security Recommendations\n\n- When implementing GitHub OAuth (mentioned in plan), ensure proper state parameter validation to prevent CSRF attacks\n- When implementing the MCP endpoint, add authentication/authorization mechanisms and rate limiting to prevent abuse\n- When implementing MongoDB connections, use environment variables for credentials and never commit connection strings to the repository\n- Consider adding security-specific sections to the planning document that address: threat modeling, security testing strategy, secret management approach, and security review processes\n- When implementing the \"Learnings\" collection mentioned for AI coding sessions, ensure no sensitive data (credentials, PII, internal paths) can be leaked through this feedback mechanism\n- Plan for security auditing of the Analysis Agents, particularly the Security Agent mentioned, as these will have access to full repository history\n\n---\n*Last updated from commit b908ecb1*\n",
+    "confidence": 1,
+    "sourceCommits": [
+      "296d345be67c674f9784914ac65b726cd0c1712d",
+      "2de75bb05e52bdea77cfc9f06f3303290153344e",
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618",
+      "84389967e435d61e9e39d9d51b732370a30098e4",
+      "15782f7c6bbf978ee9d070e879a73b0801b03472",
+      "af17f139216b14a9963812157b3923ef5bde7d66",
+      "b908ecb120818e12f51e066a6a8619fc00adbe45"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:11:56.012Z",
+    "updatedAt": "2025-11-25T22:17:12.807Z"
+  },
+  {
+    "id": "8514961d-f154-4913-bb81-3513502017dc",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "security/audit-60a1d836",
+    "title": "Security Audit: Commit 60a1d836",
+    "content": "# Security Audit: Commit 60a1d836\n\n**Relevance Level:** HIGH\n\n## Summary\n\nThis commit introduces a web interface and E2E testing infrastructure for CodeWiki. The security analysis reveals several **critical** issues: disabled Chrome sandbox in tests, lack of authentication/authorization on the web API, multiple XSS vulnerabilities in the frontend, path traversal risks, no CSRF protection, and missing security headers. While some basic XSS mitigation attempts exist, the implementation has significant security gaps that need immediate attention before production deployment.\n\n## Findings\n\n### AUTHENTICATION/AUTHORIZATION (high)\n\nNo authentication or authorization implemented for the web API. All endpoints at `/api/*` are completely open, allowing anyone to add repositories, trigger processing, and access all wiki content without any access control.\n\n\n\n### CONFIGURATION (high)\n\nChrome sandbox explicitly disabled in Playwright configuration with `--no-sandbox` and `--disable-setuid-sandbox` flags. While documented as necessary for containerized environments, this removes a critical security boundary.\n\n\n\n### INPUT VALIDATION (high)\n\nXSS vulnerability in markdown rendering. The `markdownToHtml()` function appears to be used without proper sanitization (implementation not shown in diff, but usage in line 236 of `src/web/public/app.js` is concerning).\n\n\n\n### INPUT VALIDATION (high)\n\nPotential path traversal vulnerability in wiki page loading. The `path` parameter is passed directly to the API endpoint without validation: `/repos/${repoId}/wiki/${path}`. An attacker could potentially access files outside the intended wiki directory using `../` sequences.\n\n\n\n### INPUT VALIDATION (medium)\n\nRepository path input accepts arbitrary paths without validation. User-supplied paths in `addRepo()` function could potentially be exploited for directory traversal or unauthorized repository access.\n\n\n\n### CSRF (high)\n\nNo CSRF protection on state-changing API endpoints. POST requests to `/api/repos`, `/api/repos/:id/process` lack CSRF tokens, allowing cross-site request forgery attacks.\n\n\n\n### CONFIGURATION (medium)\n\nMissing security headers. No evidence of security headers like Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security.\n\n\n\n### INPUT VALIDATION (medium)\n\nBasic XSS mitigation present but incomplete. The `escapeHtml()` function is used in several places (lines 65, 75, 105, etc.) which is good, but not consistently applied everywhere and doesn't protect against all contexts (e.g., attribute injection).\n\n\n\n### DATA HANDLING (low)\n\nDate handling code converts between Date objects and ISO strings without validation, which could lead to unexpected behavior with malformed dates but has limited security impact.\n\n\n\n### CONFIGURATION (low)\n\nWeb server port hardcoded to 3001 in multiple places. While not directly a security issue, configuration hardcoding can lead to deployment issues.\n\n\n\n## Potential Vulnerabilities\n\n- **Missing Authentication/Authorization** - Complete absence of access control allows unauthorized users to perform any operation including adding repositories, processing commits, and accessing all wiki content. [CWE-306: Missing Authentication for Critical Function]\n- **Cross-Site Scripting (XSS)** - Multiple XSS vectors exist: unsanitized markdown rendering, potential attribute injection in dynamic HTML generation, and inconsistent use of escaping functions. [CWE-79: Improper Neutralization of Input During Web Page Generation]\n- **Path Traversal** - Wiki page path parameter not validated, allowing potential access to files outside intended directories using relative path sequences. [CWE-22: Improper Limitation of a Pathname to a Restricted Directory]\n- **Cross-Site Request Forgery (CSRF)** - State-changing operations lack CSRF protection, enabling attackers to trick authenticated users into performing unwanted actions. [CWE-352: Cross-Site Request Forgery]\n- **Sandbox Escape Risk** - Disabled Chrome sandbox in test environment reduces security boundaries, though mitigated by being test-only code. [CWE-250: Execution with Unnecessary Privileges]\n- **Missing Security Headers** - Absence of security headers leaves application vulnerable to clickjacking, MIME-type confusion, and other browser-based attacks. [CWE-693: Protection Mechanism Failure]\n\n\n\n## Files Reviewed\n\n- `package.json`\n- `playwright.config.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/web/index.ts`\n- `src/web/public/app.js`\n- `src/web/public/index.html`\n- `src/web/public/styles.css`\n- `src/web/server.ts`\n- `tests/e2e/api.spec.ts`\n- `tests/e2e/query.spec.ts`\n- `tests/e2e/repositories.spec.ts`\n- `tests/e2e/smoke.spec.ts`\n- `tests/e2e/wiki.spec.ts`\n\n---\n*Security audit from commit 60a1d836*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:14:27.396Z",
+    "updatedAt": "2025-11-25T22:14:27.396Z"
+  },
+  {
+    "id": "481f759a-6dc5-4e5c-ac3e-8174544f2898",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "security/audit-84389967",
+    "title": "Security Audit: Commit 84389967",
+    "content": "# Security Audit: Commit 84389967\n\n**Relevance Level:** MEDIUM\n\n## Summary\n\nThis commit introduces a Research Agent and MCP (Model Context Protocol) server for wiki querying functionality. The primary security concern is the addition of the `@modelcontextprotocol/sdk` dependency (v1.22.0) which brings in multiple sub-dependencies including Express 5.1.0, CORS support, rate limiting, and PKCE authentication flow capabilities. The MCP server appears to provide an API interface for querying wiki content. Without seeing the actual implementation code in the diff (truncated), the security assessment focuses on the dependency chain and architectural implications.\n\n## Findings\n\n### DEPENDENCIES (medium)\n\nThe MCP SDK introduces significant dependency surface area including express@5.1.0, cors@2.8.5, express-rate-limit@7.5.0, eventsource, raw-body parsing, and PKCE authentication flow (pkce-challenge@5.0.0). These dependencies handle security-sensitive operations including HTTP request parsing, CORS policy enforcement, rate limiting, and OAuth PKCE flows. The implementation quality of these handlers will determine actual security posture.\n\n**Affected files:** `package.json`, `package-lock.json`\n\n### AUTHENTICATION (medium)\n\nThe pkce-challenge dependency suggests OAuth 2.0 with PKCE (Proof Key for Code Exchange) authentication may be implemented. PKCE is a security extension for OAuth that prevents authorization code interception attacks. Without seeing the implementation, cannot verify if properly configured.\n\n**Affected files:** `package.json dependencies`\n\n### INPUT_VALIDATION (medium)\n\nThe SDK includes ajv@8.17.1, ajv-formats@3.0.1, zod@3.23.8, and json-schema validation. These are positive security controls for input validation, but effectiveness depends on implementation. The raw-body@3.0.0 parser requires careful handling to prevent DoS via large payloads.\n\n**Affected files:** `package-lock.json`\n\n### CORS (medium)\n\nCORS@2.8.5 is included, which if misconfigured could allow unauthorized cross-origin access to the MCP API endpoints. Default permissive CORS settings would be a security issue.\n\n**Affected files:** `package-lock.json`\n\n### RATE_LIMITING (low)\n\nExpress-rate-limit@7.5.0 provides DoS protection, which is a positive security control if properly configured.\n\n**Affected files:** `package-lock.json`\n\n### TRANSPORT_SECURITY (low)\n\nThe eventsource@3.0.2 and eventsource-parser@3.0.0 dependencies suggest Server-Sent Events (SSE) may be used for real-time updates. SSE over HTTP (not HTTPS) could expose data in transit.\n\n**Affected files:** `package-lock.json`\n\n## Potential Vulnerabilities\n\n- [Information Disclosure] Without seeing the actual MCP server implementation (src/mcp/server.ts truncated in diff), potential risks include exposing sensitive wiki content without proper authorization checks, or leaking system information through error messages.\n- [Authorization Bypass] The research agent querying functionality could potentially allow unauthorized access to private or sensitive documentation if role-based access controls are not properly implemented in the MCP server endpoints.\n- [Denial of Service] Express body parsers (body-parser@2.2.1, raw-body@3.0.2) need payload size limits configured to prevent memory exhaustion attacks. The raw-body dependency shows it uses bytes and http-errors, suggesting some protection, but configuration is critical.\n- [Dependency Vulnerabilities] The large dependency tree (368+ lines of new dependencies) increases attack surface. Notable that express@5.1.0 is a major version upgrade which may have breaking changes affecting security configurations from express@4.18.2 already in project.\n\n\n\n## Files Reviewed\n\n- `package-lock.json`\n- `package.json`\n- `src/agents/index.ts`\n- `src/agents/research/index.ts`\n- `src/agents/research/research-agent.ts`\n- `src/cli.ts`\n- `src/mcp/index.ts`\n- `src/mcp/server.ts`\n\n---\n*Security audit from commit 84389967*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "84389967e435d61e9e39d9d51b732370a30098e4"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:15:06.186Z",
+    "updatedAt": "2025-11-25T22:15:06.186Z"
+  },
+  {
+    "id": "4ef44a58-3045-4ebe-9844-0efdb373b533",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "security/audit-15782f7c",
+    "title": "Security Audit: Commit 15782f7c",
+    "content": "# Security Audit: Commit 15782f7c\n\n**Relevance Level:** MEDIUM\n\n## Summary\n\nThis commit integrates the Anthropic Claude API for LLM-based code analysis. The primary security concern is the introduction of API key management for the Anthropic service. The implementation appears to follow reasonable security practices, but the diff is truncated, limiting complete analysis. Key security considerations include how API keys are stored/accessed, rate limiting, input validation for LLM prompts, and proper error handling to avoid information disclosure.\n\n## Findings\n\n### SECRETS_MANAGEMENT (high)\n\nAnthropic API integration requires API key management. Without seeing the full implementation in src/services/llm/anthropic-llm-service.ts, cannot verify if keys are properly handled via environment variables rather than hardcoded. The presence of the @anthropic-ai/sdk dependency suggests API authentication is required.\n\n**Affected files:** `src/services/llm/anthropic-llm-service.ts`, `src/cli.ts`\n\n### DEPENDENCIES (medium)\n\nAdded @anthropic-ai/sdk@0.52.0 as a production dependency. This is a third-party SDK that will have access to API keys and handle network requests. Should verify the package integrity and check for known vulnerabilities.\n\n**Affected files:** `package.json`, `package-lock.json`\n\n### INPUT_VALIDATION (medium)\n\nLLM service implementation likely accepts user-controlled input (commit diffs, code content) that will be sent to external API. Without seeing the full implementation, cannot verify proper sanitization and size limits to prevent prompt injection or excessive API costs.\n\n**Affected files:** `src/services/llm/anthropic-llm-service.ts`, `src/services/llm/llm-service.ts`\n\n### INFORMATION_DISCLOSURE (medium)\n\nCode analysis sends repository content to external Anthropic API. This could include sensitive information, internal logic, or proprietary code. Need to verify appropriate warnings/consent mechanisms and data handling policies.\n\n**Affected files:** `src/services/llm/anthropic-llm-service.ts`, `src/services/git/git-service.ts`\n\n### RATE_LIMITING (low)\n\nLLM API calls should implement rate limiting and cost controls to prevent abuse or accidental excessive usage. Cannot verify implementation from truncated diff.\n\n**Affected files:** `src/services/llm/anthropic-llm-service.ts`\n\n### ERROR_HANDLING (low)\n\nAPI integration should handle errors gracefully without exposing sensitive information like API keys, internal paths, or detailed error messages from the LLM provider.\n\n**Affected files:** `src/services/llm/anthropic-llm-service.ts`\n\n## Potential Vulnerabilities\n\n- [Credential Exposure] If API keys are hardcoded, stored in version control, or logged, they could be exposed. This would allow unauthorized access to the Anthropic API and potential cost abuse. (CWE-798: Use of Hard-coded Credentials)\n- [Information Disclosure] Sending repository code to external LLM service without user awareness could expose proprietary or sensitive information. (CWE-200: Exposure of Sensitive Information)\n- [Prompt Injection] If user input is not properly sanitized before being sent to the LLM, attackers could manipulate the analysis results or extract information through carefully crafted commit messages or code. (CWE-94: Improper Control of Generation of Code)\n- [Excessive Resource Consumption] Without proper rate limiting or input size validation, the service could be abused to generate excessive API costs. (CWE-770: Allocation of Resources Without Limits or Throttling)\n\n\n\n## Files Reviewed\n\n- `package-lock.json`\n- `package.json`\n- `src/cli.ts`\n- `src/services/git/git-service.ts`\n- `src/services/llm/anthropic-llm-service.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n\n---\n*Security audit from commit 15782f7c*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "15782f7c6bbf978ee9d070e879a73b0801b03472"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:15:40.914Z",
+    "updatedAt": "2025-11-25T22:15:40.914Z"
+  },
+  {
+    "id": "8375f51a-bbaa-4daa-bc91-8583c305efdb",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "security/audit-c69224ba",
+    "title": "Security Audit: Commit c69224ba",
+    "content": "# Security Audit: Commit c69224ba\n\n**Relevance Level:** HIGH\n\n## Summary\n\nThis commit introduces the core processing pipeline for CodeWiki, including CLI, executor, Git service, LLM service, and agent framework. The security audit reveals several concerns around input validation, command injection risks, path traversal vulnerabilities, and lack of authentication/authorization mechanisms. The LLM integration and prompt construction require particular attention due to prompt injection risks and unvalidated user content processing.\n\n## Findings\n\n\n\n## Potential Vulnerabilities\n\n- Prompt Injection (CWE-94) - Malicious commit messages or diff content could manipulate LLM behavior to generate harmful wiki updates or extract sensitive information from system prompts. The buildPrompt method concatenates user-controlled data directly into prompts without sanitization.\n- Path Traversal (CWE-22) - Wiki page paths from LLM responses (wikiUpdate.path) are used without validation, allowing \"../\" sequences to write files outside intended directories. The pathToTitle function doesn't prevent traversal.\n- Command Injection (CWE-78) - Git operations likely use shell commands with unsanitized repository IDs and commit SHAs. While implementation not shown, the pattern suggests risk if using child_process without proper escaping.\n- Regular Expression DoS (CWE-1333) - Complex regex patterns in parseResponse method (lines 111-149) could be exploited with crafted LLM responses to cause performance degradation.\n- Uncontrolled Resource Consumption (CWE-400) - No rate limiting on LLM calls (costUsd tracked but not enforced), diff processing, or wiki page generation. Malicious actors could trigger expensive operations.\n\n## Recommendations\n\n- Implement strict input validation for all external data (commit messages, author names, file paths) before incorporating into LLM prompts. Use allowlists and escape special characters.\n- Add path traversal protection by validating wiki paths against a safe pattern (e.g., `/^[a-z0-9/-]+$/`) and resolving paths to ensure they stay within designated directories.\n- Use parameterized Git commands or validated input escaping in GitService. Never pass unsanitized input to shell execution.\n- Implement authentication and authorization for CLI and API access. Add role-based access control for repository access and agent execution.\n- Add rate limiting and resource quotas for LLM usage, wiki updates per commit, and diff processing size.\n- Implement comprehensive audit logging for all security-relevant events (agent runs, wiki modifications, failed access attempts).\n- Sanitize LLM responses before parsing to prevent regex DoS. Use simpler parsing or timeout mechanisms.\n- Add content security policies for generated wiki pages if they'll be rendered as HTML.\n- Implement secrets management solution (environment variables, key vault) for LLM API keys and document secure configuration.\n- Add input length limits on commit messages, diff content, and LLM responses to prevent buffer-related issues.\n- Consider sandboxing agent execution and LLM interactions to limit blast radius of compromised or malicious agents.\n- Implement prompt injection defenses such as input/output validation, prompt templates with clear boundaries, and anomaly detection for unusual LLM responses.\n\n## Files Reviewed\n\n- `package.json`\n- `src/agents/analysis/code-change-agent.ts`\n- `src/agents/analysis/index.ts`\n- `src/agents/base-agent.ts`\n- `src/agents/index.ts`\n- `src/agents/orchestrator/index.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/cli.ts`\n- `src/executor/executor.ts`\n- `src/executor/index.ts`\n- `src/index.ts`\n- `src/services/git/git-service.ts`\n- `src/services/git/index.ts`\n- `src/services/index.ts`\n- `src/services/llm/index.ts`\n- `src/services/llm/llm-service.ts`\n- `src/services/llm/mock-llm-service.ts`\n\n---\n*Security audit from commit c69224ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "c69224baf050cd8bb45211b4d17cb71653b28d72"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:16:15.878Z",
+    "updatedAt": "2025-11-25T22:16:15.878Z"
+  },
+  {
+    "id": "9f978dff-160a-4b82-bb38-2f01a9b0a6d4",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "security/audit-af17f139",
+    "title": "Security Audit: Commit af17f139",
+    "content": "# Security Audit: Commit af17f139\n\n**Relevance Level:** MEDIUM\n\n## Summary\n\nThis commit establishes the initial project architecture for CodeWiki using CQRS patterns. The code is a foundational scaffolding commit with domain models, repository interfaces, and command handlers. No authentication, authorization, or cryptographic implementations are present yet. The main security concerns are around file-based storage implementation, environment variable handling in .gitignore, and missing input validation in command handlers.\n\n## Findings\n\n### INPUT_VALIDATION (medium)\n\nCommand handlers lack input validation and sanitization for user-provided data (fullName, cloneUrl, path parameters). The system accepts arbitrary strings without validation, potentially enabling injection attacks or path traversal.\n\n**Affected files:** `Affected: src/commands/start-processing-repo.ts`, `src/commands/update-wiki-page.ts`\n\n### PATH_TRAVERSAL (medium)\n\nWikiPage path parameter in UpdateWikiPageCommand is not validated against directory traversal patterns (../, absolute paths). An attacker could potentially write files outside intended directories.\n\n**Affected files:** `Affected: src/commands/update-wiki-page.ts`, `src/domain/wiki-page.ts`\n\n### SECRETS_MANAGEMENT (low)\n\n.gitignore properly excludes .env files, but there's no code implementation yet for secure environment variable handling or secrets management. Good foundation.\n\n**Affected files:** `Affected: .gitignore`\n\n### DEPENDENCY_SECURITY (low)\n\nDependencies include express, mongodb, and simple-git which have had historical vulnerabilities. No version pinning strategy visible - uses caret ranges (^) allowing minor version updates.\n\n**Affected files:** `Affected: package.json`\n\n### FILE_OPERATIONS (medium)\n\nFile-based repository pattern mentioned in .gitignore (.codewiki-data/) but implementation not shown in diff. Potential for insecure file operations if not implemented with proper permissions and validation.\n\n**Affected files:** `Affected: .gitignore`, `src/repositories/file-based/ references`\n\n### AUDIT_LOGGING (low)\n\nDomain models track timestamps (startedAt, completedAt, updatedAt) but no explicit audit logging or security event tracking mechanisms visible.\n\n**Affected files:** `Affected: src/domain/*.ts`\n\n## Potential Vulnerabilities\n\n- [Path Traversal - CWE-22] The WikiPage path parameter could be exploited to write files outside intended directories if not properly validated (e.g., \"../../../etc/passwd\"). No sanitization or allowlist validation present in update-wiki-page.ts.\n- [Command Injection - CWE-78] The cloneUrl parameter in StartProcessingRepoCommand will likely be passed to simple-git. Without validation, could enable command injection if malicious URLs are crafted (e.g., URLs with shell metacharacters).\n- [Unvalidated Redirect - CWE-601] If cloneUrl is used without validation, could potentially be exploited for SSRF or redirect attacks to internal services.\n\n\n\n## Files Reviewed\n\n- `.gitignore`\n- `package.json`\n- `src/commands/index.ts`\n- `src/commands/start-processing-repo.ts`\n- `src/commands/types.ts`\n- `src/commands/update-wiki-page.ts`\n- `src/domain/agent-run.ts`\n- `src/domain/commit.ts`\n- `src/domain/conflict.ts`\n- `src/domain/index.ts`\n- `src/domain/learning.ts`\n- `src/domain/repo.ts`\n- `src/domain/wiki-page.ts`\n- `src/domain/work-item.ts`\n- `src/index.ts`\n- `src/queries/get-repo-status.ts`\n- `src/queries/get-wiki-page.ts`\n- `src/queries/index.ts`\n- `src/queries/search-wiki.ts`\n- `src/queries/types.ts`\n- `src/repositories/file-based/file-agent-run-repository.ts`\n- `src/repositories/file-based/file-commit-repository.ts`\n- `src/repositories/file-based/file-conflict-repository.ts`\n- `src/repositories/file-based/file-learning-repository.ts`\n- `src/repositories/file-based/file-repo-repository.ts`\n- `src/repositories/file-based/file-store.ts`\n- `src/repositories/file-based/file-wiki-page-repository.ts`\n- `src/repositories/file-based/file-work-queue-repository.ts`\n- `src/repositories/file-based/index.ts`\n- `src/repositories/index.ts`\n- `src/repositories/interfaces/agent-run-repository.ts`\n- `src/repositories/interfaces/commit-repository.ts`\n- `src/repositories/interfaces/conflict-repository.ts`\n- `src/repositories/interfaces/index.ts`\n- `src/repositories/interfaces/learning-repository.ts`\n- `src/repositories/interfaces/repo-repository.ts`\n- `src/repositories/interfaces/wiki-page-repository.ts`\n- `src/repositories/interfaces/work-queue-repository.ts`\n- `tsconfig.json`\n\n---\n*Security audit from commit af17f139*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "af17f139216b14a9963812157b3923ef5bde7d66"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:16:49.252Z",
+    "updatedAt": "2025-11-25T22:16:49.252Z"
+  },
+  {
+    "id": "0ab21dbe-fa6c-4379-9837-35c71a639592",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "conventions/coding-standards",
+    "title": "Coding Standards & Conventions",
+    "content": "# Coding Standards & Conventions\n\n## Observed Conventions\n\n- **Naming Convention - Agents**: All specialized processing components are suffixed with \"Agent\" (Code Change Agent, Writer Agent, Research Agent). Clear, consistent naming that immediately identifies component type.\n- **Naming Convention - Commands/Queries**: Commands use imperative verbs (StartProcessingRepo, RunAgent, UpdateWikiPage). Queries use Get/Search prefixes (GetWikiPage, SearchWiki). Standard CQRS naming convention.\n- **Database as Queue**: Queues implemented as database records with timestamps and status fields rather than separate queue services. Simplicity-first approach that reduces infrastructure complexity.\n- **Single Source of Truth**: All state lives in one database. No distributed state, no separate cache layers. Simplifies reasoning about system behavior.\n- **Markdown for Documentation**: Wiki content stored as Markdown. Industry-standard, human-readable, tool-friendly format.\n- **Confidence Scoring**: Every piece of information includes confidence metadata. Transparency about data quality and completeness.\n- **Timestamp-Based Conflict Resolution**: When conflicts occur, most recent commit wins. Simple, deterministic conflict resolution strategy.\n- **Self-Documentation**: The codebase documents itself through its own wiki. \"The Repo as Its Own Best Example\" - dogfooding principle.\n\n---\n*Updated from commit b908ecb1*\n",
+    "confidence": 1,
+    "sourceCommits": [
+      "296d345be67c674f9784914ac65b726cd0c1712d",
+      "a99a401366534bbafb9d20d9fb722523feebe507",
+      "adc01766a9f6b9e6c1618b04aa21fe0b4223255d",
+      "2de75bb05e52bdea77cfc9f06f3303290153344e",
+      "4ec0c5460502ceb808354d1363f7e8496f33323e",
+      "4d5def6044fa795f5cd5205b78dc288bf73c3afc",
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618",
+      "84389967e435d61e9e39d9d51b732370a30098e4",
+      "15782f7c6bbf978ee9d070e879a73b0801b03472",
+      "c69224baf050cd8bb45211b4d17cb71653b28d72",
+      "af17f139216b14a9963812157b3923ef5bde7d66",
+      "b908ecb120818e12f51e066a6a8619fc00adbe45"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:17:57.659Z",
+    "updatedAt": "2025-11-25T22:25:50.905Z"
+  },
+  {
+    "id": "b02e292a-03ed-4131-9da7-238f25fdf9ac",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "patterns/anti-patterns",
+    "title": "Anti-Patterns to Avoid",
+    "content": "# Anti-Patterns to Avoid\n\nThese patterns have been identified as problematic in the codebase:\n\n## **No Anti-Patterns Detected**\n\n**No Anti-Patterns Detected**: The plan document shows strong architectural thinking with clear separation of concerns, appropriate use of established patterns, and conscious decisions about complexity trade-offs. The architecture avoids common pitfalls like premature optimization, over-engineering, and tight coupling.\n\n\n---\n*Updated from commit b908ecb1*\n",
+    "confidence": 1,
+    "sourceCommits": [
+      "296d345be67c674f9784914ac65b726cd0c1712d",
+      "a99a401366534bbafb9d20d9fb722523feebe507",
+      "adc01766a9f6b9e6c1618b04aa21fe0b4223255d",
+      "2de75bb05e52bdea77cfc9f06f3303290153344e",
+      "4ec0c5460502ceb808354d1363f7e8496f33323e",
+      "4d5def6044fa795f5cd5205b78dc288bf73c3afc",
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618",
+      "84389967e435d61e9e39d9d51b732370a30098e4",
+      "15782f7c6bbf978ee9d070e879a73b0801b03472",
+      "c69224baf050cd8bb45211b4d17cb71653b28d72",
+      "af17f139216b14a9963812157b3923ef5bde7d66",
+      "b908ecb120818e12f51e066a6a8619fc00adbe45"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:17:57.661Z",
+    "updatedAt": "2025-11-25T22:25:50.907Z"
+  },
+  {
+    "id": "2b5b5473-7ea3-4923-9b33-df9696ca60aa",
+    "repoId": "80591712-e111-43f7-86de-182008e65e02",
+    "path": "architecture/dependencies",
+    "title": "Dependencies",
+    "content": "# Dependencies\n\n## Recent Changes (af17f139)\n\n### Added\n- **mongodb**: ^6.3.0 - Database driver for persistent storage of domain entities (repos, wiki pages, commits, agent runs)\n- **express**: ^4.18.2 - HTTP framework for exposing REST API and potential web interface\n- **zod**: ^3.22.4 - Runtime type validation and schema definition, complementing TypeScript's compile-time checking\n- **simple-git**: ^3.22.0 - Git operations wrapper for cloning repos and reading commit history\n- **uuid**: ^9.0.1 - Generating unique IDs for domain entities (visible in code creating repos, wiki pages, agent runs)\n- **@types/express**: ^4.17.21 - TypeScript definitions for Express\n- **@types/node**: ^20.10.0 - TypeScript definitions for Node.js APIs\n- **@types/uuid**: ^9.0.7 - TypeScript definitions for uuid package\n- **typescript**: ^5.3.2 - TypeScript compiler for building the project\n- **tsx**: ^4.6.2 - TypeScript execution and watch mode for development\n- **vitest**: ^1.0.4 - Fast unit test runner with native ESM and TypeScript support\n- **@playwright/test**: ^1.40.1 - End-to-end testing framework for integration tests\n- **eslint**: ^8.55.0 - Code linting for maintainability\n- **@typescript-eslint/eslint-plugin**: ^6.13.2 - ESLint rules for TypeScript\n- **@typescript-eslint/parser**: ^6.13.2 - ESLint parser for TypeScript syntax\n\n\n\n\n\n\n## Breaking Changes\n\n- MongoDB 6.x uses new connection string format and authentication mechanisms\n- Express 4.x will eventually need migration to Express 5.x (major version)\n- Vitest 1.x is recently stable, may have API changes in future major versions\n- TypeScript 5.x includes new features that may require code adjustments when updating from 4.x\n\n\n## Security Notes\n\n- **MongoDB**: Version 6.3.0 is relatively recent (late 2023). Should verify no known CVEs. Connection string handling requires care to avoid credential leaks.\n- **Express 4.18.2**: Mature version with known security track record. Should implement helmet and other security middleware before production.\n- **simple-git**: Executes Git commands - requires careful input validation to prevent command injection. The ^3.22.0 version should be checked for recent security patches.\n- **uuid**: Standard package for ID generation, low security risk.\n- **Zod**: Validation library helps prevent injection attacks and malformed data - positive security choice.\n- **All @types packages**: No runtime security impact.\n- **Development dependencies**: No production runtime risk, but Playwright runs browsers which increases attack surface during testing.\n\n\n**Impact Level:** minimal\n\n---\n*Last updated from commit af17f139*\n",
+    "confidence": 1,
+    "sourceCommits": [
+      "60a1d8368046bd529a9398ebe0f6497dd39d5618",
+      "84389967e435d61e9e39d9d51b732370a30098e4",
+      "15782f7c6bbf978ee9d070e879a73b0801b03472",
+      "af17f139216b14a9963812157b3923ef5bde7d66"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-25T22:26:21.154Z",
+    "updatedAt": "2025-11-25T22:28:19.831Z"
+  }
+]
