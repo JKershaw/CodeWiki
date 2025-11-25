@@ -1,0 +1,314 @@
+import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
+import { createAgentResult, createFinding } from '../base-agent.js';
+import type { AgentType } from '../../domain/agent-run.js';
+import type { WikiPageUpdate } from '../../domain/wiki-page.js';
+
+/**
+ * Narrative Agent - Detects meta-documents and captures project storytelling.
+ *
+ * This agent looks for planning files, ADRs (Architecture Decision Records),
+ * idea docs, changelogs, and other narrative content that explains the "why"
+ * behind the codebase.
+ */
+export class NarrativeAgent implements Agent {
+  readonly type: AgentType = 'narrative';
+
+  async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
+    const commit = await context.repos.commits.findById(commitId);
+    if (!commit) {
+      throw new Error(`Commit not found: ${commitId}`);
+    }
+
+    const diff = await context.git.getCommitDiff(context.repoId, commit.sha);
+    const prompt = this.buildPrompt(commit, diff);
+
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 2000,
+      temperature: 0.3,
+    });
+
+    const analysis = this.parseResponse(completion.content);
+    const updates = this.generateUpdates(commit, analysis);
+
+    return {
+      result: createAgentResult({
+        summary: analysis.summary,
+        findings: analysis.findings.map(f => createFinding({
+          type: f.type,
+          description: f.description,
+          relatedPaths: f.paths,
+          importance: f.importance,
+        })),
+        confidence: analysis.confidence,
+      }),
+      updates,
+      costUsd: completion.costUsd,
+    };
+  }
+
+  private buildPrompt(commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } }, diff: string): string {
+    const truncatedDiff = diff.length > 10000 ? diff.slice(0, 10000) + '\n... (diff truncated)' : diff;
+
+    return `Analyze this commit for narrative and meta-documentation content.
+
+## Commit Information
+
+**SHA:** ${commit.sha.slice(0, 8)}
+**Message:** ${commit.message}
+**Author:** ${commit.authorName}
+**Date:** ${commit.committedAt.toISOString()}
+**Files Changed:** ${commit.diffSummary.affectedFiles.length}
+
+## Affected Files
+
+${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
+
+## Diff
+
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+
+Look for:
+1. Planning documents (PLAN.md, roadmap, project plans)
+2. Architecture Decision Records (ADRs)
+3. Design documents or RFCs
+4. Changelogs or release notes
+5. Philosophy or principles documents
+6. Onboarding or getting-started guides
+7. Important README updates that explain "why"
+8. Commit messages that tell a story about major decisions
+
+Format your response as:
+
+SUMMARY:
+[Brief description of narrative content found, or "No significant narrative content"]
+
+NARRATIVE_TYPE:
+[One of: planning, adr, design, changelog, philosophy, guide, readme, decision, none]
+
+FINDINGS:
+- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
+
+KEY_DECISIONS:
+- [Decision description with context]
+
+WIKI_UPDATES:
+- [PAGE_PATH] [ACTION:create/update] [Content description]
+
+CONFIDENCE: [0-1 value]
+`;
+  }
+
+  private parseResponse(response: string): ParsedAnalysis {
+    const analysis: ParsedAnalysis = {
+      summary: '',
+      narrativeType: 'none',
+      findings: [],
+      keyDecisions: [],
+      wikiUpdates: [],
+      confidence: 0.5,
+    };
+
+    // Parse summary
+    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=NARRATIVE_TYPE:|FINDINGS:|$)/i);
+    if (summaryMatch) {
+      analysis.summary = summaryMatch[1]!.trim();
+    }
+
+    // Parse narrative type
+    const typeMatch = response.match(/NARRATIVE_TYPE:\s*(\w+)/i);
+    if (typeMatch) {
+      analysis.narrativeType = typeMatch[1]!.toLowerCase() as NarrativeType;
+    }
+
+    // Parse findings
+    const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=KEY_DECISIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
+    if (findingsMatch) {
+      const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      for (const line of findingLines) {
+        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
+        if (match) {
+          analysis.findings.push({
+            type: match[1]!.trim(),
+            importance: match[2]!.toLowerCase() as 'low' | 'medium' | 'high',
+            description: match[3]!.trim(),
+            paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+          });
+        }
+      }
+    }
+
+    // Parse key decisions
+    const decisionsMatch = response.match(/KEY_DECISIONS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
+    if (decisionsMatch) {
+      const decisionLines = decisionsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      for (const line of decisionLines) {
+        analysis.keyDecisions.push(line.replace(/^-\s*/, '').trim());
+      }
+    }
+
+    // Parse wiki updates
+    const updatesMatch = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    if (updatesMatch) {
+      const updateLines = updatesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      for (const line of updateLines) {
+        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
+        if (match) {
+          analysis.wikiUpdates.push({
+            path: match[1]!.trim(),
+            action: match[2]!.toLowerCase() as 'create' | 'update',
+            description: match[3]!.trim(),
+          });
+        }
+      }
+    }
+
+    // Parse confidence
+    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
+    if (confidenceMatch) {
+      analysis.confidence = parseFloat(confidenceMatch[1]!);
+    }
+
+    return analysis;
+  }
+
+  private generateUpdates(
+    commit: { sha: string; message: string; diffSummary: { affectedFiles: string[] } },
+    analysis: ParsedAnalysis
+  ): WikiPageUpdate[] {
+    const updates: WikiPageUpdate[] = [];
+
+    // Skip if no narrative content
+    if (analysis.narrativeType === 'none' && analysis.keyDecisions.length === 0) {
+      return updates;
+    }
+
+    // Create a page for significant narrative content
+    if (analysis.narrativeType !== 'none') {
+      const categoryMap: Record<NarrativeType, string> = {
+        planning: 'planning',
+        adr: 'decisions',
+        design: 'architecture',
+        changelog: 'history',
+        philosophy: 'philosophy',
+        guide: 'guides',
+        readme: 'overview',
+        decision: 'decisions',
+        none: 'misc',
+      };
+
+      const category = categoryMap[analysis.narrativeType];
+      const pagePath = `${category}/${commit.sha.slice(0, 8)}-${slugify(analysis.summary.slice(0, 50))}`;
+
+      const content = `# ${analysis.summary.slice(0, 100)}
+
+${analysis.summary}
+
+## Key Points
+
+${analysis.findings.map(f => `- **${f.type}**: ${f.description}`).join('\n')}
+
+${analysis.keyDecisions.length > 0 ? `## Decisions Made
+
+${analysis.keyDecisions.map(d => `- ${d}`).join('\n')}` : ''}
+
+## Source Files
+
+${commit.diffSummary.affectedFiles.map(f => `- \`${f}\``).join('\n')}
+
+---
+*Captured from commit ${commit.sha.slice(0, 8)}*
+`;
+
+      updates.push({
+        type: 'create',
+        path: pagePath,
+        content,
+        sourceCommitId: commit.sha,
+        agentRunId: '',
+        confidenceDelta: 0.3,
+      });
+    }
+
+    // Add any wiki updates suggested by the LLM
+    for (const wikiUpdate of analysis.wikiUpdates) {
+      updates.push({
+        type: wikiUpdate.action,
+        path: wikiUpdate.path,
+        content: `# ${pathToTitle(wikiUpdate.path)}
+
+${wikiUpdate.description}
+
+---
+*Updated from commit ${commit.sha.slice(0, 8)}*
+`,
+        sourceCommitId: commit.sha,
+        agentRunId: '',
+        confidenceDelta: 0.2,
+      });
+    }
+
+    return updates;
+  }
+}
+
+type NarrativeType = 'planning' | 'adr' | 'design' | 'changelog' | 'philosophy' | 'guide' | 'readme' | 'decision' | 'none';
+
+interface ParsedAnalysis {
+  summary: string;
+  narrativeType: NarrativeType;
+  findings: Array<{
+    type: string;
+    importance: 'low' | 'medium' | 'high';
+    description: string;
+    paths: string[];
+  }>;
+  keyDecisions: string[];
+  wikiUpdates: Array<{
+    path: string;
+    action: 'create' | 'update';
+    description: string;
+  }>;
+  confidence: number;
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function pathToTitle(path: string): string {
+  const lastPart = path.split('/').pop() ?? path;
+  return lastPart
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+const SYSTEM_PROMPT = `You are a narrative analysis agent for CodeWiki, a system that generates living documentation from Git repositories.
+
+Your specialty is identifying meta-documentation: content that explains the "why" behind the codebase rather than just the "what". This includes:
+
+- Planning documents that capture project vision and roadmaps
+- Architecture Decision Records (ADRs) that document key technical choices
+- Design documents and RFCs
+- Philosophy and principles documents
+- Changelogs and release notes
+- Important README updates
+
+When you find narrative content:
+1. Identify the type of narrative (planning, ADR, design, etc.)
+2. Extract key decisions and their rationale
+3. Note any principles or guidelines established
+4. Suggest wiki pages that should capture this knowledge
+
+Your confidence should reflect:
+- 0.9+: Clear narrative document with explicit decisions/rationale
+- 0.7-0.9: Commit message or README with good context
+- 0.5-0.7: Implied decisions from code changes
+- <0.5: No significant narrative content`;
