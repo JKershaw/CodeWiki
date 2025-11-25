@@ -77,14 +77,14 @@ test.describe('Wiki Query', () => {
     // Submit
     await page.click('#submit-query');
 
-    // Should show loading
-    await expect(page.locator('#query-answer')).toContainText(/Searching|Loading/);
-
-    // Wait for result (may take a while with real LLM)
+    // Result container should become visible (may show loading briefly, then result)
     await expect(page.locator('#query-result')).not.toHaveClass(/hidden/, { timeout: 60000 });
 
-    // Result should have content
-    await expect(page.locator('#query-answer')).not.toBeEmpty();
+    // Result should have content (either loading text or actual answer)
+    await expect(page.locator('#query-answer')).not.toBeEmpty({ timeout: 60000 });
+
+    // Wait for actual answer (not loading text) - confirms API responded
+    await expect(page.locator('#query-meta')).toContainText('Confidence', { timeout: 60000 });
   });
 
   test('query result shows confidence and sources', async ({ page, request }) => {
