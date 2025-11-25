@@ -2,6 +2,28 @@ import type { CommitRepository } from '../interfaces/commit-repository.js';
 import type { Commit, AgentProcessingRecord } from '../../domain/commit.js';
 import { FileStore } from './file-store.js';
 
+/**
+ * Normalize commit dates from JSON storage.
+ * JSON storage may convert Date objects to ISO strings.
+ */
+function normalizeCommitDates(commit: Commit): Commit {
+  return {
+    ...commit,
+    committedAt: commit.committedAt instanceof Date
+      ? commit.committedAt
+      : new Date(commit.committedAt as unknown as string),
+    createdAt: commit.createdAt instanceof Date
+      ? commit.createdAt
+      : new Date(commit.createdAt as unknown as string),
+    processedBy: commit.processedBy.map(p => ({
+      ...p,
+      processedAt: p.processedAt instanceof Date
+        ? p.processedAt
+        : new Date(p.processedAt as unknown as string),
+    })),
+  };
+}
+
 export class FileCommitRepository implements CommitRepository {
   private store: FileStore<Commit>;
 
@@ -10,22 +32,19 @@ export class FileCommitRepository implements CommitRepository {
   }
 
   async findById(id: string): Promise<Commit | null> {
-    return this.store.get(id);
+    const commit = await this.store.get(id);
+    return commit ? normalizeCommitDates(commit) : null;
   }
 
   async findBySha(repoId: string, sha: string): Promise<Commit | null> {
-    return this.store.findOne(c => c.repoId === repoId && c.sha === sha);
+    const commit = await this.store.findOne(c => c.repoId === repoId && c.sha === sha);
+    return commit ? normalizeCommitDates(commit) : null;
   }
 
   async findByRepo(repoId: string, options?: { limit?: number; offset?: number }): Promise<Commit[]> {
-    const all = await this.store.find(c => c.repoId === repoId);
+    const all = (await this.store.find(c => c.repoId === repoId)).map(normalizeCommitDates);
     // Sort by commit date, newest first
-    // Handle both Date objects and ISO strings (from JSON)
-    all.sort((a, b) => {
-      const dateA = a.committedAt instanceof Date ? a.committedAt : new Date(a.committedAt as unknown as string);
-      const dateB = b.committedAt instanceof Date ? b.committedAt : new Date(b.committedAt as unknown as string);
-      return dateB.getTime() - dateA.getTime();
-    });
+    all.sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime());
 
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? all.length;
@@ -33,19 +52,21 @@ export class FileCommitRepository implements CommitRepository {
   }
 
   async findUnprocessedByAgent(repoId: string, agentType: string): Promise<Commit[]> {
-    return this.store.find(c =>
+    const commits = await this.store.find(c =>
       c.repoId === repoId &&
       !c.processedBy.some(p => p.agentType === agentType)
     );
+    return commits.map(normalizeCommitDates);
   }
 
   async findByDateRange(repoId: string, start: Date, end: Date): Promise<Commit[]> {
-    return this.store.find(c => {
+    const commits = await this.store.find(c => {
       const commitDate = c.committedAt instanceof Date ? c.committedAt : new Date(c.committedAt as unknown as string);
       return c.repoId === repoId &&
         commitDate >= start &&
         commitDate <= end;
     });
+    return commits.map(normalizeCommitDates);
   }
 
   async countByRepo(repoId: string): Promise<number> {

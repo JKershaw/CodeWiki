@@ -122,10 +122,27 @@ tests/
     └── repositories.spec.ts
 ```
 
+## Multi-Agent Processing
+
+All analysis agents are now registered and active in the executor:
+
+| Agent | Purpose | Status |
+|-------|---------|--------|
+| code-change | General code analysis | Active |
+| narrative | ADRs, planning docs, READMEs | Active |
+| security | Security audit | Active |
+| pattern | Design patterns, conventions | Active |
+| dependency | Dependency changes | Active |
+
+The orchestrator generates work for all agents in order:
+1. First, code-change processes all commits (establishes base wiki content)
+2. Then narrative, security, pattern, dependency add their perspectives
+
+Each commit is tracked per-agent via `processedBy` array, enabling incremental multi-agent processing.
+
 ## Next Steps (Future Work)
-1. Register new agents in executor for actual use
-2. Add Meta Agents (Structure, Link, Quality, Consistency)
-3. Add Synthesis Agents (Guide, Overview, History, Convention)
-4. Implement Writer Agent when scaling requires it
-5. Add GitHub OAuth for web authentication
-6. Deploy to production (Heroku)
+1. Add Meta Agents (Structure, Link, Quality, Consistency)
+2. Add Synthesis Agents (Guide, Overview, History, Convention)
+3. Implement Writer Agent when scaling requires it
+4. Add GitHub OAuth for web authentication
+5. Deploy to production (Heroku)

@@ -7,6 +7,10 @@ import type { WorkItem } from '../domain/work-item.js';
 import { createAgentRun, type AgentRun } from '../domain/agent-run.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { CodeChangeAgent } from '../agents/analysis/code-change-agent.js';
+import { NarrativeAgent } from '../agents/analysis/narrative-agent.js';
+import { SecurityAgent } from '../agents/analysis/security-agent.js';
+import { PatternAgent } from '../agents/analysis/pattern-agent.js';
+import { DependencyAgent } from '../agents/analysis/dependency-agent.js';
 
 /**
  * Executor - The inner loop that runs agents from the work queue.
@@ -25,8 +29,12 @@ export class Executor {
     private readonly llm: LLMService,
     private readonly orchestrator: Orchestrator
   ) {
-    // Register built-in agents
+    // Register built-in analysis agents
     this.registerAgent(new CodeChangeAgent());
+    this.registerAgent(new NarrativeAgent());
+    this.registerAgent(new SecurityAgent());
+    this.registerAgent(new PatternAgent());
+    this.registerAgent(new DependencyAgent());
   }
 
   /**

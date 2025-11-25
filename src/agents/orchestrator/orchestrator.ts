@@ -5,6 +5,19 @@ import { createWorkItem, Priority } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
 
 /**
+ * Analysis agents that process commits.
+ * Order matters - code-change runs first to establish base wiki content,
+ * then specialized agents add their perspectives.
+ */
+const ANALYSIS_AGENTS: AgentType[] = [
+  'code-change',   // General code analysis - runs first
+  'narrative',     // Detects ADRs, planning docs, READMEs
+  'security',      // Security audit
+  'pattern',       // Design patterns and conventions
+  'dependency',    // Dependency changes
+];
+
+/**
  * Orchestrator - The decision-maker that produces prioritized work lists.
  *
  * Runs frequently and stays lightweight (2-3 tool calls typically).
@@ -44,31 +57,36 @@ export class Orchestrator {
 
     const remainingSlots = maxItems - pendingWork;
 
-    // Strategy 1: Process unprocessed commits (highest priority for recent commits)
-    const unprocessedCommits = await this.repos.commits.findUnprocessedByAgent(repoId, 'code-change');
-
-    // Sort by date - recent commits first
-    unprocessedCommits.sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime());
-
+    // Strategy 1: Process unprocessed commits with all analysis agents
+    // Each commit should be processed by all analysis agents for comprehensive coverage
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    for (const commit of unprocessedCommits) {
+    for (const agentType of ANALYSIS_AGENTS) {
       if (workItems.length >= remainingSlots) break;
 
-      // Check if work already exists for this commit
-      const exists = await this.repos.workQueue.exists(repoId, 'code-change', commit.id);
-      if (exists) continue;
+      const unprocessedCommits = await this.repos.commits.findUnprocessedByAgent(repoId, agentType);
 
-      const isRecent = commit.committedAt > oneWeekAgo;
-      const priority = isRecent ? Priority.RECENT_COMMIT : Priority.HISTORICAL_COMMIT;
+      // Sort by date - recent commits first
+      unprocessedCommits.sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime());
 
-      workItems.push(createWorkItem({
-        id: uuid(),
-        repoId,
-        agentType: 'code-change',
-        priority,
-        targetCommitId: commit.id,
-      }));
+      for (const commit of unprocessedCommits) {
+        if (workItems.length >= remainingSlots) break;
+
+        // Check if work already exists for this commit + agent
+        const exists = await this.repos.workQueue.exists(repoId, agentType, commit.id);
+        if (exists) continue;
+
+        const isRecent = commit.committedAt > oneWeekAgo;
+        const priority = isRecent ? Priority.RECENT_COMMIT : Priority.HISTORICAL_COMMIT;
+
+        workItems.push(createWorkItem({
+          id: uuid(),
+          repoId,
+          agentType,
+          priority,
+          targetCommitId: commit.id,
+        }));
+      }
     }
 
     // Strategy 2: Address open conflicts (high priority)
@@ -98,9 +116,11 @@ export class Orchestrator {
     const pendingCount = await this.repos.workQueue.countPending(repoId);
     if (pendingCount > 0) return true;
 
-    // Check for unprocessed commits
-    const unprocessedCommits = await this.repos.commits.findUnprocessedByAgent(repoId, 'code-change');
-    if (unprocessedCommits.length > 0) return true;
+    // Check for unprocessed commits across all analysis agents
+    for (const agentType of ANALYSIS_AGENTS) {
+      const unprocessedCommits = await this.repos.commits.findUnprocessedByAgent(repoId, agentType);
+      if (unprocessedCommits.length > 0) return true;
+    }
 
     // Check for open conflicts
     const openConflicts = await this.repos.conflicts.findOpen(repoId);
@@ -119,17 +139,25 @@ export class Orchestrator {
   async getWorkSummary(repoId: string): Promise<WorkSummary> {
     const [
       totalCommits,
-      processedCommits,
       pendingWork,
       wikiPages,
       openConflicts,
     ] = await Promise.all([
       this.repos.commits.countByRepo(repoId),
-      this.repos.commits.countProcessedByAgent(repoId, 'code-change'),
       this.repos.workQueue.countPending(repoId),
       this.repos.wikiPages.findByRepo(repoId),
       this.repos.conflicts.findOpen(repoId),
     ]);
+
+    // Get per-agent coverage
+    const agentCoverage: Record<string, number> = {};
+    for (const agentType of ANALYSIS_AGENTS) {
+      const processed = await this.repos.commits.countProcessedByAgent(repoId, agentType);
+      agentCoverage[agentType] = totalCommits > 0 ? (processed / totalCommits) * 100 : 0;
+    }
+
+    // Overall coverage is based on code-change (primary agent)
+    const processedCommits = await this.repos.commits.countProcessedByAgent(repoId, 'code-change');
 
     const avgConfidence = wikiPages.length > 0
       ? wikiPages.reduce((sum, p) => sum + p.confidence, 0) / wikiPages.length
@@ -139,6 +167,7 @@ export class Orchestrator {
       totalCommits,
       processedCommits,
       coveragePercent: totalCommits > 0 ? (processedCommits / totalCommits) * 100 : 0,
+      agentCoverage,
       pendingWork,
       wikiPages: wikiPages.length,
       avgConfidence,
@@ -151,6 +180,7 @@ export interface WorkSummary {
   totalCommits: number;
   processedCommits: number;
   coveragePercent: number;
+  agentCoverage: Record<string, number>;
   pendingWork: number;
   wikiPages: number;
   avgConfidence: number;
