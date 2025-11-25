@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeWiki</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>CodeWiki</h1>
+      <p class="tagline">Living documentation from your Git history</p>
+    </header>
+
+    <nav id="nav">
+      <button class="nav-btn active" data-view="repos">Repositories</button>
+      <button class="nav-btn" data-view="wiki" disabled>Wiki</button>
+      <button class="nav-btn" data-view="query" disabled>Query</button>
+    </nav>
+
+    <main>
+      <!-- Repositories View -->
+      <section id="repos-view" class="view active">
+        <div class="section-header">
+          <h2>Repositories</h2>
+          <button id="add-repo-btn" class="btn primary">Add Repository</button>
+        </div>
+
+        <div id="add-repo-form" class="form-container hidden">
+          <input type="text" id="repo-path" placeholder="Enter repository path (e.g., /path/to/repo or .)" />
+          <button id="submit-repo-btn" class="btn">Add</button>
+          <button id="cancel-repo-btn" class="btn secondary">Cancel</button>
+        </div>
+
+        <div id="repos-list" class="card-list">
+          <p class="loading">Loading repositories...</p>
+        </div>
+      </section>
+
+      <!-- Wiki View -->
+      <section id="wiki-view" class="view">
+        <div class="section-header">
+          <h2>Wiki: <span id="wiki-repo-name"></span></h2>
+          <button id="back-to-repos" class="btn secondary">Back to Repos</button>
+        </div>
+
+        <div class="wiki-layout">
+          <aside id="wiki-sidebar">
+            <h3>Pages</h3>
+            <div id="wiki-categories"></div>
+          </aside>
+
+          <article id="wiki-content">
+            <p class="placeholder">Select a page from the sidebar</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- Query View -->
+      <section id="query-view" class="view">
+        <div class="section-header">
+          <h2>Query: <span id="query-repo-name"></span></h2>
+          <button id="back-to-repos-query" class="btn secondary">Back to Repos</button>
+        </div>
+
+        <div class="query-container">
+          <div class="query-input">
+            <input type="text" id="query-question" placeholder="Ask a question about the codebase..." />
+            <button id="submit-query" class="btn primary">Ask</button>
+          </div>
+
+          <div id="query-result" class="query-result hidden">
+            <div id="query-answer" class="answer"></div>
+            <div id="query-meta" class="meta"></div>
+            <div id="query-sources" class="sources"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>CodeWiki - Generate living wikis from Git repositories</p>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

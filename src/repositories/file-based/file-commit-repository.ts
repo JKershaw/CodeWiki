@@ -20,7 +20,12 @@ export class FileCommitRepository implements CommitRepository {
   async findByRepo(repoId: string, options?: { limit?: number; offset?: number }): Promise<Commit[]> {
     const all = await this.store.find(c => c.repoId === repoId);
     // Sort by commit date, newest first
-    all.sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime());
+    // Handle both Date objects and ISO strings (from JSON)
+    all.sort((a, b) => {
+      const dateA = a.committedAt instanceof Date ? a.committedAt : new Date(a.committedAt as unknown as string);
+      const dateB = b.committedAt instanceof Date ? b.committedAt : new Date(b.committedAt as unknown as string);
+      return dateB.getTime() - dateA.getTime();
+    });
 
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? all.length;
@@ -35,11 +40,12 @@ export class FileCommitRepository implements CommitRepository {
   }
 
   async findByDateRange(repoId: string, start: Date, end: Date): Promise<Commit[]> {
-    return this.store.find(c =>
-      c.repoId === repoId &&
-      c.committedAt >= start &&
-      c.committedAt <= end
-    );
+    return this.store.find(c => {
+      const commitDate = c.committedAt instanceof Date ? c.committedAt : new Date(c.committedAt as unknown as string);
+      return c.repoId === repoId &&
+        commitDate >= start &&
+        commitDate <= end;
+    });
   }
 
   async countByRepo(repoId: string): Promise<number> {
