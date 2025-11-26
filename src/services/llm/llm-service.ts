@@ -193,6 +193,7 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'claude-3-haiku': { input: 0.25, output: 1.25 },
   'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
   'claude-3-5-haiku-20241022': { input: 0.8, output: 4 },
+  'claude-haiku-4-5-20250929': { input: 1, output: 5 },  // Haiku 4.5 - good for JSON
   'mock': { input: 0, output: 0 },
 };
 

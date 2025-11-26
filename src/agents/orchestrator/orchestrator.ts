@@ -3,6 +3,10 @@ import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
 import { createWorkItem, Priority } from '../../domain/work-item.js';
 import type { AgentType, AgentRun } from '../../domain/agent-run.js';
+import type { LLMService } from '../../services/llm/llm-service.js';
+import { ContextGatherer } from './context-gatherer.js';
+import { ORCHESTRATOR_SYSTEM_PROMPT, buildUserPrompt, parseOrchestratorResponse } from './prompts.js';
+import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 
 /**
  * Analysis agents that process commits.
@@ -29,14 +33,39 @@ const META_AGENTS: AgentType[] = [
 ];
 
 /**
+ * Orchestrator configuration.
+ */
+export interface OrchestratorConfig {
+  /** Use LLM for decision making (default: false) */
+  useLLM?: boolean;
+  /** Model to use for orchestration (default: claude-haiku-4-5-20250929) */
+  model?: string;
+}
+
+/**
  * Orchestrator - The decision-maker that produces prioritized work lists.
  *
- * Runs frequently and stays lightweight (2-3 tool calls typically).
- * It examines wiki state, commit coverage, agent history, confidence scores,
- * and any flagged issues to decide what work should happen next.
+ * Can operate in two modes:
+ * - Deterministic: Uses fixed strategies (default, faster, predictable)
+ * - LLM-powered: Uses an LLM to make intelligent decisions (smarter, adapts to context)
+ *
+ * The LLM mode falls back to deterministic if the LLM call fails.
  */
 export class Orchestrator {
-  constructor(private readonly repos: Repositories) {}
+  private contextGatherer: ContextGatherer;
+  private config: OrchestratorConfig;
+
+  constructor(
+    private readonly repos: Repositories,
+    private readonly llm?: LLMService,
+    config?: OrchestratorConfig
+  ) {
+    this.contextGatherer = new ContextGatherer(repos);
+    this.config = {
+      useLLM: config?.useLLM ?? false,
+      model: config?.model ?? 'claude-haiku-4-5-20250929',
+    };
+  }
 
   /**
    * Run the orchestrator to produce a prioritized work list.
@@ -46,6 +75,117 @@ export class Orchestrator {
    * @returns Work items to be processed
    */
   async generateWorkList(repoId: string, maxItems: number = 10): Promise<WorkItem[]> {
+    // Check if we should use LLM
+    if (this.config.useLLM && this.llm) {
+      try {
+        return await this.generateWithLLM(repoId, maxItems);
+      } catch (error) {
+        console.warn('LLM orchestration failed, falling back to deterministic:', error);
+        // Fall through to deterministic
+      }
+    }
+
+    return this.generateDeterministic(repoId, maxItems);
+  }
+
+  /**
+   * Generate work list using LLM reasoning.
+   */
+  private async generateWithLLM(repoId: string, maxItems: number): Promise<WorkItem[]> {
+    const startTime = Date.now();
+
+    // Gather context
+    const context = await this.contextGatherer.gather(repoId);
+    const contextString = this.contextGatherer.formatForPrompt(context);
+
+    // Build prompt
+    const userPrompt = buildUserPrompt(context, contextString, maxItems);
+
+    // Create tracking record
+    const runId = uuid();
+    const orchestratorRun = createOrchestratorRun({
+      id: runId,
+      repoId,
+      context,
+      promptSent: userPrompt,
+    });
+
+    // Call LLM
+    const completion = await this.llm!.complete({
+      system: ORCHESTRATOR_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userPrompt }],
+      maxTokens: 2000,
+      temperature: 0.3,
+    });
+
+    // Get valid commit IDs for validation
+    const commits = await this.repos.commits.findByRepo(repoId, { limit: 100 });
+    const validCommitIds = new Set(commits.map(c => c.id));
+
+    // Parse response
+    const decision = parseOrchestratorResponse(completion.content, validCommitIds);
+
+    // Update tracking record
+    orchestratorRun.rawResponse = completion.content;
+    orchestratorRun.decision = decision;
+    orchestratorRun.model = completion.model;
+    orchestratorRun.costUsd = completion.costUsd;
+    orchestratorRun.durationMs = Date.now() - startTime;
+    orchestratorRun.usedLLM = true;
+
+    // Convert to work items
+    const workItems: WorkItem[] = [];
+    for (const item of decision.workItems) {
+      if (workItems.length >= maxItems) break;
+
+      // Check if work already exists (only for items with commit targets)
+      if (item.targetCommitId) {
+        const exists = await this.repos.workQueue.exists(
+          repoId,
+          item.agentType as AgentType,
+          item.targetCommitId
+        );
+        if (exists) continue;
+      }
+
+      const workItem = createWorkItem({
+        id: uuid(),
+        repoId,
+        agentType: item.agentType as AgentType,
+        priority: this.getPriority(item.agentType),
+        ...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
+      });
+
+      workItems.push(workItem);
+    }
+
+    // Save tracking record
+    orchestratorRun.workItemsCreated = workItems.map(w => w.id);
+    await this.repos.orchestratorRuns.save(orchestratorRun);
+
+    console.log(`🤖 LLM Orchestrator: "${decision.reasoning}" (${workItems.length} items, $${completion.costUsd.toFixed(4)})`);
+
+    return workItems;
+  }
+
+  /**
+   * Get priority for an agent type.
+   */
+  private getPriority(agentType: string): number {
+    if (ANALYSIS_AGENTS.includes(agentType as AgentType)) {
+      return Priority.RECENT_COMMIT;
+    }
+    if (META_AGENTS.includes(agentType as AgentType)) {
+      return Priority.META;
+    }
+    return Priority.SYNTHESIS;
+  }
+
+  /**
+   * Generate work list using deterministic strategies.
+   * This is the fallback when LLM is not available or fails.
+   */
+  private async generateDeterministic(repoId: string, maxItems: number): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
 
     // Get current state
@@ -370,6 +510,20 @@ export class Orchestrator {
       openConflicts: openConflicts.length,
     };
   }
+
+  /**
+   * Enable or disable LLM mode.
+   */
+  setUseLLM(useLLM: boolean): void {
+    this.config.useLLM = useLLM;
+  }
+
+  /**
+   * Check if LLM mode is enabled.
+   */
+  isUsingLLM(): boolean {
+    return this.config.useLLM ?? false;
+  }
 }
 
 export interface WorkSummary {
@@ -386,6 +540,10 @@ export interface WorkSummary {
 /**
  * Create an orchestrator instance.
  */
-export function createOrchestrator(repos: Repositories): Orchestrator {
-  return new Orchestrator(repos);
+export function createOrchestrator(
+  repos: Repositories,
+  llm?: LLMService,
+  config?: OrchestratorConfig
+): Orchestrator {
+  return new Orchestrator(repos, llm, config);
 }

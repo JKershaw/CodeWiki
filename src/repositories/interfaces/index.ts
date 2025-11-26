@@ -13,6 +13,7 @@ export * from './agent-run-repository.js';
 export * from './work-queue-repository.js';
 export * from './conflict-repository.js';
 export * from './learning-repository.js';
+export * from './orchestrator-run-repository.js';
 
 import type { RepoRepository } from './repo-repository.js';
 import type { CommitRepository } from './commit-repository.js';
@@ -21,6 +22,7 @@ import type { AgentRunRepository } from './agent-run-repository.js';
 import type { WorkQueueRepository } from './work-queue-repository.js';
 import type { ConflictRepository } from './conflict-repository.js';
 import type { LearningRepository } from './learning-repository.js';
+import type { OrchestratorRunRepository } from './orchestrator-run-repository.js';
 
 /**
  * Collection of all repositories.
@@ -34,4 +36,5 @@ export interface Repositories {
   workQueue: WorkQueueRepository;
   conflicts: ConflictRepository;
   learnings: LearningRepository;
+  orchestratorRuns: OrchestratorRunRepository;
 }

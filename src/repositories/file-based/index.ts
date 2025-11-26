@@ -13,6 +13,7 @@ export * from './file-agent-run-repository.js';
 export * from './file-work-queue-repository.js';
 export * from './file-conflict-repository.js';
 export * from './file-learning-repository.js';
+export * from './file-orchestrator-run-repository.js';
 
 import type { Repositories } from '../interfaces/index.js';
 import { FileRepoRepository } from './file-repo-repository.js';
@@ -22,6 +23,7 @@ import { FileAgentRunRepository } from './file-agent-run-repository.js';
 import { FileWorkQueueRepository } from './file-work-queue-repository.js';
 import { FileConflictRepository } from './file-conflict-repository.js';
 import { FileLearningRepository } from './file-learning-repository.js';
+import { FileOrchestratorRunRepository } from './file-orchestrator-run-repository.js';
 
 /**
  * Create all file-based repositories.
@@ -38,5 +40,6 @@ export function createFileRepositories(baseDir = '.codewiki-data'): Repositories
     workQueue: new FileWorkQueueRepository(baseDir),
     conflicts: new FileConflictRepository(baseDir),
     learnings: new FileLearningRepository(baseDir),
+    orchestratorRuns: new FileOrchestratorRunRepository(baseDir),
   };
 }

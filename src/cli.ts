@@ -77,8 +77,10 @@ Usage:
   npx tsx src/cli.ts <command> [options]
 
 Commands:
-  process <repo-path> [iterations]  Process a local Git repository
+  process <repo-path> [iterations] [--smart]
+                                    Process a local Git repository
                                     Default: 10 iterations
+                                    --smart: Use LLM for intelligent orchestration
 
   query <repo-path> "<question>"    Ask a question about the codebase
                                     Searches wiki and synthesizes an answer
@@ -89,6 +91,7 @@ Commands:
 
 Examples:
   npx tsx src/cli.ts process . 5                        # Process current repo
+  npx tsx src/cli.ts process . 20 --smart              # Smart orchestration
   npx tsx src/cli.ts query . "what is the architecture?"  # Ask about architecture
   npx tsx src/cli.ts query . "why use CQRS?"            # Ask about decisions
   npx tsx src/cli.ts status abc123                      # Show status
@@ -97,18 +100,26 @@ Examples:
 }
 
 async function processCommand(args: string[]) {
-  const repoPath = args[0];
-  const iterations = parseInt(args[1] ?? '10', 10);
+  // Parse args - handle both "process . 10 --smart" and "process . --smart 10"
+  const smartMode = args.includes('--smart');
+  const filteredArgs = args.filter(a => a !== '--smart');
+
+  const repoPath = filteredArgs[0];
+  const iterations = parseInt(filteredArgs[1] ?? '10', 10);
 
   if (!repoPath) {
     console.error('Error: Repository path is required');
-    console.log('Usage: process <repo-path> [iterations]');
+    console.log('Usage: process <repo-path> [iterations] [--smart]');
     process.exit(1);
   }
 
   const absolutePath = resolve(repoPath);
   console.log(`\n📂 Processing repository: ${absolutePath}`);
-  console.log(`🔄 Iterations: ${iterations}\n`);
+  console.log(`🔄 Iterations: ${iterations}`);
+  if (smartMode) {
+    console.log(`🧠 Smart mode: LLM-powered orchestration`);
+  }
+  console.log('');
 
   // Initialize services
   const repos = createRepositories({ type: 'file' });
@@ -200,7 +211,8 @@ async function processCommand(args: string[]) {
   git.registerLocalRepo(repo.id, absolutePath);
 
   // Create orchestrator and executor
-  const orchestrator = createOrchestrator(repos);
+  // Pass LLM to orchestrator for smart mode
+  const orchestrator = createOrchestrator(repos, llm, { useLLM: smartMode });
   const executor = createExecutor(repos, git, llm, orchestrator);
 
   // Show initial status
