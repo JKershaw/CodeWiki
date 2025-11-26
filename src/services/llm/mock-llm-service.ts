@@ -2,6 +2,8 @@ import {
   BaseLLMService,
   CompletionOptions,
   CompletionResult,
+  ToolUseOptions,
+  ToolUseResult,
   RateLimitConfig,
   calculateCost,
 } from './llm-service.js';
@@ -72,6 +74,16 @@ export class MockLLMService extends BaseLLMService {
 
     this.trackUsage(result);
     return result;
+  }
+
+  async completeWithTools(options: ToolUseOptions): Promise<ToolUseResult> {
+    // For mock, just return a simple completion without actually using tools
+    const baseResult = await this.complete(options);
+    return {
+      ...baseResult,
+      toolCalls: [],
+      toolRounds: 0,
+    };
   }
 }
 

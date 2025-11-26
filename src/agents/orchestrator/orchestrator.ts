@@ -403,6 +403,60 @@ export class Orchestrator {
         }
       }
 
+      // Project Overview Agent: trigger when 10+ pages but no architecture/overview
+      if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+        const hasProjectOverview = wikiPages.some(p =>
+          p.path === 'architecture/overview' || p.path === 'architecture/index'
+        );
+
+        if (!hasProjectOverview) {
+          const projectOverviewWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+            agentType: 'project-overview',
+            status: 'pending',
+          });
+
+          const recentProjectOverviewRuns = synthRuns
+            .filter((r: AgentRun) => r.agentType === 'project-overview' && r.status === 'completed')
+            .slice(0, 1);
+
+          if (projectOverviewWorkExists.length === 0 && recentProjectOverviewRuns.length === 0) {
+            workItems.push(createWorkItem({
+              id: uuid(),
+              repoId,
+              agentType: 'project-overview',
+              priority: Priority.SYNTHESIS,
+            }));
+          }
+        }
+      }
+
+      // Getting Started Agent: trigger when 10+ pages but no guides/getting-started
+      if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+        const hasGettingStarted = wikiPages.some(p =>
+          p.path === 'guides/getting-started' || p.path === 'guides/quickstart' || p.path === 'guides/index'
+        );
+
+        if (!hasGettingStarted) {
+          const gettingStartedWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+            agentType: 'getting-started',
+            status: 'pending',
+          });
+
+          const recentGettingStartedRuns = synthRuns
+            .filter((r: AgentRun) => r.agentType === 'getting-started' && r.status === 'completed')
+            .slice(0, 1);
+
+          if (gettingStartedWorkExists.length === 0 && recentGettingStartedRuns.length === 0) {
+            workItems.push(createWorkItem({
+              id: uuid(),
+              repoId,
+              agentType: 'getting-started',
+              priority: Priority.SYNTHESIS,
+            }));
+          }
+        }
+      }
+
       // Writer Agent: trigger for pages with commit-style content that needs rewriting
       if (workItems.length < remainingSlots) {
         // Check for pages that need rewriting (have "This commit..." style)

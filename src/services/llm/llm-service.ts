@@ -58,6 +58,38 @@ export interface UsageStats {
 }
 
 /**
+ * Options for tool-using completions.
+ */
+export interface ToolUseOptions extends CompletionOptions {
+  /** Tool definitions available to the LLM */
+  tools: Array<{
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
+  /** Maximum number of tool call rounds (default: 5) */
+  maxToolRounds?: number;
+  /** Function to execute tools */
+  executeTools: (
+    calls: Array<{ id: string; name: string; input: Record<string, unknown> }>
+  ) => Promise<Array<{ id: string; result: string }>>;
+}
+
+/**
+ * Result of a tool-using completion.
+ */
+export interface ToolUseResult extends CompletionResult {
+  /** Tool calls made during the completion */
+  toolCalls: Array<{
+    name: string;
+    input: Record<string, unknown>;
+    result: string;
+  }>;
+  /** Number of tool rounds used */
+  toolRounds: number;
+}
+
+/**
  * LLM Service interface.
  */
 export interface LLMService {
@@ -65,6 +97,11 @@ export interface LLMService {
    * Generate a completion.
    */
   complete(options: CompletionOptions): Promise<CompletionResult>;
+
+  /**
+   * Generate a completion with tool use support.
+   */
+  completeWithTools(options: ToolUseOptions): Promise<ToolUseResult>;
 
   /**
    * Get current usage statistics.
@@ -117,6 +154,7 @@ export abstract class BaseLLMService implements LLMService {
   ) {}
 
   abstract complete(options: CompletionOptions): Promise<CompletionResult>;
+  abstract completeWithTools(options: ToolUseOptions): Promise<ToolUseResult>;
 
   getModel(): string {
     return this.model;

@@ -2,6 +2,7 @@ import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
+import { codebaseTools, type ToolContext, type ToolDefinition } from '../../services/llm/index.js';
 
 /**
  * Project Overview Agent - Creates a project-level overview page.
@@ -61,26 +62,67 @@ export class ProjectOverviewAgent implements Agent {
     const projectContext = this.gatherProjectContext(pages);
     const prompt = this.buildPrompt(projectContext);
 
-    const completion = await context.llm.complete({
-      system: SYSTEM_PROMPT,
+    // Set up tool context for codebase exploration
+    const repoPath = context.git.getRepoPath(context.repoId);
+    const toolContext: ToolContext = { repoPath, maxFileSize: 50000 };
+
+    // Create tool executor
+    const executeTools = async (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => {
+      const results = await Promise.all(calls.map(async (call) => {
+        const tool = codebaseTools.find(t => t.name === call.name);
+        if (!tool) {
+          return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
+        }
+        const result = await tool.execute(call.input, toolContext);
+        return { id: call.id, result };
+      }));
+      return results;
+    };
+
+    // Use completeWithTools to allow codebase exploration
+    const completion = await context.llm.completeWithTools({
+      system: SYSTEM_PROMPT_WITH_TOOLS,
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 3000,
-      temperature: 0.4,
+      tools: codebaseTools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })),
+      executeTools,
+      maxToolRounds: 5,
+      maxTokens: 4000,
     });
 
-    const overview = this.parseResponse(completion.content);
-    const update = this.generateUpdate(overview, pages);
+    // Use the LLM output directly as markdown content
+    const content = completion.content.trim();
+    const update = this.generateDirectUpdate(content, pages);
+
+    // Include tool usage in findings
+    const toolUsageFinding = completion.toolCalls.length > 0
+      ? [createFinding({
+          type: 'TOOL_USE',
+          description: `Used ${completion.toolCalls.length} tool calls to explore codebase`,
+          relatedPaths: completion.toolCalls
+            .filter(c => c.name === 'read_file')
+            .map(c => c.input['path'] as string)
+            .filter(Boolean),
+          importance: 'low',
+        })]
+      : [];
 
     return {
       result: createAgentResult({
-        summary: `Created project overview from ${pages.length} wiki pages`,
-        findings: [createFinding({
-          type: 'SYNTHESIS',
-          description: 'Generated project-level overview page',
-          relatedPaths: [this.OVERVIEW_PATH],
-          importance: 'high',
-        })],
-        confidence: overview.confidence,
+        summary: `Created project overview from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
+        findings: [
+          createFinding({
+            type: 'SYNTHESIS',
+            description: 'Generated project-level overview page',
+            relatedPaths: [this.OVERVIEW_PATH],
+            importance: 'high',
+          }),
+          ...toolUsageFinding,
+        ],
+        confidence: 0.8,  // High confidence since we read source files
       }),
       updates: [update],
       costUsd: completion.costUsd,
@@ -146,53 +188,56 @@ ${firstPara.slice(0, 400)}${firstPara.length > 400 ? '...' : ''}
       .map(c => `- ${c.name}: ${c.count} pages`)
       .join('\n');
 
-    return `Create a project overview page based on the wiki content.
+    return `Create a project overview page.
 
-## Wiki Statistics
-- Total pages: ${context.totalPages}
-- Categories:
-${categorySummary}
+## Existing Wiki Info
+- ${context.totalPages} pages in categories: ${categorySummary}
 
-## Top Wiki Pages (by confidence)
+## Instructions
 
-${pagesSummary}
+1. FIRST use read_file to read "README.md" - this has the project description
+2. THEN use read_file to read "PLAN.md" if it exists - this has architecture details
+3. Optionally read "package.json" for dependencies
 
-## Your Task
+After reading the source files, write a Markdown overview page. Start with:
+# [Project Name] - Project Overview
 
-Write a comprehensive project overview that answers:
-1. What is this project? (purpose, goals)
-2. What are the main components? (architecture overview)
-3. How do the components work together?
-4. What are the key abstractions/concepts?
-5. What are the main entry points for understanding the code?
+Include sections for:
+- What the project does (2-3 paragraphs from README)
+- Architecture overview
+- Key components
+- Where to start reading the code
 
-This should be the FIRST page a new developer reads to understand the project.
-
-Format your response as:
-
-PROJECT_NAME:
-[Inferred name of the project]
-
-PURPOSE:
-[2-3 sentences explaining what this project does and why it exists]
-
-ARCHITECTURE:
-[3-5 paragraphs describing the high-level architecture, main components, and how they interact]
-
-KEY_COMPONENTS:
-- [Component 1]: [What it does, where to find it]
-- [Component 2]: [What it does, where to find it]
-
-KEY_CONCEPTS:
-- [Concept 1]: [Brief explanation]
-- [Concept 2]: [Brief explanation]
-
-ENTRY_POINTS:
-- [File/Module 1]: [Why start here]
-- [File/Module 2]: [Why read this]
-
-CONFIDENCE: [0-1]
+Output ONLY the markdown content. No explanations before or after.
 `;
+  }
+
+  private generateDirectUpdate(content: string, pages: WikiPage[]): WikiPageUpdate {
+    // Extract title from the content or use default
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    const title = titleMatch ? titleMatch[1]! : 'Project Overview';
+
+    // Append related pages if not already present
+    const nonCommitPages = pages.filter(p =>
+      !p.path.startsWith('commits/') &&
+      p.path !== this.OVERVIEW_PATH
+    );
+
+    let finalContent = content;
+    if (!content.includes('## Related') && nonCommitPages.length > 0) {
+      const relatedSection = `\n\n## Related Documentation\n\n${nonCommitPages.slice(0, 8).map(p => `- [${p.title}](${p.path}.md)`).join('\n')}`;
+      finalContent += relatedSection;
+    }
+
+    return {
+      type: 'create',
+      path: this.OVERVIEW_PATH,
+      title,
+      content: finalContent,
+      sourceCommitId: '',
+      agentRunId: '',
+      confidenceDelta: 0.8,
+    };
   }
 
   private parseResponse(response: string): ParsedProjectOverview {
@@ -364,12 +409,23 @@ interface ParsedProjectOverview {
   confidence: number;
 }
 
-const SYSTEM_PROMPT = `You are a technical writer creating a project overview page for a software project wiki.
+const SYSTEM_PROMPT_WITH_TOOLS = `You are a technical writer creating a project overview page for a software project wiki.
 
-Your job is to synthesize ALL the wiki pages into a single, comprehensive introduction that helps a new developer understand the entire project at a glance.
+You have access to tools to explore the actual source code:
+- read_file: Read any file (README.md, package.json, source files)
+- search_files: Find files matching glob patterns
+- list_directory: See directory structure
+
+IMPORTANT: ALWAYS start by reading key documentation files to understand the project:
+1. First, read "README.md" if it exists - this usually has the project description
+2. Read "package.json" or equivalent to understand dependencies and scripts
+3. List the main source directory to understand the structure
+4. Read any other documentation files you find
+
+Your job is to create a comprehensive introduction that helps a new developer understand the entire project at a glance.
 
 A good project overview:
-- Clearly explains what the project is and why it exists
+- Clearly explains what the project is and why it exists (from README/docs)
 - Describes the high-level architecture and main components
 - Explains how components interact with each other
 - Highlights key abstractions and concepts
@@ -381,6 +437,6 @@ Do NOT:
 - Write about individual commits or git history
 - Include low-level implementation details
 - Repeat content from other wiki pages verbatim
-- Be vague or generic - be specific about THIS project
+- Say "cannot be determined" - USE THE TOOLS to find out!
 
 Focus on giving the reader a mental model of how the system works as a whole.`;

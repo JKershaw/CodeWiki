@@ -7,3 +7,5 @@
 export * from './llm-service.js';
 export * from './mock-llm-service.js';
 export * from './anthropic-llm-service.js';
+export * from './tools.js';
+export * from './codebase-tools.js';
