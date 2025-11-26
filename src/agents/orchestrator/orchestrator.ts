@@ -18,6 +18,14 @@ const ANALYSIS_AGENTS: AgentType[] = [
 ];
 
 /**
+ * Meta agents that process the wiki (not commits).
+ * These run after analysis agents have created content.
+ */
+const META_AGENTS: AgentType[] = [
+  'link',          // Cross-reference management
+];
+
+/**
  * Orchestrator - The decision-maker that produces prioritized work lists.
  *
  * Runs frequently and stays lightweight (2-3 tool calls typically).
@@ -100,7 +108,36 @@ export class Orchestrator {
       // TODO: Add quality improvement work items when we have meta agents
     }
 
-    // Strategy 4: Synthesis work (when we have enough raw material)
+    // Strategy 4: Meta agents (run on wiki after analysis is complete)
+    // Only run meta agents when all commits have been analyzed by code-change
+    if (workItems.length < remainingSlots && wikiPages.length >= 2) {
+      const unprocessedByCodeChange = await this.repos.commits.findUnprocessedByAgent(repoId, 'code-change');
+
+      // Only run meta agents when analysis is mostly complete
+      if (unprocessedByCodeChange.length === 0) {
+        // Check for pages without links (need link agent)
+        const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0);
+
+        if (pagesWithoutLinks.length > 0) {
+          // Check if link agent work already exists
+          const linkWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+            agentType: 'link',
+            status: 'pending',
+          });
+
+          if (linkWorkExists.length === 0) {
+            workItems.push(createWorkItem({
+              id: uuid(),
+              repoId,
+              agentType: 'link',
+              priority: Priority.META,
+            }));
+          }
+        }
+      }
+    }
+
+    // Strategy 5: Synthesis work (when we have enough raw material)
     if (workItems.length < remainingSlots && wikiPages.length >= 10) {
       // TODO: Add synthesis work items when we have synthesis agents
     }

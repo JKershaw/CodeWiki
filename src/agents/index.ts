@@ -12,5 +12,6 @@
  */
 export * from './base-agent.js';
 export * from './analysis/index.js';
+export * from './meta/index.js';
 export * from './orchestrator/index.js';
 export * from './research/index.js';

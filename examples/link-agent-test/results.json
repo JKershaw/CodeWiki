@@ -1,0 +1,167 @@
+{
+  "timestamp": "2025-11-26T08:39:48.877Z",
+  "totalIterations": 42,
+  "totalCost": 5.1754500000000005,
+  "linkAgentTriggered": true,
+  "agentRunsSummary": {
+    "link": 2,
+    "dependency": 8,
+    "pattern": 8,
+    "security": 8,
+    "narrative": 8,
+    "code-change": 8
+  },
+  "finalWiki": {
+    "pageCount": 21,
+    "pagesWithLinks": 10,
+    "pages": [
+      {
+        "path": "commits/cd3ba217",
+        "title": "Commit cd3ba217",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "commits/296d345b",
+        "title": "Commit 296d345b",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "commits/a99a4013",
+        "title": "Commit a99a4013",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "commits/adc01766",
+        "title": "Commit adc01766",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "commits/2de75bb0",
+        "title": "Commit 2de75bb0",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "commits/4ec0c546",
+        "title": "Commit 4ec0c546",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "commits/4d5def60",
+        "title": "Commit 4d5def60",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "commits/60a1d836",
+        "title": "Commit 60a1d836",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "architecture/cd3ba217-this-commit-adds-significant-meta-documentation-in",
+        "title": "This commit adds significant meta-documentation in the form of real LLM processing examples that dem",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "planning/296d345b-significant-narrative-content-found-documenting-th",
+        "title": "Significant narrative content found documenting the implementation of multi-agent processing archite",
+        "confidence": 0.55,
+        "hasRelatedPages": true,
+        "linksCount": 0
+      },
+      {
+        "path": "guides/a99a4013-this-commit-adds-example-data-showing-wiki-evoluti",
+        "title": "This commit adds example data showing wiki evolution across different iteration counts, with a compa",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "planning/adc01766-this-commit-updates-comprehensive-project-progress",
+        "title": "This commit updates comprehensive project progress documentation, capturing completed work, architec",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "decisions/4ec0c546-this-commit-introduces-a-significant-architectural",
+        "title": "This commit introduces a significant architectural decision to implement specialized analysis agents",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "planning/4d5def60-significant-narrative-content-found-comprehensiv",
+        "title": "Significant narrative content found - comprehensive progress documentation capturing project status,",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "architecture/60a1d836-this-commit-introduces-a-major-architectural-addit",
+        "title": "This commit introduces a major architectural addition - a complete web interface and comprehensive E",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "security/audit-cd3ba217",
+        "title": "Security Audit: Commit cd3ba217",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "security/overview",
+        "title": "Security Overview",
+        "confidence": 0.7,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "security/audit-4ec0c546",
+        "title": "Security Audit: Commit 4ec0c546",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "security/audit-60a1d836",
+        "title": "Security Audit: Commit 60a1d836",
+        "confidence": 0.5,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "conventions/coding-standards",
+        "title": "Coding Standards & Conventions",
+        "confidence": 1,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      },
+      {
+        "path": "patterns/anti-patterns",
+        "title": "Anti-Patterns to Avoid",
+        "confidence": 1,
+        "hasRelatedPages": false,
+        "linksCount": 0
+      }
+    ]
+  }
+}
