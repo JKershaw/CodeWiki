@@ -1,36 +1,37 @@
 ---
 title: "CodeWiki Project Plan and Architecture"
 confidence: 0.50
-created: 2025-11-26T10:23:33.361Z
-updated: 2025-11-26T10:23:33.361Z
+created: 2025-11-26T12:36:42.412Z
+updated: 2025-11-26T12:36:42.412Z
 commits: [b908ecb120818e12f51e066a6a8619fc00adbe45]
 ---
 # CodeWiki Project Plan and Architecture
 
-Comprehensive project planning document establishing CodeWiki's vision, architecture, and principles. This is a foundational meta-document that defines the entire system's purpose, design philosophy, technical architecture, and implementation strategy.
+Complete project planning document establishing CodeWiki's architecture, philosophy, and implementation strategy. This is a foundational meta-document that defines the entire project vision, including the core insight about AI agents needing institutional memory, the CQRS architecture decision, the two-loop orchestration model, and the "eventual consistency over batch processing" philosophy.
 
 ## Key Points
 
-- **PLANNING**: Complete project vision document defining CodeWiki as a living documentation system that generates wikis from Git repositories, exposes knowledge through MCP, and learns from AI coding sessions
-- **PHILOSOPHY**: Six core principles established: eventual consistency over batch processing, confidence over completeness, organic growth, simplicity in architecture, clean abstractions, and self-documenting approach
-- **ARCHITECTURE**: CQRS-based architecture defined with clear separation between commands/queries and core logic, repository pattern for storage abstraction (MongoDB/file-based), and two-loop orchestrator/executor model
-- **DESIGN**: Multi-agent system architecture with specialized agents: analysis agents (code change, narrative, security, debt, pattern, dependency), research agent, writer agent, meta agents (structure, link, quality, consistency), and synthesis agents (guide, overview, history, convention)
-- **DESIGN**: Write queue and conflict resolution strategy using single writer agent with timestamp-based conflict resolution
-- **DESIGN**: Data model with MongoDB collections for repos, commits, agent runs, wiki pages, work queue, conflicts, and learnings
-- **DECISION**: Technology stack selection: Node.js 20.4, MongoDB primary storage, file-based fallback for restricted environments, TypeScript for type safety
-- **DECISION**: MCP (Model Context Protocol) chosen as the interface for AI agent integration, allowing external agents to query wiki for context
+- **PLANNING**: Complete project vision document establishing CodeWiki as a living wiki system for Git repositories, designed specifically to provide AI coding agents with institutional memory and context
+- **PHILOSOPHY**: Six core principles defined: eventual consistency over batch processing, confidence over completeness, organic growth, simplicity in architecture, clean abstractions, and the repo as its own best example
+- **ARCHITECTURE**: CQRS architecture decision with command/query separation creating a clean boundary between core logic and external interfaces
+- **ARCHITECTURE**: Two-loop model established: lightweight orchestrator (outer loop) for decision-making and executor (inner loop) for parallel agent execution
+- **DESIGN**: Repository pattern with dual implementations (MongoDB for production, file-based for development) enabling environment-agnostic deployment
+- **DESIGN**: Single-writer queue pattern for conflict resolution, preventing race conditions by funneling all writes through one agent
+- **ARCHITECTURE**: Multi-agent system with specialized agents: analysis agents (code, narrative, security, debt, pattern, dependency), meta agents (structure, link, quality, consistency), synthesis agents (guide, overview, history, convention), plus research and writer agents
+- **DESIGN**: MCP server endpoint for exposing wiki knowledge to external AI coding agents
 
 ## Decisions Made
 
-- Eventual consistency architecture: Prioritize fast, useful initial results (80% wiki in 20 minutes) over slow comprehensive processing (100% in 10 hours), with progressive enrichment over time
-- Confidence-scored content: Every wiki entry carries confidence metadata based on analysis depth, verification, and recency, allowing users and agents to calibrate trust
-- CQRS boundary: All external interaction through commands and queries, completely separating interface concerns from core business logic
-- Single writer pattern: All wiki modifications flow through one writer agent to prevent race conditions and ensure consistency
-- Dual storage strategy: Auto-detect between MongoDB (production) and file-based (local/restricted) repositories based on environment
-- Two-loop orchestrator model: Lightweight frequent orchestrator decides what to process; separate executor runs agents in parallel against read-only wiki
-- Self-documenting approach: CodeWiki will generate its own documentation, serving as its own best example
-- Agent specialization: Multiple focused agents rather than one general-purpose analyzer, allowing targeted expertise and parallel processing
-- Organic wiki growth: Start with recent commits, backfill history progressively, synthesize higher-order docs only when sufficient raw material exists
+- **CQRS Architecture**: All external interaction flows through commands (state changes) and queries (reads), creating a clean separation between core logic and interfaces (HTTP, MCP, CLI). This makes the system easier to reason about and extend.
+- **Eventual Consistency Philosophy**: Prioritize fast, useful results over slow comprehensive analysis. Generate an 80% wiki in 20 minutes rather than a 100% wiki in 10 hours by processing recent commits first and backfilling history progressively.
+- **Confidence-Based Information**: Every wiki entry carries a confidence score based on analysis depth, verification, and recency. This allows users and AI agents to calibrate trust appropriately.
+- **Two-Loop Orchestration**: Separate lightweight decision-making (orchestrator evaluating wiki state and generating work lists) from execution (parallel agent runs). This prevents rigid queue systems and allows dynamic re-prioritization.
+- **Single-Writer Pattern**: All wiki modifications flow through one writer agent processing a queue. This eliminates race conditions and provides a single point for conflict resolution (timestamp-based: most recent wins).
+- **Repository Pattern with Dual Implementation**: Abstract storage behind interfaces with MongoDB for production and file-based for development/restricted environments. Auto-detection based on environment configuration.
+- **Database-as-Queue**: No external queue services—work queue is just database records with status fields. Keeps infrastructure simple and deployment straightforward.
+- **Multi-Agent Specialization**: Different agents analyze commits through different lenses (code changes, narrative, security, technical debt, patterns, dependencies) rather than one monolithic analyzer.
+- **Meta-Analysis Loop**: Agents that examine the wiki itself (structure, links, quality, consistency) create feedback loops for improvement.
+- **MCP Integration**: Expose research capabilities via MCP server so external AI agents can query for context before starting work.
 
 ## Source Files
 

@@ -1,24 +1,23 @@
 ---
 title: "Coding Standards & Conventions"
 confidence: 1.00
-created: 2025-11-26T10:31:41.427Z
-updated: 2025-11-26T10:42:11.938Z
-commits: [82525543ff9587140a9ad12be99f55a1b41b69f2, fd824f7d59f47b994a77221ff125706c8eaab503, 4d2e0c45078eba61baaed35ac0a8c86472de1c29]
+created: 2025-11-26T12:46:30.235Z
+updated: 2025-11-26T13:01:31.750Z
+commits: [32b7cb2f4b05e2bc350c284e8be2bb23895bcd0a, b49c7432f6392c048e9a70ffabd2d0000bcd2830, 82193f9f7b498e2cc88343292d554153c757775f]
 ---
 # Coding Standards & Conventions
 
 ## Observed Conventions
 
-- **Naming Convention - Commands**: Commands use imperative verb phrases (StartProcessingRepo, RunAgent, UpdateWikiPage, ResolveConflict, SetThrottle). Indicates state-changing operations in CQRS pattern.
-- **Naming Convention - Queries**: Queries use Get/Search prefixes (GetWikiPage, SearchWiki, GetRepoStatus). Indicates read-only operations in CQRS pattern.
-- **Naming Convention - Agents**: All agent types end with "Agent" suffix (Code Change Agent, Narrative Agent, Writer Agent, Research Agent). Clear identification of autonomous components.
-- **Agent Categorization**: Agents organized into functional categories: Analysis Agents (examine commits), Meta Agents (examine wiki itself), Synthesis Agents (create higher-order content), plus specialized Writer and Research agents.
-- **Collection Naming**: Database collections use PascalCase plural nouns (Repos, Commits, AgentRuns, WikiPages, WorkQueue, Conflicts, Learnings). Consistent schema organization.
-- **Status Field Pattern**: Work items include status fields with timestamps for state management (queued, processing, complete). Common pattern across WorkQueue and other collections.
-- **Environment-Based Configuration**: Auto-detection of runtime environment drives implementation selection (MongoDB vs file-based). No manual switching required.
-- **Documentation Philosophy**: "The Repo as Its Own Best Example" - project documents should explain not just what but why. Emphasis on capturing reasoning and context.
-- **Commit Message Quality**: Expectation of meaningful commit messages as primary documentation source. System depends on commits conveying intent.
-- **Confidence Over Completeness**: Every piece of information includes confidence metadata. Explicit acknowledgment of uncertainty rather than false precision.
+- **Command/Query Naming**: Commands use imperative verbs (Start, Run, Update, Resolve, Set). Queries use Get/Search prefixes. Clear linguistic distinction between read and write operations.
+- **Agent Naming Convention**: All processing components suffixed with "Agent" (Code Change Agent, Pattern Agent, Writer Agent, Research Agent). Establishes consistent vocabulary for system components.
+- **Database-as-Queue Pattern**: Work queues implemented as database records with status fields rather than external queue services. Simplicity principle applied - "All state lives in one database."
+- **Progressive Enrichment**: System designed to provide value quickly (80% in 20 minutes) then improve over time, rather than batch processing everything upfront. Prioritizes user value over completeness.
+- **Confidence Metadata**: Every piece of information carries confidence scores, source attribution, and verification history. Enables calibrated trust and prioritized improvement.
+- **Single Responsibility Agents**: Each agent type has one clear lens/concern (security, patterns, technical debt, etc.). Follows SRP from SOLID principles.
+- **Write Serialization**: All writes funnel through single Writer Agent to prevent conflicts. Reads are parallelized freely. Classic read-write separation pattern.
+- **Conflict Resolution by Recency**: When conflicts detected, most recent commit wins. Simple, deterministic resolution strategy with logging for review.
+- **Auto-Environment Detection**: System automatically selects appropriate implementations (MongoDB vs file-based) based on environment configuration. No manual switching required.
 
 ---
 *Updated from commit b908ecb1*
