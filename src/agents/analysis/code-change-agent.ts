@@ -2,6 +2,7 @@ import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
+import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
 
 /**
  * Code Change Agent - Standard analysis of what changed in a commit.
@@ -25,11 +26,35 @@ export class CodeChangeAgent implements Agent {
     // Build the prompt for the LLM
     const prompt = this.buildPrompt(commit, diff);
 
-    // Get LLM analysis
-    const completion = await context.llm.complete({
+    // Set up tool context for codebase exploration
+    const repoPath = context.git.getRepoPath(context.repoId);
+    const toolContext: ToolContext = { repoPath, maxFileSize: 50000 };
+
+    // Create tool executor
+    const executeTools = async (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => {
+      const results = await Promise.all(calls.map(async (call) => {
+        const tool = codebaseTools.find(t => t.name === call.name);
+        if (!tool) {
+          return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
+        }
+        const result = await tool.execute(call.input, toolContext);
+        return { id: call.id, result };
+      }));
+      return results;
+    };
+
+    // Get LLM analysis with tool use for deeper understanding
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 2000,
+      tools: codebaseTools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })),
+      executeTools,
+      maxToolRounds: 5,
+      maxTokens: 3000,
       temperature: 0.3,
     });
 
@@ -39,15 +64,31 @@ export class CodeChangeAgent implements Agent {
     // Generate wiki updates based on the analysis
     const updates = this.generateUpdates(commit, analysis, context.repoId);
 
+    // Include tool usage in findings
+    const toolUsageFinding = completion.toolCalls.length > 0
+      ? [createFinding({
+          type: 'TOOL_USE',
+          description: `Read ${completion.toolCalls.filter(c => c.name === 'read_file').length} source files for full context`,
+          relatedPaths: completion.toolCalls
+            .filter(c => c.name === 'read_file')
+            .map(c => c.input['path'] as string)
+            .filter(Boolean),
+          importance: 'low',
+        })]
+      : [];
+
     return {
       result: createAgentResult({
         summary: analysis.summary,
-        findings: analysis.findings.map(f => createFinding({
-          type: f.type,
-          description: f.description,
-          relatedPaths: f.paths,
-          importance: f.importance,
-        })),
+        findings: [
+          ...analysis.findings.map(f => createFinding({
+            type: f.type,
+            description: f.description,
+            relatedPaths: f.paths,
+            importance: f.importance,
+          })),
+          ...toolUsageFinding,
+        ],
         confidence: analysis.confidence,
       }),
       updates,
@@ -273,6 +314,17 @@ function extractTitleFromMessage(message: string): string {
 
 const SYSTEM_PROMPT = `You are a technical writer creating wiki documentation from code changes.
 
+You have access to tools to explore the actual source code beyond just the diff:
+- read_file: Read the FULL contents of any file (not just the changed lines)
+- search_files: Find related files by glob pattern (e.g., find test files)
+- list_directory: Understand project structure
+
+WORKFLOW - Use tools to understand context:
+1. If the diff shows changes to a file, use read_file to see the COMPLETE file
+2. Search for related test files (e.g., "**/*.test.ts" or "**/*-test.ts")
+3. Read imports/dependencies to understand how the changed code fits in
+4. Only then write your analysis with full context
+
 CRITICAL: Write as encyclopedia articles, NOT commit summaries.
 
 BAD: "This commit adds a new authentication system..."
@@ -280,7 +332,7 @@ GOOD: "The authentication system provides secure user login using OAuth 2.0..."
 
 Your documentation should:
 - Describe WHAT EXISTS, not what was committed
-- Explain WHY the system works this way
+- Explain WHY the system works this way (use tools to find out!)
 - Help developers understand and use the code
 - Read like Wikipedia, not a changelog
 
@@ -292,7 +344,7 @@ When suggesting wiki pages:
 - Prefer updating existing pages over creating new ones for small changes
 
 Your confidence should reflect:
-- 0.9+: Clear implementation, well-documented code
-- 0.7-0.9: Reasonable inference from code
+- 0.9+: Clear implementation, well-documented code, verified with source
+- 0.7-0.9: Reasonable inference from code and context
 - 0.5-0.7: Some ambiguity, might need verification
 - <0.5: Significant uncertainty, needs review`;
