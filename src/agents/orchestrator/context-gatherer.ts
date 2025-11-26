@@ -196,13 +196,13 @@ export class ContextGatherer {
     lines.push(`**Low confidence pages:** ${ctx.lowConfidencePages}`);
     lines.push('');
 
-    // Recent commits
+    // Recent commits (show full ID so LLM can reference them exactly)
     lines.push('**Recent commits (most recent first):**');
-    for (const commit of ctx.recentCommits.slice(0, 5)) {
+    for (const commit of ctx.recentCommits.slice(0, 10)) {
       const processed = commit.processedBy.length > 0
         ? commit.processedBy.join(', ')
         : 'none';
-      lines.push(`- ${commit.id.slice(0, 8)}: "${commit.message.slice(0, 50)}${commit.message.length > 50 ? '...' : ''}" [processed by: ${processed}]`);
+      lines.push(`- ${commit.id}: "${commit.message.slice(0, 50)}${commit.message.length > 50 ? '...' : ''}" [processed by: ${processed}]`);
     }
     lines.push('');
 
