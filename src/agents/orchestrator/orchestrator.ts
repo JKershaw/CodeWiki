@@ -23,6 +23,7 @@ const ANALYSIS_AGENTS: AgentType[] = [
  */
 const META_AGENTS: AgentType[] = [
   'link',          // Cross-reference management
+  'structure',     // Wiki organization analysis
 ];
 
 /**
@@ -130,6 +131,30 @@ export class Orchestrator {
               id: uuid(),
               repoId,
               agentType: 'link',
+              priority: Priority.META,
+            }));
+          }
+        }
+
+        // Run structure agent periodically (when wiki has at least 5 pages)
+        if (workItems.length < remainingSlots && wikiPages.length >= 5) {
+          // Check if structure agent ran recently (within last 10 agent runs)
+          const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
+          const recentStructureRuns = recentRuns
+            .filter(r => r.agentType === 'structure' && r.status === 'completed')
+            .slice(0, 1);
+
+          // Run structure agent if it hasn't run yet or if wiki has grown significantly
+          const structureWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+            agentType: 'structure',
+            status: 'pending',
+          });
+
+          if (structureWorkExists.length === 0 && recentStructureRuns.length === 0) {
+            workItems.push(createWorkItem({
+              id: uuid(),
+              repoId,
+              agentType: 'structure',
               priority: Priority.META,
             }));
           }

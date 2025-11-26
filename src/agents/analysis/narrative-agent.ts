@@ -89,6 +89,9 @@ SUMMARY:
 NARRATIVE_TYPE:
 [One of: planning, adr, design, changelog, philosophy, guide, readme, decision, none]
 
+PAGE_TITLE:
+[Short, descriptive title for this content - 3-6 words like "Web Interface Design" or "Multi-Agent Architecture"]
+
 FINDINGS:
 - [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
 
@@ -106,6 +109,7 @@ CONFIDENCE: [0-1 value]
     const analysis: ParsedAnalysis = {
       summary: '',
       narrativeType: 'none',
+      pageTitle: '',
       findings: [],
       keyDecisions: [],
       wikiUpdates: [],
@@ -113,7 +117,7 @@ CONFIDENCE: [0-1 value]
     };
 
     // Parse summary
-    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=NARRATIVE_TYPE:|FINDINGS:|$)/i);
+    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=NARRATIVE_TYPE:|PAGE_TITLE:|FINDINGS:|$)/i);
     if (summaryMatch) {
       analysis.summary = summaryMatch[1]!.trim();
     }
@@ -122,6 +126,12 @@ CONFIDENCE: [0-1 value]
     const typeMatch = response.match(/NARRATIVE_TYPE:\s*(\w+)/i);
     if (typeMatch) {
       analysis.narrativeType = typeMatch[1]!.toLowerCase() as NarrativeType;
+    }
+
+    // Parse page title
+    const titleMatch = response.match(/PAGE_TITLE:\s*(.+?)(?=\n|FINDINGS:|KEY_DECISIONS:|$)/i);
+    if (titleMatch) {
+      analysis.pageTitle = titleMatch[1]!.trim();
     }
 
     // Parse findings
@@ -201,9 +211,11 @@ CONFIDENCE: [0-1 value]
       };
 
       const category = categoryMap[analysis.narrativeType];
-      const pagePath = `${category}/${commit.sha.slice(0, 8)}-${slugify(analysis.summary.slice(0, 50))}`;
+      // Use page title for path if available, otherwise fall back to summary
+      const title = analysis.pageTitle || analysis.summary.slice(0, 50);
+      const pagePath = `${category}/${slugify(title)}`;
 
-      const content = `# ${analysis.summary.slice(0, 100)}
+      const content = `# ${title}
 
 ${analysis.summary}
 
@@ -260,6 +272,7 @@ type NarrativeType = 'planning' | 'adr' | 'design' | 'changelog' | 'philosophy' 
 interface ParsedAnalysis {
   summary: string;
   narrativeType: NarrativeType;
+  pageTitle: string;
   findings: Array<{
     type: string;
     importance: 'low' | 'medium' | 'high';
