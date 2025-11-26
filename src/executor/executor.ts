@@ -13,6 +13,8 @@ import { PatternAgent } from '../agents/analysis/pattern-agent.js';
 import { DependencyAgent } from '../agents/analysis/dependency-agent.js';
 import { LinkAgent } from '../agents/meta/link-agent.js';
 import { StructureAgent } from '../agents/meta/structure-agent.js';
+import { QualityAgent } from '../agents/meta/quality-agent.js';
+import { ConsistencyAgent } from '../agents/meta/consistency-agent.js';
 
 /**
  * Executor - The inner loop that runs agents from the work queue.
@@ -41,6 +43,8 @@ export class Executor {
     // Register meta agents
     this.registerAgent(new LinkAgent());
     this.registerAgent(new StructureAgent());
+    this.registerAgent(new QualityAgent());
+    this.registerAgent(new ConsistencyAgent());
   }
 
   /**

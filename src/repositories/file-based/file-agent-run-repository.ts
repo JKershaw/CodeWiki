@@ -10,7 +10,8 @@ export class FileAgentRunRepository implements AgentRunRepository {
   }
 
   async findById(id: string): Promise<AgentRun | null> {
-    return this.store.get(id);
+    const result = await this.store.get(id);
+    return result ? this.hydrateDates(result) : null;
   }
 
   async findByRepo(repoId: string, options?: {
@@ -26,12 +27,31 @@ export class FileAgentRunRepository implements AgentRunRepository {
       return true;
     });
 
+    // Ensure dates are properly hydrated
+    results = results.map(r => this.hydrateDates(r));
+
     // Sort by start time, newest first
-    results.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
 
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? results.length;
     return results.slice(offset, offset + limit);
+  }
+
+  /** Safely get time from a Date or ISO string */
+  private getTime(date: Date | string): number {
+    if (date instanceof Date) return date.getTime();
+    return new Date(date).getTime();
+  }
+
+  /** Ensure all date fields are proper Date objects */
+  private hydrateDates(run: AgentRun): AgentRun {
+    return {
+      ...run,
+      startedAt: run.startedAt instanceof Date ? run.startedAt : new Date(run.startedAt),
+      completedAt: run.completedAt instanceof Date ? run.completedAt :
+        (run.completedAt ? new Date(run.completedAt) : null),
+    };
   }
 
   async findByCommit(commitId: string): Promise<AgentRun[]> {
@@ -39,10 +59,11 @@ export class FileAgentRunRepository implements AgentRunRepository {
   }
 
   async findRecentByType(repoId: string, agentType: AgentType, limit: number): Promise<AgentRun[]> {
-    const results = await this.store.find(r =>
+    let results = await this.store.find(r =>
       r.repoId === repoId && r.agentType === agentType
     );
-    results.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    results = results.map(r => this.hydrateDates(r));
+    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
     return results.slice(0, limit);
   }
 
@@ -63,8 +84,9 @@ export class FileAgentRunRepository implements AgentRunRepository {
   async calculateTotalCost(repoId: string, options?: { since?: Date; until?: Date }): Promise<number> {
     const all = await this.store.find(r => {
       if (r.repoId !== repoId) return false;
-      if (options?.since && r.startedAt < options.since) return false;
-      if (options?.until && r.startedAt > options.until) return false;
+      const startTime = this.getTime(r.startedAt);
+      if (options?.since && startTime < options.since.getTime()) return false;
+      if (options?.until && startTime > options.until.getTime()) return false;
       return true;
     });
     return all.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);

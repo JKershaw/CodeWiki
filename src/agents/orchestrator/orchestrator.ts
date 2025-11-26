@@ -24,6 +24,8 @@ const ANALYSIS_AGENTS: AgentType[] = [
 const META_AGENTS: AgentType[] = [
   'link',          // Cross-reference management
   'structure',     // Wiki organization analysis
+  'quality',       // Content quality review
+  'consistency',   // Cross-page consistency check
 ];
 
 /**
@@ -116,6 +118,9 @@ export class Orchestrator {
 
       // Only run meta agents when analysis is mostly complete
       if (unprocessedByCodeChange.length === 0) {
+        // Fetch recent agent runs for checking if meta agents ran recently
+        const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
+
         // Check for pages without links (need link agent)
         const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0);
 
@@ -138,13 +143,10 @@ export class Orchestrator {
 
         // Run structure agent periodically (when wiki has at least 5 pages)
         if (workItems.length < remainingSlots && wikiPages.length >= 5) {
-          // Check if structure agent ran recently (within last 10 agent runs)
-          const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
           const recentStructureRuns = recentRuns
             .filter(r => r.agentType === 'structure' && r.status === 'completed')
             .slice(0, 1);
 
-          // Run structure agent if it hasn't run yet or if wiki has grown significantly
           const structureWorkExists = await this.repos.workQueue.findByRepo(repoId, {
             agentType: 'structure',
             status: 'pending',
@@ -155,6 +157,54 @@ export class Orchestrator {
               id: uuid(),
               repoId,
               agentType: 'structure',
+              priority: Priority.META,
+            }));
+          }
+        }
+
+        // Run quality agent for low-confidence pages
+        if (workItems.length < remainingSlots && wikiPages.length >= 3) {
+          const lowConfidencePages = wikiPages.filter(p => p.confidence < 0.7);
+
+          if (lowConfidencePages.length > 0) {
+            const qualityWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+              agentType: 'quality',
+              status: 'pending',
+            });
+
+            // Check if quality agent ran recently
+            const recentQualityRuns = recentRuns
+              .filter(r => r.agentType === 'quality' && r.status === 'completed')
+              .slice(0, 1);
+
+            if (qualityWorkExists.length === 0 && recentQualityRuns.length === 0) {
+              workItems.push(createWorkItem({
+                id: uuid(),
+                repoId,
+                agentType: 'quality',
+                priority: Priority.META,
+              }));
+            }
+          }
+        }
+
+        // Run consistency agent when wiki has enough pages (5+)
+        if (workItems.length < remainingSlots && wikiPages.length >= 5) {
+          const consistencyWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+            agentType: 'consistency',
+            status: 'pending',
+          });
+
+          // Check if consistency agent ran recently
+          const recentConsistencyRuns = recentRuns
+            .filter(r => r.agentType === 'consistency' && r.status === 'completed')
+            .slice(0, 1);
+
+          if (consistencyWorkExists.length === 0 && recentConsistencyRuns.length === 0) {
+            workItems.push(createWorkItem({
+              id: uuid(),
+              repoId,
+              agentType: 'consistency',
               priority: Priority.META,
             }));
           }

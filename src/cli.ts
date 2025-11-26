@@ -12,6 +12,7 @@
  *   list                              - List connected repositories
  */
 
+import 'dotenv/config';
 import { v4 as uuid } from 'uuid';
 import { resolve } from 'path';
 import { createRepositories } from './repositories/index.js';
