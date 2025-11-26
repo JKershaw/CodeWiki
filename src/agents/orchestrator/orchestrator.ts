@@ -2,7 +2,7 @@ import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
 import { createWorkItem, Priority } from '../../domain/work-item.js';
-import type { AgentType } from '../../domain/agent-run.js';
+import type { AgentType, AgentRun } from '../../domain/agent-run.js';
 
 /**
  * Analysis agents that process commits.
@@ -213,8 +213,55 @@ export class Orchestrator {
     }
 
     // Strategy 5: Synthesis work (when we have enough raw material)
-    if (workItems.length < remainingSlots && wikiPages.length >= 10) {
-      // TODO: Add synthesis work items when we have synthesis agents
+    if (workItems.length < remainingSlots && wikiPages.length >= 5) {
+      // Fetch recent agent runs for synthesis checks
+      const synthRuns = await this.repos.agentRuns.findByRepo(repoId);
+
+      // Group pages by category
+      const categories = new Map<string, typeof wikiPages>();
+      for (const page of wikiPages) {
+        const category = page.path.split('/')[0] ?? 'uncategorized';
+        if (!categories.has(category)) {
+          categories.set(category, []);
+        }
+        categories.get(category)!.push(page);
+      }
+
+      // Overview Agent: trigger for categories with 3+ pages but no overview
+      const skipCategories = ['commits']; // Too granular for overviews
+      for (const [category, pages] of categories) {
+        if (workItems.length >= remainingSlots) break;
+        if (skipCategories.includes(category)) continue;
+        if (pages.length < 3) continue;
+
+        // Check if overview exists
+        const hasOverview = pages.some(p =>
+          p.path === `${category}/overview` || p.path === `${category}/index`
+        );
+
+        if (!hasOverview) {
+          // Check if overview work already pending
+          const overviewWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+            agentType: 'overview',
+            status: 'pending',
+          });
+
+          // Check if overview agent ran recently
+          const recentOverviewRuns = synthRuns
+            .filter((r: AgentRun) => r.agentType === 'overview' && r.status === 'completed')
+            .slice(0, 1);
+
+          if (overviewWorkExists.length === 0 && recentOverviewRuns.length === 0) {
+            workItems.push(createWorkItem({
+              id: uuid(),
+              repoId,
+              agentType: 'overview',
+              priority: Priority.SYNTHESIS,
+            }));
+            break; // Only add one overview at a time
+          }
+        }
+      }
     }
 
     return workItems;

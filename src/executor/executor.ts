@@ -15,6 +15,7 @@ import { LinkAgent } from '../agents/meta/link-agent.js';
 import { StructureAgent } from '../agents/meta/structure-agent.js';
 import { QualityAgent } from '../agents/meta/quality-agent.js';
 import { ConsistencyAgent } from '../agents/meta/consistency-agent.js';
+import { OverviewAgent } from '../agents/synthesis/overview-agent.js';
 
 /**
  * Executor - The inner loop that runs agents from the work queue.
@@ -45,6 +46,9 @@ export class Executor {
     this.registerAgent(new StructureAgent());
     this.registerAgent(new QualityAgent());
     this.registerAgent(new ConsistencyAgent());
+
+    // Register synthesis agents
+    this.registerAgent(new OverviewAgent());
   }
 
   /**
