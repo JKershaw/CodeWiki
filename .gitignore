@@ -27,6 +27,9 @@ test-results/
 # Local data (file-based repository)
 .codewiki-data/
 
+# Generated wiki output
+wiki-output/
+
 # Logs
 *.log
 npm-debug.log*
