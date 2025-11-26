@@ -58,7 +58,7 @@ export class CodeChangeAgent implements Agent {
   private buildPrompt(commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } }, diff: string): string {
     const truncatedDiff = diff.length > 10000 ? diff.slice(0, 10000) + '\n... (diff truncated)' : diff;
 
-    return `Analyze this git commit and provide structured documentation for a wiki.
+    return `Analyze this git commit and write a wiki article about the changes.
 
 ## Commit Information
 
@@ -79,16 +79,19 @@ ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 ${truncatedDiff}
 \`\`\`
 
-Please analyze this commit and provide:
-1. A concise summary of what changed and why
-2. Key findings (patterns, architectural decisions, potential issues)
-3. Suggested wiki pages that should be created or updated
-4. Confidence level in your analysis (0-1)
+Write documentation as a wiki article that a developer would find useful. Focus on:
+1. What capability or change was introduced (not "this commit adds...")
+2. Why it matters and how it fits into the system
+3. Key technical details and design decisions
+4. Any patterns, conventions, or gotchas
 
 Format your response as follows:
 
+PAGE_TITLE:
+[Descriptive title like "Multi-Agent Processing Pipeline" or "CQRS Architecture Implementation" - NOT "Commit abc123"]
+
 SUMMARY:
-[Your summary here]
+[2-3 paragraph article written in encyclopedia style. Do NOT start with "This commit..." - write as if explaining the feature/change to someone who doesn't know it came from a commit. Focus on WHAT exists and WHY, not on the commit itself.]
 
 FINDINGS:
 - [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths comma-separated]
@@ -102,11 +105,18 @@ CONFIDENCE: [0-1 value]
 
   private parseResponse(response: string): ParsedAnalysis {
     const analysis: ParsedAnalysis = {
+      pageTitle: '',
       summary: '',
       findings: [],
       wikiUpdates: [],
       confidence: 0.5,
     };
+
+    // Parse page title
+    const titleMatch = response.match(/PAGE_TITLE:\s*(.+?)(?=\n|SUMMARY:|$)/i);
+    if (titleMatch) {
+      analysis.pageTitle = titleMatch[1]!.trim();
+    }
 
     // Parse summary
     const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i);
@@ -163,28 +173,33 @@ CONFIDENCE: [0-1 value]
   ): WikiPageUpdate[] {
     const updates: WikiPageUpdate[] = [];
 
-    // Always create/update a page for the commit itself
+    // Use descriptive title from LLM, fall back to commit message summary
+    const pageTitle = analysis.pageTitle || extractTitleFromMessage(commit.message);
     const commitPagePath = `commits/${commit.sha.slice(0, 8)}`;
-    const commitPageContent = `# Commit ${commit.sha.slice(0, 8)}
 
-${commit.message}
+    // Build findings section only if there are findings
+    const findingsSection = analysis.findings.length > 0
+      ? `## Key Findings
 
-## Summary
+${analysis.findings.map(f => `- **${f.type}** (${f.importance}): ${f.description}`).join('\n')}`
+      : '';
+
+    const commitPageContent = `# ${pageTitle}
 
 ${analysis.summary}
 
-## Findings
+${findingsSection}
 
-${analysis.findings.map(f => `- **${f.type}** (${f.importance}): ${f.description}`).join('\n')}
+## Source
 
-## Affected Files
-
-${commit.diffSummary.affectedFiles.map(f => `- \`${f}\``).join('\n')}
+- **Commit:** ${commit.sha.slice(0, 8)}
+- **Files:** ${commit.diffSummary.affectedFiles.map(f => `\`${f}\``).join(', ')}
 `;
 
     updates.push({
       type: 'create',
       path: commitPagePath,
+      title: pageTitle,  // Store title separately for wiki page
       content: commitPageContent,
       sourceCommitId: commit.sha,
       agentRunId: '', // Will be set by the executor
@@ -217,6 +232,7 @@ ${wikiUpdate.description}
 }
 
 interface ParsedAnalysis {
+  pageTitle: string;
   summary: string;
   findings: Array<{
     type: string;
@@ -243,15 +259,32 @@ function pathToTitle(path: string): string {
     .join(' ');
 }
 
-const SYSTEM_PROMPT = `You are a code analysis agent for CodeWiki, a system that generates living documentation from Git repositories.
+/**
+ * Extract a title from a commit message.
+ * Takes the first line and cleans it up.
+ */
+function extractTitleFromMessage(message: string): string {
+  const firstLine = message.split('\n')[0] ?? message;
+  // Remove common prefixes like "feat:", "fix:", etc.
+  const cleaned = firstLine.replace(/^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert)(\([^)]+\))?:\s*/i, '');
+  // Capitalize first letter
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
 
-Your job is to analyze commits and extract meaningful documentation that captures:
-- What changed and why
-- Architectural decisions and patterns
-- Potential issues or technical debt
-- Connections to other parts of the codebase
+const SYSTEM_PROMPT = `You are a technical writer creating wiki documentation from code changes.
 
-Be concise but thorough. Focus on the "why" behind changes, not just the "what".
+CRITICAL: Write as encyclopedia articles, NOT commit summaries.
+
+BAD: "This commit adds a new authentication system..."
+GOOD: "The authentication system provides secure user login using OAuth 2.0..."
+
+Your documentation should:
+- Describe WHAT EXISTS, not what was committed
+- Explain WHY the system works this way
+- Help developers understand and use the code
+- Read like Wikipedia, not a changelog
+
+Give each page a descriptive title that captures the topic (e.g., "Multi-Agent Processing Pipeline", "OAuth Authentication Flow"), NOT "Commit abc123".
 
 When suggesting wiki pages:
 - Use lowercase paths with hyphens (e.g., "architecture/cqrs-pattern")
@@ -259,7 +292,7 @@ When suggesting wiki pages:
 - Prefer updating existing pages over creating new ones for small changes
 
 Your confidence should reflect:
-- 0.9+: Clear commit message, obvious changes, well-documented code
-- 0.7-0.9: Reasonable inference from code and message
+- 0.9+: Clear implementation, well-documented code
+- 0.7-0.9: Reasonable inference from code
 - 0.5-0.7: Some ambiguity, might need verification
-- <0.5: Significant uncertainty, needs human review`;
+- <0.5: Significant uncertainty, needs review`;

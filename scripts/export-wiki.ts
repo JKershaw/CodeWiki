@@ -30,6 +30,9 @@ interface WikiPage {
   updatedAt: string;
 }
 
+/** Valid wiki page paths for link resolution */
+let validPaths: Set<string> = new Set();
+
 async function loadPages(input: string): Promise<WikiPage[]> {
   const stat = await fs.stat(input);
 
@@ -43,6 +46,36 @@ async function loadPages(input: string): Promise<WikiPage[]> {
     const content = await fs.readFile(input, 'utf-8');
     return JSON.parse(content);
   }
+}
+
+/**
+ * Fix internal wiki links in content to use .md extension.
+ * Handles both formats:
+ *   [Title](path/to/page) → [Title](path/to/page.md)
+ *   [Title](path/to/page.md) → unchanged
+ */
+function fixInternalLinks(content: string, pageTitles: Map<string, string>): string {
+  // Match markdown links: [text](url)
+  return content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+    // Skip external links
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('#')) {
+      return match;
+    }
+
+    // Skip if already has .md extension
+    if (url.endsWith('.md')) {
+      return match;
+    }
+
+    // Check if this is a valid internal wiki path
+    const cleanPath = url.replace(/^\//, ''); // Remove leading slash if present
+    if (validPaths.has(cleanPath)) {
+      return `[${text}](${cleanPath}.md)`;
+    }
+
+    // Not a known wiki path, leave unchanged
+    return match;
+  });
 }
 
 async function exportWiki(input: string, outputDir: string): Promise<void> {
@@ -67,6 +100,9 @@ async function exportWiki(input: string, outputDir: string): Promise<void> {
   // Create output directory
   await fs.mkdir(outputDir, { recursive: true });
 
+  // Build valid paths set for link resolution
+  validPaths = new Set(pages.map(p => p.path));
+
   // Group pages by category (first part of path)
   const categories = new Map<string, WikiPage[]>();
   for (const page of pages) {
@@ -76,6 +112,9 @@ async function exportWiki(input: string, outputDir: string): Promise<void> {
     }
     categories.get(category)!.push(page);
   }
+
+  // Build page title lookup for better link text
+  const pageTitles = new Map(pages.map(p => [p.path, p.title]));
 
   // Export each page
   for (const page of pages) {
@@ -97,7 +136,10 @@ async function exportWiki(input: string, outputDir: string): Promise<void> {
       '',
     ].filter(Boolean).join('\n');
 
-    const fullContent = metadata + '\n' + page.content;
+    // Fix internal links in content (add .md extension)
+    const fixedContent = fixInternalLinks(page.content, pageTitles);
+
+    const fullContent = metadata + '\n' + fixedContent;
 
     await fs.writeFile(pagePath, fullContent);
     console.log(`  ✓ ${page.path}.md`);
@@ -112,48 +154,122 @@ async function exportWiki(input: string, outputDir: string): Promise<void> {
 }
 
 function generateIndex(pages: WikiPage[], categories: Map<string, WikiPage[]>): string {
-  const lines: string[] = [
-    '# Wiki Index',
-    '',
-    `Generated: ${new Date().toISOString()}`,
-    '',
-    `Total pages: ${pages.length}`,
-    '',
-    '## Categories',
-    '',
-  ];
+  const lines: string[] = [];
 
   // Sort categories
   const sortedCategories = Array.from(categories.entries()).sort((a, b) =>
     a[0].localeCompare(b[0])
   );
 
-  for (const [category, categoryPages] of sortedCategories) {
-    lines.push(`### ${category.charAt(0).toUpperCase() + category.slice(1)}`);
+  // Calculate stats
+  const avgConfidence = pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length;
+
+  // Generate overview section
+  lines.push('# Project Wiki');
+  lines.push('');
+  lines.push('Welcome to the project wiki. This documentation is automatically generated from the Git history,');
+  lines.push('capturing not just what the code does, but why it exists and how it evolved.');
+  lines.push('');
+
+  // Quick stats
+  lines.push(`> **${pages.length} pages** across **${categories.size} categories** • Average confidence: **${(avgConfidence * 100).toFixed(0)}%**`);
+  lines.push('');
+
+  // Category descriptions with key pages
+  lines.push('## Documentation');
+  lines.push('');
+
+  // Define category descriptions and icons
+  const categoryInfo: Record<string, { icon: string; description: string }> = {
+    architecture: { icon: '🏗️', description: 'System design, patterns, and technical decisions' },
+    decisions: { icon: '📋', description: 'Architecture Decision Records (ADRs) and rationale' },
+    security: { icon: '🔒', description: 'Security audits, vulnerabilities, and recommendations' },
+    guides: { icon: '📖', description: 'How-to guides and tutorials' },
+    patterns: { icon: '🎨', description: 'Design patterns and coding conventions' },
+    conventions: { icon: '📐', description: 'Coding standards and style guidelines' },
+    planning: { icon: '📅', description: 'Project plans and roadmaps' },
+    history: { icon: '📜', description: 'Feature histories and evolution' },
+    commits: { icon: '🔄', description: 'Individual commit documentation' },
+  };
+
+  // Group non-commit categories first
+  const primaryCategories = sortedCategories.filter(([cat]) => cat !== 'commits');
+  const commitCategory = sortedCategories.find(([cat]) => cat === 'commits');
+
+  for (const [category, categoryPages] of primaryCategories) {
+    const info = categoryInfo[category] || { icon: '📁', description: '' };
+    const catAvgConfidence = categoryPages.reduce((sum, p) => sum + p.confidence, 0) / categoryPages.length;
+
+    lines.push(`### ${info.icon} ${capitalize(category)}`);
+    if (info.description) {
+      lines.push('');
+      lines.push(info.description);
+    }
     lines.push('');
 
-    // Sort pages by title
-    const sortedPages = categoryPages.sort((a, b) => a.title.localeCompare(b.title));
+    // Show top pages (highest confidence, max 5)
+    const topPages = [...categoryPages]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5);
 
-    for (const page of sortedPages) {
+    for (const page of topPages) {
       const confidence = page.confidence >= 0.8 ? '🟢' : page.confidence >= 0.5 ? '🟡' : '🔴';
       lines.push(`- ${confidence} [${page.title}](${page.path}.md)`);
+    }
+
+    if (categoryPages.length > 5) {
+      lines.push(`- *...and ${categoryPages.length - 5} more*`);
     }
     lines.push('');
   }
 
-  // Add stats
+  // Commits section (collapsed or summarized)
+  if (commitCategory) {
+    const [, commitPages] = commitCategory;
+    lines.push(`### 🔄 Commits`);
+    lines.push('');
+    lines.push(`Documentation for ${commitPages.length} individual commits. Each commit page captures`);
+    lines.push('what changed, why, and any significant findings from analysis.');
+    lines.push('');
+
+    // Show only recent/high-confidence commits
+    const topCommits = [...commitPages]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5);
+
+    for (const page of topCommits) {
+      const confidence = page.confidence >= 0.8 ? '🟢' : page.confidence >= 0.5 ? '🟡' : '🔴';
+      lines.push(`- ${confidence} [${page.title}](${page.path}.md)`);
+    }
+
+    if (commitPages.length > 5) {
+      lines.push(`- *...and ${commitPages.length - 5} more commits*`);
+    }
+    lines.push('');
+  }
+
+  // Statistics section
+  lines.push('---');
+  lines.push('');
   lines.push('## Statistics');
   lines.push('');
   lines.push('| Category | Pages | Avg Confidence |');
   lines.push('|----------|-------|----------------|');
 
   for (const [category, categoryPages] of sortedCategories) {
-    const avgConfidence = categoryPages.reduce((sum, p) => sum + p.confidence, 0) / categoryPages.length;
-    lines.push(`| ${category} | ${categoryPages.length} | ${(avgConfidence * 100).toFixed(0)}% |`);
+    const catAvgConfidence = categoryPages.reduce((sum, p) => sum + p.confidence, 0) / categoryPages.length;
+    lines.push(`| ${capitalize(category)} | ${categoryPages.length} | ${(catAvgConfidence * 100).toFixed(0)}% |`);
   }
 
+  lines.push('');
+  lines.push('---');
+  lines.push(`*Generated: ${new Date().toISOString()}*`);
+
   return lines.join('\n');
+}
+
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 // Main

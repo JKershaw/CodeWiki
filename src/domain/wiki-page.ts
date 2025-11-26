@@ -30,6 +30,8 @@ export interface WikiPageUpdate {
   type: 'create' | 'update' | 'merge';
   /** Target page path */
   path: string;
+  /** Page title (optional, extracted from content if not provided) */
+  title?: string;
   /** New or updated content */
   content: string;
   /** Commit that triggered this update */
