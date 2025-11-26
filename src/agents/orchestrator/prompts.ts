@@ -29,7 +29,9 @@ META AGENTS (run on wiki, not commits - no targetCommitId):
 - consistency: Checks for contradictions. Run when wiki is substantial (10+ pages).
 
 SYNTHESIS AGENTS (create new content from existing - no targetCommitId):
-- overview: Creates category overview pages AND project overview. HIGH PRIORITY when wiki lacks overview.
+- overview: Creates category overview pages for categories with 3+ pages.
+- project-overview: Creates THE project overview at architecture/overview.md. CRITICAL for 10+ pages.
+- getting-started: Creates a practical getting started guide at guides/getting-started.md. Run when 10+ pages.
 - writer: Rewrites "This commit..." style pages as proper encyclopedia articles. HIGH IMPACT on readability.
 
 ## Decision Guidelines (Page-Count Based)
@@ -45,11 +47,14 @@ These thresholds ensure even large repos (1000+ commits) get useful synthesis ea
 
 **10-15 pages:** Increase synthesis priority (50% analysis, 50% meta/synthesis)
 - Run overview agent for categories with 3+ pages
+- Run project-overview agent if architecture/overview doesn't exist
+- Run getting-started agent if guides/getting-started doesn't exist
 - Ensure pages are cross-linked
 - Quality reviews become valuable
 
-**15+ pages:** Wiki needs project overview (40% analysis, 60% meta/synthesis)
-- If no project/architecture overview exists, prioritize overview agent
+**15+ pages:** Wiki needs strong synthesis (40% analysis, 60% meta/synthesis)
+- PRIORITIZE project-overview if architecture/overview missing
+- PRIORITIZE getting-started if guides/getting-started missing
 - Continue writer agent for readability
 - Focus on making wiki navigable and useful
 
@@ -101,6 +106,8 @@ Generate up to ${maxItems} work items that would make the wiki most useful right
 Consider:
 - Pages needing rewrite: ${ctx.pagesNeedingRewrite} (writer agent improves readability)
 - Categories without overview: ${ctx.categoriesWithoutOverview.join(', ') || 'none'} (overview agent helps navigation)
+- Has project overview: ${ctx.hasProjectOverview ? 'YES' : 'NO - run project-overview agent!'}
+- Has getting started: ${ctx.hasGettingStarted ? 'YES' : 'NO - run getting-started agent!'}
 - Pages without links: ${ctx.pagesWithoutLinks} (link agent improves discoverability)
 
 Return your response as valid JSON.`;
@@ -120,7 +127,7 @@ export interface OrchestratorDecision {
 
 const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'pattern', 'dependency'];
 const META_AGENTS = ['link', 'structure', 'quality', 'consistency'];
-const SYNTHESIS_AGENTS = ['overview', 'writer'];
+const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'writer'];
 const ALL_AGENTS = [...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 
 /**

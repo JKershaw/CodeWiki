@@ -34,6 +34,10 @@ export interface OrchestratorContext {
 
   // Quality Indicators
   pagesWithoutLinks: number;
+
+  // Key pages existence
+  hasProjectOverview: boolean;
+  hasGettingStarted: boolean;
 }
 
 /**
@@ -150,6 +154,17 @@ export class ContextGatherer {
     // Pages without links
     const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0).length;
 
+    // Key pages existence
+    const hasProjectOverview = wikiPages.some(p =>
+      p.path === 'architecture/overview' ||
+      p.path === 'architecture/index'
+    );
+    const hasGettingStarted = wikiPages.some(p =>
+      p.path === 'guides/getting-started' ||
+      p.path === 'guides/quickstart' ||
+      p.path === 'guides/index'
+    );
+
     return {
       totalCommits: commits.length,
       commitsByAgent,
@@ -163,6 +178,8 @@ export class ContextGatherer {
       lowConfidencePages,
       recentRuns,
       pagesWithoutLinks,
+      hasProjectOverview,
+      hasGettingStarted,
     };
   }
 
@@ -193,6 +210,8 @@ export class ContextGatherer {
     }
 
     lines.push(`**Pages needing rewrite:** ${ctx.pagesNeedingRewrite}`);
+    lines.push(`**Has project overview (architecture/overview):** ${ctx.hasProjectOverview ? 'YES' : 'NO'}`);
+    lines.push(`**Has getting started (guides/getting-started):** ${ctx.hasGettingStarted ? 'YES' : 'NO'}`);
     lines.push(`**Pages without links:** ${ctx.pagesWithoutLinks}`);
     lines.push(`**Low confidence pages:** ${ctx.lowConfidencePages}`);
     lines.push('');

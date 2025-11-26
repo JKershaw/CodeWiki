@@ -43,6 +43,8 @@ export type AgentType =
   // Synthesis agents - create higher-order content
   | 'guide'
   | 'overview'
+  | 'project-overview'
+  | 'getting-started'
   | 'history'
   | 'convention'
   // Special agents

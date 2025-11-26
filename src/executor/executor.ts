@@ -17,6 +17,8 @@ import { QualityAgent } from '../agents/meta/quality-agent.js';
 import { ConsistencyAgent } from '../agents/meta/consistency-agent.js';
 import { OverviewAgent } from '../agents/synthesis/overview-agent.js';
 import { WriterAgent } from '../agents/synthesis/writer-agent.js';
+import { ProjectOverviewAgent } from '../agents/synthesis/project-overview-agent.js';
+import { GettingStartedAgent } from '../agents/synthesis/getting-started-agent.js';
 
 /**
  * Executor - The inner loop that runs agents from the work queue.
@@ -51,6 +53,8 @@ export class Executor {
     // Register synthesis agents
     this.registerAgent(new OverviewAgent());
     this.registerAgent(new WriterAgent());
+    this.registerAgent(new ProjectOverviewAgent());
+    this.registerAgent(new GettingStartedAgent());
   }
 
   /**
