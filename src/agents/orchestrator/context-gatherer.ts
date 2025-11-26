@@ -81,11 +81,12 @@ export class ContextGatherer {
     }
 
     // Recent commits with their processing status
+    // Use sha (Git hash) instead of id (internal UUID) for the orchestrator
     const recentCommits = commits
       .sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime())
       .slice(0, 10)
       .map(c => ({
-        id: c.id,
+        id: c.sha,
         message: c.message,
         date: c.committedAt,
         processedBy: c.processedBy.map(p => p.agentType) as AgentType[],

@@ -11,7 +11,7 @@ Your job is to decide what work to do next to make the wiki most useful. You bal
 - QUALITY: Are pages readable, linked, and confidence-scored?
 - USEFULNESS: Can someone use this wiki to understand the codebase NOW?
 
-Key insight: A wiki with good structure and 60% coverage is MORE useful than a wiki with 100% coverage but no structure. Interleave structural work early.
+Key insight: A useful wiki with good structure beats comprehensive coverage. An AI coding agent needs to understand the project quickly, not read every commit. Prioritize synthesis early.
 
 ## Available Agents
 
@@ -29,19 +29,29 @@ META AGENTS (run on wiki, not commits - no targetCommitId):
 - consistency: Checks for contradictions. Run when wiki is substantial (10+ pages).
 
 SYNTHESIS AGENTS (create new content from existing - no targetCommitId):
-- overview: Creates category overview pages. Run when a category has 3+ pages but no overview.
+- overview: Creates category overview pages AND project overview. HIGH PRIORITY when wiki lacks overview.
 - writer: Rewrites "This commit..." style pages as proper encyclopedia articles. HIGH IMPACT on readability.
 
-## Decision Guidelines
+## Decision Guidelines (Page-Count Based)
 
-1. First few iterations: Focus on code-change for recent commits to establish base content
-2. After 5+ pages exist: Start interleaving meta/synthesis work (20-30% of work)
-3. Prefer recent commits over old ones (more relevant to users)
-4. Don't run the same meta/synthesis agent twice in a row (diminishing returns)
-5. Writer agent has high impact - if pages need rewriting, prioritize it
-6. Overview agent makes categories navigable - prioritize when categories have 3+ pages
-7. Link agent should run when many pages lack cross-references
-8. Only use dependency agent when there are actual dependency file changes
+These thresholds ensure even large repos (1000+ commits) get useful synthesis early:
+
+**0-5 pages:** Focus on code-change to build base content (100% analysis)
+
+**5-10 pages:** Start synthesis work (70% analysis, 30% meta/synthesis)
+- Run writer agent on pages needing rewrite
+- Run link agent to connect pages
+- Start pattern/narrative analysis
+
+**10-15 pages:** Increase synthesis priority (50% analysis, 50% meta/synthesis)
+- Run overview agent for categories with 3+ pages
+- Ensure pages are cross-linked
+- Quality reviews become valuable
+
+**15+ pages:** Wiki needs project overview (40% analysis, 60% meta/synthesis)
+- If no project/architecture overview exists, prioritize overview agent
+- Continue writer agent for readability
+- Focus on making wiki navigable and useful
 
 ## Response Format
 
@@ -71,18 +81,27 @@ IMPORTANT:
  * Build the user prompt with current context.
  */
 export function buildUserPrompt(ctx: OrchestratorContext, contextString: string, maxItems: number): string {
+  const pageCount = ctx.wikiPages;
+  const synthesisGuidance = pageCount < 5
+    ? 'Focus entirely on code-change analysis to build base content.'
+    : pageCount < 10
+    ? 'Mix in synthesis work (writer, link agents) - aim for 70% analysis, 30% synthesis.'
+    : pageCount < 15
+    ? 'Balanced approach - 50% analysis, 50% synthesis. Run overview agent for categories with 3+ pages.'
+    : 'Prioritize synthesis and overview - 40% analysis, 60% synthesis. Project overview is critical if missing.';
+
   return `${contextString}
 
 ## Your Task
 
 Generate up to ${maxItems} work items that would make the wiki most useful right now.
 
-Consider the current state carefully:
-- If code-change coverage is low, prioritize getting base content first
-- If there are pages needing rewrite (${ctx.pagesNeedingRewrite}), the writer agent will improve readability significantly
-- If categories need overviews (${ctx.categoriesWithoutOverview.join(', ') || 'none'}), overview agent helps navigation
-- If pages lack links (${ctx.pagesWithoutLinks}), link agent improves discoverability
-- Balance: aim for roughly 60-70% analysis work, 30-40% meta/synthesis work once base content exists
+**Current wiki size: ${pageCount} pages** - ${synthesisGuidance}
+
+Consider:
+- Pages needing rewrite: ${ctx.pagesNeedingRewrite} (writer agent improves readability)
+- Categories without overview: ${ctx.categoriesWithoutOverview.join(', ') || 'none'} (overview agent helps navigation)
+- Pages without links: ${ctx.pagesWithoutLinks} (link agent improves discoverability)
 
 Return your response as valid JSON.`;
 }

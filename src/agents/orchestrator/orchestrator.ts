@@ -118,9 +118,9 @@ export class Orchestrator {
       temperature: 0.3,
     });
 
-    // Get valid commit IDs for validation
+    // Get valid commit SHAs for validation (use sha, not internal id)
     const commits = await this.repos.commits.findByRepo(repoId, { limit: 100 });
-    const validCommitIds = new Set(commits.map(c => c.id));
+    const validCommitIds = new Set(commits.map(c => c.sha));
 
     // Parse response
     const decision = parseOrchestratorResponse(completion.content, validCommitIds);

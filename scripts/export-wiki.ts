@@ -164,11 +164,65 @@ function generateIndex(pages: WikiPage[], categories: Map<string, WikiPage[]>): 
   // Calculate stats
   const avgConfidence = pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length;
 
-  // Generate overview section
+  // Find key pages for prominent display
+  const overviewPage = pages.find(p =>
+    p.path.includes('overview') || p.path.includes('architecture/overview')
+  );
+  const gettingStartedPage = pages.find(p =>
+    p.path.includes('getting-started') || p.path.includes('guides/getting-started')
+  );
+
+  // Generate title and intro
   lines.push('# Project Wiki');
   lines.push('');
-  lines.push('Welcome to the project wiki. This documentation is automatically generated from the Git history,');
-  lines.push('capturing not just what the code does, but why it exists and how it evolved.');
+
+  // If we have an overview page, extract the first paragraph as project description
+  if (overviewPage) {
+    // Get first paragraph after the heading
+    const contentLines = overviewPage.content.split('\n');
+    const firstParaIndex = contentLines.findIndex(l => l.trim() && !l.startsWith('#'));
+    if (firstParaIndex >= 0) {
+      let firstPara = contentLines[firstParaIndex] || '';
+      // Truncate if too long
+      if (firstPara.length > 300) {
+        firstPara = firstPara.slice(0, 297) + '...';
+      }
+      lines.push(firstPara);
+      lines.push('');
+      lines.push(`📖 [Read full overview →](${overviewPage.path}.md)`);
+      lines.push('');
+    }
+  } else {
+    lines.push('This documentation is automatically generated from Git history, capturing');
+    lines.push('what the code does, why it exists, and how it evolved.');
+    lines.push('');
+  }
+
+  // Quick start section
+  lines.push('## Quick Start');
+  lines.push('');
+  if (gettingStartedPage) {
+    lines.push(`📚 **[Getting Started Guide](${gettingStartedPage.path}.md)** - Start here if you\\'re new`);
+    lines.push('');
+  }
+  if (overviewPage) {
+    lines.push(`🏗️ **[Architecture Overview](${overviewPage.path}.md)** - Understand the system design`);
+    lines.push('');
+  }
+
+  // Show high-value pages
+  const decisionPages = categories.get('decisions') || [];
+  const patternPages = categories.get('patterns') || [];
+  if (decisionPages.length > 0) {
+    const topDecision = decisionPages.sort((a, b) => b.confidence - a.confidence)[0];
+    lines.push(`📋 **[Key Decisions](${topDecision?.path || 'decisions/overview'}.md)** - Why things are the way they are`);
+    lines.push('');
+  }
+  if (patternPages.length > 0) {
+    const topPattern = patternPages.sort((a, b) => b.confidence - a.confidence)[0];
+    lines.push(`🎨 **[Design Patterns](${topPattern?.path || 'patterns/overview'}.md)** - Patterns used in the codebase`);
+    lines.push('');
+  }
   lines.push('');
 
   // Quick stats
@@ -223,13 +277,13 @@ function generateIndex(pages: WikiPage[], categories: Map<string, WikiPage[]>): 
     lines.push('');
   }
 
-  // Commits section (collapsed or summarized)
+  // Commits section - collapsed summary
   if (commitCategory) {
     const [, commitPages] = commitCategory;
-    lines.push(`### 🔄 Commits`);
+    lines.push('### 🔄 Recent Changes');
     lines.push('');
-    lines.push(`Documentation for ${commitPages.length} individual commits. Each commit page captures`);
-    lines.push('what changed, why, and any significant findings from analysis.');
+    lines.push(`<details>`);
+    lines.push(`<summary>${commitPages.length} commit pages documented</summary>`);
     lines.push('');
 
     // Show only recent/high-confidence commits
@@ -243,8 +297,10 @@ function generateIndex(pages: WikiPage[], categories: Map<string, WikiPage[]>): 
     }
 
     if (commitPages.length > 5) {
-      lines.push(`- *...and ${commitPages.length - 5} more commits*`);
+      lines.push(`- *...and ${commitPages.length - 5} more*`);
     }
+    lines.push('');
+    lines.push('</details>');
     lines.push('');
   }
 

@@ -154,12 +154,25 @@ export class Executor {
       return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0 };
     }
 
+    // Translate SHA to internal commit ID if we have a target commit
+    // The orchestrator returns Git SHAs, but agents expect internal UUIDs
+    let internalCommitId: string | undefined;
+    if (workItem.targetCommitId) {
+      const commit = await this.repos.commits.findBySha(repoId, workItem.targetCommitId);
+      if (!commit) {
+        console.error(`Commit not found for SHA: ${workItem.targetCommitId}`);
+        await this.repos.workQueue.fail(workItem.id);
+        return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0 };
+      }
+      internalCommitId = commit.id;
+    }
+
     // Create agent run record
     const agentRun = createAgentRun({
       id: uuid(),
       repoId,
       agentType: workItem.agentType,
-      ...(workItem.targetCommitId ? { targetCommitId: workItem.targetCommitId } : {}),
+      ...(internalCommitId ? { targetCommitId: internalCommitId } : {}),
     });
     agentRun.status = 'running';
     await this.repos.agentRuns.save(agentRun);
@@ -176,8 +189,8 @@ export class Executor {
     try {
       let result;
 
-      if (workItem.targetCommitId) {
-        result = await agent.runOnCommit(workItem.targetCommitId, context);
+      if (internalCommitId) {
+        result = await agent.runOnCommit(internalCommitId, context);
       } else if (agent.runOnWiki) {
         result = await agent.runOnWiki(context);
       } else {
@@ -228,8 +241,8 @@ export class Executor {
       }
 
       // Mark commit as processed
-      if (workItem.targetCommitId) {
-        await this.repos.commits.addProcessingRecord(workItem.targetCommitId, {
+      if (internalCommitId) {
+        await this.repos.commits.addProcessingRecord(internalCommitId, {
           agentType: agent.type,
           agentRunId: agentRun.id,
           processedAt: new Date(),
