@@ -262,6 +262,43 @@ export class Orchestrator {
           }
         }
       }
+
+      // Writer Agent: trigger for pages with commit-style content that needs rewriting
+      if (workItems.length < remainingSlots) {
+        // Check for pages that need rewriting (have "This commit..." style)
+        const pagesNeedingRewrite = wikiPages.filter(page => {
+          const category = page.path.split('/')[0] ?? '';
+          // Skip commits and security - those are inherently commit-focused
+          if (['commits', 'security'].includes(category)) return false;
+          // Skip overview pages
+          if (page.path.endsWith('/overview') || page.path.endsWith('/index')) return false;
+
+          // Check for commit-style indicators
+          const firstPara = page.content.split('\n\n')[1] ?? '';
+          const commitIndicators = [
+            'this commit ', 'this change ', 'this patch ',
+            'this adds ', 'this modifies ', 'this introduces ',
+            'commit adds', 'commit modifies',
+          ];
+          return commitIndicators.some(ind => firstPara.toLowerCase().includes(ind));
+        });
+
+        if (pagesNeedingRewrite.length > 0) {
+          const writerWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+            agentType: 'writer',
+            status: 'pending',
+          });
+
+          if (writerWorkExists.length === 0) {
+            workItems.push(createWorkItem({
+              id: uuid(),
+              repoId,
+              agentType: 'writer',
+              priority: Priority.SYNTHESIS,
+            }));
+          }
+        }
+      }
     }
 
     return workItems;
