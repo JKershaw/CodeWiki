@@ -251,7 +251,8 @@ export class Orchestrator {
         if (workItems.length >= remainingSlots) break;
 
         // Check if work already exists for this commit + agent
-        const exists = await this.repos.workQueue.exists(repoId, agentType, commit.id);
+        // Use SHA to match work items (they store SHA, not internal ID)
+        const exists = await this.repos.workQueue.exists(repoId, agentType, commit.sha);
         if (exists) continue;
 
         workItems.push(createWorkItem({

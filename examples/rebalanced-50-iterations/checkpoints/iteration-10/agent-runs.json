@@ -1,0 +1,274 @@
+[
+  {
+    "id": "696b0701-f570-410c-9966-675358801017",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "technical-debt",
+    "targetCommitId": "98cb4c04-d387-422a-b250-9952f5284507",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds only documentation files (133 exported markdown wiki files for progressive examples) with no code changes (+0/-0 lines). This is a documentation-only commit that organizes existing wiki content into example directories, representing a debt-neutral operation that actually improves project organization and maintainability.",
+      "findings": [],
+      "confidence": 0.95
+    },
+    "requestedUpdates": [],
+    "durationMs": 8792,
+    "costUsd": 0.21728999999999998,
+    "error": null,
+    "startedAt": "2025-11-27T13:53:38.402Z",
+    "completedAt": "2025-11-27T13:53:47.195Z"
+  },
+  {
+    "id": "3a50c291-141e-414f-9771-a2ebf6a485f8",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "security",
+    "targetCommitId": "98cb4c04-d387-422a-b250-9952f5284507",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds exported markdown wiki files for progressive examples, containing 133 documentation files with no code changes (+0/-0 lines). The files appear to be generated documentation from the CodeWiki system itself, showing examples of how the system processes commits and generates wiki content. While the commit contains no executable code, it does include some security-relevant documentation content that references security analysis agents and patterns.",
+      "findings": [],
+      "confidence": 0.9
+    },
+    "requestedUpdates": [],
+    "durationMs": 12280,
+    "costUsd": 0.21636,
+    "error": null,
+    "startedAt": "2025-11-27T13:53:26.116Z",
+    "completedAt": "2025-11-27T13:53:38.397Z"
+  },
+  {
+    "id": "fd703f7d-8672-4644-9e2c-e1c9e80f66ab",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "narrative",
+    "targetCommitId": "98cb4c04-d387-422a-b250-9952f5284507",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds exported markdown wiki files demonstrating a progressive documentation system across multiple iteration examples (1, 2, 5, 10, 20, 50 iterations). The wiki content reveals a comprehensive multi-agent documentation generation system with detailed architecture decisions, design patterns, and implementation strategies.",
+      "findings": [],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 13455,
+    "costUsd": 0.20654999999999998,
+    "error": null,
+    "startedAt": "2025-11-27T13:53:12.651Z",
+    "completedAt": "2025-11-27T13:53:26.107Z"
+  },
+  {
+    "id": "59e8dabb-7c75-4f37-8968-5e60b4798b73",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "code-change",
+    "targetCommitId": "98cb4c04-d387-422a-b250-9952f5284507",
+    "status": "completed",
+    "result": {
+      "summary": "The CodeWiki system now includes exported markdown documentation from four progressive development examples, demonstrating how the agentic documentation generation evolves across different iteration counts (1, 2, 5, 10, 20, and 50 iterations). These examples showcase the system's capability to generate increasingly comprehensive wiki documentation as more development iterations are processed, providing concrete demonstrations of how the multi-agent analysis system scales and improves documentation quality over time.\n\nEach progressive example contains exported wiki files organized into logical categories including architecture documentation, commit analyses, component descriptions, development guides, testing patterns, and design pattern explanations. The examples progress from simple single-commit analysis (1 iteration) to comprehensive architectural documentation with detailed pattern catalogs and planning roadmaps (50 iterations). This progression illustrates how the system's LLM-powered agents build increasingly sophisticated understanding of codebases through iterative analysis, moving from basic technical debt detection to comprehensive architectural documentation covering orchestrator-executor coordination, testing strategies, and established software engineering patterns.\n\nThe exported wikis serve as both documentation artifacts and training examples for understanding how the CodeWiki system generates living documentation. They demonstrate the system's ability to recognize and document software engineering patterns, track technical debt over time, maintain implementation roadmaps, and generate both high-level architectural overviews and detailed component documentation. The progressive nature shows how continued iteration leads to more nuanced understanding and better-structured documentation hierarchies.",
+      "findings": [
+        {
+          "type": "TOOL_USE",
+          "description": "Read 2 source files for full context",
+          "relatedPaths": [
+            "README.md",
+            "package.json"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.8
+    },
+    "requestedUpdates": [],
+    "durationMs": 30939,
+    "costUsd": 1.296,
+    "error": null,
+    "startedAt": "2025-11-27T13:52:41.703Z",
+    "completedAt": "2025-11-27T13:53:12.642Z"
+  },
+  {
+    "id": "142973c1-dba4-4776-bee0-f55349e53fb3",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "dependency",
+    "targetCommitId": "f5dad456-f4f2-4b93-98b9-68a188e70579",
+    "status": "completed",
+    "result": {
+      "summary": "No dependency changes in this commit.",
+      "findings": [],
+      "confidence": 1
+    },
+    "requestedUpdates": [],
+    "durationMs": 0,
+    "costUsd": 0,
+    "error": null,
+    "startedAt": "2025-11-27T13:52:41.696Z",
+    "completedAt": "2025-11-27T13:52:41.697Z"
+  },
+  {
+    "id": "451dec3a-10f6-4ef8-93fb-ca116cc0ed90",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "pattern",
+    "targetCommitId": "f5dad456-f4f2-4b93-98b9-68a188e70579",
+    "status": "completed",
+    "result": {
+      "summary": "This commit implements a comprehensive script orchestration pattern with dependency injection, factory patterns, and sophisticated progress tracking. The code demonstrates well-structured TypeScript conventions with clear separation of concerns, though it shows some monolithic script tendencies.",
+      "findings": [],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 22149,
+    "costUsd": 0.18216,
+    "error": null,
+    "startedAt": "2025-11-27T13:52:19.537Z",
+    "completedAt": "2025-11-27T13:52:41.687Z"
+  },
+  {
+    "id": "601438c1-4ba6-43df-9854-737041749255",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "technical-debt",
+    "targetCommitId": "f5dad456-f4f2-4b93-98b9-68a188e70579",
+    "status": "completed",
+    "result": {
+      "summary": "This commit introduces two new test scripts for the rebalanced orchestrator functionality. While the scripts serve their purpose, they contain significant technical debt issues including extremely long functions, code duplication, hardcoded values, and inadequate error handling. The main script is 292 lines with a single massive function that violates multiple maintainability principles.",
+      "findings": [],
+      "confidence": 0.9
+    },
+    "requestedUpdates": [],
+    "durationMs": 19468,
+    "costUsd": 0.21153,
+    "error": null,
+    "startedAt": "2025-11-27T13:52:00.058Z",
+    "completedAt": "2025-11-27T13:52:19.527Z"
+  },
+  {
+    "id": "9811c271-1a9e-43d1-9f34-0ea948af69d8",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "security",
+    "targetCommitId": "f5dad456-f4f2-4b93-98b9-68a188e70579",
+    "status": "completed",
+    "result": {
+      "summary": "This commit introduces scripts for testing and generating wikis with a \"rebalanced orchestrator\" system. The code includes API key handling, file system operations, and external service integrations. While not inherently malicious, it contains several security considerations around credential management, input validation, and file operations that need attention.",
+      "findings": [],
+      "confidence": 0.75
+    },
+    "requestedUpdates": [],
+    "durationMs": 14263,
+    "costUsd": 0.18209999999999998,
+    "error": null,
+    "startedAt": "2025-11-27T13:51:45.789Z",
+    "completedAt": "2025-11-27T13:52:00.052Z"
+  },
+  {
+    "id": "d76e5730-1390-4273-9249-4adfd4d01467",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "narrative",
+    "targetCommitId": "f5dad456-f4f2-4b93-98b9-68a188e70579",
+    "status": "completed",
+    "result": {
+      "summary": "This commit implements orchestrator rebalancing to improve early-stage wiki quality, along with comprehensive tooling for testing and generating wikis with the rebalanced approach.",
+      "findings": [
+        {
+          "type": "DESIGN",
+          "description": "Orchestrator rebalancing mechanism to improve early wiki quality through agent selection optimization",
+          "relatedPaths": [
+            "src/agents/orchestrator/orchestrator.ts"
+          ],
+          "importance": "high"
+        },
+        {
+          "type": "TOOLING",
+          "description": "Comprehensive wiki generation script with checkpoint tracking and statistical analysis",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "TESTING",
+          "description": "Dedicated rebalancing test framework for validation",
+          "relatedPaths": [
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "medium"
+        }
+      ],
+      "confidence": 0.82
+    },
+    "requestedUpdates": [],
+    "durationMs": 9428,
+    "costUsd": 0.14928,
+    "error": null,
+    "startedAt": "2025-11-27T13:51:36.352Z",
+    "completedAt": "2025-11-27T13:51:45.781Z"
+  },
+  {
+    "id": "e9a7d22a-3a80-4746-a7e2-467673a4deb9",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "agentType": "code-change",
+    "targetCommitId": "f5dad456-f4f2-4b93-98b9-68a188e70579",
+    "status": "completed",
+    "result": {
+      "summary": "The rebalanced wiki generation system optimizes the orchestrator's agent scheduling strategy to produce higher-quality documentation earlier in the generation process. The system addresses previous issues where agents were scheduled in strict sequential order, leading to sparse early coverage and delayed synthesis of meaningful content.\n\nThe orchestrator now employs a multi-strategy approach that bundles multiple analysis agents per commit (code-change, narrative, security, technical-debt, pattern, and dependency agents) to ensure comprehensive coverage before moving to the next commit. Meta agents (link, structure, quality, consistency) are activated earlier - after processing 20+ commits or achieving 50% coverage - rather than waiting for complete analysis coverage. Synthesis agents (overview, project-overview, getting-started, writer) trigger at lower thresholds (8+ pages instead of requiring extensive coverage), enabling the generation of high-level documentation sooner. The system includes comprehensive tooling for testing the rebalancing logic with mock LLMs and generating production wikis with detailed progress tracking, checkpoints, and exportable markdown output.",
+      "findings": [
+        {
+          "type": "FEATURE",
+          "description": "Agent bundling strategy ensures comprehensive commit coverage with multiple analysis agents per commit rather than sequential processing",
+          "relatedPaths": [
+            "src/agents/orchestrator/orchestrator.ts"
+          ],
+          "importance": "high"
+        },
+        {
+          "type": "FEATURE",
+          "description": "Early meta-agent activation triggers link/structure/quality agents after 20+ commits or 50% coverage instead of waiting for complete analysis [src/agents/orchestrator/orchestrator.ts]",
+          "relatedPaths": [],
+          "importance": "high"
+        },
+        {
+          "type": "FEATURE",
+          "description": "Synthesis agents activate at 8+ pages threshold enabling overview and getting-started documentation generation sooner",
+          "relatedPaths": [
+            "src/agents/orchestrator/orchestrator.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "FEATURE",
+          "description": "Technical debt agent integrated into bundled analysis workflow for early code quality assessment",
+          "relatedPaths": [
+            "src/agents/orchestrator/orchestrator.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "TOOLING",
+          "description": "Rebalanced wiki generation script with progress tracking, checkpoints, and markdown export capabilities",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "TOOLING",
+          "description": "Testing framework with mock LLM to verify orchestrator rebalancing behavior and agent scheduling patterns",
+          "relatedPaths": [
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "low"
+        },
+        {
+          "type": "TOOL_USE",
+          "description": "Read 3 source files for full context",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts",
+            "src/agents/orchestrator/orchestrator.ts",
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.95
+    },
+    "requestedUpdates": [],
+    "durationMs": 31503,
+    "costUsd": 2.58657,
+    "error": null,
+    "startedAt": "2025-11-27T13:51:04.837Z",
+    "completedAt": "2025-11-27T13:51:36.341Z"
+  }
+]

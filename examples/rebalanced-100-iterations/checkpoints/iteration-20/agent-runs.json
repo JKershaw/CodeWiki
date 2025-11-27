@@ -1,0 +1,570 @@
+[
+  {
+    "id": "98ae81ed-942e-4467-93d0-1cbf4ee7ff69",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "narrative",
+    "targetCommitId": "726e4160-a349-433a-9838-399b435af96c",
+    "status": "completed",
+    "result": {
+      "summary": "This commit implements a new analysis agent that specializes in identifying and tracking technical debt. The TechnicalDebtAgent represents an architectural expansion of the project's multi-agent analysis system, adding automated code quality assessment capabilities.",
+      "findings": [],
+      "confidence": 0.8
+    },
+    "requestedUpdates": [],
+    "durationMs": 10431,
+    "costUsd": 0.14772,
+    "error": null,
+    "startedAt": "2025-11-27T14:10:05.106Z",
+    "completedAt": "2025-11-27T14:10:15.538Z"
+  },
+  {
+    "id": "e3540a1c-9e3f-4b14-af26-b1696fe2247e",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "code-change",
+    "targetCommitId": "726e4160-a349-433a-9838-399b435af96c",
+    "status": "completed",
+    "result": {
+      "summary": "The Technical Debt Analysis Agent is a specialized component of the CodeWiki system that automatically identifies and tracks code quality issues in Git commits. This agent performs comprehensive technical debt analysis by examining code changes through multiple lenses including complexity, maintainability, duplication, and technical shortcuts. The agent leverages large language models to analyze commit diffs and provides structured findings with severity levels, actionable recommendations, and tracking of debt accumulation or reduction over time.\n\nThe agent integrates seamlessly with the multi-agent analysis pipeline, implementing the standard Agent interface with a dedicated `technical-debt` type. It processes commits by building detailed prompts that include commit metadata and diff content, then parses structured LLM responses to extract findings, debt levels, and recommendations. The agent maintains a sophisticated understanding of technical debt patterns including deep nesting (>4 levels), long functions (>50 LOC), magic numbers, TODO/FIXME comments, god classes, and missing abstractions. It tracks both debt introduction and debt reduction, making it valuable for monitoring refactoring efforts and code quality trends.\n\nThe agent automatically generates wiki documentation for significant technical debt findings, creating dedicated report pages for high or critical debt levels and maintaining an overview page that tracks hotspots and recommendations across the codebase. This provides development teams with persistent, searchable documentation of code quality evolution and actionable insights for technical debt management.",
+      "findings": [
+        {
+          "type": "Architecture",
+          "description": "Implements comprehensive technical debt detection across 8 categories including complexity, duplication, shortcuts, and maintainability",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "high"
+        },
+        {
+          "type": "Integration",
+          "description": "Seamlessly integrates with multi-agent pipeline through standard Agent interface and exports",
+          "relatedPaths": [
+            "src/agents/analysis/index.ts",
+            "src/agents/orchestrator/orchestrator.ts",
+            "src/executor/executor.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Parsing",
+          "description": "Sophisticated response parsing handles structured LLM output with confidence levels and severity mapping",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Documentation",
+          "description": "Automated wiki generation creates persistent tracking pages for debt reports and overview dashboards",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Testing",
+          "description": "Comprehensive test coverage includes unit tests for parsing logic and integration tests with mocked LLM responses",
+          "relatedPaths": [
+            "tests/unit/technical-debt-agent.test.ts",
+            "tests/integration/technical-debt-agent.test.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "TOOL_USE",
+          "description": "Read 5 source files for full context",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts",
+            "src/agents/base-agent.ts",
+            "tests/unit/technical-debt-agent.test.ts",
+            "tests/integration/technical-debt-agent.test.ts",
+            "src/agents/analysis/index.ts"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.92
+    },
+    "requestedUpdates": [],
+    "durationMs": 32936,
+    "costUsd": 2.1780000000000004,
+    "error": null,
+    "startedAt": "2025-11-27T14:09:32.160Z",
+    "completedAt": "2025-11-27T14:10:05.097Z"
+  },
+  {
+    "id": "8493805c-6bf3-407c-bdcd-47546975b30a",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "dependency",
+    "targetCommitId": "b56ab33a-d45f-47b8-a4c5-24a890d0d974",
+    "status": "completed",
+    "result": {
+      "summary": "No dependency changes in this commit.",
+      "findings": [],
+      "confidence": 1
+    },
+    "requestedUpdates": [],
+    "durationMs": 0,
+    "costUsd": 0,
+    "error": null,
+    "startedAt": "2025-11-27T14:09:32.155Z",
+    "completedAt": "2025-11-27T14:09:32.156Z"
+  },
+  {
+    "id": "737a10e5-50c4-41d3-a346-206199014881",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "pattern",
+    "targetCommitId": "b56ab33a-d45f-47b8-a4c5-24a890d0d974",
+    "status": "completed",
+    "result": {
+      "summary": "This commit demonstrates a **Snapshot Testing / Progressive Documentation** pattern where the system captures incremental states of wiki generation across different iteration counts (1, 2, 5, 10, 20, 50). The file structure follows a **Template Method Pattern** with consistent JSON schemas across all snapshots, and employs a **Data-Driven Testing** approach for validating progressive system behavior.",
+      "findings": [],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 20663,
+    "costUsd": 0.17979,
+    "error": null,
+    "startedAt": "2025-11-27T14:09:11.484Z",
+    "completedAt": "2025-11-27T14:09:32.148Z"
+  },
+  {
+    "id": "286063dc-9a43-470f-9a41-a28503059621",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "technical-debt",
+    "targetCommitId": "b56ab33a-d45f-47b8-a4c5-24a890d0d974",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds progressive wiki generation examples with JSON data files across multiple iteration scenarios (1, 2, 5, 10, 20, 50 iterations). The commit is primarily data-focused, containing example JSON files that demonstrate the system's behavior at different stages. No actual code changes are present, making this essentially debt-neutral from a code quality perspective. However, there are some maintainability concerns around the data structure and organization.",
+      "findings": [
+        {
+          "type": "Code Duplication",
+          "description": "Highly repetitive file structure across 6 different iteration examples, with identical file names repeated in each directory (agent-runs.json, commits.json, orchestrator-runs.json, repos.json, wiki-pages.json, work-queue.json) - this violates DRY principles at the organizational level",
+          "relatedPaths": [
+            "examples/progressive-*/"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Maintainability",
+          "description": "Large JSON files (commits.json appears to have 1486+ lines) without any validation or schema documentation, making them difficult to maintain and verify",
+          "relatedPaths": [
+            "examples/progressive-*/commits.json"
+          ],
+          "importance": "low"
+        },
+        {
+          "type": "Missing Abstractions",
+          "description": "No apparent tooling or scripts to generate or validate these example files, suggesting manual maintenance which is error-prone",
+          "relatedPaths": [
+            "examples/progressive-*/"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.8
+    },
+    "requestedUpdates": [],
+    "durationMs": 15376,
+    "costUsd": 0.19458,
+    "error": null,
+    "startedAt": "2025-11-27T14:08:56.092Z",
+    "completedAt": "2025-11-27T14:09:11.469Z"
+  },
+  {
+    "id": "03330e2f-2bf6-40f1-9d5e-c0c7ae2f351b",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "security",
+    "targetCommitId": "b56ab33a-d45f-47b8-a4c5-24a890d0d974",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds example JSON files containing sample data for progressive wiki generation across different iteration counts (1, 2, 5, 10, 20, 50). The files appear to be test fixtures or example data sets containing agent runs, commits, orchestrator runs, repositories, wiki pages, and work queues. No actual code changes are present - only JSON data files with 0 lines added/deleted.",
+      "findings": [
+        {
+          "type": "DATA_EXPOSURE",
+          "description": "Example files may contain sensitive patterns or structure that could reveal system architecture and data models to potential attackers",
+          "relatedPaths": [
+            "examples/progressive-*-iterations/*.json"
+          ],
+          "importance": "low"
+        },
+        {
+          "type": "INFORMATION_DISCLOSURE",
+          "description": "JSON files contain system internals like agent types, commit IDs, repository structures, and processing workflows that could aid reconnaissance",
+          "relatedPaths": [
+            "All affected files"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.8
+    },
+    "requestedUpdates": [],
+    "durationMs": 15931,
+    "costUsd": 0.18134999999999998,
+    "error": null,
+    "startedAt": "2025-11-27T14:08:40.148Z",
+    "completedAt": "2025-11-27T14:08:56.080Z"
+  },
+  {
+    "id": "ec4ac857-7d27-471c-afe1-e1b27a09c600",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "narrative",
+    "targetCommitId": "b56ab33a-d45f-47b8-a4c5-24a890d0d974",
+    "status": "completed",
+    "result": {
+      "summary": "No significant narrative content - this commit adds example data files showing progressive wiki generation across different iteration counts (1, 2, 5, 10, 20, 50 iterations), but contains no planning documents, architectural decisions, or design explanations.",
+      "findings": [
+        {
+          "type": "EXAMPLE_DATA",
+          "description": "Example dataset showing progressive wiki generation system with snapshots at 1, 2, 5, 10, 20, and 50 iterations, demonstrating how the system evolves documentation over time",
+          "relatedPaths": [
+            "examples/progressive-*-iteration/*"
+          ],
+          "importance": "low"
+        },
+        {
+          "type": "SYSTEM_BEHAVIOR",
+          "description": "Shows the multi-agent analysis system with different agent types (code-change, narrative, security, technical-debt, pattern, dependency) processing commits and generating wiki content",
+          "relatedPaths": [
+            "examples/progressive-*-iteration/agent-runs.json"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.1
+    },
+    "requestedUpdates": [],
+    "durationMs": 6932,
+    "costUsd": 0.14451,
+    "error": null,
+    "startedAt": "2025-11-27T14:08:33.209Z",
+    "completedAt": "2025-11-27T14:08:40.142Z"
+  },
+  {
+    "id": "f2b20757-4c56-4e1b-bf3f-0990ed389ffe",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "code-change",
+    "targetCommitId": "b56ab33a-d45f-47b8-a4c5-24a890d0d974",
+    "status": "completed",
+    "result": {
+      "summary": "The progressive wiki generation examples demonstrate the evolution of a multi-agent documentation system across different iteration counts (1, 2, 5, 10, 20, and 50 iterations). These examples provide snapshots of how the system's data structures and processing evolve as more commits are analyzed and more wiki content is generated. Each example directory contains six key data files that represent the complete state of the system at that point in the progression: agent runs, commits, orchestrator runs, repositories, wiki pages, and work queue items.\n\nThe examples serve as both test fixtures and documentation artifacts, showing how the system scales from analyzing a single commit to processing dozens of commits with multiple analysis agents. The progression reveals how wiki content becomes more comprehensive and interconnected as the system processes more code changes, with agents building upon previous analysis to create richer documentation. The data shows the multi-agent architecture in action, where different specialized agents (code-change, narrative, security, technical-debt, pattern, dependency) collaborate to analyze commits from various perspectives and generate cohesive wiki documentation.",
+      "findings": [
+        {
+          "type": "TOOL_USE",
+          "description": "Read 1 source files for full context",
+          "relatedPaths": [
+            ".codewiki-data/agent-runs.json"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 35452,
+    "costUsd": 1.00248,
+    "error": null,
+    "startedAt": "2025-11-27T14:07:57.747Z",
+    "completedAt": "2025-11-27T14:08:33.200Z"
+  },
+  {
+    "id": "fe5e1bc6-1a71-4f18-9146-7e2c0728c742",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "dependency",
+    "targetCommitId": "d1ad07a4-a2ce-4230-a2ac-9c591832a7a6",
+    "status": "completed",
+    "result": {
+      "summary": "No dependency changes in this commit.",
+      "findings": [],
+      "confidence": 1
+    },
+    "requestedUpdates": [],
+    "durationMs": 0,
+    "costUsd": 0,
+    "error": null,
+    "startedAt": "2025-11-27T14:07:57.742Z",
+    "completedAt": "2025-11-27T14:07:57.743Z"
+  },
+  {
+    "id": "3661395b-6137-4935-98bb-9280b3f32b5b",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "pattern",
+    "targetCommitId": "d1ad07a4-a2ce-4230-a2ac-9c591832a7a6",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds exported markdown wiki files for progressive examples, revealing a sophisticated **Documentation-as-Code** architectural pattern with **Multi-Agent System** design. The files show a CodeWiki system that uses specialized agents (technical-debt, security, pattern, dependency analysis) coordinated through an orchestrator-executor pattern to generate living documentation from Git repositories.",
+      "findings": [],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 25071,
+    "costUsd": 0.23648999999999998,
+    "error": null,
+    "startedAt": "2025-11-27T14:07:32.659Z",
+    "completedAt": "2025-11-27T14:07:57.731Z"
+  },
+  {
+    "id": "3905faca-22fe-466a-ad0d-c24a5fcf181e",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "technical-debt",
+    "targetCommitId": "d1ad07a4-a2ce-4230-a2ac-9c591832a7a6",
+    "status": "completed",
+    "result": {
+      "summary": "This commit is debt-neutral with a positive impact. It adds 133 markdown documentation files containing exported wiki content for progressive examples, demonstrating the CodeWiki system's output at different iteration levels (1, 2, 5, 10, 20, 50). No code changes were made - this is purely documentation addition that enhances project transparency and provides concrete examples of the system's capabilities. The commit actually reduces documentation debt by making the system's output visible and accessible.",
+      "findings": [],
+      "confidence": 0.95
+    },
+    "requestedUpdates": [],
+    "durationMs": 10664,
+    "costUsd": 0.22179,
+    "error": null,
+    "startedAt": "2025-11-27T14:07:21.985Z",
+    "completedAt": "2025-11-27T14:07:32.650Z"
+  },
+  {
+    "id": "ca0b4a1f-fbe0-4dea-aaba-9a96e58d36e2",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "security",
+    "targetCommitId": "d1ad07a4-a2ce-4230-a2ac-9c591832a7a6",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds 133 exported markdown wiki files containing documentation and examples. The files are static markdown content with no executable code, configuration changes, or security-sensitive modifications. This is purely a documentation addition with no direct security implications.",
+      "findings": [],
+      "confidence": 0.95
+    },
+    "requestedUpdates": [],
+    "durationMs": 10691,
+    "costUsd": 0.21036000000000002,
+    "error": null,
+    "startedAt": "2025-11-27T14:07:11.288Z",
+    "completedAt": "2025-11-27T14:07:21.980Z"
+  },
+  {
+    "id": "26558ef8-bad5-40a2-8554-4d3335f2e438",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "narrative",
+    "targetCommitId": "d1ad07a4-a2ce-4230-a2ac-9c591832a7a6",
+    "status": "completed",
+    "result": {
+      "summary": "This commit exports comprehensive wiki documentation from multiple progressive example iterations, showcasing the evolution of a multi-agent Git analysis system. The content includes architectural decisions, design patterns, testing strategies, and development practices that emerged across different project maturity levels.",
+      "findings": [],
+      "confidence": 0.8
+    },
+    "requestedUpdates": [],
+    "durationMs": 12272,
+    "costUsd": 0.20384999999999998,
+    "error": null,
+    "startedAt": "2025-11-27T14:06:59.009Z",
+    "completedAt": "2025-11-27T14:07:11.281Z"
+  },
+  {
+    "id": "653958fe-ee7f-4352-94ca-8474b5430a43",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "code-change",
+    "targetCommitId": "d1ad07a4-a2ce-4230-a2ac-9c591832a7a6",
+    "status": "completed",
+    "result": {
+      "summary": "The Progressive Examples Wiki Documentation System provides a comprehensive set of pre-generated wiki documentation that demonstrates how CodeWiki's automated documentation generation evolves across different iteration counts. The system includes four complete example projects (progressive-1-iteration, progressive-2-iterations, progressive-10-iterations, progressive-20-iterations, and progressive-50-iterations) that showcase the depth and sophistication of documentation that emerges as the AI agent processes more commits and builds understanding of a codebase over time.\n\nEach progressive example contains a full wiki directory structure with markdown files organized into logical categories including architecture, components, development guides, testing strategies, and design patterns. The examples demonstrate how initial simple commit analysis (1-2 iterations) evolves into comprehensive technical documentation covering orchestrator-executor coordination, work queue design, testing infrastructure, coding standards, and sophisticated pattern recognition. The 50-iteration example represents the most mature state, containing detailed documentation on complex topics like agentic documentation generation, codebase analysis tools, confidence scoring patterns, and comprehensive architectural overviews. This progression illustrates CodeWiki's capability to build increasingly sophisticated understanding and documentation quality as it processes more of a codebase's history.\n\nThe documentation structure follows consistent conventions across all examples, with standardized frontmatter including titles, confidence scores, and path metadata. Each wiki includes an index page that organizes content by category and provides navigation aids. The examples serve as both demonstration material for potential users and regression testing data for ensuring documentation quality remains consistent across system updates.",
+      "findings": [
+        {
+          "type": "TOOL_USE",
+          "description": "Read 1 source files for full context",
+          "relatedPaths": [
+            ".cwignore"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.8
+    },
+    "requestedUpdates": [],
+    "durationMs": 34802,
+    "costUsd": 1.27827,
+    "error": null,
+    "startedAt": "2025-11-27T14:06:24.198Z",
+    "completedAt": "2025-11-27T14:06:59.001Z"
+  },
+  {
+    "id": "549f109e-22d2-46ed-8ffb-028a1b9f9a32",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "dependency",
+    "targetCommitId": "dae99ef7-82c2-4fe2-a796-8505e69be03c",
+    "status": "completed",
+    "result": {
+      "summary": "No dependency changes in this commit.",
+      "findings": [],
+      "confidence": 1
+    },
+    "requestedUpdates": [],
+    "durationMs": 0,
+    "costUsd": 0,
+    "error": null,
+    "startedAt": "2025-11-27T14:06:24.193Z",
+    "completedAt": "2025-11-27T14:06:24.194Z"
+  },
+  {
+    "id": "eb8241ce-a2ca-44d6-b831-50c0b48cb673",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "pattern",
+    "targetCommitId": "dae99ef7-82c2-4fe2-a796-8505e69be03c",
+    "status": "completed",
+    "result": {
+      "summary": "This commit introduces a script orchestration pattern with comprehensive CLI utilities, repository abstraction pattern, and robust checkpoint/export mechanisms. The code demonstrates strong separation of concerns, factory patterns for service creation, and comprehensive error handling conventions.",
+      "findings": [],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 19426,
+    "costUsd": 0.18192,
+    "error": null,
+    "startedAt": "2025-11-27T14:06:04.756Z",
+    "completedAt": "2025-11-27T14:06:24.183Z"
+  },
+  {
+    "id": "da6c6630-fd60-4eb1-9087-60188db1a460",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "technical-debt",
+    "targetCommitId": "dae99ef7-82c2-4fe2-a796-8505e69be03c",
+    "status": "completed",
+    "result": {
+      "summary": "This commit adds two new substantial script files (292 and 403 lines) with several technical debt issues. While the scripts serve a valid purpose for testing and generating rebalanced wikis, they contain duplicated patterns, long functions, hardcoded values, and insufficient error handling. The code is functional but shows signs of rapid development without sufficient refactoring.",
+      "findings": [
+        {
+          "type": "COMPLEXITY",
+          "description": "Main functions exceed recommended length (292 LOC in generate-rebalanced-wiki.ts, 403 LOC in test-rebalancing.ts)",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts",
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "high"
+        },
+        {
+          "type": "TECHNICAL_SHORTCUTS",
+          "description": "Magic numbers scattered throughout (50, 100, 10, 20, 8, etc.) without named constants",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts:28",
+            "135",
+            "220",
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "CODE_DUPLICATION",
+          "description": "Similar repository setup and commit processing patterns between both scripts",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts:52-77",
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "MAINTAINABILITY",
+          "description": "Inconsistent error handling - some try/catch blocks ignore errors silently",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts:45-49",
+            "108-111"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "MAINTAINABILITY",
+          "description": "Functions mixing multiple concerns (main() handles CLI parsing, setup, execution, and reporting)",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts:27",
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "TECHNICAL_SHORTCUTS",
+          "description": "Hardcoded model name and configuration values",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts:57"
+          ],
+          "importance": "low"
+        },
+        {
+          "type": "MAINTAINABILITY",
+          "description": "Large parameter lists in mock functions and inline object creation",
+          "relatedPaths": [
+            "scripts/test-rebalancing.ts"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 16016,
+    "costUsd": 0.20079000000000002,
+    "error": null,
+    "startedAt": "2025-11-27T14:05:48.729Z",
+    "completedAt": "2025-11-27T14:06:04.746Z"
+  },
+  {
+    "id": "b184cecd-c47b-4806-adb0-4e967ed64a74",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "security",
+    "targetCommitId": "dae99ef7-82c2-4fe2-a796-8505e69be03c",
+    "status": "completed",
+    "result": {
+      "summary": "This commit introduces new scripts for testing and generating documentation with a \"rebalanced orchestrator\" system. The changes primarily involve test scripts and orchestration logic for a CodeWiki system. While not directly security-critical, there are several security considerations around API key handling, file system operations, and input processing.",
+      "findings": [],
+      "confidence": 0.75
+    },
+    "requestedUpdates": [],
+    "durationMs": 14182,
+    "costUsd": 0.1788,
+    "error": null,
+    "startedAt": "2025-11-27T14:05:34.537Z",
+    "completedAt": "2025-11-27T14:05:48.720Z"
+  },
+  {
+    "id": "47cc298a-508a-49ac-9490-dd43364d5755",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "narrative",
+    "targetCommitId": "dae99ef7-82c2-4fe2-a796-8505e69be03c",
+    "status": "completed",
+    "result": {
+      "summary": "This commit implements orchestrator rebalancing changes to improve early wiki quality, along with comprehensive testing and generation scripts. The code reveals architectural decisions about agent orchestration strategies and quality optimization.",
+      "findings": [],
+      "confidence": 0.75
+    },
+    "requestedUpdates": [],
+    "durationMs": 8802,
+    "costUsd": 0.14514,
+    "error": null,
+    "startedAt": "2025-11-27T14:05:25.726Z",
+    "completedAt": "2025-11-27T14:05:34.528Z"
+  },
+  {
+    "id": "6a21ff13-8681-4842-8fb8-072e596bb53b",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "agentType": "code-change",
+    "targetCommitId": "dae99ef7-82c2-4fe2-a796-8505e69be03c",
+    "status": "completed",
+    "result": {
+      "summary": "The Orchestrator Rebalancing System is a sophisticated work scheduling component that optimizes the order and bundling of AI agents to improve early wiki quality. The system operates through deterministic strategies that bundle multiple analysis agents per commit rather than processing commits sequentially by single agent types. This approach ensures comprehensive coverage of each code change before moving to the next, creating richer initial wiki content.\n\nThe rebalancing introduces several key improvements: analysis agents (code-change, narrative, security, technical-debt, pattern, dependency) are now bundled together per commit with code-change running first to establish base content, followed by specialized agents adding their perspectives. Meta agents (link, structure, quality, consistency) activate earlier - after processing 20+ commits or achieving 50% coverage rather than waiting for complete analysis. Synthesis agents (overview, project-overview, getting-started, writer) trigger at lower thresholds (8 pages instead of higher counts) to create structural documentation sooner. The system includes comprehensive testing infrastructure through mock LLM services and checkpoint tracking to validate that bundling works correctly, meta agents activate appropriately, and synthesis occurs at the right intervals.\n\nThe orchestrator maintains backward compatibility with optional LLM-powered decision making while defaulting to the improved deterministic strategies. Two utility scripts provide testing and demonstration capabilities: a test harness that validates rebalancing behavior with mock responses, and a wiki generation script that produces complete documentation with progress checkpoints and detailed analytics.",
+      "findings": [
+        {
+          "type": "TOOL_USE",
+          "description": "Read 3 source files for full context",
+          "relatedPaths": [
+            "scripts/generate-rebalanced-wiki.ts",
+            "scripts/test-rebalancing.ts",
+            "src/agents/orchestrator/orchestrator.ts"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.85
+    },
+    "requestedUpdates": [],
+    "durationMs": 35390,
+    "costUsd": 2.50191,
+    "error": null,
+    "startedAt": "2025-11-27T14:04:50.324Z",
+    "completedAt": "2025-11-27T14:05:25.716Z"
+  }
+]

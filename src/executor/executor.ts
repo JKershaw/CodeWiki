@@ -89,10 +89,11 @@ export class Executor {
 
     try {
       for (let i = 0; i < iterations && !this.shouldStop; i++) {
-        // Check rate limits
+        // Check rate limits - don't count this iteration if rate limited
         if (this.llm.isRateLimited()) {
           console.log('Rate limited, waiting...');
           await new Promise(resolve => setTimeout(resolve, 5000));
+          i--; // Don't count rate-limited iterations
           continue;
         }
 

@@ -1,0 +1,21 @@
+[
+  {
+    "id": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "fullName": "/home/user/CodeWiki",
+    "cloneUrl": "/home/user/CodeWiki",
+    "defaultBranch": "main",
+    "status": "pending",
+    "config": {
+      "maxConcurrency": 1,
+      "throttle": {
+        "maxCallsPerMinute": 10,
+        "maxCostPerHour": 1
+      },
+      "enabledAgents": [
+        "code-change"
+      ]
+    },
+    "createdAt": "2025-11-27T13:51:03.735Z",
+    "lastProcessedAt": null
+  }
+]

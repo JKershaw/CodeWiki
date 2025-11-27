@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2025-11-27T14:29:10.896Z",
+  "iterations": 100,
+  "pages": 61,
+  "cost": 34.77567,
+  "timeSeconds": 1460.531,
+  "categories": {
+    "commits": 17,
+    "architecture": 7,
+    "security": 12,
+    "technical-debt": 6,
+    "conventions": 1,
+    "patterns": 1,
+    "decisions": 5,
+    "testing": 5,
+    "project": 1,
+    "agents": 1,
+    "guides": 1,
+    "planning": 3,
+    "undefined": 1
+  },
+  "agentRuns": {
+    "technical-debt": 17,
+    "security": 17,
+    "narrative": 17,
+    "code-change": 17,
+    "dependency": 16,
+    "pattern": 16
+  }
+}

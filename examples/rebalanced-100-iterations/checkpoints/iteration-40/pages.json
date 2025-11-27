@@ -1,0 +1,467 @@
+[
+  {
+    "id": "fd3dfe94-c24f-4bd7-b011-0e30f295e266",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "commits/a1211231",
+    "title": "Orchestrator Rebalancing System",
+    "content": "# Orchestrator Rebalancing System\n\nThe Orchestrator Rebalancing System is a sophisticated work scheduling component that optimizes the order and bundling of AI agents to improve early wiki quality. The system operates through deterministic strategies that bundle multiple analysis agents per commit rather than processing commits sequentially by single agent types. This approach ensures comprehensive coverage of each code change before moving to the next, creating richer initial wiki content.\n\nThe rebalancing introduces several key improvements: analysis agents (code-change, narrative, security, technical-debt, pattern, dependency) are now bundled together per commit with code-change running first to establish base content, followed by specialized agents adding their perspectives. Meta agents (link, structure, quality, consistency) activate earlier - after processing 20+ commits or achieving 50% coverage rather than waiting for complete analysis. Synthesis agents (overview, project-overview, getting-started, writer) trigger at lower thresholds (8 pages instead of higher counts) to create structural documentation sooner. The system includes comprehensive testing infrastructure through mock LLM services and checkpoint tracking to validate that bundling works correctly, meta agents activate appropriately, and synthesis occurs at the right intervals.\n\nThe orchestrator maintains backward compatibility with optional LLM-powered decision making while defaulting to the improved deterministic strategies. Two utility scripts provide testing and demonstration capabilities: a test harness that validates rebalancing behavior with mock responses, and a wiki generation script that produces complete documentation with progress checkpoints and detailed analytics.\n\n\n\n## Source\n\n- **Commit:** a1211231\n- **Files:** `scripts/generate-rebalanced-wiki.ts`, `scripts/test-rebalancing.ts`, `src/agents/orchestrator/orchestrator.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a12112316f1f9c083d0aff0e640b161f98226918"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:05:25.720Z",
+    "updatedAt": "2025-11-27T14:05:25.720Z"
+  },
+  {
+    "id": "451317af-e086-4a66-9d9b-7ff33dd8cd7f",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "architecture/orchestrator-rebalancing-strategy",
+    "title": "Orchestrator Rebalancing Strategy",
+    "content": "# Orchestrator Rebalancing Strategy\n\nThis commit implements orchestrator rebalancing changes to improve early wiki quality, along with comprehensive testing and generation scripts. The code reveals architectural decisions about agent orchestration strategies and quality optimization.\n\n## Key Points\n\n\n\n## Decisions Made\n\n- Orchestrator rebalancing strategy implemented to improve early wiki page quality through better agent selection\n- Checkpoint-based generation system designed for tracking quality improvements across iterations\n- Quality metrics integration with confidence scoring and category-based organization\n\n## Source Files\n\n- `scripts/generate-rebalanced-wiki.ts`\n- `scripts/test-rebalancing.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n\n---\n*Captured from commit a1211231*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a12112316f1f9c083d0aff0e640b161f98226918"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:05:34.532Z",
+    "updatedAt": "2025-11-27T14:05:34.532Z"
+  },
+  {
+    "id": "41f3d2d0-1ccb-4395-8dfd-3b30091c486a",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "security/audit-a1211231",
+    "title": "Security Audit: Commit a1211231",
+    "content": "# Security Audit: Commit a1211231\n\n**Relevance Level:** LOW\n\n## Summary\n\nThis commit introduces new scripts for testing and generating documentation with a \"rebalanced orchestrator\" system. The changes primarily involve test scripts and orchestration logic for a CodeWiki system. While not directly security-critical, there are several security considerations around API key handling, file system operations, and input processing.\n\n## Findings\n\n\n\n## Potential Vulnerabilities\n\n- Information Disclosure: API keys may be logged or exposed in process lists when passed via command line (CWE-532)\n- Path Traversal (Low Risk): While path.join() is used appropriately, user-controlled output directories could potentially be exploited in edge cases (CWE-22)\n\n## Recommendations\n\n- Use a more secure method for API key handling, such as reading from a secure configuration file rather than environment variables\n- Add input validation for command line arguments, especially for iteration counts and directory paths\n- Consider sanitizing or restricting output directory paths to prevent potential path traversal\n- Add error handling and logging controls to prevent sensitive information from being logged\n- Consider rate limiting or resource constraints for the LLM API calls\n\n## Files Reviewed\n\n- `scripts/generate-rebalanced-wiki.ts`\n- `scripts/test-rebalancing.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n\n---\n*Security audit from commit a1211231*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a12112316f1f9c083d0aff0e640b161f98226918"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:05:48.724Z",
+    "updatedAt": "2025-11-27T14:05:48.724Z"
+  },
+  {
+    "id": "edf31746-caed-46f8-ada0-ec73cc623981",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "technical-debt/report-a1211231",
+    "title": "Technical Debt Report: Commit a1211231",
+    "content": "# Technical Debt Report: Commit a1211231\n\n**Debt Level:** MEDIUM\n**Commit:** Rebalance orchestrator for better early wiki quality\n\n## Summary\n\nThis commit adds two new substantial script files (292 and 403 lines) with several technical debt issues. While the scripts serve a valid purpose for testing and generating rebalanced wikis, they contain duplicated patterns, long functions, hardcoded values, and insufficient error handling. The code is functional but shows signs of rapid development without sufficient refactoring.\n\n## Issues Found\n\n### COMPLEXITY (high)\n\nMain functions exceed recommended length (292 LOC in generate-rebalanced-wiki.ts, 403 LOC in test-rebalancing.ts)\n\n**Affected files:** `scripts/generate-rebalanced-wiki.ts`, `scripts/test-rebalancing.ts`\n\n### TECHNICAL_SHORTCUTS (medium)\n\nMagic numbers scattered throughout (50, 100, 10, 20, 8, etc.) without named constants\n\n**Affected files:** `scripts/generate-rebalanced-wiki.ts:28`, `135`, `220`, `scripts/test-rebalancing.ts`\n\n### CODE_DUPLICATION (medium)\n\nSimilar repository setup and commit processing patterns between both scripts\n\n**Affected files:** `scripts/generate-rebalanced-wiki.ts:52-77`, `scripts/test-rebalancing.ts`\n\n### MAINTAINABILITY (medium)\n\nInconsistent error handling - some try/catch blocks ignore errors silently\n\n**Affected files:** `scripts/generate-rebalanced-wiki.ts:45-49`, `108-111`\n\n### MAINTAINABILITY (medium)\n\nFunctions mixing multiple concerns (main() handles CLI parsing, setup, execution, and reporting)\n\n**Affected files:** `scripts/generate-rebalanced-wiki.ts:27`, `scripts/test-rebalancing.ts`\n\n### TECHNICAL_SHORTCUTS (low)\n\nHardcoded model name and configuration values\n\n**Affected files:** `scripts/generate-rebalanced-wiki.ts:57`\n\n### MAINTAINABILITY (low)\n\nLarge parameter lists in mock functions and inline object creation\n\n**Affected files:** `scripts/test-rebalancing.ts`\n\n## Debt Added\n\n- Two large monolithic script files without proper separation of concerns\n- Duplicated repository initialization and commit processing logic\n- Magic numbers for iteration counts, thresholds, and batch sizes\n- Silent error handling in directory cleanup operations\n- Hardcoded configuration values mixed with business logic\n\n\n\n## Recommendations\n\n- Extract common repository setup logic into a shared utility module\n- Create named constants for all magic numbers (MAX_ITERATIONS, BATCH_SIZE, etc.)\n- Break down main functions into smaller, focused functions (setup, execution, reporting phases)\n- Add proper error handling with meaningful error messages instead of silent catches\n- Extract configuration objects to separate modules or config files\n- Consider creating a shared base class or utility for both script patterns\n- Add input validation for CLI arguments\n- Extract the mock LLM creation into a separate test utility module\n\n## Hotspots\n\nThese files are accumulating technical debt:\n\n- `scripts/generate-rebalanced-wiki.ts (large monolithic script)`\n- `scripts/test-rebalancing.ts (large monolithic script with embedded mock)`\n\n## Files Reviewed\n\n- `scripts/generate-rebalanced-wiki.ts`\n- `scripts/test-rebalancing.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n\n---\n*Technical debt analysis from commit a1211231*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a12112316f1f9c083d0aff0e640b161f98226918"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:06:04.749Z",
+    "updatedAt": "2025-11-27T14:06:04.749Z"
+  },
+  {
+    "id": "83d2df76-1f38-44c8-b81e-318ad939d68d",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "technical-debt/overview",
+    "title": "Technical Debt Overview",
+    "content": "# Technical Debt Overview\n\n## Recent Changes\n\n### Commit e2a858ba\n\n**Level:** low\n\nThis commit represents a significant **debt reduction** through test infrastructure reorganization. The commit moves test files to a more organized structure and introduces comprehensive test fixtures...\n\n\n**Resolved:** **Test organization debt**: Moving tests from `src/` to proper `tests/` structure eliminates mixing of production and test code, **Test duplication debt**: Centralized fixtures in `tests/fixtures/` prevent duplicate mock setup across test files, **Test maintainability debt**: Reusable mock factories reduce the burden of maintaining test setup code\n\n## Current Hotspots\n\n- `tests/fixtures/mock-llm.ts (largest single file, most complex mock implementation)`\n\n## Priority Recommendations\n\n- Consider splitting MockLLMService into smaller, more focused classes (e.g., MockCompletionService, MockToolService, MockUsageTracker)\n- Add JSDoc documentation to the mock factory functions to clarify their intended usage patterns\n- Consider extracting the nested mock structure in createMockContext into a builder pattern for better readability\n\n---\n*Last updated from commit e2a858ba*\n",
+    "confidence": 0.8999999999999999,
+    "sourceCommits": [
+      "a12112316f1f9c083d0aff0e640b161f98226918",
+      "7e5f49d56cdb455fb614513e91d8a2be7c9344f6",
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+      "aaf040f35810ab3747d35559da8afec508e393c8",
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:06:04.752Z",
+    "updatedAt": "2025-11-27T14:15:25.771Z"
+  },
+  {
+    "id": "12661fe2-7d6d-44c0-820a-50d62b6c342e",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "conventions/coding-standards",
+    "title": "Coding Standards & Conventions",
+    "content": "# Coding Standards & Conventions\n\n## Observed Conventions\n\n- **Test File Naming**: Consistent `.test.ts` suffix for all test files, organized by test type (unit/integration)\n- **Mock Organization**: Centralized mock utilities in `tests/fixtures/` and `tests/helpers/` directories\n- **Agent-Based Testing**: Test files organized around agent concepts (consistency-agent, link-agent, quality-agent, structure-agent)\n- **Integration Test Grouping**: High-level workflow tests separated from unit tests (agent-workflow, commit-processing, wiki-analysis)\n\n---\n*Updated from commit aaf040f3*\n",
+    "confidence": 1,
+    "sourceCommits": [
+      "a12112316f1f9c083d0aff0e640b161f98226918",
+      "7a767dd5023eb693aaefe3e7175ba4e33f684f1b",
+      "7e5f49d56cdb455fb614513e91d8a2be7c9344f6",
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+      "9dad2c6065f7b21d411ef60199af695bd41e4822",
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:06:24.186Z",
+    "updatedAt": "2025-11-27T14:14:12.442Z"
+  },
+  {
+    "id": "55b232e1-0f68-4cfd-a23b-9130bcdca726",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "patterns/anti-patterns",
+    "title": "Anti-Patterns to Avoid",
+    "content": "# Anti-Patterns to Avoid\n\nThese patterns have been identified as problematic in the codebase:\n\n## None detected in this migration - the removal of external dependencies and consolidation of test utilities appears to be a positive architectural decision\n\nNone detected in this migration - the removal of external dependencies and consolidation of test utilities appears to be a positive architectural decision\n\n\n---\n*Updated from commit aaf040f3*\n",
+    "confidence": 1,
+    "sourceCommits": [
+      "a12112316f1f9c083d0aff0e640b161f98226918",
+      "7a767dd5023eb693aaefe3e7175ba4e33f684f1b",
+      "7e5f49d56cdb455fb614513e91d8a2be7c9344f6",
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+      "9dad2c6065f7b21d411ef60199af695bd41e4822",
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:06:24.188Z",
+    "updatedAt": "2025-11-27T14:14:12.444Z"
+  },
+  {
+    "id": "5b775309-87be-430e-89f8-727cfd097927",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "commits/7a767dd5",
+    "title": "Progressive Examples Wiki Documentation System",
+    "content": "# Progressive Examples Wiki Documentation System\n\nThe Progressive Examples Wiki Documentation System provides a comprehensive set of pre-generated wiki documentation that demonstrates how CodeWiki's automated documentation generation evolves across different iteration counts. The system includes four complete example projects (progressive-1-iteration, progressive-2-iterations, progressive-10-iterations, progressive-20-iterations, and progressive-50-iterations) that showcase the depth and sophistication of documentation that emerges as the AI agent processes more commits and builds understanding of a codebase over time.\n\nEach progressive example contains a full wiki directory structure with markdown files organized into logical categories including architecture, components, development guides, testing strategies, and design patterns. The examples demonstrate how initial simple commit analysis (1-2 iterations) evolves into comprehensive technical documentation covering orchestrator-executor coordination, work queue design, testing infrastructure, coding standards, and sophisticated pattern recognition. The 50-iteration example represents the most mature state, containing detailed documentation on complex topics like agentic documentation generation, codebase analysis tools, confidence scoring patterns, and comprehensive architectural overviews. This progression illustrates CodeWiki's capability to build increasingly sophisticated understanding and documentation quality as it processes more of a codebase's history.\n\nThe documentation structure follows consistent conventions across all examples, with standardized frontmatter including titles, confidence scores, and path metadata. Each wiki includes an index page that organizes content by category and provides navigation aids. The examples serve as both demonstration material for potential users and regression testing data for ensuring documentation quality remains consistent across system updates.\n\n\n\n## Source\n\n- **Commit:** 7a767dd5\n- **Files:** `examples/progressive-1-iteration/wiki/commits/a286af4b.md`, `examples/progressive-1-iteration/wiki/index.md`, `examples/progressive-10-iterations/wiki/architecture/orchestrator-executor-coordination.md`, `examples/progressive-10-iterations/wiki/architecture/testing-strategy.md`, `examples/progressive-10-iterations/wiki/architecture/work-queue-design.md`, `examples/progressive-10-iterations/wiki/commits/574dabed.md`, `examples/progressive-10-iterations/wiki/commits/85ff400e.md`, `examples/progressive-10-iterations/wiki/commits/a286af4b.md`, `examples/progressive-10-iterations/wiki/commits/aaf040f3.md`, `examples/progressive-10-iterations/wiki/commits/c600a87f.md`, `examples/progressive-10-iterations/wiki/commits/dd5aa96c.md`, `examples/progressive-10-iterations/wiki/commits/e2a858ba.md`, `examples/progressive-10-iterations/wiki/commits/e584b6e6.md`, `examples/progressive-10-iterations/wiki/components/executor.md`, `examples/progressive-10-iterations/wiki/conventions/coding-standards.md`, `examples/progressive-10-iterations/wiki/development/dependencies.md`, `examples/progressive-10-iterations/wiki/development/fixtures-api.md`, `examples/progressive-10-iterations/wiki/guides/testing.md`, `examples/progressive-10-iterations/wiki/index.md`, `examples/progressive-10-iterations/wiki/patterns/anti-patterns.md`, `examples/progressive-10-iterations/wiki/planning/implementation-status-and-development-roadmap.md`, `examples/progressive-10-iterations/wiki/testing/infrastructure.md`, `examples/progressive-10-iterations/wiki/testing/integration-patterns.md`, `examples/progressive-2-iterations/wiki/commits/a286af4b.md`, `examples/progressive-2-iterations/wiki/commits/aaf040f3.md`, `examples/progressive-2-iterations/wiki/development/dependencies.md`, `examples/progressive-2-iterations/wiki/index.md`, `examples/progressive-2-iterations/wiki/testing/infrastructure.md`, `examples/progressive-2-iterations/wiki/testing/integration-patterns.md`, `examples/progressive-20-iterations/wiki/architecture/agentic-documentation-generation-example.md`, `examples/progressive-20-iterations/wiki/architecture/orchestrator-executor-coordination.md`, `examples/progressive-20-iterations/wiki/architecture/overview.md`, `examples/progressive-20-iterations/wiki/architecture/testing-strategy.md`, `examples/progressive-20-iterations/wiki/architecture/work-queue-design.md`, `examples/progressive-20-iterations/wiki/commits/574dabed.md`, `examples/progressive-20-iterations/wiki/commits/85ff400e.md`, `examples/progressive-20-iterations/wiki/commits/9dad2c60.md`, `examples/progressive-20-iterations/wiki/commits/a286af4b.md`, `examples/progressive-20-iterations/wiki/commits/aaf040f3.md`, `examples/progressive-20-iterations/wiki/commits/c600a87f.md`, `examples/progressive-20-iterations/wiki/commits/dd5aa96c.md`, `examples/progressive-20-iterations/wiki/commits/e2a858ba.md`, `examples/progressive-20-iterations/wiki/commits/e584b6e6.md`, `examples/progressive-20-iterations/wiki/components/executor.md`, `examples/progressive-20-iterations/wiki/conventions/coding-standards.md`, `examples/progressive-20-iterations/wiki/development/dependencies.md`, `examples/progressive-20-iterations/wiki/development/fixtures-api.md`, `examples/progressive-20-iterations/wiki/guides/getting-started.md`, `examples/progressive-20-iterations/wiki/guides/testing.md`, `examples/progressive-20-iterations/wiki/index.md`, `examples/progressive-20-iterations/wiki/patterns/anti-patterns.md`, `examples/progressive-20-iterations/wiki/planning/implementation-status-and-development-roadmap.md`, `examples/progressive-20-iterations/wiki/planning/project-roadmap-and-implementation-status.md`, `examples/progressive-20-iterations/wiki/testing/infrastructure.md`, `examples/progressive-20-iterations/wiki/testing/integration-patterns.md`, `examples/progressive-5-iterations/wiki/architecture/testing-strategy.md`, `examples/progressive-5-iterations/wiki/commits/574dabed.md`, `examples/progressive-5-iterations/wiki/commits/85ff400e.md`, `examples/progressive-5-iterations/wiki/commits/a286af4b.md`, `examples/progressive-5-iterations/wiki/commits/aaf040f3.md`, `examples/progressive-5-iterations/wiki/commits/e2a858ba.md`, `examples/progressive-5-iterations/wiki/development/dependencies.md`, `examples/progressive-5-iterations/wiki/development/fixtures-api.md`, `examples/progressive-5-iterations/wiki/guides/testing.md`, `examples/progressive-5-iterations/wiki/index.md`, `examples/progressive-5-iterations/wiki/testing/infrastructure.md`, `examples/progressive-5-iterations/wiki/testing/integration-patterns.md`, `examples/progressive-50-iterations/wiki/architecture/agentic-documentation-generation-example.md`, `examples/progressive-50-iterations/wiki/architecture/codebase-tools.md`, `examples/progressive-50-iterations/wiki/architecture/orchestrator-executor-coordination.md`, `examples/progressive-50-iterations/wiki/architecture/overview.md`, `examples/progressive-50-iterations/wiki/architecture/testing-strategy.md`, `examples/progressive-50-iterations/wiki/architecture/work-queue-design.md`, `examples/progressive-50-iterations/wiki/commits/574dabed.md`, `examples/progressive-50-iterations/wiki/commits/85ff400e.md`, `examples/progressive-50-iterations/wiki/commits/9dad2c60.md`, `examples/progressive-50-iterations/wiki/commits/a286af4b.md`, `examples/progressive-50-iterations/wiki/commits/aaf040f3.md`, `examples/progressive-50-iterations/wiki/commits/c600a87f.md`, `examples/progressive-50-iterations/wiki/commits/dd5aa96c.md`, `examples/progressive-50-iterations/wiki/commits/e2a858ba.md`, `examples/progressive-50-iterations/wiki/commits/e584b6e6.md`, `examples/progressive-50-iterations/wiki/components/executor.md`, `examples/progressive-50-iterations/wiki/configuration/cwignore.md`, `examples/progressive-50-iterations/wiki/conventions/coding-standards.md`, `examples/progressive-50-iterations/wiki/development/dependencies.md`, `examples/progressive-50-iterations/wiki/development/fixtures-api.md`, `examples/progressive-50-iterations/wiki/development/overview.md`, `examples/progressive-50-iterations/wiki/development/testing.md`, `examples/progressive-50-iterations/wiki/guides/getting-started.md`, `examples/progressive-50-iterations/wiki/guides/testing.md`, `examples/progressive-50-iterations/wiki/index.md`, `examples/progressive-50-iterations/wiki/patterns/agent-interface.md`, `examples/progressive-50-iterations/wiki/patterns/anti-patterns.md`, `examples/progressive-50-iterations/wiki/patterns/barrel-export-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/barrel-exports.md`, `examples/progressive-50-iterations/wiki/patterns/builder-pattern-prompt-construction.md`, `examples/progressive-50-iterations/wiki/patterns/builder-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/confidence-scoring.md`, `examples/progressive-50-iterations/wiki/patterns/cost-tracking.md`, `examples/progressive-50-iterations/wiki/patterns/dependency-injection.md`, `examples/progressive-50-iterations/wiki/patterns/dual-test-coverage.md`, `examples/progressive-50-iterations/wiki/patterns/explicit-response-parsing.md`, `examples/progressive-50-iterations/wiki/patterns/facade-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/factory-functions.md`, `examples/progressive-50-iterations/wiki/patterns/factory-method.md`, `examples/progressive-50-iterations/wiki/patterns/guard-clauses.md`, `examples/progressive-50-iterations/wiki/patterns/interface-implementation.md`, `examples/progressive-50-iterations/wiki/patterns/interface-segregation.md`, `examples/progressive-50-iterations/wiki/patterns/named-constructor-variants.md`, `examples/progressive-50-iterations/wiki/patterns/overview.md`, `examples/progressive-50-iterations/wiki/patterns/repository-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/spy-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/strategy-pattern-update-generation.md`, `examples/progressive-50-iterations/wiki/patterns/strategy-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/structured-parsing-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/structured-prompting.md`, `examples/progressive-50-iterations/wiki/patterns/template-method.md`, `examples/progressive-50-iterations/wiki/patterns/test-data-builder.md`, `examples/progressive-50-iterations/wiki/patterns/test-double.md`, `examples/progressive-50-iterations/wiki/patterns/test-fixture-organization.md`, `examples/progressive-50-iterations/wiki/patterns/test-organization-by-type.md`, `examples/progressive-50-iterations/wiki/patterns/test-separation-pattern.md`, `examples/progressive-50-iterations/wiki/patterns/type-narrowing.md`, `examples/progressive-50-iterations/wiki/patterns/type-safe-domain-modeling.md`, `examples/progressive-50-iterations/wiki/patterns/wiki-page-updates.md`, `examples/progressive-50-iterations/wiki/planning/codewiki-roadmap-and-architecture-status.md`, `examples/progressive-50-iterations/wiki/planning/implementation-status-and-development-roadmap.md`, `examples/progressive-50-iterations/wiki/planning/overview.md`, `examples/progressive-50-iterations/wiki/planning/project-roadmap-and-implementation-status.md`, `examples/progressive-50-iterations/wiki/planning/project-status-and-development-roadmap.md`, `examples/progressive-50-iterations/wiki/testing/infrastructure.md`, `examples/progressive-50-iterations/wiki/testing/integration-patterns.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "7a767dd5023eb693aaefe3e7175ba4e33f684f1b"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:06:59.005Z",
+    "updatedAt": "2025-11-27T14:06:59.005Z"
+  },
+  {
+    "id": "504e352b-cd93-443c-b962-cd1475266351",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "architecture/progressive-multi-agent-system-documentation",
+    "title": "Progressive Multi-Agent System Documentation",
+    "content": "# Progressive Multi-Agent System Documentation\n\nThis commit exports comprehensive wiki documentation from multiple progressive example iterations, showcasing the evolution of a multi-agent Git analysis system. The content includes architectural decisions, design patterns, testing strategies, and development practices that emerged across different project maturity levels.\n\n## Key Points\n\n\n\n## Decisions Made\n\n- Multi-agent architecture with orchestrator scheduling work items and executor running specialized analysis agents\n- Work queue design serving as boundary between Git layer and domain logic\n- Three-tier testing approach balancing speed and confidence with appropriate test types\n- Progressive documentation generation showing system evolution from 1 to 50 iterations\n- Structured wiki organization with consistent categorization (architecture, patterns, testing, development)\n\n## Source Files\n\n- `examples/progressive-1-iteration/wiki/commits/a286af4b.md`\n- `examples/progressive-1-iteration/wiki/index.md`\n- `examples/progressive-10-iterations/wiki/architecture/orchestrator-executor-coordination.md`\n- `examples/progressive-10-iterations/wiki/architecture/testing-strategy.md`\n- `examples/progressive-10-iterations/wiki/architecture/work-queue-design.md`\n- `examples/progressive-10-iterations/wiki/commits/574dabed.md`\n- `examples/progressive-10-iterations/wiki/commits/85ff400e.md`\n- `examples/progressive-10-iterations/wiki/commits/a286af4b.md`\n- `examples/progressive-10-iterations/wiki/commits/aaf040f3.md`\n- `examples/progressive-10-iterations/wiki/commits/c600a87f.md`\n- `examples/progressive-10-iterations/wiki/commits/dd5aa96c.md`\n- `examples/progressive-10-iterations/wiki/commits/e2a858ba.md`\n- `examples/progressive-10-iterations/wiki/commits/e584b6e6.md`\n- `examples/progressive-10-iterations/wiki/components/executor.md`\n- `examples/progressive-10-iterations/wiki/conventions/coding-standards.md`\n- `examples/progressive-10-iterations/wiki/development/dependencies.md`\n- `examples/progressive-10-iterations/wiki/development/fixtures-api.md`\n- `examples/progressive-10-iterations/wiki/guides/testing.md`\n- `examples/progressive-10-iterations/wiki/index.md`\n- `examples/progressive-10-iterations/wiki/patterns/anti-patterns.md`\n- `examples/progressive-10-iterations/wiki/planning/implementation-status-and-development-roadmap.md`\n- `examples/progressive-10-iterations/wiki/testing/infrastructure.md`\n- `examples/progressive-10-iterations/wiki/testing/integration-patterns.md`\n- `examples/progressive-2-iterations/wiki/commits/a286af4b.md`\n- `examples/progressive-2-iterations/wiki/commits/aaf040f3.md`\n- `examples/progressive-2-iterations/wiki/development/dependencies.md`\n- `examples/progressive-2-iterations/wiki/index.md`\n- `examples/progressive-2-iterations/wiki/testing/infrastructure.md`\n- `examples/progressive-2-iterations/wiki/testing/integration-patterns.md`\n- `examples/progressive-20-iterations/wiki/architecture/agentic-documentation-generation-example.md`\n- `examples/progressive-20-iterations/wiki/architecture/orchestrator-executor-coordination.md`\n- `examples/progressive-20-iterations/wiki/architecture/overview.md`\n- `examples/progressive-20-iterations/wiki/architecture/testing-strategy.md`\n- `examples/progressive-20-iterations/wiki/architecture/work-queue-design.md`\n- `examples/progressive-20-iterations/wiki/commits/574dabed.md`\n- `examples/progressive-20-iterations/wiki/commits/85ff400e.md`\n- `examples/progressive-20-iterations/wiki/commits/9dad2c60.md`\n- `examples/progressive-20-iterations/wiki/commits/a286af4b.md`\n- `examples/progressive-20-iterations/wiki/commits/aaf040f3.md`\n- `examples/progressive-20-iterations/wiki/commits/c600a87f.md`\n- `examples/progressive-20-iterations/wiki/commits/dd5aa96c.md`\n- `examples/progressive-20-iterations/wiki/commits/e2a858ba.md`\n- `examples/progressive-20-iterations/wiki/commits/e584b6e6.md`\n- `examples/progressive-20-iterations/wiki/components/executor.md`\n- `examples/progressive-20-iterations/wiki/conventions/coding-standards.md`\n- `examples/progressive-20-iterations/wiki/development/dependencies.md`\n- `examples/progressive-20-iterations/wiki/development/fixtures-api.md`\n- `examples/progressive-20-iterations/wiki/guides/getting-started.md`\n- `examples/progressive-20-iterations/wiki/guides/testing.md`\n- `examples/progressive-20-iterations/wiki/index.md`\n- `examples/progressive-20-iterations/wiki/patterns/anti-patterns.md`\n- `examples/progressive-20-iterations/wiki/planning/implementation-status-and-development-roadmap.md`\n- `examples/progressive-20-iterations/wiki/planning/project-roadmap-and-implementation-status.md`\n- `examples/progressive-20-iterations/wiki/testing/infrastructure.md`\n- `examples/progressive-20-iterations/wiki/testing/integration-patterns.md`\n- `examples/progressive-5-iterations/wiki/architecture/testing-strategy.md`\n- `examples/progressive-5-iterations/wiki/commits/574dabed.md`\n- `examples/progressive-5-iterations/wiki/commits/85ff400e.md`\n- `examples/progressive-5-iterations/wiki/commits/a286af4b.md`\n- `examples/progressive-5-iterations/wiki/commits/aaf040f3.md`\n- `examples/progressive-5-iterations/wiki/commits/e2a858ba.md`\n- `examples/progressive-5-iterations/wiki/development/dependencies.md`\n- `examples/progressive-5-iterations/wiki/development/fixtures-api.md`\n- `examples/progressive-5-iterations/wiki/guides/testing.md`\n- `examples/progressive-5-iterations/wiki/index.md`\n- `examples/progressive-5-iterations/wiki/testing/infrastructure.md`\n- `examples/progressive-5-iterations/wiki/testing/integration-patterns.md`\n- `examples/progressive-50-iterations/wiki/architecture/agentic-documentation-generation-example.md`\n- `examples/progressive-50-iterations/wiki/architecture/codebase-tools.md`\n- `examples/progressive-50-iterations/wiki/architecture/orchestrator-executor-coordination.md`\n- `examples/progressive-50-iterations/wiki/architecture/overview.md`\n- `examples/progressive-50-iterations/wiki/architecture/testing-strategy.md`\n- `examples/progressive-50-iterations/wiki/architecture/work-queue-design.md`\n- `examples/progressive-50-iterations/wiki/commits/574dabed.md`\n- `examples/progressive-50-iterations/wiki/commits/85ff400e.md`\n- `examples/progressive-50-iterations/wiki/commits/9dad2c60.md`\n- `examples/progressive-50-iterations/wiki/commits/a286af4b.md`\n- `examples/progressive-50-iterations/wiki/commits/aaf040f3.md`\n- `examples/progressive-50-iterations/wiki/commits/c600a87f.md`\n- `examples/progressive-50-iterations/wiki/commits/dd5aa96c.md`\n- `examples/progressive-50-iterations/wiki/commits/e2a858ba.md`\n- `examples/progressive-50-iterations/wiki/commits/e584b6e6.md`\n- `examples/progressive-50-iterations/wiki/components/executor.md`\n- `examples/progressive-50-iterations/wiki/configuration/cwignore.md`\n- `examples/progressive-50-iterations/wiki/conventions/coding-standards.md`\n- `examples/progressive-50-iterations/wiki/development/dependencies.md`\n- `examples/progressive-50-iterations/wiki/development/fixtures-api.md`\n- `examples/progressive-50-iterations/wiki/development/overview.md`\n- `examples/progressive-50-iterations/wiki/development/testing.md`\n- `examples/progressive-50-iterations/wiki/guides/getting-started.md`\n- `examples/progressive-50-iterations/wiki/guides/testing.md`\n- `examples/progressive-50-iterations/wiki/index.md`\n- `examples/progressive-50-iterations/wiki/patterns/agent-interface.md`\n- `examples/progressive-50-iterations/wiki/patterns/anti-patterns.md`\n- `examples/progressive-50-iterations/wiki/patterns/barrel-export-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/barrel-exports.md`\n- `examples/progressive-50-iterations/wiki/patterns/builder-pattern-prompt-construction.md`\n- `examples/progressive-50-iterations/wiki/patterns/builder-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/confidence-scoring.md`\n- `examples/progressive-50-iterations/wiki/patterns/cost-tracking.md`\n- `examples/progressive-50-iterations/wiki/patterns/dependency-injection.md`\n- `examples/progressive-50-iterations/wiki/patterns/dual-test-coverage.md`\n- `examples/progressive-50-iterations/wiki/patterns/explicit-response-parsing.md`\n- `examples/progressive-50-iterations/wiki/patterns/facade-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/factory-functions.md`\n- `examples/progressive-50-iterations/wiki/patterns/factory-method.md`\n- `examples/progressive-50-iterations/wiki/patterns/guard-clauses.md`\n- `examples/progressive-50-iterations/wiki/patterns/interface-implementation.md`\n- `examples/progressive-50-iterations/wiki/patterns/interface-segregation.md`\n- `examples/progressive-50-iterations/wiki/patterns/named-constructor-variants.md`\n- `examples/progressive-50-iterations/wiki/patterns/overview.md`\n- `examples/progressive-50-iterations/wiki/patterns/repository-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/spy-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/strategy-pattern-update-generation.md`\n- `examples/progressive-50-iterations/wiki/patterns/strategy-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/structured-parsing-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/structured-prompting.md`\n- `examples/progressive-50-iterations/wiki/patterns/template-method.md`\n- `examples/progressive-50-iterations/wiki/patterns/test-data-builder.md`\n- `examples/progressive-50-iterations/wiki/patterns/test-double.md`\n- `examples/progressive-50-iterations/wiki/patterns/test-fixture-organization.md`\n- `examples/progressive-50-iterations/wiki/patterns/test-organization-by-type.md`\n- `examples/progressive-50-iterations/wiki/patterns/test-separation-pattern.md`\n- `examples/progressive-50-iterations/wiki/patterns/type-narrowing.md`\n- `examples/progressive-50-iterations/wiki/patterns/type-safe-domain-modeling.md`\n- `examples/progressive-50-iterations/wiki/patterns/wiki-page-updates.md`\n- `examples/progressive-50-iterations/wiki/planning/codewiki-roadmap-and-architecture-status.md`\n- `examples/progressive-50-iterations/wiki/planning/implementation-status-and-development-roadmap.md`\n- `examples/progressive-50-iterations/wiki/planning/overview.md`\n- `examples/progressive-50-iterations/wiki/planning/project-roadmap-and-implementation-status.md`\n- `examples/progressive-50-iterations/wiki/planning/project-status-and-development-roadmap.md`\n- `examples/progressive-50-iterations/wiki/testing/infrastructure.md`\n- `examples/progressive-50-iterations/wiki/testing/integration-patterns.md`\n\n---\n*Captured from commit 7a767dd5*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "7a767dd5023eb693aaefe3e7175ba4e33f684f1b"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:07:11.284Z",
+    "updatedAt": "2025-11-27T14:07:11.284Z"
+  },
+  {
+    "id": "2edfaaa6-d779-481b-b5a3-b583485f07ad",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "commits/7e5f49d5",
+    "title": "Progressive Wiki Generation Examples",
+    "content": "# Progressive Wiki Generation Examples\n\nThe progressive wiki generation examples demonstrate the evolution of a multi-agent documentation system across different iteration counts (1, 2, 5, 10, 20, and 50 iterations). These examples provide snapshots of how the system's data structures and processing evolve as more commits are analyzed and more wiki content is generated. Each example directory contains six key data files that represent the complete state of the system at that point in the progression: agent runs, commits, orchestrator runs, repositories, wiki pages, and work queue items.\n\nThe examples serve as both test fixtures and documentation artifacts, showing how the system scales from analyzing a single commit to processing dozens of commits with multiple analysis agents. The progression reveals how wiki content becomes more comprehensive and interconnected as the system processes more code changes, with agents building upon previous analysis to create richer documentation. The data shows the multi-agent architecture in action, where different specialized agents (code-change, narrative, security, technical-debt, pattern, dependency) collaborate to analyze commits from various perspectives and generate cohesive wiki documentation.\n\n\n\n## Source\n\n- **Commit:** 7e5f49d5\n- **Files:** `examples/progressive-1-iteration/agent-runs.json`, `examples/progressive-1-iteration/commits.json`, `examples/progressive-1-iteration/orchestrator-runs.json`, `examples/progressive-1-iteration/repos.json`, `examples/progressive-1-iteration/wiki-pages.json`, `examples/progressive-1-iteration/work-queue.json`, `examples/progressive-10-iterations/agent-runs.json`, `examples/progressive-10-iterations/commits.json`, `examples/progressive-10-iterations/orchestrator-runs.json`, `examples/progressive-10-iterations/repos.json`, `examples/progressive-10-iterations/wiki-pages.json`, `examples/progressive-10-iterations/work-queue.json`, `examples/progressive-2-iterations/agent-runs.json`, `examples/progressive-2-iterations/commits.json`, `examples/progressive-2-iterations/orchestrator-runs.json`, `examples/progressive-2-iterations/repos.json`, `examples/progressive-2-iterations/wiki-pages.json`, `examples/progressive-2-iterations/work-queue.json`, `examples/progressive-20-iterations/agent-runs.json`, `examples/progressive-20-iterations/commits.json`, `examples/progressive-20-iterations/orchestrator-runs.json`, `examples/progressive-20-iterations/repos.json`, `examples/progressive-20-iterations/wiki-pages.json`, `examples/progressive-20-iterations/work-queue.json`, `examples/progressive-5-iterations/agent-runs.json`, `examples/progressive-5-iterations/commits.json`, `examples/progressive-5-iterations/orchestrator-runs.json`, `examples/progressive-5-iterations/repos.json`, `examples/progressive-5-iterations/wiki-pages.json`, `examples/progressive-5-iterations/work-queue.json`, `examples/progressive-50-iterations/agent-runs.json`, `examples/progressive-50-iterations/commits.json`, `examples/progressive-50-iterations/orchestrator-runs.json`, `examples/progressive-50-iterations/repos.json`, `examples/progressive-50-iterations/wiki-pages.json`, `examples/progressive-50-iterations/work-queue.json`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "7e5f49d56cdb455fb614513e91d8a2be7c9344f6"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:08:33.204Z",
+    "updatedAt": "2025-11-27T14:08:33.204Z"
+  },
+  {
+    "id": "104563c1-ee1b-47c6-bb20-d1ae23840fce",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "security/audit-7e5f49d5",
+    "title": "Security Audit: Commit 7e5f49d5",
+    "content": "# Security Audit: Commit 7e5f49d5\n\n**Relevance Level:** LOW\n\n## Summary\n\nThis commit adds example JSON files containing sample data for progressive wiki generation across different iteration counts (1, 2, 5, 10, 20, 50). The files appear to be test fixtures or example data sets containing agent runs, commits, orchestrator runs, repositories, wiki pages, and work queues. No actual code changes are present - only JSON data files with 0 lines added/deleted.\n\n## Findings\n\n### DATA_EXPOSURE (low)\n\nExample files may contain sensitive patterns or structure that could reveal system architecture and data models to potential attackers\n\n**Affected files:** `examples/progressive-*-iterations/*.json`\n\n### INFORMATION_DISCLOSURE (low)\n\nJSON files contain system internals like agent types, commit IDs, repository structures, and processing workflows that could aid reconnaissance\n\n**Affected files:** `All affected files`\n\n## Potential Vulnerabilities\n\n- Information Disclosure: Example data may reveal internal system architecture, agent types, data models, and processing patterns that could be useful for attack planning (CWE-200)\n\n## Recommendations\n\n- Review example JSON files to ensure they don't contain real commit SHAs, repository URLs, or other sensitive identifiers\n- Consider sanitizing or anonymizing any real data used in examples\n- Ensure example files are clearly marked as fictional/test data if they contain realistic-looking identifiers\n- Verify that example data doesn't inadvertently expose API keys, tokens, or other credentials in the JSON structures\n\n## Files Reviewed\n\n- `examples/progressive-1-iteration/agent-runs.json`\n- `examples/progressive-1-iteration/commits.json`\n- `examples/progressive-1-iteration/orchestrator-runs.json`\n- `examples/progressive-1-iteration/repos.json`\n- `examples/progressive-1-iteration/wiki-pages.json`\n- `examples/progressive-1-iteration/work-queue.json`\n- `examples/progressive-10-iterations/agent-runs.json`\n- `examples/progressive-10-iterations/commits.json`\n- `examples/progressive-10-iterations/orchestrator-runs.json`\n- `examples/progressive-10-iterations/repos.json`\n- `examples/progressive-10-iterations/wiki-pages.json`\n- `examples/progressive-10-iterations/work-queue.json`\n- `examples/progressive-2-iterations/agent-runs.json`\n- `examples/progressive-2-iterations/commits.json`\n- `examples/progressive-2-iterations/orchestrator-runs.json`\n- `examples/progressive-2-iterations/repos.json`\n- `examples/progressive-2-iterations/wiki-pages.json`\n- `examples/progressive-2-iterations/work-queue.json`\n- `examples/progressive-20-iterations/agent-runs.json`\n- `examples/progressive-20-iterations/commits.json`\n- `examples/progressive-20-iterations/orchestrator-runs.json`\n- `examples/progressive-20-iterations/repos.json`\n- `examples/progressive-20-iterations/wiki-pages.json`\n- `examples/progressive-20-iterations/work-queue.json`\n- `examples/progressive-5-iterations/agent-runs.json`\n- `examples/progressive-5-iterations/commits.json`\n- `examples/progressive-5-iterations/orchestrator-runs.json`\n- `examples/progressive-5-iterations/repos.json`\n- `examples/progressive-5-iterations/wiki-pages.json`\n- `examples/progressive-5-iterations/work-queue.json`\n- `examples/progressive-50-iterations/agent-runs.json`\n- `examples/progressive-50-iterations/commits.json`\n- `examples/progressive-50-iterations/orchestrator-runs.json`\n- `examples/progressive-50-iterations/repos.json`\n- `examples/progressive-50-iterations/wiki-pages.json`\n- `examples/progressive-50-iterations/work-queue.json`\n\n---\n*Security audit from commit 7e5f49d5*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "7e5f49d56cdb455fb614513e91d8a2be7c9344f6"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:08:56.084Z",
+    "updatedAt": "2025-11-27T14:08:56.084Z"
+  },
+  {
+    "id": "e61de1fa-b261-48f8-b318-2fef5c84f203",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "security/overview",
+    "title": "Security Overview",
+    "content": "# Security Overview\n\n## Recent Security Changes\n\n- **aaf040f3** (low): This commit removes the Vitest testing framework and migrates to Node's built-in test runner. The ch\n\n## Security Recommendations\n\n- Verify that the new Node test runner maintains equivalent test coverage, especially for security-sensitive code paths\n- Ensure mock implementations (mock-llm.ts, mock-context.ts, etc.) don't inadvertently expose sensitive data in test environments\n- Consider reviewing test isolation to ensure tests don't leak state that could mask security issues\n\n---\n*Last updated from commit aaf040f3*\n",
+    "confidence": 0.6,
+    "sourceCommits": [
+      "7e5f49d56cdb455fb614513e91d8a2be7c9344f6",
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:08:56.087Z",
+    "updatedAt": "2025-11-27T14:13:39.724Z"
+  },
+  {
+    "id": "f30f504a-0410-4379-97d8-8463cdaf4af4",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "technical-debt/report-7e5f49d5",
+    "title": "Technical Debt Report: Commit 7e5f49d5",
+    "content": "# Technical Debt Report: Commit 7e5f49d5\n\n**Debt Level:** LOW\n**Commit:** Add progressive wiki generation examples (1-50 iterations)\n\n## Summary\n\nThis commit adds progressive wiki generation examples with JSON data files across multiple iteration scenarios (1, 2, 5, 10, 20, 50 iterations). The commit is primarily data-focused, containing example JSON files that demonstrate the system's behavior at different stages. No actual code changes are present, making this essentially debt-neutral from a code quality perspective. However, there are some maintainability concerns around the data structure and organization.\n\n## Issues Found\n\n### Code Duplication (medium)\n\nHighly repetitive file structure across 6 different iteration examples, with identical file names repeated in each directory (agent-runs.json, commits.json, orchestrator-runs.json, repos.json, wiki-pages.json, work-queue.json) - this violates DRY principles at the organizational level\n\n**Affected files:** `examples/progressive-*/`\n\n### Maintainability (low)\n\nLarge JSON files (commits.json appears to have 1486+ lines) without any validation or schema documentation, making them difficult to maintain and verify\n\n**Affected files:** `examples/progressive-*/commits.json`\n\n### Missing Abstractions (low)\n\nNo apparent tooling or scripts to generate or validate these example files, suggesting manual maintenance which is error-prone\n\n**Affected files:** `examples/progressive-*/`\n\n## Debt Added\n\n- Repetitive directory structure that will be difficult to maintain as more iteration examples are added\n- Large, unvalidated JSON data files that could become inconsistent over time\n- No documentation or tooling to explain the purpose or maintenance of these examples\n\n\n\n## Recommendations\n\n- Consider consolidating examples into a single parameterized structure rather than separate directories for each iteration count\n- Add JSON schema validation for the example files to ensure consistency\n- Create tooling/scripts to generate these examples programmatically rather than maintaining them manually\n- Add README files explaining the purpose and differences between iteration levels\n- Consider using a more maintainable format (e.g., YAML with comments) for complex example data\n\n## Hotspots\n\nThese files are accumulating technical debt:\n\n- `examples/ directory - accumulating many similar files that will be difficult to maintain`\n- `Any future additions to this pattern will compound the duplication debt`\n\n## Files Reviewed\n\n- `examples/progressive-1-iteration/agent-runs.json`\n- `examples/progressive-1-iteration/commits.json`\n- `examples/progressive-1-iteration/orchestrator-runs.json`\n- `examples/progressive-1-iteration/repos.json`\n- `examples/progressive-1-iteration/wiki-pages.json`\n- `examples/progressive-1-iteration/work-queue.json`\n- `examples/progressive-10-iterations/agent-runs.json`\n- `examples/progressive-10-iterations/commits.json`\n- `examples/progressive-10-iterations/orchestrator-runs.json`\n- `examples/progressive-10-iterations/repos.json`\n- `examples/progressive-10-iterations/wiki-pages.json`\n- `examples/progressive-10-iterations/work-queue.json`\n- `examples/progressive-2-iterations/agent-runs.json`\n- `examples/progressive-2-iterations/commits.json`\n- `examples/progressive-2-iterations/orchestrator-runs.json`\n- `examples/progressive-2-iterations/repos.json`\n- `examples/progressive-2-iterations/wiki-pages.json`\n- `examples/progressive-2-iterations/work-queue.json`\n- `examples/progressive-20-iterations/agent-runs.json`\n- `examples/progressive-20-iterations/commits.json`\n- `examples/progressive-20-iterations/orchestrator-runs.json`\n- `examples/progressive-20-iterations/repos.json`\n- `examples/progressive-20-iterations/wiki-pages.json`\n- `examples/progressive-20-iterations/work-queue.json`\n- `examples/progressive-5-iterations/agent-runs.json`\n- `examples/progressive-5-iterations/commits.json`\n- `examples/progressive-5-iterations/orchestrator-runs.json`\n- `examples/progressive-5-iterations/repos.json`\n- `examples/progressive-5-iterations/wiki-pages.json`\n- `examples/progressive-5-iterations/work-queue.json`\n- `examples/progressive-50-iterations/agent-runs.json`\n- `examples/progressive-50-iterations/commits.json`\n- `examples/progressive-50-iterations/orchestrator-runs.json`\n- `examples/progressive-50-iterations/repos.json`\n- `examples/progressive-50-iterations/wiki-pages.json`\n- `examples/progressive-50-iterations/work-queue.json`\n\n---\n*Technical debt analysis from commit 7e5f49d5*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "7e5f49d56cdb455fb614513e91d8a2be7c9344f6"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:09:11.473Z",
+    "updatedAt": "2025-11-27T14:09:11.473Z"
+  },
+  {
+    "id": "471e3c1c-d148-43ff-9329-ded7901a318b",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "commits/a286af4b",
+    "title": "Technical Debt Analysis Agent",
+    "content": "# Technical Debt Analysis Agent\n\nThe Technical Debt Analysis Agent is a specialized component of the CodeWiki system that automatically identifies and tracks code quality issues in Git commits. This agent performs comprehensive technical debt analysis by examining code changes through multiple lenses including complexity, maintainability, duplication, and technical shortcuts. The agent leverages large language models to analyze commit diffs and provides structured findings with severity levels, actionable recommendations, and tracking of debt accumulation or reduction over time.\n\nThe agent integrates seamlessly with the multi-agent analysis pipeline, implementing the standard Agent interface with a dedicated `technical-debt` type. It processes commits by building detailed prompts that include commit metadata and diff content, then parses structured LLM responses to extract findings, debt levels, and recommendations. The agent maintains a sophisticated understanding of technical debt patterns including deep nesting (>4 levels), long functions (>50 LOC), magic numbers, TODO/FIXME comments, god classes, and missing abstractions. It tracks both debt introduction and debt reduction, making it valuable for monitoring refactoring efforts and code quality trends.\n\nThe agent automatically generates wiki documentation for significant technical debt findings, creating dedicated report pages for high or critical debt levels and maintaining an overview page that tracks hotspots and recommendations across the codebase. This provides development teams with persistent, searchable documentation of code quality evolution and actionable insights for technical debt management.\n\n## Key Findings\n\n- **Architecture** (high): Implements comprehensive technical debt detection across 8 categories including complexity, duplication, shortcuts, and maintainability\n- **Integration** (medium): Seamlessly integrates with multi-agent pipeline through standard Agent interface and exports\n- **Parsing** (medium): Sophisticated response parsing handles structured LLM output with confidence levels and severity mapping\n- **Documentation** (medium): Automated wiki generation creates persistent tracking pages for debt reports and overview dashboards\n- **Testing** (medium): Comprehensive test coverage includes unit tests for parsing logic and integration tests with mocked LLM responses\n\n## Source\n\n- **Commit:** a286af4b\n- **Files:** `src/agents/analysis/index.ts`, `src/agents/analysis/technical-debt-agent.ts`, `src/agents/orchestrator/orchestrator.ts`, `src/executor/executor.ts`, `tests/integration/technical-debt-agent.test.ts`, `tests/unit/technical-debt-agent.test.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:10:05.101Z",
+    "updatedAt": "2025-11-27T14:10:05.101Z"
+  },
+  {
+    "id": "8a28feea-05d9-4903-b57f-8b35e8ef9dce",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "architecture/technical-debt-analysis-agent",
+    "title": "Technical Debt Analysis Agent",
+    "content": "# Technical Debt Analysis Agent\n\nThis commit implements a new analysis agent that specializes in identifying and tracking technical debt. The TechnicalDebtAgent represents an architectural expansion of the project's multi-agent analysis system, adding automated code quality assessment capabilities.\n\n## Key Points\n\n\n\n## Decisions Made\n\n- Decision to create a specialized agent for technical debt rather than extending existing agents, maintaining separation of concerns in the analysis pipeline\n- Choice to analyze 8 specific categories of technical debt: complexity issues, code duplication, technical shortcuts, maintainability concerns, code smells, missing abstractions, test coverage gaps, and documentation debt\n- Implementation uses structured response parsing with severity mapping (critical/high/medium/low) and tracks both debt added and removed\n- Agent generates wiki pages for significant technical debt findings (critical/high level or multiple issues) to maintain project documentation\n\n## Source Files\n\n- `src/agents/analysis/index.ts`\n- `src/agents/analysis/technical-debt-agent.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/executor/executor.ts`\n- `tests/integration/technical-debt-agent.test.ts`\n- `tests/unit/technical-debt-agent.test.ts`\n\n---\n*Captured from commit a286af4b*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:10:15.542Z",
+    "updatedAt": "2025-11-27T14:10:15.542Z"
+  },
+  {
+    "id": "4c0cc015-b271-4768-9e9d-edf112dfab21",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "technical-debt/report-a286af4b",
+    "title": "Technical Debt Report: Commit a286af4b",
+    "content": "# Technical Debt Report: Commit a286af4b\n\n**Debt Level:** MEDIUM\n**Commit:** Add TechnicalDebtAgent for code quality tracking\n\n## Summary\n\nThis commit introduces a new TechnicalDebtAgent class that appears well-structured and comprehensive. The implementation follows good software engineering practices with clear separation of concerns, proper error handling, and extensive documentation. However, there are some complexity and maintainability concerns, particularly in the large parsing method and the substantial class size (417 LOC). The commit is primarily debt-neutral with some minor maintainability issues introduced.\n\n## Issues Found\n\n### COMPLEXITY (medium)\n\nThe parseResponse method is overly complex with repetitive parsing logic and exceeds comfortable function length (~200 LOC)\n\n**Affected files:** `src/agents/analysis/technical-debt-agent.ts`\n\n### CODE DUPLICATION (medium)\n\nRepeated regex parsing patterns throughout parseResponse method could be abstracted\n\n**Affected files:** `src/agents/analysis/technical-debt-agent.ts`\n\n### MAINTAINABILITY (medium)\n\nTechnicalDebtAgent class is quite large (417 LOC) approaching God class territory\n\n**Affected files:** `src/agents/analysis/technical-debt-agent.ts`\n\n### MAGIC NUMBERS (low)\n\nHardcoded values like maxTokens: 2500, temperature: 0.2, and diff truncation at 12000 characters\n\n**Affected files:** `src/agents/analysis/technical-debt-agent.ts`\n\n### MISSING ABSTRACTIONS (low)\n\nString manipulation and formatting logic in generateUpdates could be extracted to helper methods\n\n**Affected files:** `src/agents/analysis/technical-debt-agent.ts`\n\n## Debt Added\n\n- Large parseResponse method with repetitive parsing logic that will be difficult to maintain and extend\n- TechnicalDebtAgent class approaching size limits for single responsibility\n- Hardcoded configuration values scattered throughout the implementation\n- Complex string formatting logic embedded in generateUpdates method\n\n\n\n## Recommendations\n\n- Extract parsing logic into separate methods (parseSection, extractBulletItems, etc.) to reduce parseResponse complexity\n- Consider breaking TechnicalDebtAgent into smaller, focused classes (parser, formatter, analyzer)\n- Move hardcoded configuration values to a configuration object or constants\n- Extract string formatting and template generation logic to utility functions\n- Add more granular error handling in the parsing logic to handle malformed responses gracefully\n\n## Hotspots\n\nThese files are accumulating technical debt:\n\n- `src/agents/analysis/technical-debt-agent.ts (large class with complex parsing logic)`\n\n## Files Reviewed\n\n- `src/agents/analysis/index.ts`\n- `src/agents/analysis/technical-debt-agent.ts`\n- `src/agents/orchestrator/orchestrator.ts`\n- `src/executor/executor.ts`\n- `tests/integration/technical-debt-agent.test.ts`\n- `tests/unit/technical-debt-agent.test.ts`\n\n---\n*Technical debt analysis from commit a286af4b*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:10:42.381Z",
+    "updatedAt": "2025-11-27T14:10:42.381Z"
+  },
+  {
+    "id": "ffd6c076-e22e-4d81-a4f3-617c7a5bdfcd",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "commits/9dad2c60",
+    "title": "CodeWiki Ignore System",
+    "content": "# CodeWiki Ignore System\n\nThe CodeWiki ignore system provides selective file filtering for repository analysis, similar to how .gitignore works for Git. The system uses a .cwignore file in the repository root to specify patterns for files and directories that should be excluded from code analysis. This filtering is applied throughout the codebase exploration tools, ensuring that generated content, build artifacts, and other irrelevant files don't interfere with the analysis process.\n\nThe ignore system follows .gitignore syntax conventions, supporting glob patterns, directory patterns (with trailing /), and comment lines. It automatically merges user-defined patterns with sensible defaults like node_modules/** and .git/**, ensuring essential directories are always excluded. The system includes performance optimizations through pattern caching and integrates seamlessly with the fast-glob library for efficient file matching. All codebase exploration tools (read_file, search_files, list_directory) respect these ignore patterns, providing a consistent filtering experience across the entire analysis pipeline.\n\n\n\n## Source\n\n- **Commit:** 9dad2c60\n- **Files:** `.cwignore`, `package-lock.json`, `package.json`, `src/services/cwignore.ts`, `src/services/llm/codebase-tools.test.ts`, `src/services/llm/codebase-tools.ts`, `tests/helpers/index.ts`, `tests/helpers/mock-llm.ts`, `tests/helpers/test-context.ts`, `tests/integration/commit-processing.test.ts`, `tests/integration/wiki-analysis.test.ts`, `tests/unit/consistency-agent.test.ts`, `tests/unit/cwignore.test.ts`, `tests/unit/link-agent.test.ts`, `tests/unit/quality-agent.test.ts`, `tests/unit/structure-agent.test.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "9dad2c6065f7b21d411ef60199af695bd41e4822"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:11:33.168Z",
+    "updatedAt": "2025-11-27T14:11:33.168Z"
+  },
+  {
+    "id": "71520eb5-7b31-48b2-bfd6-06b64aff47c0",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "architecture/codewiki-ignore-file-feature",
+    "title": "CodeWiki Ignore File Feature",
+    "content": "# CodeWiki Ignore File Feature\n\nThis commit introduces a .cwignore file feature that allows CodeWiki to selectively ignore files and directories during repository analysis, similar to .gitignore but specifically for codebase documentation generation.\n\n## Key Points\n\n- **FEATURE**: New .cwignore file support allows filtering files during codebase analysis, with glob pattern matching via fast-glob and minimatch libraries\n- **ARCHITECTURE**: Integrated ignore functionality into codebase tools with comprehensive test coverage across unit and integration tests\n- **IMPLEMENTATION**: Added fast-glob and minimatch dependencies while removing vitest from dependencies (moved to dev)\n\n## Decisions Made\n\n- Implemented .cwignore pattern matching using industry-standard glob libraries (fast-glob, minimatch) for consistency with existing tooling patterns\n- Chose to ignore example directories by default since they contain generated content rather than source code that needs analysis\n- Integrated ignore functionality directly into the codebase analysis tools rather than as a separate preprocessing step\n- Used comprehensive testing strategy covering both unit tests for the ignore service and integration tests for the full analysis pipeline\n\n## Source Files\n\n- `.cwignore`\n- `package-lock.json`\n- `package.json`\n- `src/services/cwignore.ts`\n- `src/services/llm/codebase-tools.test.ts`\n- `src/services/llm/codebase-tools.ts`\n- `tests/helpers/index.ts`\n- `tests/helpers/mock-llm.ts`\n- `tests/helpers/test-context.ts`\n- `tests/integration/commit-processing.test.ts`\n- `tests/integration/wiki-analysis.test.ts`\n- `tests/unit/consistency-agent.test.ts`\n- `tests/unit/cwignore.test.ts`\n- `tests/unit/link-agent.test.ts`\n- `tests/unit/quality-agent.test.ts`\n- `tests/unit/structure-agent.test.ts`\n\n---\n*Captured from commit 9dad2c60*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "9dad2c6065f7b21d411ef60199af695bd41e4822"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:11:45.258Z",
+    "updatedAt": "2025-11-27T14:11:45.258Z"
+  },
+  {
+    "id": "bc824a5d-ff0f-4d4a-b33f-e75ee6e058ca",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "security/audit-9dad2c60",
+    "title": "Security Audit: Commit 9dad2c60",
+    "content": "# Security Audit: Commit 9dad2c60\n\n**Relevance Level:** MEDIUM\n\n## Summary\n\nThis commit introduces `.cwignore` functionality to CodeWiki, adding pattern-based file filtering capabilities. The implementation uses standard glob pattern matching libraries (fast-glob, minimatch) and includes comprehensive test coverage. No direct security vulnerabilities are introduced, but the file filtering functionality has security implications for access control and information disclosure prevention.\n\n## Findings\n\n\n\n## Potential Vulnerabilities\n\n- [Path Traversal] Potential for malicious patterns in .cwignore files to cause path traversal or excessive resource consumption through crafted glob patterns [CWE-22]\n- [Information Disclosure] Misconfigured ignore patterns could inadvertently expose sensitive files or fail to exclude them from analysis [CWE-200]\n\n## Recommendations\n\n- Implement validation and sanitization of glob patterns in .cwignore files to prevent ReDoS attacks and excessive resource consumption\n- Add limits on the number of patterns and pattern complexity to prevent denial of service\n- Consider implementing a whitelist of allowed pattern types rather than accepting arbitrary glob patterns\n- Document security implications of .cwignore patterns for users\n- Add logging for ignored files to maintain audit trail of what content is being excluded from analysis\n\n## Files Reviewed\n\n- `.cwignore`\n- `package-lock.json`\n- `package.json`\n- `src/services/cwignore.ts`\n- `src/services/llm/codebase-tools.test.ts`\n- `src/services/llm/codebase-tools.ts`\n- `tests/helpers/index.ts`\n- `tests/helpers/mock-llm.ts`\n- `tests/helpers/test-context.ts`\n- `tests/integration/commit-processing.test.ts`\n- `tests/integration/wiki-analysis.test.ts`\n- `tests/unit/consistency-agent.test.ts`\n- `tests/unit/cwignore.test.ts`\n- `tests/unit/link-agent.test.ts`\n- `tests/unit/quality-agent.test.ts`\n- `tests/unit/structure-agent.test.ts`\n\n---\n*Security audit from commit 9dad2c60*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "9dad2c6065f7b21d411ef60199af695bd41e4822"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:11:58.897Z",
+    "updatedAt": "2025-11-27T14:11:58.897Z"
+  },
+  {
+    "id": "47390fdf-0a57-434c-a11d-2219157ac8f7",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "commits/aaf040f3",
+    "title": "Node.js Test Runner Migration",
+    "content": "# Node.js Test Runner Migration\n\nThe testing infrastructure has been migrated from Vitest to Node.js's built-in test runner, eliminating external testing framework dependencies while maintaining comprehensive test coverage. This architectural decision reduces bundle size by removing Vitest and its associated dependencies (including Rollup platform-specific binaries and Jest schemas), streamlining the development environment.\n\nThe migration preserves the existing test structure with unit tests for individual components (agents, tools, services) and integration tests for complete workflows. A minimal mocking infrastructure has been implemented using plain TypeScript classes, with the MockLLMService providing predictable responses for testing AI-powered components without external API calls. The test execution is now handled through Node's native `--test` flag combined with TypeScript compilation via tsx, maintaining the same developer experience while reducing complexity.\n\nThe testing approach emphasizes real service integration where possible, using actual file repositories and git services in tests, with only the LLM service being mocked to ensure deterministic and fast test execution. This hybrid approach provides confidence in system integration while maintaining test isolation and speed.\n\n\n\n## Source\n\n- **Commit:** aaf040f3\n- **Files:** `package-lock.json`, `package.json`, `tests/fixtures/index.ts`, `tests/fixtures/mock-context.ts`, `tests/fixtures/mock-llm.ts`, `tests/fixtures/mock-pages.ts`, `tests/helpers/index.ts`, `tests/helpers/mock-llm.ts`, `tests/helpers/test-context.ts`, `tests/integration/agent-workflow.test.ts`, `tests/integration/commit-processing.test.ts`, `tests/integration/wiki-analysis.test.ts`, `tests/unit/codebase-tools.test.ts`, `tests/unit/consistency-agent.test.ts`, `tests/unit/cwignore.test.ts`, `tests/unit/link-agent.test.ts`, `tests/unit/quality-agent.test.ts`, `tests/unit/structure-agent.test.ts`, `vitest.config.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:13:13.523Z",
+    "updatedAt": "2025-11-27T14:13:13.523Z"
+  },
+  {
+    "id": "19f90f7a-030a-48e0-845d-94ac240be6a2",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "decisions/node-js-native-test-runner-migration",
+    "title": "Node.js Native Test Runner Migration",
+    "content": "# Node.js Native Test Runner Migration\n\nTesting framework migration decision from Vitest to Node.js native test runner, representing a significant architectural choice for test infrastructure simplification.\n\n## Key Points\n\n- **ARCHITECTURE_DECISION**: Migration from Vitest to Node.js native test runner with complete removal of external testing framework dependencies\n- **TESTING_STRATEGY**: Adoption of minimal mocking approach with custom mock implementations\n- **DEPENDENCY_REDUCTION**: Elimination of bundler and test framework dependencies, reducing package complexity\n\n## Decisions Made\n\n- Replace Vitest with Node.js built-in test runner to reduce external dependencies\n- Implement custom mocking infrastructure instead of relying on framework-provided mocks\n- Maintain existing test structure while adapting to native Node.js testing patterns\n\n## Source Files\n\n- `package-lock.json`\n- `package.json`\n- `tests/fixtures/index.ts`\n- `tests/fixtures/mock-context.ts`\n- `tests/fixtures/mock-llm.ts`\n- `tests/fixtures/mock-pages.ts`\n- `tests/helpers/index.ts`\n- `tests/helpers/mock-llm.ts`\n- `tests/helpers/test-context.ts`\n- `tests/integration/agent-workflow.test.ts`\n- `tests/integration/commit-processing.test.ts`\n- `tests/integration/wiki-analysis.test.ts`\n- `tests/unit/codebase-tools.test.ts`\n- `tests/unit/consistency-agent.test.ts`\n- `tests/unit/cwignore.test.ts`\n- `tests/unit/link-agent.test.ts`\n- `tests/unit/quality-agent.test.ts`\n- `tests/unit/structure-agent.test.ts`\n- `vitest.config.ts`\n\n---\n*Captured from commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:13:25.524Z",
+    "updatedAt": "2025-11-27T14:13:25.524Z"
+  },
+  {
+    "id": "e4969bc1-95db-4248-962e-2482b54d0457",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "security/audit-aaf040f3",
+    "title": "Security Audit: Commit aaf040f3",
+    "content": "# Security Audit: Commit aaf040f3\n\n**Relevance Level:** LOW\n\n## Summary\n\nThis commit removes the Vitest testing framework and migrates to Node's built-in test runner. The change involves removing Vitest dependencies and related build tooling (Rollup packages) from package.json/package-lock.json, along with updating test files and configurations. This is primarily a development tooling change with minimal security implications.\n\n## Findings\n\n### DEPENDENCIES (low)\n\nRemoval of development dependencies (Vitest, Rollup packages) reduces attack surface by eliminating unused packages from the project\n\n**Affected files:** `package.json`, `package-lock.json`\n\n### TESTING (low)\n\nMigration to Node test runner may affect test isolation and mocking capabilities, potentially impacting security test coverage\n\n**Affected files:** `tests/ directory files`\n\n## Potential Vulnerabilities\n\n- None identified - this is a development tooling change that doesn't affect runtime security\n\n## Recommendations\n\n- Verify that the new Node test runner maintains equivalent test coverage, especially for security-sensitive code paths\n- Ensure mock implementations (mock-llm.ts, mock-context.ts, etc.) don't inadvertently expose sensitive data in test environments\n- Consider reviewing test isolation to ensure tests don't leak state that could mask security issues\n\n## Files Reviewed\n\n- `package-lock.json`\n- `package.json`\n- `tests/fixtures/index.ts`\n- `tests/fixtures/mock-context.ts`\n- `tests/fixtures/mock-llm.ts`\n- `tests/fixtures/mock-pages.ts`\n- `tests/helpers/index.ts`\n- `tests/helpers/mock-llm.ts`\n- `tests/helpers/test-context.ts`\n- `tests/integration/agent-workflow.test.ts`\n- `tests/integration/commit-processing.test.ts`\n- `tests/integration/wiki-analysis.test.ts`\n- `tests/unit/codebase-tools.test.ts`\n- `tests/unit/consistency-agent.test.ts`\n- `tests/unit/cwignore.test.ts`\n- `tests/unit/link-agent.test.ts`\n- `tests/unit/quality-agent.test.ts`\n- `tests/unit/structure-agent.test.ts`\n- `vitest.config.ts`\n\n---\n*Security audit from commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:13:39.722Z",
+    "updatedAt": "2025-11-27T14:13:39.722Z"
+  },
+  {
+    "id": "78939eb9-3341-4cf3-9a91-d8a234d2d7a2",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "commits/e2a858ba",
+    "title": "Test Infrastructure Reorganization",
+    "content": "# Test Infrastructure Reorganization\n\nThe CodeWiki test infrastructure has been reorganized into a structured hierarchy with dedicated unit and integration test directories, accompanied by a comprehensive test fixture system. The new organization separates concerns by moving unit tests for core services like `cwignore` and `codebase-tools` into a dedicated `tests/unit/` directory, while establishing an `tests/integration/` directory for end-to-end workflow testing. A centralized fixture system provides reusable mock implementations for common testing scenarios, including mock LLM services, agent contexts, and wiki pages.\n\nThe fixture system is particularly sophisticated, offering specialized mock LLM implementations for different agent types (code-change, link, and quality agents) with configurable response handlers. The mock agent context provides complete repository and service mocking capabilities, enabling comprehensive testing of agent workflows without external dependencies. This reorganization follows testing best practices by clearly separating unit tests (which test individual functions and services in isolation) from integration tests (which test complete workflows and agent interactions).\n\n## Key Findings\n\n- **ARCHITECTURE** (high): Established clear test organization with unit/integration separation\n- **TESTING** (high): Created comprehensive fixture system with reusable mocks\n- **TESTING** (medium): Implemented sophisticated mock LLM service with configurable responses\n- **TESTING** (medium): Added agent workflow integration testing capability\n- **REFACTORING** (medium): Moved existing unit tests to proper directory structure\n\n## Source\n\n- **Commit:** e2a858ba\n- **Files:** `tests/fixtures/index.ts`, `tests/fixtures/mock-context.ts`, `tests/fixtures/mock-llm.ts`, `tests/fixtures/mock-pages.ts`, `tests/integration/agent-workflow.test.ts`, `src/services/llm/codebase-tools.test.ts\ttests/unit/codebase-tools.test.ts`, `src/services/cwignore.test.ts\ttests/unit/cwignore.test.ts`, `vitest.config.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:14:53.484Z",
+    "updatedAt": "2025-11-27T14:14:53.484Z"
+  },
+  {
+    "id": "b22fa478-385c-4989-8e92-250b0e3a850e",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "testing/test-organization",
+    "title": "Test Organization",
+    "content": "# Test Organization\n\nDocument test directory structure and conventions\n\n---\n*Updated based on commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:14:53.487Z",
+    "updatedAt": "2025-11-27T14:14:53.487Z"
+  },
+  {
+    "id": "d425dc23-3f3b-4958-b37f-d404ac805e99",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "testing/fixtures-system",
+    "title": "Fixtures System",
+    "content": "# Fixtures System\n\nGuide to using test fixtures and mocks\n\n---\n*Updated based on commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:14:53.489Z",
+    "updatedAt": "2025-11-27T14:14:53.489Z"
+  },
+  {
+    "id": "b68b734a-5d6c-4cec-ae96-7aab5f332995",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "testing/integration-testing",
+    "title": "Integration Testing",
+    "content": "# Integration Testing\n\nHow to write integration tests for agent workflows\n\n---\n*Updated based on commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:14:53.492Z",
+    "updatedAt": "2025-11-27T14:14:53.492Z"
+  },
+  {
+    "id": "bb8fcbe8-b529-47fb-905a-94c4e06574f7",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "architecture/test-architecture-reorganization",
+    "title": "Test Architecture Reorganization",
+    "content": "# Test Architecture Reorganization\n\nThis commit demonstrates a test architecture reorganization, establishing standardized test patterns and introducing integration testing capabilities. The changes reveal testing philosophy decisions and infrastructure patterns.\n\n## Key Points\n\n- **ARCHITECTURE**: Test structure reorganized into unit/integration/fixtures hierarchy\n- **PATTERN**: Mock factories established for consistent test setup\n- **DESIGN**: Integration tests introduced for agent workflow testing\n- **TOOLING**: Vitest configuration updated to support new structure\n\n## Decisions Made\n\n- Adopted a three-tier test structure (unit/integration/fixtures) for better organization and maintainability\n- Created centralized mock factories to ensure consistent test data across the codebase\n- Introduced comprehensive mock LLM service to enable integration testing without external API dependencies\n- Established agent-specific mock configurations for different testing scenarios\n\n## Source Files\n\n- `tests/fixtures/index.ts`\n- `tests/fixtures/mock-context.ts`\n- `tests/fixtures/mock-llm.ts`\n- `tests/fixtures/mock-pages.ts`\n- `tests/integration/agent-workflow.test.ts`\n- `src/services/llm/codebase-tools.test.ts\ttests/unit/codebase-tools.test.ts`\n- `src/services/cwignore.test.ts\ttests/unit/cwignore.test.ts`\n- `vitest.config.ts`\n\n---\n*Captured from commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:15:02.517Z",
+    "updatedAt": "2025-11-27T14:15:02.517Z"
+  },
+  {
+    "id": "9497dee8-f49f-41bc-8578-0b5c4f78e433",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "testing/test-architecture",
+    "title": "Test Architecture",
+    "content": "# Test Architecture\n\nDocuments the three-tier test structure and mock factory patterns\n\n---\n*Updated from commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:15:02.519Z",
+    "updatedAt": "2025-11-27T14:15:02.519Z"
+  },
+  {
+    "id": "b5ec75dc-7ca8-4acd-a733-6c23b880c5a3",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "testing/mock-strategies",
+    "title": "Mock Strategies",
+    "content": "# Mock Strategies\n\nExplains LLM mocking approach and agent-specific test configurations\n\n---\n*Updated from commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:15:02.521Z",
+    "updatedAt": "2025-11-27T14:15:02.521Z"
+  },
+  {
+    "id": "8a80e6df-072b-4e9f-b3ab-45461b62a263",
+    "repoId": "9ef7b60e-6129-4294-9af4-8115cec927f5",
+    "path": "technical-debt/report-e2a858ba",
+    "title": "Technical Debt Report: Commit e2a858ba",
+    "content": "# Technical Debt Report: Commit e2a858ba\n\n**Debt Level:** LOW\n**Commit:** Reorganize test structure and add integration tests\n\n## Summary\n\nThis commit represents a significant **debt reduction** through test infrastructure reorganization. The commit moves test files to a more organized structure and introduces comprehensive test fixtures and mocks. While some of the mock implementations are fairly complex, they reduce overall technical debt by providing reusable testing infrastructure and establishing better patterns for integration testing.\n\n## Issues Found\n\n### COMPLEXITY (medium)\n\nMockLLMService class is quite large (~220 LOC) and handles multiple responsibilities (mocking completions, tools, stats tracking)\n\n**Affected files:** `tests/fixtures/mock-llm.ts`\n\n### MAINTAINABILITY (low)\n\nMockLLMService has many public methods which could indicate interface bloat\n\n**Affected files:** `tests/fixtures/mock-llm.ts`\n\n### CODE_SMELL (low)\n\ncreateMockContext function has a large object literal with nested mocking structure that could be hard to maintain\n\n**Affected files:** `tests/fixtures/mock-context.ts`\n\n\n\n## Debt Removed\n\n- **Test organization debt**: Moving tests from `src/` to proper `tests/` structure eliminates mixing of production and test code\n- **Test duplication debt**: Centralized fixtures in `tests/fixtures/` prevent duplicate mock setup across test files\n- **Test maintainability debt**: Reusable mock factories reduce the burden of maintaining test setup code\n\n## Recommendations\n\n- Consider splitting MockLLMService into smaller, more focused classes (e.g., MockCompletionService, MockToolService, MockUsageTracker)\n- Add JSDoc documentation to the mock factory functions to clarify their intended usage patterns\n- Consider extracting the nested mock structure in createMockContext into a builder pattern for better readability\n\n## Hotspots\n\nThese files are accumulating technical debt:\n\n- `tests/fixtures/mock-llm.ts (largest single file, most complex mock implementation)`\n\n## Files Reviewed\n\n- `tests/fixtures/index.ts`\n- `tests/fixtures/mock-context.ts`\n- `tests/fixtures/mock-llm.ts`\n- `tests/fixtures/mock-pages.ts`\n- `tests/integration/agent-workflow.test.ts`\n- `src/services/llm/codebase-tools.test.ts\ttests/unit/codebase-tools.test.ts`\n- `src/services/cwignore.test.ts\ttests/unit/cwignore.test.ts`\n- `vitest.config.ts`\n\n---\n*Technical debt analysis from commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T14:15:25.769Z",
+    "updatedAt": "2025-11-27T14:15:25.769Z"
+  }
+]

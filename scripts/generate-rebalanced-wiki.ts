@@ -55,7 +55,10 @@ async function main() {
   const llm = createAnthropicLLM({
     apiKey: process.env.ANTHROPIC_API_KEY,
     model: 'claude-sonnet-4-20250514',
-    maxTokensPerMinute: 40000,
+    rateLimit: {
+      maxRequestsPerMinute: 100,
+      maxCostPerHour: 50,  // Allow higher cost for wiki generation
+    },
   });
 
   const orchestrator = createOrchestrator(repos);

@@ -1,0 +1,1971 @@
+[
+  {
+    "id": "f5dad456-f4f2-4b93-98b9-68a188e70579",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "a12112316f1f9c083d0aff0e640b161f98226918",
+    "message": "Rebalance orchestrator for better early wiki quality",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-27T13:23:57.000Z",
+    "diffSummary": {
+      "filesAdded": 2,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "scripts/generate-rebalanced-wiki.ts",
+        "scripts/test-rebalancing.ts",
+        "src/agents/orchestrator/orchestrator.ts"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "e9a7d22a-3a80-4746-a7e2-467673a4deb9",
+        "processedAt": "2025-11-27T13:51:36.347Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "d76e5730-1390-4273-9249-4adfd4d01467",
+        "processedAt": "2025-11-27T13:51:45.785Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "9811c271-1a9e-43d1-9f34-0ea948af69d8",
+        "processedAt": "2025-11-27T13:52:00.055Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "601438c1-4ba6-43df-9854-737041749255",
+        "processedAt": "2025-11-27T13:52:19.533Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "451dec3a-10f6-4ef8-93fb-ca116cc0ed90",
+        "processedAt": "2025-11-27T13:52:41.693Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "142973c1-dba4-4776-bee0-f55349e53fb3",
+        "processedAt": "2025-11-27T13:52:41.698Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.797Z"
+  },
+  {
+    "id": "98cb4c04-d387-422a-b250-9952f5284507",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "7a767dd5023eb693aaefe3e7175ba4e33f684f1b",
+    "message": "Add exported markdown wiki files for progressive examples",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-27T13:04:14.000Z",
+    "diffSummary": {
+      "filesAdded": 133,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/progressive-1-iteration/wiki/commits/a286af4b.md",
+        "examples/progressive-1-iteration/wiki/index.md",
+        "examples/progressive-10-iterations/wiki/architecture/orchestrator-executor-coordination.md",
+        "examples/progressive-10-iterations/wiki/architecture/testing-strategy.md",
+        "examples/progressive-10-iterations/wiki/architecture/work-queue-design.md",
+        "examples/progressive-10-iterations/wiki/commits/574dabed.md",
+        "examples/progressive-10-iterations/wiki/commits/85ff400e.md",
+        "examples/progressive-10-iterations/wiki/commits/a286af4b.md",
+        "examples/progressive-10-iterations/wiki/commits/aaf040f3.md",
+        "examples/progressive-10-iterations/wiki/commits/c600a87f.md",
+        "examples/progressive-10-iterations/wiki/commits/dd5aa96c.md",
+        "examples/progressive-10-iterations/wiki/commits/e2a858ba.md",
+        "examples/progressive-10-iterations/wiki/commits/e584b6e6.md",
+        "examples/progressive-10-iterations/wiki/components/executor.md",
+        "examples/progressive-10-iterations/wiki/conventions/coding-standards.md",
+        "examples/progressive-10-iterations/wiki/development/dependencies.md",
+        "examples/progressive-10-iterations/wiki/development/fixtures-api.md",
+        "examples/progressive-10-iterations/wiki/guides/testing.md",
+        "examples/progressive-10-iterations/wiki/index.md",
+        "examples/progressive-10-iterations/wiki/patterns/anti-patterns.md",
+        "examples/progressive-10-iterations/wiki/planning/implementation-status-and-development-roadmap.md",
+        "examples/progressive-10-iterations/wiki/testing/infrastructure.md",
+        "examples/progressive-10-iterations/wiki/testing/integration-patterns.md",
+        "examples/progressive-2-iterations/wiki/commits/a286af4b.md",
+        "examples/progressive-2-iterations/wiki/commits/aaf040f3.md",
+        "examples/progressive-2-iterations/wiki/development/dependencies.md",
+        "examples/progressive-2-iterations/wiki/index.md",
+        "examples/progressive-2-iterations/wiki/testing/infrastructure.md",
+        "examples/progressive-2-iterations/wiki/testing/integration-patterns.md",
+        "examples/progressive-20-iterations/wiki/architecture/agentic-documentation-generation-example.md",
+        "examples/progressive-20-iterations/wiki/architecture/orchestrator-executor-coordination.md",
+        "examples/progressive-20-iterations/wiki/architecture/overview.md",
+        "examples/progressive-20-iterations/wiki/architecture/testing-strategy.md",
+        "examples/progressive-20-iterations/wiki/architecture/work-queue-design.md",
+        "examples/progressive-20-iterations/wiki/commits/574dabed.md",
+        "examples/progressive-20-iterations/wiki/commits/85ff400e.md",
+        "examples/progressive-20-iterations/wiki/commits/9dad2c60.md",
+        "examples/progressive-20-iterations/wiki/commits/a286af4b.md",
+        "examples/progressive-20-iterations/wiki/commits/aaf040f3.md",
+        "examples/progressive-20-iterations/wiki/commits/c600a87f.md",
+        "examples/progressive-20-iterations/wiki/commits/dd5aa96c.md",
+        "examples/progressive-20-iterations/wiki/commits/e2a858ba.md",
+        "examples/progressive-20-iterations/wiki/commits/e584b6e6.md",
+        "examples/progressive-20-iterations/wiki/components/executor.md",
+        "examples/progressive-20-iterations/wiki/conventions/coding-standards.md",
+        "examples/progressive-20-iterations/wiki/development/dependencies.md",
+        "examples/progressive-20-iterations/wiki/development/fixtures-api.md",
+        "examples/progressive-20-iterations/wiki/guides/getting-started.md",
+        "examples/progressive-20-iterations/wiki/guides/testing.md",
+        "examples/progressive-20-iterations/wiki/index.md",
+        "examples/progressive-20-iterations/wiki/patterns/anti-patterns.md",
+        "examples/progressive-20-iterations/wiki/planning/implementation-status-and-development-roadmap.md",
+        "examples/progressive-20-iterations/wiki/planning/project-roadmap-and-implementation-status.md",
+        "examples/progressive-20-iterations/wiki/testing/infrastructure.md",
+        "examples/progressive-20-iterations/wiki/testing/integration-patterns.md",
+        "examples/progressive-5-iterations/wiki/architecture/testing-strategy.md",
+        "examples/progressive-5-iterations/wiki/commits/574dabed.md",
+        "examples/progressive-5-iterations/wiki/commits/85ff400e.md",
+        "examples/progressive-5-iterations/wiki/commits/a286af4b.md",
+        "examples/progressive-5-iterations/wiki/commits/aaf040f3.md",
+        "examples/progressive-5-iterations/wiki/commits/e2a858ba.md",
+        "examples/progressive-5-iterations/wiki/development/dependencies.md",
+        "examples/progressive-5-iterations/wiki/development/fixtures-api.md",
+        "examples/progressive-5-iterations/wiki/guides/testing.md",
+        "examples/progressive-5-iterations/wiki/index.md",
+        "examples/progressive-5-iterations/wiki/testing/infrastructure.md",
+        "examples/progressive-5-iterations/wiki/testing/integration-patterns.md",
+        "examples/progressive-50-iterations/wiki/architecture/agentic-documentation-generation-example.md",
+        "examples/progressive-50-iterations/wiki/architecture/codebase-tools.md",
+        "examples/progressive-50-iterations/wiki/architecture/orchestrator-executor-coordination.md",
+        "examples/progressive-50-iterations/wiki/architecture/overview.md",
+        "examples/progressive-50-iterations/wiki/architecture/testing-strategy.md",
+        "examples/progressive-50-iterations/wiki/architecture/work-queue-design.md",
+        "examples/progressive-50-iterations/wiki/commits/574dabed.md",
+        "examples/progressive-50-iterations/wiki/commits/85ff400e.md",
+        "examples/progressive-50-iterations/wiki/commits/9dad2c60.md",
+        "examples/progressive-50-iterations/wiki/commits/a286af4b.md",
+        "examples/progressive-50-iterations/wiki/commits/aaf040f3.md",
+        "examples/progressive-50-iterations/wiki/commits/c600a87f.md",
+        "examples/progressive-50-iterations/wiki/commits/dd5aa96c.md",
+        "examples/progressive-50-iterations/wiki/commits/e2a858ba.md",
+        "examples/progressive-50-iterations/wiki/commits/e584b6e6.md",
+        "examples/progressive-50-iterations/wiki/components/executor.md",
+        "examples/progressive-50-iterations/wiki/configuration/cwignore.md",
+        "examples/progressive-50-iterations/wiki/conventions/coding-standards.md",
+        "examples/progressive-50-iterations/wiki/development/dependencies.md",
+        "examples/progressive-50-iterations/wiki/development/fixtures-api.md",
+        "examples/progressive-50-iterations/wiki/development/overview.md",
+        "examples/progressive-50-iterations/wiki/development/testing.md",
+        "examples/progressive-50-iterations/wiki/guides/getting-started.md",
+        "examples/progressive-50-iterations/wiki/guides/testing.md",
+        "examples/progressive-50-iterations/wiki/index.md",
+        "examples/progressive-50-iterations/wiki/patterns/agent-interface.md",
+        "examples/progressive-50-iterations/wiki/patterns/anti-patterns.md",
+        "examples/progressive-50-iterations/wiki/patterns/barrel-export-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/barrel-exports.md",
+        "examples/progressive-50-iterations/wiki/patterns/builder-pattern-prompt-construction.md",
+        "examples/progressive-50-iterations/wiki/patterns/builder-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/confidence-scoring.md",
+        "examples/progressive-50-iterations/wiki/patterns/cost-tracking.md",
+        "examples/progressive-50-iterations/wiki/patterns/dependency-injection.md",
+        "examples/progressive-50-iterations/wiki/patterns/dual-test-coverage.md",
+        "examples/progressive-50-iterations/wiki/patterns/explicit-response-parsing.md",
+        "examples/progressive-50-iterations/wiki/patterns/facade-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/factory-functions.md",
+        "examples/progressive-50-iterations/wiki/patterns/factory-method.md",
+        "examples/progressive-50-iterations/wiki/patterns/guard-clauses.md",
+        "examples/progressive-50-iterations/wiki/patterns/interface-implementation.md",
+        "examples/progressive-50-iterations/wiki/patterns/interface-segregation.md",
+        "examples/progressive-50-iterations/wiki/patterns/named-constructor-variants.md",
+        "examples/progressive-50-iterations/wiki/patterns/overview.md",
+        "examples/progressive-50-iterations/wiki/patterns/repository-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/spy-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/strategy-pattern-update-generation.md",
+        "examples/progressive-50-iterations/wiki/patterns/strategy-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/structured-parsing-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/structured-prompting.md",
+        "examples/progressive-50-iterations/wiki/patterns/template-method.md",
+        "examples/progressive-50-iterations/wiki/patterns/test-data-builder.md",
+        "examples/progressive-50-iterations/wiki/patterns/test-double.md",
+        "examples/progressive-50-iterations/wiki/patterns/test-fixture-organization.md",
+        "examples/progressive-50-iterations/wiki/patterns/test-organization-by-type.md",
+        "examples/progressive-50-iterations/wiki/patterns/test-separation-pattern.md",
+        "examples/progressive-50-iterations/wiki/patterns/type-narrowing.md",
+        "examples/progressive-50-iterations/wiki/patterns/type-safe-domain-modeling.md",
+        "examples/progressive-50-iterations/wiki/patterns/wiki-page-updates.md",
+        "examples/progressive-50-iterations/wiki/planning/codewiki-roadmap-and-architecture-status.md",
+        "examples/progressive-50-iterations/wiki/planning/implementation-status-and-development-roadmap.md",
+        "examples/progressive-50-iterations/wiki/planning/overview.md",
+        "examples/progressive-50-iterations/wiki/planning/project-roadmap-and-implementation-status.md",
+        "examples/progressive-50-iterations/wiki/planning/project-status-and-development-roadmap.md",
+        "examples/progressive-50-iterations/wiki/testing/infrastructure.md",
+        "examples/progressive-50-iterations/wiki/testing/integration-patterns.md"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "59e8dabb-7c75-4f37-8968-5e60b4798b73",
+        "processedAt": "2025-11-27T13:53:12.646Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "fd703f7d-8672-4644-9e2c-e1c9e80f66ab",
+        "processedAt": "2025-11-27T13:53:26.112Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "3a50c291-141e-414f-9771-a2ebf6a485f8",
+        "processedAt": "2025-11-27T13:53:38.398Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "696b0701-f570-410c-9966-675358801017",
+        "processedAt": "2025-11-27T13:53:47.196Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "6e872055-9561-4aa0-97b2-f0fd366d1e95",
+        "processedAt": "2025-11-27T13:54:08.316Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "ea191809-29cf-4ab7-926d-a0ea43ccaa66",
+        "processedAt": "2025-11-27T13:54:08.320Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.831Z"
+  },
+  {
+    "id": "5ecaea63-674e-4ee3-ba19-3f6a0f4936f7",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "7e5f49d56cdb455fb614513e91d8a2be7c9344f6",
+    "message": "Add progressive wiki generation examples (1-50 iterations)",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-27T13:02:25.000Z",
+    "diffSummary": {
+      "filesAdded": 36,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/progressive-1-iteration/agent-runs.json",
+        "examples/progressive-1-iteration/commits.json",
+        "examples/progressive-1-iteration/orchestrator-runs.json",
+        "examples/progressive-1-iteration/repos.json",
+        "examples/progressive-1-iteration/wiki-pages.json",
+        "examples/progressive-1-iteration/work-queue.json",
+        "examples/progressive-10-iterations/agent-runs.json",
+        "examples/progressive-10-iterations/commits.json",
+        "examples/progressive-10-iterations/orchestrator-runs.json",
+        "examples/progressive-10-iterations/repos.json",
+        "examples/progressive-10-iterations/wiki-pages.json",
+        "examples/progressive-10-iterations/work-queue.json",
+        "examples/progressive-2-iterations/agent-runs.json",
+        "examples/progressive-2-iterations/commits.json",
+        "examples/progressive-2-iterations/orchestrator-runs.json",
+        "examples/progressive-2-iterations/repos.json",
+        "examples/progressive-2-iterations/wiki-pages.json",
+        "examples/progressive-2-iterations/work-queue.json",
+        "examples/progressive-20-iterations/agent-runs.json",
+        "examples/progressive-20-iterations/commits.json",
+        "examples/progressive-20-iterations/orchestrator-runs.json",
+        "examples/progressive-20-iterations/repos.json",
+        "examples/progressive-20-iterations/wiki-pages.json",
+        "examples/progressive-20-iterations/work-queue.json",
+        "examples/progressive-5-iterations/agent-runs.json",
+        "examples/progressive-5-iterations/commits.json",
+        "examples/progressive-5-iterations/orchestrator-runs.json",
+        "examples/progressive-5-iterations/repos.json",
+        "examples/progressive-5-iterations/wiki-pages.json",
+        "examples/progressive-5-iterations/work-queue.json",
+        "examples/progressive-50-iterations/agent-runs.json",
+        "examples/progressive-50-iterations/commits.json",
+        "examples/progressive-50-iterations/orchestrator-runs.json",
+        "examples/progressive-50-iterations/repos.json",
+        "examples/progressive-50-iterations/wiki-pages.json",
+        "examples/progressive-50-iterations/work-queue.json"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "dd63fbf5-e650-4e15-8385-7c53620f0511",
+        "processedAt": "2025-11-27T13:54:41.847Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "5dfdea66-42b8-4b1b-99b8-6b2b81affc58",
+        "processedAt": "2025-11-27T13:54:50.319Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "4e26493a-4d95-4092-a2ee-76ee8991f6ae",
+        "processedAt": "2025-11-27T13:55:05.538Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "18d8dea8-8d0d-415a-b55d-54267b04ab53",
+        "processedAt": "2025-11-27T13:55:20.203Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "1101985e-cd42-473f-ae22-70778bbf674a",
+        "processedAt": "2025-11-27T13:55:42.869Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "63345c18-a744-47cd-806d-9abc2358b4fe",
+        "processedAt": "2025-11-27T13:55:42.874Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.855Z"
+  },
+  {
+    "id": "b5d7dec6-a4cc-42c4-9099-5224dead0b4e",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+    "message": "Add TechnicalDebtAgent for code quality tracking",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-27T11:47:30.000Z",
+    "diffSummary": {
+      "filesAdded": 3,
+      "filesModified": 3,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/analysis/index.ts",
+        "src/agents/analysis/technical-debt-agent.ts",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/executor/executor.ts",
+        "tests/integration/technical-debt-agent.test.ts",
+        "tests/unit/technical-debt-agent.test.ts"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "32f0f9a6-a07c-415a-87fa-1680fa924ab7",
+        "processedAt": "2025-11-27T13:56:21.894Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "9f1907e3-7bea-48f9-be27-6a7eacb519c5",
+        "processedAt": "2025-11-27T13:56:32.396Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "75585281-d7c3-4af8-ae73-2428a38b8ae4",
+        "processedAt": "2025-11-27T13:56:44.723Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "0a21f285-6520-4919-acf7-463511bf1bc7",
+        "processedAt": "2025-11-27T13:57:01.740Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "e2a54bd3-1767-45da-b3a7-f9343e4512ff",
+        "processedAt": "2025-11-27T13:57:22.886Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "9ca2cfec-f407-4a51-a9f6-a7ebc2393af4",
+        "processedAt": "2025-11-27T13:57:22.891Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.878Z"
+  },
+  {
+    "id": "6cc84ae4-bb0c-4f06-9a24-d47cb3af0610",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "9dad2c6065f7b21d411ef60199af695bd41e4822",
+    "message": "Merge pull request #2 from JKershaw/claude/add-cwignore-support-01HG83agdLjhghM5jjDTYHa1",
+    "authorName": "John Kershaw",
+    "authorEmail": "wardrox@gmail.com",
+    "committedAt": "2025-11-27T11:10:27.000Z",
+    "diffSummary": {
+      "filesAdded": 8,
+      "filesModified": 3,
+      "filesDeleted": 5,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        ".cwignore",
+        "package-lock.json",
+        "package.json",
+        "src/services/cwignore.ts",
+        "src/services/llm/codebase-tools.test.ts",
+        "src/services/llm/codebase-tools.ts",
+        "tests/helpers/index.ts",
+        "tests/helpers/mock-llm.ts",
+        "tests/helpers/test-context.ts",
+        "tests/integration/commit-processing.test.ts",
+        "tests/integration/wiki-analysis.test.ts",
+        "tests/unit/consistency-agent.test.ts",
+        "tests/unit/cwignore.test.ts",
+        "tests/unit/link-agent.test.ts",
+        "tests/unit/quality-agent.test.ts",
+        "tests/unit/structure-agent.test.ts"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "636988cf-97a5-436f-a859-220f3a5e41a4",
+        "processedAt": "2025-11-27T13:57:49.459Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "eab811f4-b77f-454e-bf43-592b1c011c2a",
+        "processedAt": "2025-11-27T13:57:58.101Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "9bbebbf2-5892-4092-a4e0-e015b3e946bf",
+        "processedAt": "2025-11-27T13:58:12.317Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "6fac02c6-6ba9-4374-8105-ca8c2337780e",
+        "processedAt": "2025-11-27T13:58:25.482Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "64737e77-1ce6-4621-a046-0fd4d7c3fefe",
+        "processedAt": "2025-11-27T13:58:44.506Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "21912ea5-e1e1-43b5-96f2-94dff700c92b",
+        "processedAt": "2025-11-27T13:58:58.778Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.906Z"
+  },
+  {
+    "id": "ec5a732b-482b-477e-84d2-e18a4d4886e3",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "aaf040f35810ab3747d35559da8afec508e393c8",
+    "message": "Remove Vitest, migrate to Node test runner with minimal mocks",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-27T11:06:30.000Z",
+    "diffSummary": {
+      "filesAdded": 5,
+      "filesModified": 3,
+      "filesDeleted": 11,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "package-lock.json",
+        "package.json",
+        "tests/fixtures/index.ts",
+        "tests/fixtures/mock-context.ts",
+        "tests/fixtures/mock-llm.ts",
+        "tests/fixtures/mock-pages.ts",
+        "tests/helpers/index.ts",
+        "tests/helpers/mock-llm.ts",
+        "tests/helpers/test-context.ts",
+        "tests/integration/agent-workflow.test.ts",
+        "tests/integration/commit-processing.test.ts",
+        "tests/integration/wiki-analysis.test.ts",
+        "tests/unit/codebase-tools.test.ts",
+        "tests/unit/consistency-agent.test.ts",
+        "tests/unit/cwignore.test.ts",
+        "tests/unit/link-agent.test.ts",
+        "tests/unit/quality-agent.test.ts",
+        "tests/unit/structure-agent.test.ts",
+        "vitest.config.ts"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "b6b79a5d-2479-46b0-8c31-5ff13efd2609",
+        "processedAt": "2025-11-27T13:59:25.455Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "04a4b18c-b00f-4a3d-9a6c-9105fec6cb0c",
+        "processedAt": "2025-11-27T13:59:33.900Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "ab73e2e7-8ea3-4a6a-8ab4-f442a608a31c",
+        "processedAt": "2025-11-27T13:59:43.957Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "45fc2ee5-3448-4fa9-ab7f-9df63f206c36",
+        "processedAt": "2025-11-27T13:59:59.293Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "3b2791d9-3076-44bc-b24f-09f98b7f9ec9",
+        "processedAt": "2025-11-27T14:00:13.765Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "0033e205-4e0f-4795-8cdd-9adcd86f3fd5",
+        "processedAt": "2025-11-27T14:00:30.672Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.935Z"
+  },
+  {
+    "id": "fa81f285-4560-4e8a-a3f5-2e3030af5606",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "e2a858ba25bada3d251d146767142fb7f3ad6260",
+    "message": "Reorganize test structure and add integration tests",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-27T10:02:19.000Z",
+    "diffSummary": {
+      "filesAdded": 6,
+      "filesModified": 2,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "tests/fixtures/index.ts",
+        "tests/fixtures/mock-context.ts",
+        "tests/fixtures/mock-llm.ts",
+        "tests/fixtures/mock-pages.ts",
+        "tests/integration/agent-workflow.test.ts",
+        "src/services/llm/codebase-tools.test.ts\ttests/unit/codebase-tools.test.ts",
+        "src/services/cwignore.test.ts\ttests/unit/cwignore.test.ts",
+        "vitest.config.ts"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "b500fc23-95ad-4296-a292-180eb09de9f7",
+        "processedAt": "2025-11-27T14:00:57.938Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "9f5f876d-44e8-4db0-b80c-f66393d213a6",
+        "processedAt": "2025-11-27T14:01:03.647Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "39334db2-c654-4b58-bb08-24695e12b8fa",
+        "processedAt": "2025-11-27T14:01:12.865Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "305035de-9d31-4798-9ad2-18db5a006c6f",
+        "processedAt": "2025-11-27T14:01:25.078Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "396d0a9c-962d-4b62-82fc-f0e12803dfab",
+        "processedAt": "2025-11-27T14:01:46.700Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "f459bf96-c018-46d5-a405-300a77d75390",
+        "processedAt": "2025-11-27T14:01:46.708Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.961Z"
+  },
+  {
+    "id": "9ee2884a-5247-4381-8ffe-72505e43d9f4",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "574dabedfdb2783776fa41663df8152ea35950e6",
+    "message": "Add .cwignore file support for ignoring paths during analysis",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-27T09:51:19.000Z",
+    "diffSummary": {
+      "filesAdded": 3,
+      "filesModified": 4,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        ".cwignore",
+        "package-lock.json",
+        "package.json",
+        "src/services/cwignore.test.ts",
+        "src/services/cwignore.ts",
+        "src/services/llm/codebase-tools.test.ts",
+        "src/services/llm/codebase-tools.ts"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "11f0c99f-2c09-4cd6-bd53-9c400b5f774c",
+        "processedAt": "2025-11-27T14:02:13.791Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "b5d295af-f1b7-48b9-828e-3ebfb5412f70",
+        "processedAt": "2025-11-27T14:02:24.226Z"
+      },
+      {
+        "agentType": "security",
+        "agentRunId": "c368a2bb-717a-4b8e-a59b-3ecd9d1c4c17",
+        "processedAt": "2025-11-27T14:02:37.142Z"
+      },
+      {
+        "agentType": "technical-debt",
+        "agentRunId": "5edd548a-e9e2-46cd-bc76-c5976910c180",
+        "processedAt": "2025-11-27T14:02:49.633Z"
+      },
+      {
+        "agentType": "pattern",
+        "agentRunId": "85880029-77ec-49a2-9556-1290e9159b93",
+        "processedAt": "2025-11-27T14:03:04.744Z"
+      },
+      {
+        "agentType": "dependency",
+        "agentRunId": "6ed6934b-9a01-4a95-801a-c19725882a83",
+        "processedAt": "2025-11-27T14:03:17.814Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:03.982Z"
+  },
+  {
+    "id": "3d2316e3-5ea8-4549-8618-af505015febd",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "c600a87f7e46addaa64f54480d19fd10a28ff0ff",
+    "message": "Delete example-wiki directory",
+    "authorName": "John Kershaw",
+    "authorEmail": "wardrox@gmail.com",
+    "committedAt": "2025-11-27T09:41:38.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 0,
+      "filesDeleted": 17,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "example-wiki/architecture/codewiki-multi-agent-architecture-design.md",
+        "example-wiki/architecture/overview.md",
+        "example-wiki/commits/3f14bd3e.md",
+        "example-wiki/commits/4101e622.md",
+        "example-wiki/commits/64a8801e.md",
+        "example-wiki/commits/659d7dd1.md",
+        "example-wiki/commits/68a74ae6.md",
+        "example-wiki/commits/7b58314c.md",
+        "example-wiki/commits/80221a0a.md",
+        "example-wiki/commits/8c4122db.md",
+        "example-wiki/commits/ddc9b52b.md",
+        "example-wiki/commits/fdcf054c.md",
+        "example-wiki/conventions/coding-standards.md",
+        "example-wiki/guides/getting-started.md",
+        "example-wiki/index.md",
+        "example-wiki/patterns/anti-patterns.md",
+        "example-wiki/planning/agentic-tool-using-agents-design.md"
+      ]
+    },
+    "processedBy": [
+      {
+        "agentType": "code-change",
+        "agentRunId": "d2a2115b-64fb-43fe-b9f6-d1ee440cbfa3",
+        "processedAt": "2025-11-27T14:03:46.663Z"
+      },
+      {
+        "agentType": "narrative",
+        "agentRunId": "0f6c1515-cd34-42a6-b807-cde4e7fe392e",
+        "processedAt": "2025-11-27T14:04:00.596Z"
+      }
+    ],
+    "createdAt": "2025-11-27T13:51:04.002Z"
+  },
+  {
+    "id": "1071e183-b419-4d62-868e-6bc205d6ddf0",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "adbc48ad17c9303ad62ead4b0c824a62f9e2cc64",
+    "message": "Merge pull request #1 from JKershaw/claude/analyze-agent-tools-01P2keFfDZD3dDhda2sy5yfY",
+    "authorName": "John Kershaw",
+    "authorEmail": "wardrox@gmail.com",
+    "committedAt": "2025-11-27T09:38:03.000Z",
+    "diffSummary": {
+      "filesAdded": 21,
+      "filesModified": 2,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "ROADMAP.md",
+        "examples/wiki-20-iterations-agentic/agents/code-change-agent.md",
+        "examples/wiki-20-iterations-agentic/architecture/agentic-tool-use.md",
+        "examples/wiki-20-iterations-agentic/architecture/overview.md",
+        "examples/wiki-20-iterations-agentic/commits/1cec4b8a.md",
+        "examples/wiki-20-iterations-agentic/commits/3797446e.md",
+        "examples/wiki-20-iterations-agentic/commits/4101e622.md",
+        "examples/wiki-20-iterations-agentic/commits/64a8801e.md",
+        "examples/wiki-20-iterations-agentic/commits/68a74ae6.md",
+        "examples/wiki-20-iterations-agentic/commits/6d0a4e65.md",
+        "examples/wiki-20-iterations-agentic/commits/7b58314c.md",
+        "examples/wiki-20-iterations-agentic/commits/80221a0a.md",
+        "examples/wiki-20-iterations-agentic/commits/9ac80919.md",
+        "examples/wiki-20-iterations-agentic/commits/e584b6e6.md",
+        "examples/wiki-20-iterations-agentic/components/codebase-tools.md",
+        "examples/wiki-20-iterations-agentic/conventions/coding-standards.md",
+        "examples/wiki-20-iterations-agentic/guides/agent-development.md",
+        "examples/wiki-20-iterations-agentic/guides/getting-started.md",
+        "examples/wiki-20-iterations-agentic/index.md",
+        "examples/wiki-20-iterations-agentic/patterns/anti-patterns.md",
+        "examples/wiki-20-iterations-agentic/planning/agentic-tools-implementation-plan.md",
+        "src/agents/analysis/code-change-agent.ts",
+        "src/agents/orchestrator/orchestrator.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.024Z"
+  },
+  {
+    "id": "cda2bd67-4816-431d-bf50-1d3d9f22e604",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "85ff400ec7f7e9416220683c088bdb7be9dc965e",
+    "message": "Add roadmap comparing current state to original plan",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T20:37:08.000Z",
+    "diffSummary": {
+      "filesAdded": 1,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "ROADMAP.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.042Z"
+  },
+  {
+    "id": "5627c7c3-2eb8-4d2e-9d36-5b836ee9b82a",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55",
+    "message": "Add example wiki generated with agentic tool-using agents",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T19:03:48.000Z",
+    "diffSummary": {
+      "filesAdded": 20,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/wiki-20-iterations-agentic/agents/code-change-agent.md",
+        "examples/wiki-20-iterations-agentic/architecture/agentic-tool-use.md",
+        "examples/wiki-20-iterations-agentic/architecture/overview.md",
+        "examples/wiki-20-iterations-agentic/commits/1cec4b8a.md",
+        "examples/wiki-20-iterations-agentic/commits/3797446e.md",
+        "examples/wiki-20-iterations-agentic/commits/4101e622.md",
+        "examples/wiki-20-iterations-agentic/commits/64a8801e.md",
+        "examples/wiki-20-iterations-agentic/commits/68a74ae6.md",
+        "examples/wiki-20-iterations-agentic/commits/6d0a4e65.md",
+        "examples/wiki-20-iterations-agentic/commits/7b58314c.md",
+        "examples/wiki-20-iterations-agentic/commits/80221a0a.md",
+        "examples/wiki-20-iterations-agentic/commits/9ac80919.md",
+        "examples/wiki-20-iterations-agentic/commits/e584b6e6.md",
+        "examples/wiki-20-iterations-agentic/components/codebase-tools.md",
+        "examples/wiki-20-iterations-agentic/conventions/coding-standards.md",
+        "examples/wiki-20-iterations-agentic/guides/agent-development.md",
+        "examples/wiki-20-iterations-agentic/guides/getting-started.md",
+        "examples/wiki-20-iterations-agentic/index.md",
+        "examples/wiki-20-iterations-agentic/patterns/anti-patterns.md",
+        "examples/wiki-20-iterations-agentic/planning/agentic-tools-implementation-plan.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.065Z"
+  },
+  {
+    "id": "f8da7137-5cca-451c-9b27-95a8656dd304",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "e584b6e63665e575629f27f3f730ea8f6ad03a21",
+    "message": "Fix orchestrator to use commit SHA instead of internal UUID",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T18:33:48.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/orchestrator/orchestrator.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.086Z"
+  },
+  {
+    "id": "3ee3b570-8ca5-4ae9-877e-4d94da7277cc",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "9ac80919a5e8bd77573b461ab8a0febcbfbbf43c",
+    "message": "Upgrade code-change agent to use agentic tool use",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T18:27:09.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/analysis/code-change-agent.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.108Z"
+  },
+  {
+    "id": "256e05ca-edc9-4690-aecb-1ba5b09e7a09",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "1cec4b8a6dabf5525420e7bd78639a8e3e1bb051",
+    "message": "Upgrade getting-started agent to use agentic tool use",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T18:12:30.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/synthesis/getting-started-agent.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.128Z"
+  },
+  {
+    "id": "b202a3e2-e9a9-451a-8143-51f622fce504",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "3797446ea0ee63aa1fca2d38f6cb75e57175ebe7",
+    "message": "Add example wiki output demonstrating agentic tool use",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T17:52:51.000Z",
+    "diffSummary": {
+      "filesAdded": 17,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "example-wiki/architecture/codewiki-multi-agent-architecture-design.md",
+        "example-wiki/architecture/overview.md",
+        "example-wiki/commits/3f14bd3e.md",
+        "example-wiki/commits/4101e622.md",
+        "example-wiki/commits/64a8801e.md",
+        "example-wiki/commits/659d7dd1.md",
+        "example-wiki/commits/68a74ae6.md",
+        "example-wiki/commits/7b58314c.md",
+        "example-wiki/commits/80221a0a.md",
+        "example-wiki/commits/8c4122db.md",
+        "example-wiki/commits/ddc9b52b.md",
+        "example-wiki/commits/fdcf054c.md",
+        "example-wiki/conventions/coding-standards.md",
+        "example-wiki/guides/getting-started.md",
+        "example-wiki/index.md",
+        "example-wiki/patterns/anti-patterns.md",
+        "example-wiki/planning/agentic-tool-using-agents-design.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.148Z"
+  },
+  {
+    "id": "4ea87b63-297f-4246-a955-fdab0a2297c4",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "6d0a4e65f24aa0ee3af3fc5dd36e0fedf8f80407",
+    "message": "Implement agentic tool use for project-overview agent",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T17:48:54.000Z",
+    "diffSummary": {
+      "filesAdded": 3,
+      "filesModified": 6,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/agents/synthesis/project-overview-agent.ts",
+        "src/services/llm/anthropic-llm-service.ts",
+        "src/services/llm/codebase-tools.test.ts",
+        "src/services/llm/codebase-tools.ts",
+        "src/services/llm/index.ts",
+        "src/services/llm/llm-service.ts",
+        "src/services/llm/mock-llm-service.ts",
+        "src/services/llm/tools.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.170Z"
+  },
+  {
+    "id": "77b47aaf-faf2-472f-9621-12281d3694da",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "80221a0ae8ea931ececed3686086db2ea3fa0948",
+    "message": "Add plan for agentic tool-using agents",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T16:58:55.000Z",
+    "diffSummary": {
+      "filesAdded": 1,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "AGENTIC_TOOLS_PLAN.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.191Z"
+  },
+  {
+    "id": "9d5d6b58-fef4-4c85-95f3-3f0b7624f272",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "68a74ae6d9e8ad677b5f4dae436b5fc9f5044fd9",
+    "message": "Add 50-iteration wiki example demonstrating all FIXES.md improvements",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T16:43:47.000Z",
+    "diffSummary": {
+      "filesAdded": 18,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/wiki-50-iterations/architecture/codewiki-system-architecture-and-agent-design.md",
+        "examples/wiki-50-iterations/architecture/overview.md",
+        "examples/wiki-50-iterations/commits/32b7cb2f.md",
+        "examples/wiki-50-iterations/commits/3f14bd3e.md",
+        "examples/wiki-50-iterations/commits/4101e622.md",
+        "examples/wiki-50-iterations/commits/64a8801e.md",
+        "examples/wiki-50-iterations/commits/659d7dd1.md",
+        "examples/wiki-50-iterations/commits/7b58314c.md",
+        "examples/wiki-50-iterations/commits/8c4122db.md",
+        "examples/wiki-50-iterations/commits/b49c7432.md",
+        "examples/wiki-50-iterations/commits/ddc9b52b.md",
+        "examples/wiki-50-iterations/commits/fdcf054c.md",
+        "examples/wiki-50-iterations/conventions/coding-standards.md",
+        "examples/wiki-50-iterations/decisions/llm-powered-orchestrator-architecture.md",
+        "examples/wiki-50-iterations/guides/getting-started.md",
+        "examples/wiki-50-iterations/index.md",
+        "examples/wiki-50-iterations/patterns/anti-patterns.md",
+        "examples/wiki-50-iterations/planning/wiki-synthesis-strategy.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.212Z"
+  },
+  {
+    "id": "94a7c272-118c-417f-a194-bfe6fedc824d",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "4101e622469a5d339bf5eb0698bdbf008a726454",
+    "message": "Add example wiki output demonstrating improved generation",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T16:07:31.000Z",
+    "diffSummary": {
+      "filesAdded": 16,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/wiki-test-output/architecture/llm-powered-orchestrator-architecture.md",
+        "examples/wiki-test-output/architecture/writer-agent-design.md",
+        "examples/wiki-test-output/commits/32b7cb2f.md",
+        "examples/wiki-test-output/commits/3f14bd3e.md",
+        "examples/wiki-test-output/commits/659d7dd1.md",
+        "examples/wiki-test-output/commits/82193f9f.md",
+        "examples/wiki-test-output/commits/8c4122db.md",
+        "examples/wiki-test-output/commits/addfc9e6.md",
+        "examples/wiki-test-output/commits/b49c7432.md",
+        "examples/wiki-test-output/commits/ca53f7ea.md",
+        "examples/wiki-test-output/commits/ddc9b52b.md",
+        "examples/wiki-test-output/commits/fdcf054c.md",
+        "examples/wiki-test-output/conventions/coding-standards.md",
+        "examples/wiki-test-output/index.md",
+        "examples/wiki-test-output/patterns/anti-patterns.md",
+        "examples/wiki-test-output/philosophy/wiki-documentation-philosophy-and-architecture.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.236Z"
+  },
+  {
+    "id": "88bc26f3-4278-474a-a40c-0d620cd8ffd3",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "7b58314c66cbb923e0844fa7c6f24e589a83b303",
+    "message": "Add Project Overview and Getting Started agents (Fix 3 & 4)",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T16:01:00.000Z",
+    "diffSummary": {
+      "filesAdded": 2,
+      "filesModified": 5,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/orchestrator/context-gatherer.ts",
+        "src/agents/orchestrator/prompts.ts",
+        "src/agents/synthesis/getting-started-agent.ts",
+        "src/agents/synthesis/index.ts",
+        "src/agents/synthesis/project-overview-agent.ts",
+        "src/domain/agent-run.ts",
+        "src/executor/executor.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.257Z"
+  },
+  {
+    "id": "956a2ee1-f316-47c7-b439-59253da1603f",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "64a8801ea6c6d6680e59da4c91ced8949a244e41",
+    "message": "Implement page-count based synthesis triggers for wiki quality",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T15:50:29.000Z",
+    "diffSummary": {
+      "filesAdded": 1,
+      "filesModified": 5,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "FIXES.md",
+        "scripts/export-wiki.ts",
+        "src/agents/orchestrator/context-gatherer.ts",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/agents/orchestrator/prompts.ts",
+        "src/executor/executor.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.279Z"
+  },
+  {
+    "id": "0e48a443-742a-458e-a6ce-b7b167f6088e",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "ddc9b52b2ffb85b5fe7e65906b03026a014bb841",
+    "message": "Add 40-iteration wiki example showing improved structure",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T15:10:44.000Z",
+    "diffSummary": {
+      "filesAdded": 18,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/wiki-40-iterations/commits/32b7cb2f.md",
+        "examples/wiki-40-iterations/commits/3f14bd3e.md",
+        "examples/wiki-40-iterations/commits/659d7dd1.md",
+        "examples/wiki-40-iterations/commits/82193f9f.md",
+        "examples/wiki-40-iterations/commits/82525543.md",
+        "examples/wiki-40-iterations/commits/addfc9e6.md",
+        "examples/wiki-40-iterations/commits/b49c7432.md",
+        "examples/wiki-40-iterations/commits/ca53f7ea.md",
+        "examples/wiki-40-iterations/commits/fd824f7d.md",
+        "examples/wiki-40-iterations/commits/fdcf054c.md",
+        "examples/wiki-40-iterations/conventions/coding-standards.md",
+        "examples/wiki-40-iterations/decisions/intelligent-llm-powered-orchestration-architecture.md",
+        "examples/wiki-40-iterations/decisions/llm-powered-orchestration-architecture.md",
+        "examples/wiki-40-iterations/decisions/overview.md",
+        "examples/wiki-40-iterations/decisions/writer-agent-content-transformation-architecture.md",
+        "examples/wiki-40-iterations/decisions/writer-agent-synthesis-architecture.md",
+        "examples/wiki-40-iterations/index.md",
+        "examples/wiki-40-iterations/patterns/anti-patterns.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.298Z"
+  },
+  {
+    "id": "d5ff41e6-6de4-44d9-9105-beabad5ed532",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "8c4122db9d7409740c297fc6c0f7991838b827d3",
+    "message": "Simplify CLI to always use LLM orchestration, add wiki progression examples",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T14:55:48.000Z",
+    "diffSummary": {
+      "filesAdded": 34,
+      "filesModified": 2,
+      "filesDeleted": 5,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/wiki-1-iteration/commits/fdcf054c.md",
+        "examples/wiki-1-iteration/index.md",
+        "examples/wiki-10-iterations/commits/32b7cb2f.md",
+        "examples/wiki-10-iterations/commits/3f14bd3e.md",
+        "examples/wiki-10-iterations/commits/659d7dd1.md",
+        "examples/wiki-10-iterations/commits/82193f9f.md",
+        "examples/wiki-10-iterations/commits/82525543.md",
+        "examples/wiki-10-iterations/commits/addfc9e6.md",
+        "examples/wiki-10-iterations/commits/b49c7432.md",
+        "examples/wiki-10-iterations/commits/ca53f7ea.md",
+        "examples/wiki-10-iterations/commits/fd824f7d.md",
+        "examples/wiki-10-iterations/commits/fdcf054c.md",
+        "examples/wiki-10-iterations/index.md",
+        "examples/wiki-20-iterations/commits/32b7cb2f.md",
+        "examples/wiki-20-iterations/commits/3f14bd3e.md",
+        "examples/wiki-20-iterations/commits/659d7dd1.md",
+        "examples/wiki-20-iterations/commits/82193f9f.md",
+        "examples/wiki-20-iterations/commits/82525543.md",
+        "examples/wiki-20-iterations/commits/addfc9e6.md",
+        "examples/wiki-20-iterations/commits/b49c7432.md",
+        "examples/wiki-20-iterations/commits/ca53f7ea.md",
+        "examples/wiki-20-iterations/commits/fd824f7d.md",
+        "examples/wiki-20-iterations/commits/fdcf054c.md",
+        "examples/wiki-20-iterations/conventions/coding-standards.md",
+        "examples/wiki-20-iterations/decisions/intelligent-llm-powered-orchestration-architecture.md",
+        "examples/wiki-20-iterations/decisions/writer-agent-content-transformation-architecture.md",
+        "examples/wiki-20-iterations/index.md",
+        "examples/wiki-20-iterations/patterns/anti-patterns.md",
+        "examples/wiki-5-iterations/commits/32b7cb2f.md",
+        "examples/wiki-5-iterations/commits/3f14bd3e.md",
+        "examples/wiki-5-iterations/commits/659d7dd1.md",
+        "examples/wiki-5-iterations/commits/b49c7432.md",
+        "examples/wiki-5-iterations/commits/fdcf054c.md",
+        "examples/wiki-5-iterations/index.md",
+        "examples/wiki-iterations/1-iteration/wiki-pages.json",
+        "examples/wiki-iterations/10-iterations/wiki-pages.json",
+        "examples/wiki-iterations/2-iterations/wiki-pages.json",
+        "examples/wiki-iterations/5-iterations/wiki-pages.json",
+        "examples/wiki-iterations/COMPARISON.md",
+        "src/agents/orchestrator/context-gatherer.ts",
+        "src/cli.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.323Z"
+  },
+  {
+    "id": "605eb6de-4ed5-489a-ad09-dc4c4a8f59e1",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "fdcf054cda36dcc5761c1e6643612ac701335d75",
+    "message": "Add LLM-powered orchestrator for intelligent work prioritization",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T14:40:02.000Z",
+    "diffSummary": {
+      "filesAdded": 5,
+      "filesModified": 5,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/orchestrator/context-gatherer.ts",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/agents/orchestrator/prompts.ts",
+        "src/cli.ts",
+        "src/domain/orchestrator-run.ts",
+        "src/repositories/file-based/file-orchestrator-run-repository.ts",
+        "src/repositories/file-based/index.ts",
+        "src/repositories/interfaces/index.ts",
+        "src/repositories/interfaces/orchestrator-run-repository.ts",
+        "src/services/llm/llm-service.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.342Z"
+  },
+  {
+    "id": "8e2e0d09-2819-4766-ad10-be6f113714c5",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "659d7dd1c6000904ad6b487a8fd185291854f550",
+    "message": "Add Writer Agent to transform raw analysis into wiki articles",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T13:59:42.000Z",
+    "diffSummary": {
+      "filesAdded": 1,
+      "filesModified": 3,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/agents/synthesis/index.ts",
+        "src/agents/synthesis/writer-agent.ts",
+        "src/executor/executor.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.361Z"
+  },
+  {
+    "id": "639fcdfc-c4ff-457c-a17d-e54ef617197c",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "3f14bd3ed995fedeff81f5b7e28f63f1f35c6711",
+    "message": "Update full-wiki example with improved generation",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T13:14:04.000Z",
+    "diffSummary": {
+      "filesAdded": 43,
+      "filesModified": 26,
+      "filesDeleted": 17,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/full-wiki/REVIEW.md",
+        "examples/full-wiki/SUMMARY.md",
+        "examples/full-wiki/architecture/core-processing-pipeline-architecture.md",
+        "examples/full-wiki/architecture/dependencies.md",
+        "examples/full-wiki/architecture/meta-agent-wiki-analysis-architecture.md",
+        "examples/full-wiki/architecture/multi-agent-analysis-architecture.md",
+        "examples/full-wiki/architecture/multi-agent-processing-architecture.md",
+        "examples/full-wiki/architecture/multi-agent-system.md",
+        "examples/full-wiki/architecture/research-agent-and-mcp-integration.md",
+        "examples/full-wiki/architecture/service-layer.md",
+        "examples/full-wiki/architecture/web-interface-and-e2e-testing-architecture.md",
+        "examples/full-wiki/architecture/wiki-export-and-distribution-strategy.md",
+        "examples/full-wiki/commits/15782f7c.md",
+        "examples/full-wiki/commits/296d345b.md",
+        "examples/full-wiki/commits/2de75bb0.md",
+        "examples/full-wiki/commits/32b7cb2f.md",
+        "examples/full-wiki/commits/4d2e0c45.md",
+        "examples/full-wiki/commits/4d5def60.md",
+        "examples/full-wiki/commits/4ec0c546.md",
+        "examples/full-wiki/commits/60a1d836.md",
+        "examples/full-wiki/commits/82193f9f.md",
+        "examples/full-wiki/commits/82525543.md",
+        "examples/full-wiki/commits/84389967.md",
+        "examples/full-wiki/commits/a99a4013.md",
+        "examples/full-wiki/commits/adc01766.md",
+        "examples/full-wiki/commits/addfc9e6.md",
+        "examples/full-wiki/commits/af17f139.md",
+        "examples/full-wiki/commits/b49c7432.md",
+        "examples/full-wiki/commits/b908ecb1.md",
+        "examples/full-wiki/commits/c69224ba.md",
+        "examples/full-wiki/commits/ca53f7ea.md",
+        "examples/full-wiki/commits/cd3ba217.md",
+        "examples/full-wiki/commits/fd824f7d.md",
+        "examples/full-wiki/components/agents.md",
+        "examples/full-wiki/components/code-change-agent.md",
+        "examples/full-wiki/components/orchestrator.md",
+        "examples/full-wiki/conventions/coding-standards.md",
+        "examples/full-wiki/conventions/wiki-paths.md",
+        "examples/full-wiki/decisions/anthropic-claude-llm-integration-decision.md",
+        "examples/full-wiki/decisions/anthropic-claude-llm-integration.md",
+        "examples/full-wiki/decisions/cqrs-architecture-decision.md",
+        "examples/full-wiki/decisions/cqrs-architecture-pattern-decision.md",
+        "examples/full-wiki/decisions/meta-agent-architecture-link-agent.md",
+        "examples/full-wiki/decisions/multi-agent-processing-architecture.md",
+        "examples/full-wiki/decisions/research-agent-and-mcp-integration.md",
+        "examples/full-wiki/decisions/structure-agent-and-page-naming.md",
+        "examples/full-wiki/dependencies/modelcontextprotocol-sdk.md",
+        "examples/full-wiki/development/llm-integration.md",
+        "examples/full-wiki/development/testing-strategy.md",
+        "examples/full-wiki/guides/cli-usage.md",
+        "examples/full-wiki/guides/multi-agent-documentation-system-example.md",
+        "examples/full-wiki/guides/wiki-iteration-quality-comparison.md",
+        "examples/full-wiki/guides/wiki-iteration-quality-examples.md",
+        "examples/full-wiki/history/agent-implementation-and-testing-milestone.md",
+        "examples/full-wiki/history/multi-agent-processing-examples.md",
+        "examples/full-wiki/history/project-progress-and-architectural-decisions.md",
+        "examples/full-wiki/index.md",
+        "examples/full-wiki/patterns/anti-patterns.md",
+        "examples/full-wiki/patterns/batch-processing.md",
+        "examples/full-wiki/patterns/command-pattern.md",
+        "examples/full-wiki/patterns/dependency-injection.md",
+        "examples/full-wiki/patterns/export-adapter.md",
+        "examples/full-wiki/patterns/factory-pattern.md",
+        "examples/full-wiki/patterns/fluent-interface.md",
+        "examples/full-wiki/patterns/multi-agent-system.md",
+        "examples/full-wiki/patterns/overview.md",
+        "examples/full-wiki/patterns/registry-pattern.md",
+        "examples/full-wiki/patterns/repository-pattern.md",
+        "examples/full-wiki/patterns/structured-output-parsing.md",
+        "examples/full-wiki/philosophy/documentation-generation-philosophy.md",
+        "examples/full-wiki/planning/codewiki-project-plan-and-architecture.md",
+        "examples/full-wiki/planning/project-development-status-and-architecture.md",
+        "examples/full-wiki/planning/project-status-and-browser-testing-decisions.md",
+        "examples/full-wiki/security/audit-15782f7c.md",
+        "examples/full-wiki/security/audit-32b7cb2f.md",
+        "examples/full-wiki/security/audit-4d2e0c45.md",
+        "examples/full-wiki/security/audit-60a1d836.md",
+        "examples/full-wiki/security/audit-82525543.md",
+        "examples/full-wiki/security/audit-84389967.md",
+        "examples/full-wiki/security/audit-addfc9e6.md",
+        "examples/full-wiki/security/audit-af17f139.md",
+        "examples/full-wiki/security/audit-b908ecb1.md",
+        "examples/full-wiki/security/audit-c69224ba.md",
+        "examples/full-wiki/security/audit-fd824f7d.md",
+        "examples/full-wiki/security/overview.md",
+        "examples/full-wiki/undefined/meta-agent-architecture-pattern.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.388Z"
+  },
+  {
+    "id": "c4af341b-ce10-4abd-9108-422e5b7a2930",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "32b7cb2f4b05e2bc350c284e8be2bb23895bcd0a",
+    "message": "Add Overview Agent for category synthesis",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T12:18:58.000Z",
+    "diffSummary": {
+      "filesAdded": 2,
+      "filesModified": 2,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/agents/synthesis/index.ts",
+        "src/agents/synthesis/overview-agent.ts",
+        "src/executor/executor.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.412Z"
+  },
+  {
+    "id": "f66abd08-c719-4d80-88d9-60a919b5f659",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "b49c7432f6392c048e9a70ffabd2d0000bcd2830",
+    "message": "Improve wiki export and agent prompts for better content quality",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T12:15:44.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 4,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "scripts/export-wiki.ts",
+        "src/agents/analysis/code-change-agent.ts",
+        "src/agents/analysis/narrative-agent.ts",
+        "src/domain/wiki-page.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.436Z"
+  },
+  {
+    "id": "ebb0a21b-f6f1-495b-b368-4b6e04fa352d",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "82193f9f7b498e2cc88343292d554153c757775f",
+    "message": "Add full wiki example with all 9 agents",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T11:43:24.000Z",
+    "diffSummary": {
+      "filesAdded": 43,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/full-wiki/SUMMARY.md",
+        "examples/full-wiki/architecture/core-processing-pipeline-architecture.md",
+        "examples/full-wiki/architecture/dependencies.md",
+        "examples/full-wiki/architecture/multi-agent-analysis-architecture.md",
+        "examples/full-wiki/architecture/web-interface-and-e2e-testing-architecture.md",
+        "examples/full-wiki/architecture/wiki-export-and-distribution-strategy.md",
+        "examples/full-wiki/commits/15782f7c.md",
+        "examples/full-wiki/commits/296d345b.md",
+        "examples/full-wiki/commits/2de75bb0.md",
+        "examples/full-wiki/commits/4d2e0c45.md",
+        "examples/full-wiki/commits/4d5def60.md",
+        "examples/full-wiki/commits/4ec0c546.md",
+        "examples/full-wiki/commits/60a1d836.md",
+        "examples/full-wiki/commits/82525543.md",
+        "examples/full-wiki/commits/84389967.md",
+        "examples/full-wiki/commits/a99a4013.md",
+        "examples/full-wiki/commits/adc01766.md",
+        "examples/full-wiki/commits/af17f139.md",
+        "examples/full-wiki/commits/b908ecb1.md",
+        "examples/full-wiki/commits/c69224ba.md",
+        "examples/full-wiki/commits/cd3ba217.md",
+        "examples/full-wiki/commits/fd824f7d.md",
+        "examples/full-wiki/conventions/coding-standards.md",
+        "examples/full-wiki/decisions/anthropic-claude-llm-integration-decision.md",
+        "examples/full-wiki/decisions/cqrs-architecture-decision.md",
+        "examples/full-wiki/decisions/meta-agent-architecture-link-agent.md",
+        "examples/full-wiki/decisions/multi-agent-processing-architecture.md",
+        "examples/full-wiki/decisions/research-agent-and-mcp-integration.md",
+        "examples/full-wiki/decisions/structure-agent-and-page-naming.md",
+        "examples/full-wiki/guides/wiki-iteration-quality-examples.md",
+        "examples/full-wiki/history/multi-agent-processing-examples.md",
+        "examples/full-wiki/history/project-progress-and-architectural-decisions.md",
+        "examples/full-wiki/index.md",
+        "examples/full-wiki/patterns/anti-patterns.md",
+        "examples/full-wiki/planning/codewiki-project-plan-and-architecture.md",
+        "examples/full-wiki/planning/project-status-and-browser-testing-decisions.md",
+        "examples/full-wiki/security/audit-15782f7c.md",
+        "examples/full-wiki/security/audit-60a1d836.md",
+        "examples/full-wiki/security/audit-84389967.md",
+        "examples/full-wiki/security/audit-af17f139.md",
+        "examples/full-wiki/security/audit-c69224ba.md",
+        "examples/full-wiki/security/audit-fd824f7d.md",
+        "examples/full-wiki/security/overview.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.459Z"
+  },
+  {
+    "id": "b4fa9109-9cd4-46a1-bf6f-a756e5f49aab",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "ca53f7eaf87dc836914eb445bb5869c4978f2599",
+    "message": "Add wiki-output to gitignore",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T11:07:29.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        ".gitignore"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.482Z"
+  },
+  {
+    "id": "2e731d2d-10c2-43f2-a55d-8be939266df9",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "addfc9e6ba26bc56753b30cadb7949e2afa582d8",
+    "message": "Add Quality and Consistency meta-agents for wiki analysis",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T11:06:26.000Z",
+    "diffSummary": {
+      "filesAdded": 4,
+      "filesModified": 5,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/meta/consistency-agent.ts",
+        "src/agents/meta/index.ts",
+        "src/agents/meta/quality-agent.ts",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/cli.ts",
+        "src/executor/executor.ts",
+        "src/repositories/file-based/file-agent-run-repository.ts",
+        "tests/unit/consistency-agent.test.ts",
+        "tests/unit/quality-agent.test.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.505Z"
+  },
+  {
+    "id": "fb9d7172-9c6c-480b-9e92-3c7786e43d2a",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "82525543ff9587140a9ad12be99f55a1b41b69f2",
+    "message": "Add Structure Agent and improve wiki page naming",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T09:14:27.000Z",
+    "diffSummary": {
+      "filesAdded": 3,
+      "filesModified": 4,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "scripts/generate-and-review.ts",
+        "src/agents/analysis/narrative-agent.ts",
+        "src/agents/meta/index.ts",
+        "src/agents/meta/structure-agent.ts",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/executor/executor.ts",
+        "tests/unit/structure-agent.test.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.526Z"
+  },
+  {
+    "id": "08fd91e6-d66d-4ce7-8924-32ed3b1ee8cd",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "fd824f7d59f47b994a77221ff125706c8eaab503",
+    "message": "Add markdown export script for wiki pages",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T08:54:30.000Z",
+    "diffSummary": {
+      "filesAdded": 34,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/real-llm/markdown/architecture/4ec0c546-this-commit-introduces-a-system-of-specialized-ana.md",
+        "examples/real-llm/markdown/architecture/a99a4013-this-commit-adds-meta-documentation-comparing-wiki.md",
+        "examples/real-llm/markdown/architecture/c69224ba-this-commit-introduces-the-core-processing-pipelin.md",
+        "examples/real-llm/markdown/architecture/dependencies.md",
+        "examples/real-llm/markdown/commits/15782f7c.md",
+        "examples/real-llm/markdown/commits/296d345b.md",
+        "examples/real-llm/markdown/commits/2de75bb0.md",
+        "examples/real-llm/markdown/commits/4d5def60.md",
+        "examples/real-llm/markdown/commits/4ec0c546.md",
+        "examples/real-llm/markdown/commits/60a1d836.md",
+        "examples/real-llm/markdown/commits/84389967.md",
+        "examples/real-llm/markdown/commits/a99a4013.md",
+        "examples/real-llm/markdown/commits/adc01766.md",
+        "examples/real-llm/markdown/commits/af17f139.md",
+        "examples/real-llm/markdown/commits/b908ecb1.md",
+        "examples/real-llm/markdown/commits/c69224ba.md",
+        "examples/real-llm/markdown/conventions/coding-standards.md",
+        "examples/real-llm/markdown/decisions/15782f7c-this-commit-introduces-a-significant-architectural.md",
+        "examples/real-llm/markdown/decisions/296d345b-this-commit-documents-a-significant-architectural.md",
+        "examples/real-llm/markdown/decisions/60a1d836-this-commit-represents-a-significant-architectural.md",
+        "examples/real-llm/markdown/decisions/84389967-this-commit-introduces-a-significant-architectural.md",
+        "examples/real-llm/markdown/decisions/af17f139-this-commit-establishes-the-foundational-architect.md",
+        "examples/real-llm/markdown/history/adc01766-comprehensive-progress-documentation-update-captur.md",
+        "examples/real-llm/markdown/index.md",
+        "examples/real-llm/markdown/patterns/anti-patterns.md",
+        "examples/real-llm/markdown/planning/4d5def60-this-commit-introduces-comprehensive-meta-document.md",
+        "examples/real-llm/markdown/planning/b908ecb1-this-commit-adds-a-comprehensive-project-planning.md",
+        "examples/real-llm/markdown/security/audit-15782f7c.md",
+        "examples/real-llm/markdown/security/audit-60a1d836.md",
+        "examples/real-llm/markdown/security/audit-84389967.md",
+        "examples/real-llm/markdown/security/audit-af17f139.md",
+        "examples/real-llm/markdown/security/audit-c69224ba.md",
+        "examples/real-llm/markdown/security/overview.md",
+        "scripts/export-wiki.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.549Z"
+  },
+  {
+    "id": "b5d3d541-a9ff-43a8-bb58-0c9341438a8b",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "4d2e0c45078eba61baaed35ac0a8c86472de1c29",
+    "message": "Add Link Agent meta-agent for wiki cross-references",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-26T08:40:42.000Z",
+    "diffSummary": {
+      "filesAdded": 4,
+      "filesModified": 5,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/link-agent-test/results.json",
+        "package-lock.json",
+        "package.json",
+        "src/agents/index.ts",
+        "src/agents/meta/index.ts",
+        "src/agents/meta/link-agent.ts",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/executor/executor.ts",
+        "tests/unit/link-agent.test.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.570Z"
+  },
+  {
+    "id": "84b05172-6b63-47e9-9f9b-95fe68b74a62",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "cd3ba217a1da9bcb9d74a1c79819bf31555b7358",
+    "message": "Add real LLM examples and fix work queue date handling",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T22:32:06.000Z",
+    "diffSummary": {
+      "filesAdded": 3,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/real-llm/5-iterations.json",
+        "examples/real-llm/SUMMARY.md",
+        "examples/real-llm/full-processing.json",
+        "src/repositories/file-based/file-work-queue-repository.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.591Z"
+  },
+  {
+    "id": "395cb039-b90d-4ad2-9905-3640a493d561",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "296d345be67c674f9784914ac65b726cd0c1712d",
+    "message": "Enable multi-agent processing in executor and orchestrator",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T21:55:34.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 4,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "PROGRESS.md",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/executor/executor.ts",
+        "src/repositories/file-based/file-commit-repository.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.611Z"
+  },
+  {
+    "id": "ba0c56a7-954f-43be-80d8-4444e18b9fba",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "a99a401366534bbafb9d20d9fb722523feebe507",
+    "message": "Add wiki iteration comparison examples",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T20:22:30.000Z",
+    "diffSummary": {
+      "filesAdded": 5,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "examples/wiki-iterations/1-iteration/wiki-pages.json",
+        "examples/wiki-iterations/10-iterations/wiki-pages.json",
+        "examples/wiki-iterations/2-iterations/wiki-pages.json",
+        "examples/wiki-iterations/5-iterations/wiki-pages.json",
+        "examples/wiki-iterations/COMPARISON.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.631Z"
+  },
+  {
+    "id": "d3615a5a-19fe-4e67-9d4a-fb0d58412a11",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "adc01766a9f6b9e6c1618b04aa21fe0b4223255d",
+    "message": "Update progress documentation with completed work",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T20:16:00.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "PROGRESS.md"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.650Z"
+  },
+  {
+    "id": "2307479c-60c0-4dce-ae1c-7cfcd5d295ba",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "2de75bb05e52bdea77cfc9f06f3303290153344e",
+    "message": "Fix all TypeScript errors for strict type checking",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T20:14:55.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 8,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/cli.ts",
+        "src/commands/types.ts",
+        "src/domain/repo.ts",
+        "src/executor/executor.ts",
+        "src/repositories/file-based/file-store.ts",
+        "src/services/git/git-service.ts",
+        "src/services/llm/anthropic-llm-service.ts",
+        "src/web/server.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.670Z"
+  },
+  {
+    "id": "c5747d9e-d99d-463e-ac0b-29ebd090eeb3",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "4ec0c5460502ceb808354d1363f7e8496f33323e",
+    "message": "Add analysis agents: Narrative, Security, Pattern, Dependency",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T20:10:04.000Z",
+    "diffSummary": {
+      "filesAdded": 4,
+      "filesModified": 1,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "src/agents/analysis/dependency-agent.ts",
+        "src/agents/analysis/index.ts",
+        "src/agents/analysis/narrative-agent.ts",
+        "src/agents/analysis/pattern-agent.ts",
+        "src/agents/analysis/security-agent.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.690Z"
+  },
+  {
+    "id": "e2f37df1-9ba1-4255-9a1b-950f9502e78e",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "4d5def6044fa795f5cd5205b78dc288bf73c3afc",
+    "message": "Fix Playwright browser stability and test assertions",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T20:05:22.000Z",
+    "diffSummary": {
+      "filesAdded": 1,
+      "filesModified": 3,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "PROGRESS.md",
+        "playwright.config.ts",
+        "tests/e2e/query.spec.ts",
+        "tests/e2e/wiki.spec.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.711Z"
+  },
+  {
+    "id": "d5c1efb4-d4ed-4298-8743-45a5d1361639",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "60a1d8368046bd529a9398ebe0f6497dd39d5618",
+    "message": "Add web interface and E2E tests",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T19:54:34.000Z",
+    "diffSummary": {
+      "filesAdded": 11,
+      "filesModified": 2,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "package.json",
+        "playwright.config.ts",
+        "src/repositories/file-based/file-commit-repository.ts",
+        "src/web/index.ts",
+        "src/web/public/app.js",
+        "src/web/public/index.html",
+        "src/web/public/styles.css",
+        "src/web/server.ts",
+        "tests/e2e/api.spec.ts",
+        "tests/e2e/query.spec.ts",
+        "tests/e2e/repositories.spec.ts",
+        "tests/e2e/smoke.spec.ts",
+        "tests/e2e/wiki.spec.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.731Z"
+  },
+  {
+    "id": "d09dddbe-371a-4c39-b213-9721bca44066",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "84389967e435d61e9e39d9d51b732370a30098e4",
+    "message": "Add Research Agent and MCP server for wiki querying",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T19:23:07.000Z",
+    "diffSummary": {
+      "filesAdded": 4,
+      "filesModified": 4,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "package-lock.json",
+        "package.json",
+        "src/agents/index.ts",
+        "src/agents/research/index.ts",
+        "src/agents/research/research-agent.ts",
+        "src/cli.ts",
+        "src/mcp/index.ts",
+        "src/mcp/server.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.752Z"
+  },
+  {
+    "id": "3a9b1872-02a6-402e-87fd-197ad140ab03",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "15782f7c6bbf978ee9d070e879a73b0801b03472",
+    "message": "Add Anthropic Claude integration for real LLM analysis",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T19:12:57.000Z",
+    "diffSummary": {
+      "filesAdded": 2,
+      "filesModified": 5,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "package-lock.json",
+        "package.json",
+        "src/cli.ts",
+        "src/services/git/git-service.ts",
+        "src/services/llm/anthropic-llm-service.ts",
+        "src/services/llm/index.ts",
+        "src/services/llm/llm-service.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.770Z"
+  },
+  {
+    "id": "798c7872-50dd-460e-bd7c-f59ac3d7d285",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "c69224baf050cd8bb45211b4d17cb71653b28d72",
+    "message": "Add core processing pipeline with CLI",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T19:03:06.000Z",
+    "diffSummary": {
+      "filesAdded": 15,
+      "filesModified": 2,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        "package.json",
+        "src/agents/analysis/code-change-agent.ts",
+        "src/agents/analysis/index.ts",
+        "src/agents/base-agent.ts",
+        "src/agents/index.ts",
+        "src/agents/orchestrator/index.ts",
+        "src/agents/orchestrator/orchestrator.ts",
+        "src/cli.ts",
+        "src/executor/executor.ts",
+        "src/executor/index.ts",
+        "src/index.ts",
+        "src/services/git/git-service.ts",
+        "src/services/git/index.ts",
+        "src/services/index.ts",
+        "src/services/llm/index.ts",
+        "src/services/llm/llm-service.ts",
+        "src/services/llm/mock-llm-service.ts"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.789Z"
+  },
+  {
+    "id": "dab5d6d4-e4c5-43f0-92c2-da507d689e49",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "af17f139216b14a9963812157b3923ef5bde7d66",
+    "message": "Set up initial project structure with CQRS architecture",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T18:28:43.000Z",
+    "diffSummary": {
+      "filesAdded": 39,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": [
+        ".gitignore",
+        "package.json",
+        "src/commands/index.ts",
+        "src/commands/start-processing-repo.ts",
+        "src/commands/types.ts",
+        "src/commands/update-wiki-page.ts",
+        "src/domain/agent-run.ts",
+        "src/domain/commit.ts",
+        "src/domain/conflict.ts",
+        "src/domain/index.ts",
+        "src/domain/learning.ts",
+        "src/domain/repo.ts",
+        "src/domain/wiki-page.ts",
+        "src/domain/work-item.ts",
+        "src/index.ts",
+        "src/queries/get-repo-status.ts",
+        "src/queries/get-wiki-page.ts",
+        "src/queries/index.ts",
+        "src/queries/search-wiki.ts",
+        "src/queries/types.ts",
+        "src/repositories/file-based/file-agent-run-repository.ts",
+        "src/repositories/file-based/file-commit-repository.ts",
+        "src/repositories/file-based/file-conflict-repository.ts",
+        "src/repositories/file-based/file-learning-repository.ts",
+        "src/repositories/file-based/file-repo-repository.ts",
+        "src/repositories/file-based/file-store.ts",
+        "src/repositories/file-based/file-wiki-page-repository.ts",
+        "src/repositories/file-based/file-work-queue-repository.ts",
+        "src/repositories/file-based/index.ts",
+        "src/repositories/index.ts",
+        "src/repositories/interfaces/agent-run-repository.ts",
+        "src/repositories/interfaces/commit-repository.ts",
+        "src/repositories/interfaces/conflict-repository.ts",
+        "src/repositories/interfaces/index.ts",
+        "src/repositories/interfaces/learning-repository.ts",
+        "src/repositories/interfaces/repo-repository.ts",
+        "src/repositories/interfaces/wiki-page-repository.ts",
+        "src/repositories/interfaces/work-queue-repository.ts",
+        "tsconfig.json"
+      ]
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.807Z"
+  },
+  {
+    "id": "b1a6dec6-65fa-4803-a9d1-60655accc66c",
+    "repoId": "279890f2-55e8-47f1-9a81-a1406e5f8c20",
+    "sha": "b908ecb120818e12f51e066a6a8619fc00adbe45",
+    "message": "Add project plan document",
+    "authorName": "Claude",
+    "authorEmail": "noreply@anthropic.com",
+    "committedAt": "2025-11-25T18:20:21.000Z",
+    "diffSummary": {
+      "filesAdded": 0,
+      "filesModified": 0,
+      "filesDeleted": 0,
+      "linesAdded": 0,
+      "linesDeleted": 0,
+      "affectedFiles": []
+    },
+    "processedBy": [],
+    "createdAt": "2025-11-27T13:51:04.827Z"
+  }
+]
