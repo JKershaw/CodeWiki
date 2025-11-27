@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { readFileTool, searchFilesTool, listDirectoryTool } from './codebase-tools.js';
-import type { ToolContext } from './tools.js';
-import { clearIgnoreCache } from '../cwignore.js';
+import { readFileTool, searchFilesTool, listDirectoryTool } from '../../src/services/llm/codebase-tools.js';
+import type { ToolContext } from '../../src/services/llm/tools.js';
+import { clearIgnoreCache } from '../../src/services/cwignore.js';
 
 describe('codebase-tools', () => {
   let testDir: string;

@@ -7,7 +7,7 @@ import {
   loadIgnorePatterns,
   clearIgnoreCache,
   DEFAULT_IGNORE_PATTERNS,
-} from './cwignore.js';
+} from '../../src/services/cwignore.js';
 
 describe('cwignore', () => {
   describe('parseIgnorePatterns', () => {
