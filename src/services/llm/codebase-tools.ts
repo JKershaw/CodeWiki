@@ -5,7 +5,9 @@
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, resolve, relative } from 'path';
 import fg from 'fast-glob';
+import { minimatch } from 'minimatch';
 import type { ToolDefinition, ToolContext } from './tools.js';
+import { loadIgnorePatterns } from '../cwignore.js';
 
 const DEFAULT_MAX_FILE_SIZE = 100_000; // 100KB
 
@@ -80,10 +82,11 @@ export const searchFilesTool: ToolDefinition = {
   execute: async (input, context) => {
     const pattern = input['pattern'] as string;
     try {
+      const ignorePatterns = await loadIgnorePatterns(context.repoPath);
       const files = await fg(pattern, {
         cwd: context.repoPath,
         onlyFiles: true,
-        ignore: ['node_modules/**', '.git/**'],
+        ignore: ignorePatterns,
       });
 
       if (files.length === 0) {
@@ -101,8 +104,23 @@ export const searchFilesTool: ToolDefinition = {
 };
 
 /**
- * Tool to list directory contents.
+ * Check if a path should be ignored based on ignore patterns.
  */
+function isIgnored(entryPath: string, ignorePatterns: string[]): boolean {
+  for (const pattern of ignorePatterns) {
+    // Handle directory patterns (ending with /**)
+    const dirPattern = pattern.endsWith('/**') ? pattern.slice(0, -3) : null;
+    if (dirPattern && (entryPath === dirPattern || entryPath.startsWith(dirPattern + '/'))) {
+      return true;
+    }
+    // Use minimatch for glob pattern matching
+    if (minimatch(entryPath, pattern, { dot: true })) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export const listDirectoryTool: ToolDefinition = {
   name: 'list_directory',
   description: 'List contents of a directory to understand project structure.',
@@ -121,8 +139,15 @@ export const listDirectoryTool: ToolDefinition = {
     try {
       const fullPath = validatePath(path, context.repoPath);
       const entries = await readdir(fullPath, { withFileTypes: true });
+      const ignorePatterns = await loadIgnorePatterns(context.repoPath);
 
-      const formatted = entries.map(entry => {
+      // Filter out ignored entries
+      const filteredEntries = entries.filter(entry => {
+        const entryPath = path === '.' ? entry.name : join(path, entry.name);
+        return !isIgnored(entryPath, ignorePatterns);
+      });
+
+      const formatted = filteredEntries.map(entry => {
         const suffix = entry.isDirectory() ? '/' : '';
         return entry.name + suffix;
       });

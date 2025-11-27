@@ -16,8 +16,7 @@
     "cli": "tsx src/cli.ts",
     "mcp": "tsx src/mcp/server.ts",
     "web": "tsx src/web/server.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
     "test:e2e": "playwright test",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"
@@ -27,6 +26,8 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "dotenv": "^17.2.3",
     "express": "^4.18.2",
+    "fast-glob": "^3.3.2",
+    "minimatch": "^10.0.1",
     "mongodb": "^6.3.0",
     "simple-git": "^3.22.0",
     "uuid": "^9.0.1",
@@ -41,7 +42,6 @@
     "@typescript-eslint/parser": "^6.13.2",
     "eslint": "^8.55.0",
     "tsx": "^4.6.2",
-    "typescript": "^5.3.2",
-    "vitest": "^1.0.4"
+    "typescript": "^5.3.2"
   }
 }
