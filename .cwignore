@@ -1,0 +1,5 @@
+# CodeWiki Ignore File
+# Patterns listed here will be ignored when analyzing this repository
+
+# Example wiki outputs (generated content, not source code)
+examples/

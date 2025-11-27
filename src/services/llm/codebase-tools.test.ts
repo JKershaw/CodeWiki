@@ -4,6 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { readFileTool, searchFilesTool, listDirectoryTool } from './codebase-tools.js';
 import type { ToolContext } from './tools.js';
+import { clearIgnoreCache } from '../cwignore.js';
 
 describe('codebase-tools', () => {
   let testDir: string;
@@ -24,6 +25,7 @@ describe('codebase-tools', () => {
 
   afterEach(async () => {
     await rm(testDir, { recursive: true });
+    clearIgnoreCache();
   });
 
   describe('readFileTool', () => {
@@ -93,6 +95,80 @@ describe('codebase-tools', () => {
     it('returns error for non-existent directory', async () => {
       const result = await listDirectoryTool.execute({ path: 'nonexistent' }, context);
       expect(result).toContain('Error');
+    });
+  });
+
+  describe('.cwignore integration', () => {
+    beforeEach(async () => {
+      // Create additional directories for ignore testing
+      await mkdir(join(testDir, 'examples'));
+      await writeFile(join(testDir, 'examples', 'test.md'), '# Example');
+      await mkdir(join(testDir, 'dist'));
+      await writeFile(join(testDir, 'dist', 'bundle.js'), 'bundled code');
+      clearIgnoreCache();
+    });
+
+    it('searchFilesTool ignores patterns from .cwignore', async () => {
+      // Before adding .cwignore, examples should be found
+      const beforeResult = await searchFilesTool.execute({ pattern: '**/*.md' }, context);
+      expect(beforeResult).toContain('examples/test.md');
+      expect(beforeResult).toContain('README.md');
+
+      // Add .cwignore
+      clearIgnoreCache();
+      await writeFile(join(testDir, '.cwignore'), 'examples/');
+
+      // After adding .cwignore, examples should be ignored
+      const afterResult = await searchFilesTool.execute({ pattern: '**/*.md' }, context);
+      expect(afterResult).not.toContain('examples/test.md');
+      expect(afterResult).toContain('README.md');
+    });
+
+    it('searchFilesTool applies multiple ignore patterns', async () => {
+      await writeFile(join(testDir, '.cwignore'), `examples/
+dist/
+*.log`);
+
+      // Create a log file
+      await writeFile(join(testDir, 'debug.log'), 'log content');
+
+      const result = await searchFilesTool.execute({ pattern: '**/*' }, context);
+      expect(result).not.toContain('examples/');
+      expect(result).not.toContain('dist/');
+      expect(result).not.toContain('debug.log');
+      expect(result).toContain('README.md');
+      expect(result).toContain('src/index.ts');
+    });
+
+    it('listDirectoryTool filters ignored directories', async () => {
+      await writeFile(join(testDir, '.cwignore'), 'examples/');
+
+      const result = await listDirectoryTool.execute({ path: '.' }, context);
+      expect(result).not.toContain('examples/');
+      expect(result).toContain('src/');
+      expect(result).toContain('README.md');
+    });
+
+    it('listDirectoryTool filters ignored files', async () => {
+      await writeFile(join(testDir, 'debug.log'), 'log content');
+      await writeFile(join(testDir, '.cwignore'), '*.log');
+
+      const result = await listDirectoryTool.execute({ path: '.' }, context);
+      expect(result).not.toContain('debug.log');
+      expect(result).toContain('README.md');
+    });
+
+    it('always ignores node_modules regardless of .cwignore', async () => {
+      await mkdir(join(testDir, 'node_modules'));
+      await writeFile(join(testDir, 'node_modules', 'package.json'), '{}');
+
+      // No .cwignore file
+      const searchResult = await searchFilesTool.execute({ pattern: '**/*.json' }, context);
+      expect(searchResult).toContain('package.json');
+      expect(searchResult).not.toContain('node_modules');
+
+      const listResult = await listDirectoryTool.execute({ path: '.' }, context);
+      expect(listResult).not.toContain('node_modules');
     });
   });
 });
