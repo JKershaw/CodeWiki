@@ -1,0 +1,167 @@
+[
+  {
+    "id": "bbfdd1d6-571b-4ca3-ac54-0ce85fe3081c",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "commits/a286af4b",
+    "title": "Technical Debt Analysis Agent",
+    "content": "# Technical Debt Analysis Agent\n\nThe Technical Debt Agent is a specialized analysis component that evaluates code quality issues and technical debt in Git commits. It operates as part of a multi-agent system where different agents examine commits from various perspectives (security, patterns, dependencies, etc.). The Technical Debt Agent specifically focuses on identifying complexity issues, code smells, and maintainability concerns that accumulate over time.\n\nThe agent uses an LLM-powered analysis approach to detect eight categories of technical debt: complexity issues (long functions, deep nesting), code duplication (DRY violations), technical shortcuts (TODO/FIXME comments, magic numbers), maintainability concerns (tight coupling, large parameter lists), code smells (god classes, feature envy), missing abstractions, test coverage gaps, and documentation debt. When analyzing a commit, it evaluates whether debt is being added, removed, or if the commit is debt-neutral, providing actionable recommendations for improvement.\n\nThe agent integrates into the system's orchestrator-executor pattern, where the orchestrator schedules work items and the executor runs agents against commits. Each commit can be processed by multiple analysis agents (code-change, narrative, security, technical-debt, pattern, dependency) to build comprehensive documentation from different viewpoints. The Technical Debt Agent generates structured wiki pages for significant findings, including detailed reports for high/critical debt levels and a tracking overview page that maintains a history of debt accumulation and resolution across the codebase.\n\nThe design follows a consistent pattern across analysis agents: they accept commit data and diffs, use structured prompts to guide LLM analysis, parse responses into findings with confidence scores, and generate wiki page updates conditionally based on severity. The Technical Debt Agent only creates wiki content when notable debt is detected (level of \"low\" or higher, or multiple findings), avoiding noise from clean commits. It categorizes debt into five levels (critical, high, medium, low, none) and tracks both debt added and debt removed, making refactoring efforts visible in the documentation.\n\n## Key Findings\n\n- **Agent Architecture** (high): Implements the Agent interface with runOnCommit method, following the established pattern for analysis agents that process individual commits with LLM-powered analysis\n- **Multi-Agent System** (high): Integrated into orchestrator as part of ANALYSIS_AGENTS array, ensuring all commits are analyzed for technical debt alongside other aspects like security and patterns\n- **LLM Integration** (medium): Uses structured prompts with specific debt categories and severity levels, employing low temperature (0.2) for consistent code quality assessment\n- **Wiki Generation** (medium): Creates conditional documentation with report pages for significant debt (high/critical levels or 2+ findings) and an overview page for tracking debt trends\n- **Executor Integration** (medium): Registered in executor alongside other analysis agents, enabling automatic processing of commits through the work queue system\n- **Debt Tracking** (medium): Tracks both debt accumulation and reduction, recognizing refactoring efforts that improve code quality with structured debtAdded and debtRemoved sections\n- **Response Parsing** (medium): Implements robust parsing of structured LLM responses with regex-based extraction, handling optional fields and filtering placeholder values like \"None\" and \"N/A\"\n- **Hotspot Detection** (low): Identifies files becoming debt hotspots through repeated issues, helping prioritize refactoring efforts\n\n## Source\n\n- **Commit:** a286af4b\n- **Files:** `src/agents/analysis/index.ts`, `src/agents/analysis/technical-debt-agent.ts`, `src/agents/orchestrator/orchestrator.ts`, `src/executor/executor.ts`, `tests/integration/technical-debt-agent.test.ts`, `tests/unit/technical-debt-agent.test.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:31:55.906Z",
+    "updatedAt": "2025-11-27T12:31:55.906Z"
+  },
+  {
+    "id": "81a5a6ac-272f-4be8-9416-237ed4654744",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "commits/aaf040f3",
+    "title": "Node.js Native Test Runner Migration",
+    "content": "# Node.js Native Test Runner Migration\n\nThe test suite uses Node.js's built-in test runner (available since Node 20.4.0) instead of external testing frameworks like Vitest. This approach eliminates external dependencies for testing while providing modern testing capabilities including describe/it blocks, lifecycle hooks (before/after/beforeEach), and assertion utilities through the native `node:test` and `node:assert` modules.\n\nThe testing strategy employs a \"minimal mocking\" philosophy where only the LLM service is mocked, while all other components use real implementations. Test helpers provide isolated environments with real file-based repositories, real Git operations via simple-git, and a predictable MockLLMService that returns configurable responses. This integration testing approach validates actual system behavior rather than mocked interactions, catching real-world issues like file system operations, Git command execution, and repository state management.\n\nThe test infrastructure creates temporary directories for each test context, setting up complete working environments with Git repositories, wiki data storage, and all production services except the LLM. Tests can create commits, analyze them with agents, and verify that wiki pages are correctly generated and stored. The MockLLMService records all completion calls for assertions while allowing tests to configure specific responses for different prompts, enabling deterministic testing of agent logic without actual API calls.\n\n## Key Findings\n\n- **ARCHITECTURE** (high): Migration from Vitest to Node.js native test runner eliminates external test dependencies\n- **TESTING** (high): Minimal mocking strategy uses real repositories, Git operations, and file system with only LLM mocked\n- **INFRASTRUCTURE** (medium): Test context helpers create isolated temporary environments for integration tests\n- **PATTERN** (medium): MockLLMService provides deterministic LLM responses without API calls while tracking usage\n- **DEPENDENCY** (low): Removed Vitest and related packages (@jest/schemas, @jridgewell/sourcemap-codec, @rollup/*)\n- **CONFIGURATION** (medium): Test script uses Node's --test flag with tsx import for TypeScript support\n\n## Source\n\n- **Commit:** aaf040f3\n- **Files:** `package-lock.json`, `package.json`, `tests/fixtures/index.ts`, `tests/fixtures/mock-context.ts`, `tests/fixtures/mock-llm.ts`, `tests/fixtures/mock-pages.ts`, `tests/helpers/index.ts`, `tests/helpers/mock-llm.ts`, `tests/helpers/test-context.ts`, `tests/integration/agent-workflow.test.ts`, `tests/integration/commit-processing.test.ts`, `tests/integration/wiki-analysis.test.ts`, `tests/unit/codebase-tools.test.ts`, `tests/unit/consistency-agent.test.ts`, `tests/unit/cwignore.test.ts`, `tests/unit/link-agent.test.ts`, `tests/unit/quality-agent.test.ts`, `tests/unit/structure-agent.test.ts`, `vitest.config.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.366Z",
+    "updatedAt": "2025-11-27T12:32:59.366Z"
+  },
+  {
+    "id": "50053776-9fb9-4e34-bde3-e6f79a951d67",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "testing/infrastructure",
+    "title": "Infrastructure",
+    "content": "# Infrastructure\n\nTest infrastructure using Node.js native runner with minimal mocking\n\n---\n*Updated based on commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.368Z",
+    "updatedAt": "2025-11-27T12:32:59.368Z"
+  },
+  {
+    "id": "22375591-1454-49da-8f02-6af344569183",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "testing/integration-patterns",
+    "title": "Integration Patterns",
+    "content": "# Integration Patterns\n\nIntegration testing patterns with real services and temporary repositories\n\n---\n*Updated based on commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.370Z",
+    "updatedAt": "2025-11-27T12:32:59.370Z"
+  },
+  {
+    "id": "773d367f-493c-4eec-9b8e-a7f3ec423e3b",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "development/dependencies",
+    "title": "Dependencies",
+    "content": "# Dependencies\n\nNode.js built-in testing capabilities eliminate need for external test frameworks\n\n---\n*Updated based on commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.372Z",
+    "updatedAt": "2025-11-27T12:32:59.372Z"
+  },
+  {
+    "id": "8a4c8953-1ffa-45c4-ab1d-1e817981de05",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "commits/e2a858ba",
+    "title": "Test Infrastructure and Organization",
+    "content": "# Test Infrastructure and Organization\n\nThe CodeWiki project maintains a comprehensive test infrastructure organized into three distinct layers: unit tests, integration tests, and end-to-end tests. The test suite utilizes a centralized fixtures system that provides reusable mock factories for common testing scenarios, including mock LLM services, agent contexts, wiki pages, and commits. This fixture-based approach ensures consistency across tests and reduces duplication.\n\nThe testing architecture separates pure unit tests (which test isolated functions without mocking) from integration tests (which test component interactions with mocked dependencies). Test files are now organized by test type rather than collocated with source code, following a common convention where `tests/unit/` mirrors the `src/` structure and `tests/integration/` contains workflow and cross-component tests. The fixtures directory (`tests/fixtures/`) serves as a centralized repository for test utilities, exported through a single barrel file for convenient imports.\n\nThe mock infrastructure is particularly sophisticated for LLM testing, providing configurable mock services that can simulate different agent responses without making actual API calls. This includes specialized factory functions like `createCodeChangeMockLLM()`, `createLinkAgentMockLLM()`, and `createQualityAgentMockLLM()` that return pre-configured mocks with realistic agent-specific response patterns. These mocks track usage statistics, maintain request history, and support custom response handlers for testing complex scenarios.\n\n## Key Findings\n\n- **ARCHITECTURE** (high): Three-tier test organization (unit/integration/e2e) with dedicated fixture system providing reusable mocks and factories\n- **TEST_PATTERN** (high): Mock LLM service with configurable response handlers, usage tracking, and specialized factory functions for different agent types\n- **TEST_PATTERN** (medium): Centralized mock factories for AgentContext and WikiPage domain objects with sensible defaults and override support\n- **CODE_ORGANIZATION** (medium): Test files moved from src/ directories to dedicated tests/ hierarchy, separating test code from production code\n- **TEST_PATTERN** (medium): Vitest configuration updated to support the new test directory structure\n\n## Source\n\n- **Commit:** e2a858ba\n- **Files:** `tests/fixtures/index.ts`, `tests/fixtures/mock-context.ts`, `tests/fixtures/mock-llm.ts`, `tests/fixtures/mock-pages.ts`, `tests/integration/agent-workflow.test.ts`, `src/services/llm/codebase-tools.test.ts\ttests/unit/codebase-tools.test.ts`, `src/services/cwignore.test.ts\ttests/unit/cwignore.test.ts`, `vitest.config.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:34:04.974Z",
+    "updatedAt": "2025-11-27T12:34:04.974Z"
+  },
+  {
+    "id": "5afec653-d91e-4deb-b092-d6930fcb0a5d",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "guides/testing",
+    "title": "Testing",
+    "content": "# Testing\n\nComprehensive guide covering test organization, fixture usage patterns, and mock LLM configuration for different testing scenarios\n\n---\n*Updated based on commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:34:04.976Z",
+    "updatedAt": "2025-11-27T12:34:04.976Z"
+  },
+  {
+    "id": "4e283b6d-36cf-4904-9573-a3abb9f14cfd",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "architecture/testing-strategy",
+    "title": "Testing Strategy",
+    "content": "# Testing Strategy\n\nDocumentation of the three-tier testing approach and when to use unit vs integration tests\n\n---\n*Updated based on commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:34:04.978Z",
+    "updatedAt": "2025-11-27T12:34:04.978Z"
+  },
+  {
+    "id": "d673a346-40a9-4952-a1be-6fcb14fb0389",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "development/fixtures-api",
+    "title": "Fixtures Api",
+    "content": "# Fixtures Api\n\nAPI reference for test fixtures including mock factories and their configuration options\n\n---\n*Updated based on commit e2a858ba*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "e2a858ba25bada3d251d146767142fb7f3ad6260"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:34:04.979Z",
+    "updatedAt": "2025-11-27T12:34:04.979Z"
+  },
+  {
+    "id": "a7555d8c-f148-42b1-9cfd-243b5e09b5d8",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "commits/574dabed",
+    "title": "Repository Ignore Pattern System (.cwignore)",
+    "content": "# Repository Ignore Pattern System (.cwignore)\n\nThe CodeWiki system implements a .cwignore file mechanism that allows repositories to specify paths and patterns to exclude from analysis. This feature mirrors the familiar .gitignore syntax, providing developers with fine-grained control over which files and directories the system examines when generating wiki documentation. By default, the system ignores common non-source directories like `node_modules/` and `.git/`, but projects can extend this with custom patterns through a `.cwignore` file at the repository root.\n\nThe ignore system integrates deeply into the codebase exploration tools used by LLM agents. When agents use tools like `search_files` to find code files or `list_directory` to browse project structure, the ignore patterns automatically filter results. This prevents the system from wasting token budget analyzing generated files, build artifacts, or other content that shouldn't influence the documentation. The implementation uses `fast-glob` for efficient pattern matching and `minimatch` for glob evaluation, with a caching layer to avoid repeatedly reading and parsing the ignore file.\n\nThe design follows established conventions from the Git ecosystem while adapting to CodeWiki's specific needs. Negation patterns (lines starting with `!`) are explicitly not supported since the underlying `fast-glob` library's ignore option doesn't handle them. Directory patterns ending with `/` are automatically expanded to `/**` to match all contents recursively. This makes the system intuitive for developers already familiar with `.gitignore` while providing clear boundaries for what's technically feasible.\n\n## Key Findings\n\n- **FEATURE** (high): .cwignore file parser supporting gitignore-style syntax with comments, empty lines, and glob patterns - src/services/cwignore.ts\n- **FEATURE** (high): Integration of ignore patterns into codebase exploration tools (read_file, search_files, list_directory) used by LLM agents - src/services/llm/codebase-tools.ts\n- **IMPLEMENTATION** (medium): Pattern caching mechanism to avoid re-reading .cwignore on every tool invocation - src/services/cwignore.ts\n- **IMPLEMENTATION** (medium): Default ignore patterns (node_modules/**, .git/**) always applied regardless of .cwignore presence - src/services/cwignore.ts\n- **IMPLEMENTATION** (low): Automatic expansion of directory patterns (examples/ becomes examples/**) for glob matching - src/services/cwignore.ts\n- **LIMITATION** (low): Negation patterns (starting with !) are skipped and not supported due to fast-glob limitations - src/services/cwignore.ts\n- **DEPENDENCY** (medium): Added fast-glob@3.3.2 for efficient file pattern matching and minimatch@10.0.1 for glob evaluation - package.json, package-lock.json\n- **TESTING** (medium): Comprehensive unit tests covering pattern parsing, caching, and file system integration - tests/unit/cwignore.test.ts\n- **EXAMPLE** (low): Project's own .cwignore file excludes examples/ directory from analysis - .cwignore\n\n## Source\n\n- **Commit:** 574dabed\n- **Files:** `.cwignore`, `package-lock.json`, `package.json`, `src/services/cwignore.test.ts`, `src/services/cwignore.ts`, `src/services/llm/codebase-tools.test.ts`, `src/services/llm/codebase-tools.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "574dabedfdb2783776fa41663df8152ea35950e6"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:34:45.416Z",
+    "updatedAt": "2025-11-27T12:34:45.416Z"
+  },
+  {
+    "id": "bf777d38-c201-4f5e-a78c-0b37ef482c55",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "commits/85ff400e",
+    "title": "Project Roadmap and Development Status",
+    "content": "# Project Roadmap and Development Status\n\nCodeWiki maintains a structured roadmap that tracks implementation progress against the original vision documented in PLAN.md. The roadmap serves as a living assessment of what has been built versus what was envisioned, providing clear visibility into completed work, remaining gaps, and deferred features.\n\nThe system has achieved strong backend infrastructure with a complete CQRS architecture, file-based repository pattern, two-loop orchestrator/executor model, and a comprehensive multi-agent processing pipeline. Of the 13 planned agents, all core analysis agents (code-change, narrative, security, pattern, dependency) and meta agents (structure, link, quality, consistency) are operational. Three synthesis agents (overview, project-overview, getting-started) generate higher-order documentation. The research agent enables wiki querying, and a CLI provides local processing capabilities.\n\nThe primary gap to a shareable demo is the user-facing layer: the web interface exists as an API-only backend without a frontend, the query interface lacks a UI, and the MCP server endpoint has not been started. The roadmap outlines a three-phase completion strategy focused on web UI, query interface, and MCP integration, deliberately deferring authentication, payments, and multi-tenant infrastructure until costs are better understood. This pragmatic approach enables running CodeWiki either locally or as a single shared instance without complex account management.\n\n## Key Findings\n\n- **DOCUMENTATION** (high): Comprehensive roadmap comparing actual implementation against original architectural vision, showing 80%+ core feature completion, ROADMAP.md\n- **ARCHITECTURE** (high): Implementation status reveals strong backend (CQRS, repository pattern, two-loop model, write queue) but missing user-facing components (web UI, query interface, MCP endpoint), PLAN.md, PROGRESS.md, ROADMAP.md\n- **AGENT_SYSTEM** (medium): Multi-agent pipeline includes 5/6 analysis agents (missing tech-debt), 4/4 meta agents, 3/4 synthesis agents (missing convention), and research agent, with only 3/13 agents upgraded to use agentic tools, ROADMAP.md, AGENTIC_TOOLS_PLAN.md\n- **DEVELOPMENT** (medium): Project uses dogfooding approach (CodeWiki builds its own wiki) and maintains philosophy documents to provide AI coding agents with architectural context, PLAN.md\n- **DEPLOYMENT** (medium): Three-phase roadmap prioritizes UI/query/MCP over authentication/payments, enabling local deployment or single shared instance without account complexity, ROADMAP.md\n- **TECHNICAL_DEBT** (medium): Writer agent evaluated and deferred as unnecessary for current MVP scale, agentic tool use only implemented in 3/13 agents, PROGRESS.md, AGENTIC_TOOLS_PLAN.md\n\n## Source\n\n- **Commit:** 85ff400e\n- **Files:** `ROADMAP.md`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "85ff400ec7f7e9416220683c088bdb7be9dc965e"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:35:28.826Z",
+    "updatedAt": "2025-11-27T12:35:28.826Z"
+  }
+]

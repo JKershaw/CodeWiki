@@ -1,0 +1,103 @@
+[
+  {
+    "id": "e2ef69f9-63a4-45e9-84d6-98af59ebf8e2",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "agentType": "code-change",
+    "targetCommitId": "23621321-82e3-4f28-86bb-03715484495d",
+    "status": "completed",
+    "result": {
+      "summary": "The Technical Debt Agent is a specialized analysis component that evaluates code quality issues and technical debt in Git commits. It operates as part of a multi-agent system where different agents examine commits from various perspectives (security, patterns, dependencies, etc.). The Technical Debt Agent specifically focuses on identifying complexity issues, code smells, and maintainability concerns that accumulate over time.\n\nThe agent uses an LLM-powered analysis approach to detect eight categories of technical debt: complexity issues (long functions, deep nesting), code duplication (DRY violations), technical shortcuts (TODO/FIXME comments, magic numbers), maintainability concerns (tight coupling, large parameter lists), code smells (god classes, feature envy), missing abstractions, test coverage gaps, and documentation debt. When analyzing a commit, it evaluates whether debt is being added, removed, or if the commit is debt-neutral, providing actionable recommendations for improvement.\n\nThe agent integrates into the system's orchestrator-executor pattern, where the orchestrator schedules work items and the executor runs agents against commits. Each commit can be processed by multiple analysis agents (code-change, narrative, security, technical-debt, pattern, dependency) to build comprehensive documentation from different viewpoints. The Technical Debt Agent generates structured wiki pages for significant findings, including detailed reports for high/critical debt levels and a tracking overview page that maintains a history of debt accumulation and resolution across the codebase.\n\nThe design follows a consistent pattern across analysis agents: they accept commit data and diffs, use structured prompts to guide LLM analysis, parse responses into findings with confidence scores, and generate wiki page updates conditionally based on severity. The Technical Debt Agent only creates wiki content when notable debt is detected (level of \"low\" or higher, or multiple findings), avoiding noise from clean commits. It categorizes debt into five levels (critical, high, medium, low, none) and tracks both debt added and debt removed, making refactoring efforts visible in the documentation.",
+      "findings": [
+        {
+          "type": "Agent Architecture",
+          "description": "Implements the Agent interface with runOnCommit method, following the established pattern for analysis agents that process individual commits with LLM-powered analysis",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts",
+            "src/agents/base-agent.ts"
+          ],
+          "importance": "high"
+        },
+        {
+          "type": "Multi-Agent System",
+          "description": "Integrated into orchestrator as part of ANALYSIS_AGENTS array, ensuring all commits are analyzed for technical debt alongside other aspects like security and patterns",
+          "relatedPaths": [
+            "src/agents/orchestrator/orchestrator.ts"
+          ],
+          "importance": "high"
+        },
+        {
+          "type": "LLM Integration",
+          "description": "Uses structured prompts with specific debt categories and severity levels, employing low temperature (0.2) for consistent code quality assessment",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Wiki Generation",
+          "description": "Creates conditional documentation with report pages for significant debt (high/critical levels or 2+ findings) and an overview page for tracking debt trends",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Executor Integration",
+          "description": "Registered in executor alongside other analysis agents, enabling automatic processing of commits through the work queue system",
+          "relatedPaths": [
+            "src/executor/executor.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Debt Tracking",
+          "description": "Tracks both debt accumulation and reduction, recognizing refactoring efforts that improve code quality with structured debtAdded and debtRemoved sections",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Response Parsing",
+          "description": "Implements robust parsing of structured LLM responses with regex-based extraction, handling optional fields and filtering placeholder values like \"None\" and \"N/A\"",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "medium"
+        },
+        {
+          "type": "Hotspot Detection",
+          "description": "Identifies files becoming debt hotspots through repeated issues, helping prioritize refactoring efforts",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts"
+          ],
+          "importance": "low"
+        },
+        {
+          "type": "TOOL_USE",
+          "description": "Read 10 source files for full context",
+          "relatedPaths": [
+            "src/agents/analysis/technical-debt-agent.ts",
+            "src/agents/orchestrator/orchestrator.ts",
+            "src/agents/base-agent.js",
+            "tests/integration/technical-debt-agent.test.ts",
+            "tests/unit/technical-debt-agent.test.ts",
+            "src/agents/base-agent.ts",
+            "src/agents/analysis/security-agent.ts",
+            "src/executor/executor.ts",
+            "src/domain/agent-run.ts",
+            "src/agents/analysis/pattern-agent.ts"
+          ],
+          "importance": "low"
+        }
+      ],
+      "confidence": 0.92
+    },
+    "requestedUpdates": [],
+    "durationMs": 56802,
+    "costUsd": 0.443235,
+    "error": null,
+    "startedAt": "2025-11-27T12:30:59.097Z",
+    "completedAt": "2025-11-27T12:31:55.899Z"
+  }
+]

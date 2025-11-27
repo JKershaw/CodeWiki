@@ -1,0 +1,77 @@
+[
+  {
+    "id": "bbfdd1d6-571b-4ca3-ac54-0ce85fe3081c",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "commits/a286af4b",
+    "title": "Technical Debt Analysis Agent",
+    "content": "# Technical Debt Analysis Agent\n\nThe Technical Debt Agent is a specialized analysis component that evaluates code quality issues and technical debt in Git commits. It operates as part of a multi-agent system where different agents examine commits from various perspectives (security, patterns, dependencies, etc.). The Technical Debt Agent specifically focuses on identifying complexity issues, code smells, and maintainability concerns that accumulate over time.\n\nThe agent uses an LLM-powered analysis approach to detect eight categories of technical debt: complexity issues (long functions, deep nesting), code duplication (DRY violations), technical shortcuts (TODO/FIXME comments, magic numbers), maintainability concerns (tight coupling, large parameter lists), code smells (god classes, feature envy), missing abstractions, test coverage gaps, and documentation debt. When analyzing a commit, it evaluates whether debt is being added, removed, or if the commit is debt-neutral, providing actionable recommendations for improvement.\n\nThe agent integrates into the system's orchestrator-executor pattern, where the orchestrator schedules work items and the executor runs agents against commits. Each commit can be processed by multiple analysis agents (code-change, narrative, security, technical-debt, pattern, dependency) to build comprehensive documentation from different viewpoints. The Technical Debt Agent generates structured wiki pages for significant findings, including detailed reports for high/critical debt levels and a tracking overview page that maintains a history of debt accumulation and resolution across the codebase.\n\nThe design follows a consistent pattern across analysis agents: they accept commit data and diffs, use structured prompts to guide LLM analysis, parse responses into findings with confidence scores, and generate wiki page updates conditionally based on severity. The Technical Debt Agent only creates wiki content when notable debt is detected (level of \"low\" or higher, or multiple findings), avoiding noise from clean commits. It categorizes debt into five levels (critical, high, medium, low, none) and tracks both debt added and debt removed, making refactoring efforts visible in the documentation.\n\n## Key Findings\n\n- **Agent Architecture** (high): Implements the Agent interface with runOnCommit method, following the established pattern for analysis agents that process individual commits with LLM-powered analysis\n- **Multi-Agent System** (high): Integrated into orchestrator as part of ANALYSIS_AGENTS array, ensuring all commits are analyzed for technical debt alongside other aspects like security and patterns\n- **LLM Integration** (medium): Uses structured prompts with specific debt categories and severity levels, employing low temperature (0.2) for consistent code quality assessment\n- **Wiki Generation** (medium): Creates conditional documentation with report pages for significant debt (high/critical levels or 2+ findings) and an overview page for tracking debt trends\n- **Executor Integration** (medium): Registered in executor alongside other analysis agents, enabling automatic processing of commits through the work queue system\n- **Debt Tracking** (medium): Tracks both debt accumulation and reduction, recognizing refactoring efforts that improve code quality with structured debtAdded and debtRemoved sections\n- **Response Parsing** (medium): Implements robust parsing of structured LLM responses with regex-based extraction, handling optional fields and filtering placeholder values like \"None\" and \"N/A\"\n- **Hotspot Detection** (low): Identifies files becoming debt hotspots through repeated issues, helping prioritize refactoring efforts\n\n## Source\n\n- **Commit:** a286af4b\n- **Files:** `src/agents/analysis/index.ts`, `src/agents/analysis/technical-debt-agent.ts`, `src/agents/orchestrator/orchestrator.ts`, `src/executor/executor.ts`, `tests/integration/technical-debt-agent.test.ts`, `tests/unit/technical-debt-agent.test.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "a286af4bb19f1063caf49d16d9fc01aef08ba040"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:31:55.906Z",
+    "updatedAt": "2025-11-27T12:31:55.906Z"
+  },
+  {
+    "id": "81a5a6ac-272f-4be8-9416-237ed4654744",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "commits/aaf040f3",
+    "title": "Node.js Native Test Runner Migration",
+    "content": "# Node.js Native Test Runner Migration\n\nThe test suite uses Node.js's built-in test runner (available since Node 20.4.0) instead of external testing frameworks like Vitest. This approach eliminates external dependencies for testing while providing modern testing capabilities including describe/it blocks, lifecycle hooks (before/after/beforeEach), and assertion utilities through the native `node:test` and `node:assert` modules.\n\nThe testing strategy employs a \"minimal mocking\" philosophy where only the LLM service is mocked, while all other components use real implementations. Test helpers provide isolated environments with real file-based repositories, real Git operations via simple-git, and a predictable MockLLMService that returns configurable responses. This integration testing approach validates actual system behavior rather than mocked interactions, catching real-world issues like file system operations, Git command execution, and repository state management.\n\nThe test infrastructure creates temporary directories for each test context, setting up complete working environments with Git repositories, wiki data storage, and all production services except the LLM. Tests can create commits, analyze them with agents, and verify that wiki pages are correctly generated and stored. The MockLLMService records all completion calls for assertions while allowing tests to configure specific responses for different prompts, enabling deterministic testing of agent logic without actual API calls.\n\n## Key Findings\n\n- **ARCHITECTURE** (high): Migration from Vitest to Node.js native test runner eliminates external test dependencies\n- **TESTING** (high): Minimal mocking strategy uses real repositories, Git operations, and file system with only LLM mocked\n- **INFRASTRUCTURE** (medium): Test context helpers create isolated temporary environments for integration tests\n- **PATTERN** (medium): MockLLMService provides deterministic LLM responses without API calls while tracking usage\n- **DEPENDENCY** (low): Removed Vitest and related packages (@jest/schemas, @jridgewell/sourcemap-codec, @rollup/*)\n- **CONFIGURATION** (medium): Test script uses Node's --test flag with tsx import for TypeScript support\n\n## Source\n\n- **Commit:** aaf040f3\n- **Files:** `package-lock.json`, `package.json`, `tests/fixtures/index.ts`, `tests/fixtures/mock-context.ts`, `tests/fixtures/mock-llm.ts`, `tests/fixtures/mock-pages.ts`, `tests/helpers/index.ts`, `tests/helpers/mock-llm.ts`, `tests/helpers/test-context.ts`, `tests/integration/agent-workflow.test.ts`, `tests/integration/commit-processing.test.ts`, `tests/integration/wiki-analysis.test.ts`, `tests/unit/codebase-tools.test.ts`, `tests/unit/consistency-agent.test.ts`, `tests/unit/cwignore.test.ts`, `tests/unit/link-agent.test.ts`, `tests/unit/quality-agent.test.ts`, `tests/unit/structure-agent.test.ts`, `vitest.config.ts`\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.366Z",
+    "updatedAt": "2025-11-27T12:32:59.366Z"
+  },
+  {
+    "id": "50053776-9fb9-4e34-bde3-e6f79a951d67",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "testing/infrastructure",
+    "title": "Infrastructure",
+    "content": "# Infrastructure\n\nTest infrastructure using Node.js native runner with minimal mocking\n\n---\n*Updated based on commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.368Z",
+    "updatedAt": "2025-11-27T12:32:59.368Z"
+  },
+  {
+    "id": "22375591-1454-49da-8f02-6af344569183",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "testing/integration-patterns",
+    "title": "Integration Patterns",
+    "content": "# Integration Patterns\n\nIntegration testing patterns with real services and temporary repositories\n\n---\n*Updated based on commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.370Z",
+    "updatedAt": "2025-11-27T12:32:59.370Z"
+  },
+  {
+    "id": "773d367f-493c-4eec-9b8e-a7f3ec423e3b",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "path": "development/dependencies",
+    "title": "Dependencies",
+    "content": "# Dependencies\n\nNode.js built-in testing capabilities eliminate need for external test frameworks\n\n---\n*Updated based on commit aaf040f3*\n",
+    "confidence": 0.5,
+    "sourceCommits": [
+      "aaf040f35810ab3747d35559da8afec508e393c8"
+    ],
+    "links": [],
+    "backlinks": [],
+    "createdAt": "2025-11-27T12:32:59.372Z",
+    "updatedAt": "2025-11-27T12:32:59.372Z"
+  }
+]

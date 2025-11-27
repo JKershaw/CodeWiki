@@ -1,0 +1,411 @@
+[
+  {
+    "id": "f7a75238-02ea-45cd-a7a4-d9e8ede6eaf5",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "timestamp": "2025-11-27T12:30:48.439Z",
+    "context": {
+      "totalCommits": 45,
+      "commitsByAgent": {
+        "code-change": {
+          "processed": 0,
+          "pending": 45
+        },
+        "narrative": {
+          "processed": 0,
+          "pending": 45
+        },
+        "security": {
+          "processed": 0,
+          "pending": 45
+        },
+        "pattern": {
+          "processed": 0,
+          "pending": 45
+        },
+        "dependency": {
+          "processed": 0,
+          "pending": 45
+        }
+      },
+      "recentCommits": [
+        {
+          "id": "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+          "message": "Add TechnicalDebtAgent for code quality tracking",
+          "date": "2025-11-27T11:47:30.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "9dad2c6065f7b21d411ef60199af695bd41e4822",
+          "message": "Merge pull request #2 from JKershaw/claude/add-cwignore-support-01HG83agdLjhghM5jjDTYHa1",
+          "date": "2025-11-27T11:10:27.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "aaf040f35810ab3747d35559da8afec508e393c8",
+          "message": "Remove Vitest, migrate to Node test runner with minimal mocks",
+          "date": "2025-11-27T11:06:30.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "e2a858ba25bada3d251d146767142fb7f3ad6260",
+          "message": "Reorganize test structure and add integration tests",
+          "date": "2025-11-27T10:02:19.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "574dabedfdb2783776fa41663df8152ea35950e6",
+          "message": "Add .cwignore file support for ignoring paths during analysis",
+          "date": "2025-11-27T09:51:19.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "c600a87f7e46addaa64f54480d19fd10a28ff0ff",
+          "message": "Delete example-wiki directory",
+          "date": "2025-11-27T09:41:38.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "adbc48ad17c9303ad62ead4b0c824a62f9e2cc64",
+          "message": "Merge pull request #1 from JKershaw/claude/analyze-agent-tools-01P2keFfDZD3dDhda2sy5yfY",
+          "date": "2025-11-27T09:38:03.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "85ff400ec7f7e9416220683c088bdb7be9dc965e",
+          "message": "Add roadmap comparing current state to original plan",
+          "date": "2025-11-26T20:37:08.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55",
+          "message": "Add example wiki generated with agentic tool-using agents",
+          "date": "2025-11-26T19:03:48.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "e584b6e63665e575629f27f3f730ea8f6ad03a21",
+          "message": "Fix orchestrator to use commit SHA instead of internal UUID",
+          "date": "2025-11-26T18:33:48.000Z",
+          "processedBy": []
+        }
+      ],
+      "wikiPages": 0,
+      "categoryCounts": {},
+      "categoriesWithOverview": [],
+      "categoriesWithoutOverview": [],
+      "pagesNeedingRewrite": 0,
+      "avgConfidence": 0,
+      "lowConfidencePages": 0,
+      "recentRuns": [],
+      "pagesWithoutLinks": 0,
+      "hasProjectOverview": false,
+      "hasGettingStarted": false
+    },
+    "promptSent": "## Current Wiki State\n\n**Commits:** 45 total\n- code-change: 0/45 (0%) processed, 45 pending\n- narrative: 0/45 (0%) processed, 45 pending\n- security: 0/45 (0%) processed, 45 pending\n- pattern: 0/45 (0%) processed, 45 pending\n- dependency: 0/45 (0%) processed, 45 pending\n\n**Wiki Pages:** 0 total, avg confidence 0%\n**Categories:** \n**Pages needing rewrite:** 0\n**Has project overview (architecture/overview):** NO\n**Has getting started (guides/getting-started):** NO\n**Pages without links:** 0\n**Low confidence pages:** 0\n\n**Recent commits (most recent first):**\n- a286af4bb19f1063caf49d16d9fc01aef08ba040: \"Add TechnicalDebtAgent for code quality tracking\" [processed by: none]\n- 9dad2c6065f7b21d411ef60199af695bd41e4822: \"Merge pull request #2 from JKershaw/claude/add-cwi...\" [processed by: none]\n- aaf040f35810ab3747d35559da8afec508e393c8: \"Remove Vitest, migrate to Node test runner with mi...\" [processed by: none]\n- e2a858ba25bada3d251d146767142fb7f3ad6260: \"Reorganize test structure and add integration test...\" [processed by: none]\n- 574dabedfdb2783776fa41663df8152ea35950e6: \"Add .cwignore file support for ignoring paths duri...\" [processed by: none]\n- c600a87f7e46addaa64f54480d19fd10a28ff0ff: \"Delete example-wiki directory\" [processed by: none]\n- adbc48ad17c9303ad62ead4b0c824a62f9e2cc64: \"Merge pull request #1 from JKershaw/claude/analyze...\" [processed by: none]\n- 85ff400ec7f7e9416220683c088bdb7be9dc965e: \"Add roadmap comparing current state to original pl...\" [processed by: none]\n- dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55: \"Add example wiki generated with agentic tool-using...\" [processed by: none]\n- e584b6e63665e575629f27f3f730ea8f6ad03a21: \"Fix orchestrator to use commit SHA instead of inte...\" [processed by: none]\n\n**Last 5 agent runs:**\n\n## Your Task\n\nGenerate up to 10 work items that would make the wiki most useful right now.\n\n**Current wiki size: 0 pages** - Focus entirely on code-change analysis to build base content.\n\nConsider:\n- Pages needing rewrite: 0 (writer agent improves readability)\n- Categories without overview: none (overview agent helps navigation)\n- Has project overview: NO - run project-overview agent!\n- Has getting started: NO - run getting-started agent!\n- Pages without links: 0 (link agent improves discoverability)\n\nReturn your response as valid JSON.",
+    "rawResponse": "```json\n{\n  \"reasoning\": \"With 0 pages and 45 unprocessed commits, the priority is building base content through code-change analysis. Starting with the most recent commits ensures we capture the current state of the codebase first, which is most valuable for understanding the project now. I'm selecting a diverse set of commits that appear to represent significant features and changes.\",\n  \"workItems\": [\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"a286af4bb19f1063caf49d16d9fc01aef08ba040\",\n      \"reason\": \"Most recent commit adding TechnicalDebtAgent - likely a significant feature addition\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"aaf040f35810ab3747d35559da8afec508e393c8\",\n      \"reason\": \"Migration from Vitest to Node test runner - architectural decision affecting testing strategy\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"e2a858ba25bada3d251d146767142fb7f3ad6260\",\n      \"reason\": \"Test structure reorganization - helps understand project organization and testing approach\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"574dabedfdb2783776fa41663df8152ea35950e6\",\n      \"reason\": \"Addition of .cwignore file support - new feature for path filtering\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"85ff400ec7f7e9416220683c088bdb7be9dc965e\",\n      \"reason\": \"Roadmap addition comparing current state to plans - valuable for understanding project direction\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55\",\n      \"reason\": \"Example wiki addition - demonstrates the tool's output and capabilities\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"e584b6e63665e575629f27f3f730ea8f6ad03a21\",\n      \"reason\": \"Fix to orchestrator using commit SHA - important bug fix affecting core functionality\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"c600a87f7e46addaa64f54480d19fd10a28ff0ff\",\n      \"reason\": \"Deletion of example-wiki directory - cleanup that affects project structure\"\n    }\n  ]\n}\n```",
+    "decision": {
+      "reasoning": "With 0 pages and 45 unprocessed commits, the priority is building base content through code-change analysis. Starting with the most recent commits ensures we capture the current state of the codebase first, which is most valuable for understanding the project now. I'm selecting a diverse set of commits that appear to represent significant features and changes.",
+      "workItems": [
+        {
+          "agentType": "code-change",
+          "targetCommitId": "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+          "reason": "Most recent commit adding TechnicalDebtAgent - likely a significant feature addition"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "aaf040f35810ab3747d35559da8afec508e393c8",
+          "reason": "Migration from Vitest to Node test runner - architectural decision affecting testing strategy"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "e2a858ba25bada3d251d146767142fb7f3ad6260",
+          "reason": "Test structure reorganization - helps understand project organization and testing approach"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "574dabedfdb2783776fa41663df8152ea35950e6",
+          "reason": "Addition of .cwignore file support - new feature for path filtering"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "85ff400ec7f7e9416220683c088bdb7be9dc965e",
+          "reason": "Roadmap addition comparing current state to plans - valuable for understanding project direction"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55",
+          "reason": "Example wiki addition - demonstrates the tool's output and capabilities"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "e584b6e63665e575629f27f3f730ea8f6ad03a21",
+          "reason": "Fix to orchestrator using commit SHA - important bug fix affecting core functionality"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "c600a87f7e46addaa64f54480d19fd10a28ff0ff",
+          "reason": "Deletion of example-wiki directory - cleanup that affects project structure"
+        }
+      ]
+    },
+    "workItemsCreated": [
+      "63294cc9-c1ff-4b7e-937e-17430a4355df",
+      "e0354f34-2df9-4c14-bd4c-dee58db22214",
+      "e8f37df8-732f-4018-bc89-91c6f8dc4e91",
+      "86e26883-c323-4437-b365-098f6dfec974",
+      "6af92ea6-1143-4845-9ca9-253d96522f02",
+      "0807d8c2-733b-4e52-83a7-928c866d3887",
+      "713e1c45-de1f-4dfc-8194-773af29e998a",
+      "282e1658-c60a-4344-9134-79344615179e"
+    ],
+    "model": "claude-sonnet-4-5-20250929",
+    "costUsd": 0.015132,
+    "durationMs": 10654,
+    "usedLLM": true
+  },
+  {
+    "id": "ffd55e54-64d0-41b9-bd73-e338b0f9334a",
+    "repoId": "f26adaa0-8a2e-49d8-8899-402b81102b25",
+    "timestamp": "2025-11-27T12:37:56.912Z",
+    "context": {
+      "totalCommits": 45,
+      "commitsByAgent": {
+        "code-change": {
+          "processed": 8,
+          "pending": 37
+        },
+        "narrative": {
+          "processed": 0,
+          "pending": 45
+        },
+        "security": {
+          "processed": 0,
+          "pending": 45
+        },
+        "pattern": {
+          "processed": 0,
+          "pending": 45
+        },
+        "dependency": {
+          "processed": 0,
+          "pending": 45
+        }
+      },
+      "recentCommits": [
+        {
+          "id": "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+          "message": "Add TechnicalDebtAgent for code quality tracking",
+          "date": "2025-11-27T11:47:30.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        },
+        {
+          "id": "9dad2c6065f7b21d411ef60199af695bd41e4822",
+          "message": "Merge pull request #2 from JKershaw/claude/add-cwignore-support-01HG83agdLjhghM5jjDTYHa1",
+          "date": "2025-11-27T11:10:27.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "aaf040f35810ab3747d35559da8afec508e393c8",
+          "message": "Remove Vitest, migrate to Node test runner with minimal mocks",
+          "date": "2025-11-27T11:06:30.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        },
+        {
+          "id": "e2a858ba25bada3d251d146767142fb7f3ad6260",
+          "message": "Reorganize test structure and add integration tests",
+          "date": "2025-11-27T10:02:19.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        },
+        {
+          "id": "574dabedfdb2783776fa41663df8152ea35950e6",
+          "message": "Add .cwignore file support for ignoring paths during analysis",
+          "date": "2025-11-27T09:51:19.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        },
+        {
+          "id": "c600a87f7e46addaa64f54480d19fd10a28ff0ff",
+          "message": "Delete example-wiki directory",
+          "date": "2025-11-27T09:41:38.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        },
+        {
+          "id": "adbc48ad17c9303ad62ead4b0c824a62f9e2cc64",
+          "message": "Merge pull request #1 from JKershaw/claude/analyze-agent-tools-01P2keFfDZD3dDhda2sy5yfY",
+          "date": "2025-11-27T09:38:03.000Z",
+          "processedBy": []
+        },
+        {
+          "id": "85ff400ec7f7e9416220683c088bdb7be9dc965e",
+          "message": "Add roadmap comparing current state to original plan",
+          "date": "2025-11-26T20:37:08.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        },
+        {
+          "id": "dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55",
+          "message": "Add example wiki generated with agentic tool-using agents",
+          "date": "2025-11-26T19:03:48.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        },
+        {
+          "id": "e584b6e63665e575629f27f3f730ea8f6ad03a21",
+          "message": "Fix orchestrator to use commit SHA instead of internal UUID",
+          "date": "2025-11-26T18:33:48.000Z",
+          "processedBy": [
+            "code-change"
+          ]
+        }
+      ],
+      "wikiPages": 17,
+      "categoryCounts": {
+        "commits": 8,
+        "testing": 2,
+        "development": 2,
+        "guides": 1,
+        "architecture": 3,
+        "components": 1
+      },
+      "categoriesWithOverview": [],
+      "categoriesWithoutOverview": [
+        "architecture"
+      ],
+      "pagesNeedingRewrite": 0,
+      "avgConfidence": 0.5,
+      "lowConfidencePages": 0,
+      "recentRuns": [
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:37:19.022Z"
+        },
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:36:41.584Z"
+        },
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:35:54.834Z"
+        },
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:34:45.420Z"
+        },
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:34:04.984Z"
+        },
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:33:24.826Z"
+        },
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:32:22.985Z"
+        },
+        {
+          "agentType": "code-change",
+          "success": true,
+          "pagesAffected": 0,
+          "timestamp": "2025-11-27T12:30:59.097Z"
+        }
+      ],
+      "pagesWithoutLinks": 17,
+      "hasProjectOverview": false,
+      "hasGettingStarted": false
+    },
+    "promptSent": "## Current Wiki State\n\n**Commits:** 45 total\n- code-change: 8/45 (18%) processed, 37 pending\n- narrative: 0/45 (0%) processed, 45 pending\n- security: 0/45 (0%) processed, 45 pending\n- pattern: 0/45 (0%) processed, 45 pending\n- dependency: 0/45 (0%) processed, 45 pending\n\n**Wiki Pages:** 17 total, avg confidence 50%\n**Categories:** commits(8), testing(2), development(2), guides(1), architecture(3), components(1)\n**Categories needing overview:** architecture\n**Pages needing rewrite:** 0\n**Has project overview (architecture/overview):** NO\n**Has getting started (guides/getting-started):** NO\n**Pages without links:** 17\n**Low confidence pages:** 0\n\n**Recent commits (most recent first):**\n- a286af4bb19f1063caf49d16d9fc01aef08ba040: \"Add TechnicalDebtAgent for code quality tracking\" [processed by: code-change]\n- 9dad2c6065f7b21d411ef60199af695bd41e4822: \"Merge pull request #2 from JKershaw/claude/add-cwi...\" [processed by: none]\n- aaf040f35810ab3747d35559da8afec508e393c8: \"Remove Vitest, migrate to Node test runner with mi...\" [processed by: code-change]\n- e2a858ba25bada3d251d146767142fb7f3ad6260: \"Reorganize test structure and add integration test...\" [processed by: code-change]\n- 574dabedfdb2783776fa41663df8152ea35950e6: \"Add .cwignore file support for ignoring paths duri...\" [processed by: code-change]\n- c600a87f7e46addaa64f54480d19fd10a28ff0ff: \"Delete example-wiki directory\" [processed by: code-change]\n- adbc48ad17c9303ad62ead4b0c824a62f9e2cc64: \"Merge pull request #1 from JKershaw/claude/analyze...\" [processed by: none]\n- 85ff400ec7f7e9416220683c088bdb7be9dc965e: \"Add roadmap comparing current state to original pl...\" [processed by: code-change]\n- dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55: \"Add example wiki generated with agentic tool-using...\" [processed by: code-change]\n- e584b6e63665e575629f27f3f730ea8f6ad03a21: \"Fix orchestrator to use commit SHA instead of inte...\" [processed by: code-change]\n\n**Last 5 agent runs:**\n- code-change: success, 0 pages affected\n- code-change: success, 0 pages affected\n- code-change: success, 0 pages affected\n- code-change: success, 0 pages affected\n- code-change: success, 0 pages affected\n\n## Your Task\n\nGenerate up to 10 work items that would make the wiki most useful right now.\n\n**Current wiki size: 17 pages** - Prioritize synthesis and overview - 40% analysis, 60% synthesis. Project overview is critical if missing.\n\nConsider:\n- Pages needing rewrite: 0 (writer agent improves readability)\n- Categories without overview: architecture (overview agent helps navigation)\n- Has project overview: NO - run project-overview agent!\n- Has getting started: NO - run getting-started agent!\n- Pages without links: 17 (link agent improves discoverability)\n\nReturn your response as valid JSON.",
+    "rawResponse": "```json\n{\n  \"reasoning\": \"With 17 pages, the wiki needs strong synthesis to be immediately useful. Critical: create project overview and getting started guide. Then focus on linking pages and building architectural understanding through narrative/pattern analysis.\",\n  \"workItems\": [\n    {\n      \"agentType\": \"project-overview\",\n      \"reason\": \"CRITICAL: Create architecture/overview.md to give immediate understanding of the entire codebase\"\n    },\n    {\n      \"agentType\": \"getting-started\",\n      \"reason\": \"CRITICAL: Create guides/getting-started.md for practical onboarding of new developers or AI agents\"\n    },\n    {\n      \"agentType\": \"link\",\n      \"reason\": \"All 17 pages lack cross-references, severely limiting wiki navigation and discoverability\"\n    },\n    {\n      \"agentType\": \"overview\",\n      \"reason\": \"Create architecture category overview (3 pages) to organize architectural concepts\"\n    },\n    {\n      \"agentType\": \"narrative\",\n      \"targetCommitId\": \"85ff400ec7f7e9416220683c088bdb7be9dc965e\",\n      \"reason\": \"Roadmap commit likely contains planning docs and ADRs for strategic understanding\"\n    },\n    {\n      \"agentType\": \"pattern\",\n      \"targetCommitId\": \"a286af4bb19f1063caf49d16d9fc01aef08ba040\",\n      \"reason\": \"TechnicalDebtAgent commit shows design patterns for agent architecture\"\n    },\n    {\n      \"agentType\": \"narrative\",\n      \"targetCommitId\": \"dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55\",\n      \"reason\": \"Example wiki commit contains documentation about agentic tool-using approach\"\n    },\n    {\n      \"agentType\": \"code-change\",\n      \"targetCommitId\": \"9dad2c6065f7b21d411ef60199af695bd41e4822\",\n      \"reason\": \"Unprocessed merge commit that may contain significant changes\"\n    },\n    {\n      \"agentType\": \"pattern\",\n      \"targetCommitId\": \"aaf040f35810ab3747d35559da8afec508e393c8\",\n      \"reason\": \"Test runner migration shows testing patterns and architectural decisions\"\n    },\n    {\n      \"agentType\": \"structure\",\n      \"reason\": \"Analyze overall wiki organization to identify gaps and improvement opportunities\"\n    }\n  ]\n}\n```",
+    "decision": {
+      "reasoning": "With 17 pages, the wiki needs strong synthesis to be immediately useful. Critical: create project overview and getting started guide. Then focus on linking pages and building architectural understanding through narrative/pattern analysis.",
+      "workItems": [
+        {
+          "agentType": "project-overview",
+          "reason": "CRITICAL: Create architecture/overview.md to give immediate understanding of the entire codebase"
+        },
+        {
+          "agentType": "getting-started",
+          "reason": "CRITICAL: Create guides/getting-started.md for practical onboarding of new developers or AI agents"
+        },
+        {
+          "agentType": "link",
+          "reason": "All 17 pages lack cross-references, severely limiting wiki navigation and discoverability"
+        },
+        {
+          "agentType": "overview",
+          "reason": "Create architecture category overview (3 pages) to organize architectural concepts"
+        },
+        {
+          "agentType": "narrative",
+          "targetCommitId": "85ff400ec7f7e9416220683c088bdb7be9dc965e",
+          "reason": "Roadmap commit likely contains planning docs and ADRs for strategic understanding"
+        },
+        {
+          "agentType": "pattern",
+          "targetCommitId": "a286af4bb19f1063caf49d16d9fc01aef08ba040",
+          "reason": "TechnicalDebtAgent commit shows design patterns for agent architecture"
+        },
+        {
+          "agentType": "narrative",
+          "targetCommitId": "dd5aa96cd78833cb9689dbf6f56e88ad90ed1e55",
+          "reason": "Example wiki commit contains documentation about agentic tool-using approach"
+        },
+        {
+          "agentType": "code-change",
+          "targetCommitId": "9dad2c6065f7b21d411ef60199af695bd41e4822",
+          "reason": "Unprocessed merge commit that may contain significant changes"
+        },
+        {
+          "agentType": "pattern",
+          "targetCommitId": "aaf040f35810ab3747d35559da8afec508e393c8",
+          "reason": "Test runner migration shows testing patterns and architectural decisions"
+        },
+        {
+          "agentType": "structure",
+          "reason": "Analyze overall wiki organization to identify gaps and improvement opportunities"
+        }
+      ]
+    },
+    "workItemsCreated": [
+      "5a23076d-f572-45f7-96cc-b6b1245da398",
+      "0af2b3d7-e276-4f9e-b142-6dcfd2b4f9b9",
+      "89b875f3-4221-441a-9295-4a2571d27253",
+      "96dcccc4-18de-4c8c-b59d-5eb666b0b917",
+      "5a885dc5-e2ae-4696-8dd2-f589d05bcaf6",
+      "892da4a2-de5c-4178-9bd9-709c1df1b8ba",
+      "c1e2e06f-181a-4805-87b3-ab94472dcc4c",
+      "9dc7ad97-bdab-4eec-aee3-2bec72481dd1",
+      "289ed2ed-676b-4d07-931b-2f8872b81309",
+      "15c6c586-586e-4ea1-9cca-259dc82d97c7"
+    ],
+    "model": "claude-sonnet-4-5-20250929",
+    "costUsd": 0.014648999999999999,
+    "durationMs": 11350,
+    "usedLLM": true
+  }
+]
