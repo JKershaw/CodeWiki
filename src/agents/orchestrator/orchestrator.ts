@@ -235,7 +235,7 @@ export class Orchestrator {
           repoId,
           agentType,
           priority,
-          targetCommitId: commit.id,
+          targetCommitId: commit.sha,  // Use SHA, not internal ID - executor looks up by SHA
         }));
       }
     }
