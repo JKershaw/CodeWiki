@@ -210,26 +210,49 @@ export class Orchestrator {
     const remainingSlots = maxItems - pendingWork;
 
     // Strategy 1: Process unprocessed commits with all analysis agents
-    // Each commit should be processed by all analysis agents for comprehensive coverage
+    // Bundle multiple agents per commit for richer coverage, interleaved for balance
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    for (const agentType of ANALYSIS_AGENTS) {
-      if (workItems.length >= remainingSlots) break;
+    // Build a map of commit -> agents that need to process it
+    const commitAgentMap = new Map<string, { commit: typeof commits[0]; agents: AgentType[] }>();
 
+    for (const agentType of ANALYSIS_AGENTS) {
       const unprocessedCommits = await this.repos.commits.findUnprocessedByAgent(repoId, agentType);
 
-      // Sort by date - recent commits first
-      unprocessedCommits.sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime());
-
       for (const commit of unprocessedCommits) {
+        if (!commitAgentMap.has(commit.sha)) {
+          commitAgentMap.set(commit.sha, { commit, agents: [] });
+        }
+        commitAgentMap.get(commit.sha)!.agents.push(agentType);
+      }
+    }
+
+    // Sort commits by date (recent first) and convert to array
+    const sortedCommits = Array.from(commitAgentMap.values())
+      .sort((a, b) => b.commit.committedAt.getTime() - a.commit.committedAt.getTime());
+
+    // Process commits, bundling multiple agents per commit
+    // This ensures each commit gets comprehensive coverage before moving to the next
+    for (const { commit, agents } of sortedCommits) {
+      if (workItems.length >= remainingSlots) break;
+
+      const isRecent = commit.committedAt > oneWeekAgo;
+      const priority = isRecent ? Priority.RECENT_COMMIT : Priority.HISTORICAL_COMMIT;
+
+      // Add work items for all agents that need to process this commit
+      // Prioritize code-change first, then others
+      const sortedAgents = agents.sort((a, b) => {
+        if (a === 'code-change') return -1;
+        if (b === 'code-change') return 1;
+        return 0;
+      });
+
+      for (const agentType of sortedAgents) {
         if (workItems.length >= remainingSlots) break;
 
         // Check if work already exists for this commit + agent
         const exists = await this.repos.workQueue.exists(repoId, agentType, commit.id);
         if (exists) continue;
-
-        const isRecent = commit.committedAt > oneWeekAgo;
-        const priority = isRecent ? Priority.RECENT_COMMIT : Priority.HISTORICAL_COMMIT;
 
         workItems.push(createWorkItem({
           id: uuid(),
@@ -252,13 +275,17 @@ export class Orchestrator {
       // TODO: Add quality improvement work items when we have meta agents
     }
 
-    // Strategy 4: Meta agents (run on wiki after analysis is complete)
-    // Only run meta agents when all commits have been analyzed by code-change
+    // Strategy 4: Meta agents (run on wiki after analysis has meaningful coverage)
+    // Allow meta agents earlier - after 20+ commits processed OR 50%+ coverage
     if (workItems.length < remainingSlots && wikiPages.length >= 2) {
       const unprocessedByCodeChange = await this.repos.commits.findUnprocessedByAgent(repoId, 'code-change');
+      const processedCommits = commits.length - unprocessedByCodeChange.length;
+      const coveragePercent = commits.length > 0 ? (processedCommits / commits.length) * 100 : 0;
 
-      // Only run meta agents when analysis is mostly complete
-      if (unprocessedByCodeChange.length === 0) {
+      // Run meta agents when we have enough data: 20+ commits processed OR 50%+ coverage
+      const hasEnoughData = processedCommits >= 20 || coveragePercent >= 50 || unprocessedByCodeChange.length === 0;
+
+      if (hasEnoughData) {
         // Fetch recent agent runs for checking if meta agents ran recently
         const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
 
@@ -404,8 +431,8 @@ export class Orchestrator {
         }
       }
 
-      // Project Overview Agent: trigger when 10+ pages but no architecture/overview
-      if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+      // Project Overview Agent: trigger when 8+ pages but no architecture/overview
+      if (workItems.length < remainingSlots && wikiPages.length >= 8) {
         const hasProjectOverview = wikiPages.some(p =>
           p.path === 'architecture/overview' || p.path === 'architecture/index'
         );
@@ -431,8 +458,8 @@ export class Orchestrator {
         }
       }
 
-      // Getting Started Agent: trigger when 10+ pages but no guides/getting-started
-      if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+      // Getting Started Agent: trigger when 8+ pages but no guides/getting-started
+      if (workItems.length < remainingSlots && wikiPages.length >= 8) {
         const hasGettingStarted = wikiPages.some(p =>
           p.path === 'guides/getting-started' || p.path === 'guides/quickstart' || p.path === 'guides/index'
         );
