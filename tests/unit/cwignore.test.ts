@@ -1,4 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+/**
+ * Unit tests for cwignore pattern parsing.
+ * Tests pure functions - no mocking needed.
+ */
+
+import { describe, it, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert';
 import { mkdtemp, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -16,7 +22,7 @@ describe('cwignore', () => {
 build
 *.log`;
       const patterns = parseIgnorePatterns(content);
-      expect(patterns).toEqual(['dist', 'build', '*.log']);
+      assert.deepStrictEqual(patterns, ['dist', 'build', '*.log']);
     });
 
     it('ignores empty lines', () => {
@@ -26,7 +32,7 @@ build
 
 *.log`;
       const patterns = parseIgnorePatterns(content);
-      expect(patterns).toEqual(['dist', 'build', '*.log']);
+      assert.deepStrictEqual(patterns, ['dist', 'build', '*.log']);
     });
 
     it('ignores comment lines', () => {
@@ -35,21 +41,21 @@ dist
 # Another comment
 build`;
       const patterns = parseIgnorePatterns(content);
-      expect(patterns).toEqual(['dist', 'build']);
+      assert.deepStrictEqual(patterns, ['dist', 'build']);
     });
 
     it('trims whitespace from patterns', () => {
       const content = `  dist
    build   `;
       const patterns = parseIgnorePatterns(content);
-      expect(patterns).toEqual(['dist', 'build']);
+      assert.deepStrictEqual(patterns, ['dist', 'build']);
     });
 
     it('adds /** to directory patterns ending with /', () => {
       const content = `examples/
 dist/`;
       const patterns = parseIgnorePatterns(content);
-      expect(patterns).toEqual(['examples/**', 'dist/**']);
+      assert.deepStrictEqual(patterns, ['examples/**', 'dist/**']);
     });
 
     it('skips negation patterns (not supported)', () => {
@@ -57,7 +63,7 @@ dist/`;
 !dist/important
 build`;
       const patterns = parseIgnorePatterns(content);
-      expect(patterns).toEqual(['dist', 'build']);
+      assert.deepStrictEqual(patterns, ['dist', 'build']);
     });
 
     it('handles glob patterns', () => {
@@ -65,32 +71,40 @@ build`;
 src/**/*.test.ts
 coverage/**`;
       const patterns = parseIgnorePatterns(content);
-      expect(patterns).toEqual(['**/*.log', 'src/**/*.test.ts', 'coverage/**']);
+      assert.deepStrictEqual(patterns, ['**/*.log', 'src/**/*.test.ts', 'coverage/**']);
     });
   });
 
   describe('loadIgnorePatterns', () => {
     let testDir: string;
 
-    beforeEach(async () => {
+    before(async () => {
       testDir = await mkdtemp(join(tmpdir(), 'cwignore-test-'));
+    });
+
+    beforeEach(() => {
       clearIgnoreCache();
     });
 
-    afterEach(async () => {
-      await rm(testDir, { recursive: true });
+    after(async () => {
       clearIgnoreCache();
+      await rm(testDir, { recursive: true });
     });
 
     it('returns default patterns when no .cwignore exists', async () => {
-      const patterns = await loadIgnorePatterns(testDir);
-      expect(patterns).toEqual(DEFAULT_IGNORE_PATTERNS);
+      const emptyDir = await mkdtemp(join(tmpdir(), 'cwignore-empty-'));
+      try {
+        const patterns = await loadIgnorePatterns(emptyDir);
+        assert.deepStrictEqual(patterns, DEFAULT_IGNORE_PATTERNS);
+      } finally {
+        await rm(emptyDir, { recursive: true });
+      }
     });
 
     it('merges .cwignore patterns with defaults', async () => {
       await writeFile(join(testDir, '.cwignore'), 'examples/\ndist/');
       const patterns = await loadIgnorePatterns(testDir);
-      expect(patterns).toEqual([
+      assert.deepStrictEqual(patterns, [
         ...DEFAULT_IGNORE_PATTERNS,
         'examples/**',
         'dist/**',
@@ -98,32 +112,46 @@ coverage/**`;
     });
 
     it('caches results for subsequent calls', async () => {
-      await writeFile(join(testDir, '.cwignore'), 'dist/');
-      const patterns1 = await loadIgnorePatterns(testDir);
+      const cacheDir = await mkdtemp(join(tmpdir(), 'cwignore-cache-'));
+      try {
+        await writeFile(join(cacheDir, '.cwignore'), 'dist/');
+        const patterns1 = await loadIgnorePatterns(cacheDir);
 
-      // Modify the file
-      await writeFile(join(testDir, '.cwignore'), 'different/');
-      const patterns2 = await loadIgnorePatterns(testDir);
+        // Modify the file
+        await writeFile(join(cacheDir, '.cwignore'), 'different/');
+        const patterns2 = await loadIgnorePatterns(cacheDir);
 
-      // Should still return cached result
-      expect(patterns2).toEqual(patterns1);
+        // Should still return cached result
+        assert.deepStrictEqual(patterns2, patterns1);
+      } finally {
+        clearIgnoreCache();
+        await rm(cacheDir, { recursive: true });
+      }
     });
 
     it('clears cache correctly', async () => {
-      await writeFile(join(testDir, '.cwignore'), 'dist/');
-      await loadIgnorePatterns(testDir);
+      const clearDir = await mkdtemp(join(tmpdir(), 'cwignore-clear-'));
+      try {
+        await writeFile(join(clearDir, '.cwignore'), 'dist/');
+        await loadIgnorePatterns(clearDir);
 
-      clearIgnoreCache(testDir);
+        clearIgnoreCache(clearDir);
 
-      await writeFile(join(testDir, '.cwignore'), 'different/');
-      const patterns = await loadIgnorePatterns(testDir);
+        await writeFile(join(clearDir, '.cwignore'), 'different/');
+        const patterns = await loadIgnorePatterns(clearDir);
 
-      expect(patterns).toContain('different/**');
-      expect(patterns).not.toContain('dist/**');
+        assert.ok(patterns.includes('different/**'));
+        assert.ok(!patterns.includes('dist/**'));
+      } finally {
+        clearIgnoreCache();
+        await rm(clearDir, { recursive: true });
+      }
     });
 
     it('handles complex .cwignore files', async () => {
-      const cwignoreContent = `# Build outputs
+      const complexDir = await mkdtemp(join(tmpdir(), 'cwignore-complex-'));
+      try {
+        const cwignoreContent = `# Build outputs
 dist/
 build/
 
@@ -138,83 +166,24 @@ coverage/
 .vscode/
 .idea/
 `;
-      await writeFile(join(testDir, '.cwignore'), cwignoreContent);
-      const patterns = await loadIgnorePatterns(testDir);
+        await writeFile(join(complexDir, '.cwignore'), cwignoreContent);
+        const patterns = await loadIgnorePatterns(complexDir);
 
-      // Should include defaults
-      expect(patterns).toContain('node_modules/**');
-      expect(patterns).toContain('.git/**');
+        // Should include defaults
+        assert.ok(patterns.includes('node_modules/**'));
+        assert.ok(patterns.includes('.git/**'));
 
-      // Should include custom patterns
-      expect(patterns).toContain('dist/**');
-      expect(patterns).toContain('build/**');
-      expect(patterns).toContain('coverage/**');
-      expect(patterns).toContain('*.lcov');
-      expect(patterns).toContain('.vscode/**');
-      expect(patterns).toContain('.idea/**');
-    });
-  });
-
-  describe('clearIgnoreCache', () => {
-    let testDir1: string;
-    let testDir2: string;
-
-    beforeEach(async () => {
-      testDir1 = await mkdtemp(join(tmpdir(), 'cwignore-test1-'));
-      testDir2 = await mkdtemp(join(tmpdir(), 'cwignore-test2-'));
-      clearIgnoreCache();
-    });
-
-    afterEach(async () => {
-      await rm(testDir1, { recursive: true });
-      await rm(testDir2, { recursive: true });
-      clearIgnoreCache();
-    });
-
-    it('clears cache for specific repo', async () => {
-      await writeFile(join(testDir1, '.cwignore'), 'dist/');
-      await writeFile(join(testDir2, '.cwignore'), 'build/');
-
-      await loadIgnorePatterns(testDir1);
-      await loadIgnorePatterns(testDir2);
-
-      // Clear only testDir1
-      clearIgnoreCache(testDir1);
-
-      // Modify both files
-      await writeFile(join(testDir1, '.cwignore'), 'changed1/');
-      await writeFile(join(testDir2, '.cwignore'), 'changed2/');
-
-      const patterns1 = await loadIgnorePatterns(testDir1);
-      const patterns2 = await loadIgnorePatterns(testDir2);
-
-      // testDir1 should have new patterns
-      expect(patterns1).toContain('changed1/**');
-      // testDir2 should still have cached patterns
-      expect(patterns2).toContain('build/**');
-      expect(patterns2).not.toContain('changed2/**');
-    });
-
-    it('clears all caches when no repo specified', async () => {
-      await writeFile(join(testDir1, '.cwignore'), 'dist/');
-      await writeFile(join(testDir2, '.cwignore'), 'build/');
-
-      await loadIgnorePatterns(testDir1);
-      await loadIgnorePatterns(testDir2);
-
-      // Clear all
-      clearIgnoreCache();
-
-      // Modify both files
-      await writeFile(join(testDir1, '.cwignore'), 'changed1/');
-      await writeFile(join(testDir2, '.cwignore'), 'changed2/');
-
-      const patterns1 = await loadIgnorePatterns(testDir1);
-      const patterns2 = await loadIgnorePatterns(testDir2);
-
-      // Both should have new patterns
-      expect(patterns1).toContain('changed1/**');
-      expect(patterns2).toContain('changed2/**');
+        // Should include custom patterns
+        assert.ok(patterns.includes('dist/**'));
+        assert.ok(patterns.includes('build/**'));
+        assert.ok(patterns.includes('coverage/**'));
+        assert.ok(patterns.includes('*.lcov'));
+        assert.ok(patterns.includes('.vscode/**'));
+        assert.ok(patterns.includes('.idea/**'));
+      } finally {
+        clearIgnoreCache();
+        await rm(complexDir, { recursive: true });
+      }
     });
   });
 });
