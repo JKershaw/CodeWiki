@@ -14,11 +14,12 @@ import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
  * then specialized agents add their perspectives.
  */
 const ANALYSIS_AGENTS: AgentType[] = [
-  'code-change',   // General code analysis - runs first
-  'narrative',     // Detects ADRs, planning docs, READMEs
-  'security',      // Security audit
-  'pattern',       // Design patterns and conventions
-  'dependency',    // Dependency changes
+  'code-change',      // General code analysis - runs first
+  'narrative',        // Detects ADRs, planning docs, READMEs
+  'security',         // Security audit
+  'technical-debt',   // Code quality and technical debt
+  'pattern',          // Design patterns and conventions
+  'dependency',       // Dependency changes
 ];
 
 /**
