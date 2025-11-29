@@ -20,7 +20,7 @@ export class OverviewAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByRepo(context.repoId);
+    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
 
     // Group pages by category
     const categories = this.groupByCategory(pages);
@@ -74,7 +74,7 @@ export class OverviewAgent implements Agent {
    * Run on a specific category to generate its overview.
    */
   async runOnCategory(category: string, context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByRepo(context.repoId);
+    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
     const categoryPages = pages.filter(p => p.path.startsWith(category + '/'));
 
     if (categoryPages.length < this.MIN_PAGES_FOR_OVERVIEW) {

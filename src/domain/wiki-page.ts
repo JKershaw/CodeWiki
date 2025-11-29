@@ -3,8 +3,8 @@
  */
 export interface WikiPage {
   id: string;
-  /** Reference to the repo this wiki belongs to */
-  repoId: string;
+  /** Reference to the wiki this page belongs to */
+  wikiId: string;
   /** Page path/slug, e.g., "architecture/cqrs" */
   path: string;
   /** Page title */
@@ -44,7 +44,7 @@ export interface WikiPageUpdate {
 
 export function createWikiPage(params: {
   id: string;
-  repoId: string;
+  wikiId: string;
   path: string;
   title: string;
   content: string;
@@ -52,7 +52,7 @@ export function createWikiPage(params: {
 }): WikiPage {
   return {
     id: params.id,
-    repoId: params.repoId,
+    wikiId: params.wikiId,
     path: params.path,
     title: params.title,
     content: params.content,

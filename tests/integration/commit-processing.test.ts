@@ -80,7 +80,7 @@ CONFIDENCE: 0.8`);
 
       // Run the agent
       const agent = new CodeChangeAgent();
-      const agentCtx = ctx.agentContext(repoId);
+      const agentCtx = await ctx.agentContext(repoId);
       const result = await agent.runOnCommit(commitSha, agentCtx);
 
       // Verify results
@@ -143,7 +143,8 @@ WIKI_UPDATES:
 CONFIDENCE: 0.75`);
 
       const agent = new CodeChangeAgent();
-      const result = await agent.runOnCommit(commitSha, ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnCommit(commitSha, agentCtx);
 
       assert.ok(result.updates.length > 0);
       assert.strictEqual(result.result.confidence, 0.75);

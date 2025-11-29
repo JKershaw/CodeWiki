@@ -6,6 +6,7 @@ import type { Agent, AgentContext } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
 import { createAgentRun, type AgentRun } from '../domain/agent-run.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
+import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { CodeChangeAgent } from '../agents/analysis/code-change-agent.js';
 import { NarrativeAgent } from '../agents/analysis/narrative-agent.js';
 import { SecurityAgent } from '../agents/analysis/security-agent.js';
@@ -84,6 +85,10 @@ export class Executor {
       wikiPagesUpdated: 0,
     };
 
+    // Get or create the active wiki for this repo
+    const wiki = await getOrCreateActiveWiki(repoId, this.repos);
+    const wikiId = wiki.id;
+
     this.running = true;
     this.shouldStop = false;
 
@@ -96,12 +101,12 @@ export class Executor {
           continue;
         }
 
-        // Get work to do
+        // Get work to do (work queue is per-repo)
         let workItem = await this.repos.workQueue.claimNext(repoId);
 
         // If no work, generate more
         if (!workItem) {
-          const newWork = await this.orchestrator.generateWorkList(repoId, 10);
+          const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
           if (newWork.length === 0) {
             console.log('No more work to do');
             break;
@@ -116,7 +121,7 @@ export class Executor {
         }
 
         // Execute the work item
-        const result = await this.executeWorkItem(workItem, repoId);
+        const result = await this.executeWorkItem(workItem, repoId, wikiId);
 
         summary.iterations++;
         if (result.success) {
@@ -151,7 +156,8 @@ export class Executor {
 
   private async executeWorkItem(
     workItem: WorkItem,
-    repoId: string
+    repoId: string,
+    wikiId: string
   ): Promise<WorkItemResult> {
     const agent = this.agents.get(workItem.agentType);
     if (!agent) {
@@ -177,6 +183,7 @@ export class Executor {
     const agentRun = createAgentRun({
       id: uuid(),
       repoId,
+      wikiId,
       agentType: workItem.agentType,
       ...(internalCommitId ? { targetCommitId: internalCommitId } : {}),
     });
@@ -185,6 +192,7 @@ export class Executor {
 
     const context: AgentContext = {
       repoId,
+      wikiId,
       repos: this.repos,
       git: this.git,
       llm: this.llm,
@@ -220,7 +228,7 @@ export class Executor {
       for (const update of result.updates) {
         update.agentRunId = agentRun.id;
 
-        const existingPage = await this.repos.wikiPages.findByPath(repoId, update.path);
+        const existingPage = await this.repos.wikiPages.findByPath(wikiId, update.path);
 
         if (existingPage) {
           await this.repos.wikiPages.updateContent(existingPage.id, {
@@ -235,7 +243,7 @@ export class Executor {
           const { createWikiPage } = await import('../domain/wiki-page.js');
           const newPage = createWikiPage({
             id: uuid(),
-            repoId,
+            wikiId,
             path: update.path,
             title: extractTitle(update.content),
             content: update.content,

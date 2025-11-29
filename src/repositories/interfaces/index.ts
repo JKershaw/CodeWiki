@@ -7,6 +7,7 @@
  */
 
 export * from './repo-repository.js';
+export * from './wiki-repository.js';
 export * from './commit-repository.js';
 export * from './wiki-page-repository.js';
 export * from './agent-run-repository.js';
@@ -16,6 +17,7 @@ export * from './learning-repository.js';
 export * from './orchestrator-run-repository.js';
 
 import type { RepoRepository } from './repo-repository.js';
+import type { WikiRepository } from './wiki-repository.js';
 import type { CommitRepository } from './commit-repository.js';
 import type { WikiPageRepository } from './wiki-page-repository.js';
 import type { AgentRunRepository } from './agent-run-repository.js';
@@ -30,6 +32,7 @@ import type { OrchestratorRunRepository } from './orchestrator-run-repository.js
  */
 export interface Repositories {
   repos: RepoRepository;
+  wikis: WikiRepository;
   commits: CommitRepository;
   wikiPages: WikiPageRepository;
   agentRuns: AgentRunRepository;

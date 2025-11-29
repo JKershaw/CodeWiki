@@ -7,6 +7,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
+import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 
 describe('Orchestrator Bootstrap Behavior', () => {
   let ctx: TestContext;
@@ -59,8 +60,9 @@ describe('Orchestrator Bootstrap Behavior', () => {
         createdAt: new Date(),
       });
 
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
-      const workItems = await orchestrator.generateWorkList(repoId, 10);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // First item should be bootstrap
       assert.ok(workItems.length > 0, 'Should generate work items');
@@ -106,8 +108,9 @@ describe('Orchestrator Bootstrap Behavior', () => {
         });
       }
 
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
-      const workItems = await orchestrator.generateWorkList(repoId, 10);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should ONLY return bootstrap - don't add commit work until bootstrapped
       assert.strictEqual(workItems.length, 1, 'Should only return bootstrap work item');
@@ -121,10 +124,13 @@ describe('Orchestrator Bootstrap Behavior', () => {
         'README.md': '# Test',
       });
 
+      // Get the wiki for this repo
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
       // Pre-populate wiki with a page
       await ctx.repos.wikiPages.save({
         id: 'existing-overview',
-        repoId,
+        wikiId: wiki.id,
         path: 'overview',
         title: 'Overview',
         content: '# Overview\n\nExisting content.',
@@ -162,7 +168,7 @@ describe('Orchestrator Bootstrap Behavior', () => {
       });
 
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
-      const workItems = await orchestrator.generateWorkList(repoId, 10);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should NOT include bootstrap
       const bootstrapItems = workItems.filter(w => w.agentType === 'bootstrap');
@@ -183,6 +189,9 @@ describe('Orchestrator Bootstrap Behavior', () => {
         'README.md': '# Test',
       });
 
+      // Get the wiki for this repo
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
       // Pre-create a pending bootstrap work item
       await ctx.repos.workQueue.save({
         id: 'existing-bootstrap-work',
@@ -199,7 +208,7 @@ describe('Orchestrator Bootstrap Behavior', () => {
       });
 
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
-      const workItems = await orchestrator.generateWorkList(repoId, 10);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should not create another bootstrap item
       const bootstrapItems = workItems.filter(w => w.agentType === 'bootstrap');

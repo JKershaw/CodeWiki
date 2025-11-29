@@ -26,7 +26,7 @@ export class BootstrapAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByRepo(context.repoId);
+    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
 
     // Only run on empty wikis
     if (pages.length > 0) {

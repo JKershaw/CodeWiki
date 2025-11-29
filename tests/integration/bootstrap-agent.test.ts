@@ -7,6 +7,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, type TestContext } from '../helpers/index.js';
 import { BootstrapAgent } from '../../src/agents/synthesis/bootstrap-agent.js';
+import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 
 describe('BootstrapAgent', () => {
   let ctx: TestContext;
@@ -69,7 +70,8 @@ This project provides utilities for doing awesome things. It is built with TypeS
 - \`npm start\` - Start the application`);
 
       const agent = new BootstrapAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // Should create foundation pages
       assert.ok(result.updates.length > 0, 'Should create at least one foundation page');
@@ -98,10 +100,13 @@ This project provides utilities for doing awesome things. It is built with TypeS
         'README.md': '# Test Project',
       });
 
+      // Get the wiki for this repo
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
       // Pre-populate wiki with an existing page
       await ctx.repos.wikiPages.save({
         id: 'existing-page-1',
-        repoId,
+        wikiId: wiki.id,
         path: 'overview',
         title: 'Existing Overview',
         content: '# Existing Overview\n\nThis wiki already has content.',
@@ -114,7 +119,8 @@ This project provides utilities for doing awesome things. It is built with TypeS
       });
 
       const agent = new BootstrapAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // Should skip - no updates, no LLM cost
       assert.strictEqual(result.updates.length, 0, 'Should not create any pages');
@@ -149,7 +155,8 @@ This project appears to be a Node.js application. No README was found, so this o
 This project uses npm. Check package.json for available scripts.`);
 
       const agent = new BootstrapAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // Should still create pages, even without README
       assert.ok(result.updates.length > 0, 'Should create pages even without README');
@@ -184,7 +191,8 @@ Multi-agent system with orchestrator.
 - \`PLAN.md\` - Project planning document`);
 
       const agent = new BootstrapAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // Should create pages from PLAN.md
       assert.ok(result.updates.length > 0, 'Should create pages from PLAN.md');
@@ -207,7 +215,8 @@ Multi-agent system with orchestrator.
       ctx.llm.setDefaultResponse(`# Test - Overview\n\nA test project overview.`);
 
       const agent = new BootstrapAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // All bootstrap pages should have moderate confidence delta
       for (const update of result.updates) {
@@ -222,9 +231,10 @@ Multi-agent system with orchestrator.
   describe('runOnCommit', () => {
     it('throws error when called (bootstrap does not process commits)', async () => {
       const agent = new BootstrapAgent();
+      const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit-id', ctx.agentContext('any-repo')),
+        async () => agent.runOnCommit('any-commit-id', agentCtx),
         /does not run on commits/,
         'Should throw error explaining bootstrap does not run on commits'
       );

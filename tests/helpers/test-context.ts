@@ -11,6 +11,7 @@ import { createFileRepositories } from '../../src/repositories/file-based/index.
 import { FileSystemGitService } from '../../src/services/git/git-service.js';
 import { MockLLMService } from './mock-llm.js';
 import { clearIgnoreCache } from '../../src/services/cwignore.js';
+import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import type { AgentContext } from '../../src/agents/base-agent.js';
 import type { Repositories } from '../../src/repositories/index.js';
 
@@ -27,8 +28,8 @@ export interface TestContext {
   git: FileSystemGitService;
   /** Mock LLM service */
   llm: MockLLMService;
-  /** Create an AgentContext for a repo */
-  agentContext(repoId: string): AgentContext;
+  /** Create an AgentContext for a repo (auto-creates wiki if needed) */
+  agentContext(repoId: string): Promise<AgentContext>;
   /** Clean up all test data */
   cleanup(): Promise<void>;
 }
@@ -55,8 +56,9 @@ export async function createTestContext(): Promise<TestContext> {
     repos,
     git,
     llm,
-    agentContext(repoId: string): AgentContext {
-      return { repoId, repos, git, llm };
+    async agentContext(repoId: string): Promise<AgentContext> {
+      const wiki = await getOrCreateActiveWiki(repoId, repos);
+      return { repoId, wikiId: wiki.id, repos, git, llm };
     },
     async cleanup(): Promise<void> {
       clearIgnoreCache();

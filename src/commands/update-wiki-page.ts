@@ -26,13 +26,13 @@ export function createUpdateWikiPageCommand(update: WikiPageUpdate): UpdateWikiP
 export async function handleUpdateWikiPage(
   command: UpdateWikiPageCommand,
   repos: Repositories,
-  repoId: string
+  wikiId: string
 ): Promise<CommandResult<WikiPage>> {
   const { update } = command;
 
   try {
     // Check if page exists
-    const existing = await repos.wikiPages.findByPath(repoId, update.path);
+    const existing = await repos.wikiPages.findByPath(wikiId, update.path);
 
     if (update.type === 'create') {
       if (existing) {
@@ -41,7 +41,7 @@ export async function handleUpdateWikiPage(
 
       const page = createWikiPage({
         id: uuid(),
-        repoId,
+        wikiId,
         path: update.path,
         title: extractTitle(update.content),
         content: update.content,
@@ -72,7 +72,7 @@ export async function handleUpdateWikiPage(
         // If page doesn't exist, create it
         const page = createWikiPage({
           id: uuid(),
-          repoId,
+          wikiId,
           path: update.path,
           title: extractTitle(update.content),
           content: update.content,

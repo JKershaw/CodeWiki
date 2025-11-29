@@ -22,9 +22,9 @@ export class ResearchAgent {
   /**
    * Answer a question using the wiki content.
    */
-  async query(repoId: string, question: string): Promise<ResearchResult> {
+  async query(wikiId: string, question: string): Promise<ResearchResult> {
     // Search for relevant wiki pages
-    const relevantPages = await this.findRelevantPages(repoId, question);
+    const relevantPages = await this.findRelevantPages(wikiId, question);
 
     if (relevantPages.length === 0) {
       return {
@@ -72,11 +72,11 @@ export class ResearchAgent {
    * Find wiki pages relevant to the question.
    */
   private async findRelevantPages(
-    repoId: string,
+    wikiId: string,
     question: string
   ): Promise<RelevantPage[]> {
-    // Get all wiki pages for this repo
-    const allPages = await this.repos.wikiPages.findByRepo(repoId);
+    // Get all wiki pages for this wiki
+    const allPages = await this.repos.wikiPages.findByWiki(wikiId);
 
     if (allPages.length === 0) {
       return [];

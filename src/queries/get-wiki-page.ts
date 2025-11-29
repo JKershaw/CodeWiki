@@ -8,14 +8,14 @@ import type { WikiPage } from '../domain/wiki-page.js';
  */
 export interface GetWikiPageQuery extends Query {
   readonly type: 'GetWikiPage';
-  readonly repoId: string;
+  readonly wikiId: string;
   readonly path: string;
 }
 
-export function createGetWikiPageQuery(repoId: string, path: string): GetWikiPageQuery {
+export function createGetWikiPageQuery(wikiId: string, path: string): GetWikiPageQuery {
   return {
     type: 'GetWikiPage',
-    repoId,
+    wikiId,
     path,
   };
 }
@@ -28,7 +28,7 @@ export async function handleGetWikiPage(
   repos: Repositories
 ): Promise<QueryResult<WikiPage>> {
   try {
-    const page = await repos.wikiPages.findByPath(query.repoId, query.path);
+    const page = await repos.wikiPages.findByPath(query.wikiId, query.path);
     if (!page) {
       return notFound(`Wiki page not found at path: ${query.path}`);
     }

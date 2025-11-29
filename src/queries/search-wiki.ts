@@ -8,14 +8,14 @@ import type { WikiPage } from '../domain/wiki-page.js';
  */
 export interface SearchWikiQuery extends Query {
   readonly type: 'SearchWiki';
-  readonly repoId: string;
+  readonly wikiId: string;
   readonly query: string;
 }
 
-export function createSearchWikiQuery(repoId: string, query: string): SearchWikiQuery {
+export function createSearchWikiQuery(wikiId: string, query: string): SearchWikiQuery {
   return {
     type: 'SearchWiki',
-    repoId,
+    wikiId,
     query,
   };
 }
@@ -37,7 +37,7 @@ export async function handleSearchWiki(
   repos: Repositories
 ): Promise<QueryResult<SearchResult[]>> {
   try {
-    const pages = await repos.wikiPages.search(query.repoId, query.query);
+    const pages = await repos.wikiPages.search(query.wikiId, query.query);
 
     const results: SearchResult[] = pages.map(page => ({
       page,

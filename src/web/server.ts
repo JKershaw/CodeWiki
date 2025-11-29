@@ -24,6 +24,8 @@ import { createResearchAgent } from '../agents/research/research-agent.js';
 import { createExecutor } from '../executor/executor.js';
 import { createRepo } from '../domain/repo.js';
 import { v4 as uuid } from 'uuid';
+import { getOrCreateActiveWiki, handleCreateWiki, createCreateWikiCommand } from '../commands/create-wiki.js';
+import { handleSetActiveWiki, createSetActiveWikiCommand } from '../commands/set-active-wiki.js';
 
 const app = express();
 const PORT = process.env['PORT'] || 3000;
@@ -55,11 +57,19 @@ app.get('/api/repos', async (_req: Request, res: Response) => {
     const reposWithStatus = await Promise.all(
       allRepos.map(async (repo) => {
         const orchestrator = createOrchestrator(repos);
-        const summary = await orchestrator.getWorkSummary(repo.id);
+        const wiki = await getOrCreateActiveWiki(repo.id, repos);
+        const allWikis = await repos.wikis.findByRepo(repo.id);
+        const summary = await orchestrator.getWorkSummary(repo.id, wiki.id);
         return {
           id: repo.id,
           fullName: repo.fullName,
           status: repo.status,
+          activeWiki: {
+            id: wiki.id,
+            name: wiki.name,
+            slug: wiki.slug,
+          },
+          wikiCount: allWikis.length,
           ...summary,
         };
       })
@@ -82,12 +92,20 @@ app.get('/api/repos/:id', async (req: Request, res: Response) => {
     }
 
     const orchestrator = createOrchestrator(repos);
-    const summary = await orchestrator.getWorkSummary(repo.id);
+    const wiki = await getOrCreateActiveWiki(repo.id, repos);
+    const allWikis = await repos.wikis.findByRepo(repo.id);
+    const summary = await orchestrator.getWorkSummary(repo.id, wiki.id);
 
     res.json({
       id: repo.id,
       fullName: repo.fullName,
       status: repo.status,
+      activeWiki: {
+        id: wiki.id,
+        name: wiki.name,
+        slug: wiki.slug,
+      },
+      wikiCount: allWikis.length,
       ...summary,
     });
   } catch (error) {
@@ -224,6 +242,7 @@ app.post('/api/repos/:id/process', async (req: Request, res: Response) => {
 
 /**
  * Get wiki pages for a repository.
+ * Supports optional ?wikiId query param to get pages for a specific wiki.
  */
 app.get('/api/repos/:id/wiki', async (req: Request, res: Response) => {
   try {
@@ -233,7 +252,18 @@ app.get('/api/repos/:id/wiki', async (req: Request, res: Response) => {
       return;
     }
 
-    const pages = await repos.wikiPages.findByRepo(repo.id);
+    // Use specified wiki or active wiki
+    let wiki;
+    if (req.query.wikiId) {
+      wiki = await repos.wikis.findById(req.query.wikiId as string);
+      if (!wiki || wiki.repoId !== repo.id) {
+        res.status(404).json({ error: 'Wiki not found' });
+        return;
+      }
+    } else {
+      wiki = await getOrCreateActiveWiki(repo.id, repos);
+    }
+    const pages = await repos.wikiPages.findByWiki(wiki.id);
 
     // Group by category (first part of path)
     const grouped: Record<string, typeof pages> = {};
@@ -251,6 +281,7 @@ app.get('/api/repos/:id/wiki', async (req: Request, res: Response) => {
 
 /**
  * Get a specific wiki page.
+ * Supports optional ?wikiId query param to get page from a specific wiki.
  */
 app.get('/api/repos/:id/wiki/:path(*)', async (req: Request, res: Response) => {
   try {
@@ -260,7 +291,18 @@ app.get('/api/repos/:id/wiki/:path(*)', async (req: Request, res: Response) => {
       return;
     }
 
-    const page = await repos.wikiPages.findByPath(repo.id, req.params.path!);
+    // Use specified wiki or active wiki
+    let wiki;
+    if (req.query.wikiId) {
+      wiki = await repos.wikis.findById(req.query.wikiId as string);
+      if (!wiki || wiki.repoId !== repo.id) {
+        res.status(404).json({ error: 'Wiki not found' });
+        return;
+      }
+    } else {
+      wiki = await getOrCreateActiveWiki(repo.id, repos);
+    }
+    const page = await repos.wikiPages.findByPath(wiki.id, req.params.path!);
     if (!page) {
       res.status(404).json({ error: 'Wiki page not found' });
       return;
@@ -291,7 +333,8 @@ app.post('/api/repos/:id/query', async (req: Request, res: Response) => {
 
     const llm = createLLM();
     const research = createResearchAgent(repos, llm);
-    const result = await research.query(repo.id, question);
+    const wiki = await getOrCreateActiveWiki(repo.id, repos);
+    const result = await research.query(wiki.id, question);
 
     res.json(result);
   } catch (error) {
@@ -369,6 +412,170 @@ app.get('/api/filesystem/browse', async (req: Request, res: Response) => {
       parent,
       directories,
     });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============ Wiki Management API ============
+
+/**
+ * List all wikis for a repository.
+ */
+app.get('/api/repos/:id/wikis', async (req: Request, res: Response) => {
+  try {
+    const repo = await repos.repos.findById(req.params.id!);
+    if (!repo) {
+      res.status(404).json({ error: 'Repository not found' });
+      return;
+    }
+
+    const wikis = await repos.wikis.findByRepo(repo.id);
+    res.json(wikis);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * Create a new wiki for a repository.
+ */
+app.post('/api/repos/:id/wikis', async (req: Request, res: Response) => {
+  try {
+    const repo = await repos.repos.findById(req.params.id!);
+    if (!repo) {
+      res.status(404).json({ error: 'Repository not found' });
+      return;
+    }
+
+    const { name, description, branchFilter, pathFilters, setActive } = req.body;
+    if (!name) {
+      res.status(400).json({ error: 'Wiki name is required' });
+      return;
+    }
+
+    const command = createCreateWikiCommand({
+      repoId: repo.id,
+      name,
+      description,
+      branchFilter,
+      pathFilters,
+      setActive: setActive ?? false,
+    });
+
+    const result = await handleCreateWiki(command, repos);
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    res.status(201).json(result.data);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * Get a specific wiki with stats.
+ */
+app.get('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
+  try {
+    const wiki = await repos.wikis.findById(req.params.wikiId!);
+    if (!wiki || wiki.repoId !== req.params.id) {
+      res.status(404).json({ error: 'Wiki not found' });
+      return;
+    }
+
+    const pages = await repos.wikiPages.findByWiki(wiki.id);
+
+    res.json({
+      ...wiki,
+      stats: {
+        pageCount: pages.length,
+        avgConfidence: pages.length > 0
+          ? pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length
+          : 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * Update a wiki's settings.
+ */
+app.put('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
+  try {
+    const wiki = await repos.wikis.findById(req.params.wikiId!);
+    if (!wiki || wiki.repoId !== req.params.id) {
+      res.status(404).json({ error: 'Wiki not found' });
+      return;
+    }
+
+    const { name, description, branchFilter, pathFilters } = req.body;
+
+    const updatedWiki = {
+      ...wiki,
+      ...(name ? { name } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(branchFilter !== undefined ? { branchFilter } : {}),
+      ...(pathFilters !== undefined ? { pathFilters } : {}),
+      updatedAt: new Date(),
+    };
+
+    await repos.wikis.save(updatedWiki);
+    res.json(updatedWiki);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * Delete a wiki.
+ */
+app.delete('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
+  try {
+    const wiki = await repos.wikis.findById(req.params.wikiId!);
+    if (!wiki || wiki.repoId !== req.params.id) {
+      res.status(404).json({ error: 'Wiki not found' });
+      return;
+    }
+
+    if (wiki.isActive) {
+      res.status(400).json({ error: 'Cannot delete the active wiki. Set another wiki as active first.' });
+      return;
+    }
+
+    await repos.wikiPages.deleteByWiki(wiki.id);
+    await repos.wikis.delete(wiki.id);
+
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * Set a wiki as active.
+ */
+app.post('/api/repos/:id/wikis/:wikiId/activate', async (req: Request, res: Response) => {
+  try {
+    const wiki = await repos.wikis.findById(req.params.wikiId!);
+    if (!wiki || wiki.repoId !== req.params.id) {
+      res.status(404).json({ error: 'Wiki not found' });
+      return;
+    }
+
+    const command = createSetActiveWikiCommand(wiki.id);
+    const result = await handleSetActiveWiki(command, repos);
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    res.json(result.data);
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

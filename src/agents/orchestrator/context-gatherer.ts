@@ -60,7 +60,7 @@ export class ContextGatherer {
   /**
    * Gather a complete snapshot of the wiki state.
    */
-  async gather(repoId: string): Promise<OrchestratorContext> {
+  async gather(repoId: string, wikiId: string): Promise<OrchestratorContext> {
     // Fetch all the data we need
     const [
       commits,
@@ -68,7 +68,7 @@ export class ContextGatherer {
       agentRuns,
     ] = await Promise.all([
       this.repos.commits.findByRepo(repoId, { limit: 100 }),
-      this.repos.wikiPages.findByRepo(repoId),
+      this.repos.wikiPages.findByWiki(wikiId),
       this.repos.agentRuns.findByRepo(repoId),
     ]);
 

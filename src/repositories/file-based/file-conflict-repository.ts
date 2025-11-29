@@ -13,30 +13,30 @@ export class FileConflictRepository implements ConflictRepository {
     return this.store.get(id);
   }
 
-  async findByRepo(repoId: string, options?: {
+  async findByWiki(wikiId: string, options?: {
     status?: ConflictStatus;
     type?: ConflictType;
   }): Promise<Conflict[]> {
     return this.store.find(c => {
-      if (c.repoId !== repoId) return false;
+      if (c.wikiId !== wikiId) return false;
       if (options?.status && c.status !== options.status) return false;
       if (options?.type && c.type !== options.type) return false;
       return true;
     });
   }
 
-  async findOpen(repoId: string): Promise<Conflict[]> {
-    return this.store.find(c => c.repoId === repoId && c.status === 'open');
+  async findOpen(wikiId: string): Promise<Conflict[]> {
+    return this.store.find(c => c.wikiId === wikiId && c.status === 'open');
   }
 
-  async findByPage(repoId: string, pagePath: string): Promise<Conflict[]> {
+  async findByPage(wikiId: string, pagePath: string): Promise<Conflict[]> {
     return this.store.find(c =>
-      c.repoId === repoId && c.pagePathaffected === pagePath
+      c.wikiId === wikiId && c.pagePathaffected === pagePath
     );
   }
 
-  async countByStatus(repoId: string): Promise<Record<ConflictStatus, number>> {
-    const all = await this.store.find(c => c.repoId === repoId);
+  async countByStatus(wikiId: string): Promise<Record<ConflictStatus, number>> {
+    const all = await this.store.find(c => c.wikiId === wikiId);
     const counts: Record<ConflictStatus, number> = {
       open: 0,
       'auto-resolved': 0,
@@ -57,8 +57,8 @@ export class FileConflictRepository implements ConflictRepository {
     await this.store.delete(id);
   }
 
-  async deleteByRepo(repoId: string): Promise<void> {
-    await this.store.deleteMany(c => c.repoId === repoId);
+  async deleteByWiki(wikiId: string): Promise<void> {
+    await this.store.deleteMany(c => c.wikiId === wikiId);
   }
 
   async resolve(id: string, resolution: ConflictResolution): Promise<void> {

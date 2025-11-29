@@ -26,7 +26,7 @@ export class ConsistencyAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByRepo(context.repoId);
+    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
 
     if (pages.length < this.MIN_PAGES_FOR_ANALYSIS) {
       return {
