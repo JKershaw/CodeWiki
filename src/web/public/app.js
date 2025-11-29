@@ -149,35 +149,95 @@ async function processRepo(id) {
   }
 }
 
-// Add Repo Form
+// Add Repo Form - Folder Browser
 const addRepoBtn = document.getElementById('add-repo-btn');
 const addRepoForm = document.getElementById('add-repo-form');
 const submitRepoBtn = document.getElementById('submit-repo-btn');
 const cancelRepoBtn = document.getElementById('cancel-repo-btn');
-const repoPathInput = document.getElementById('repo-path');
+const browserUpBtn = document.getElementById('browser-up-btn');
+const browserPath = document.getElementById('browser-path');
+const folderList = document.getElementById('folder-list');
+
+let selectedRepoPath = null;
+let currentBrowsePath = null;
+
+async function browseFolders(path = null) {
+  folderList.innerHTML = '<p class="loading" style="padding: 20px;">Loading...</p>';
+
+  try {
+    const url = path ? `/api/filesystem/browse?path=${encodeURIComponent(path)}` : '/api/filesystem/browse';
+    const data = await api(url.replace('/api', ''));
+
+    currentBrowsePath = data.currentPath;
+    browserPath.textContent = data.currentPath;
+    browserUpBtn.disabled = !data.parent;
+
+    if (data.directories.length === 0) {
+      folderList.innerHTML = '<p class="placeholder" style="padding: 20px;">No subdirectories</p>';
+      return;
+    }
+
+    folderList.innerHTML = data.directories.map(dir => `
+      <div class="folder-item" data-path="${escapeHtml(dir.path)}" data-is-git="${dir.isGitRepo}">
+        <span class="folder-icon">${dir.isGitRepo ? '📦' : '📁'}</span>
+        <span class="folder-name">${escapeHtml(dir.name)}</span>
+        ${dir.isGitRepo ? '<span class="git-badge">GIT</span>' : ''}
+      </div>
+    `).join('');
+
+    // Add click handlers
+    folderList.querySelectorAll('.folder-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const isGit = item.dataset.isGit === 'true';
+        const path = item.dataset.path;
+
+        if (isGit) {
+          // Select this repo
+          folderList.querySelectorAll('.folder-item').forEach(i => i.classList.remove('selected'));
+          item.classList.add('selected');
+          selectedRepoPath = path;
+          submitRepoBtn.disabled = false;
+        } else {
+          // Navigate into folder
+          browseFolders(path);
+        }
+      });
+
+      // Double-click to navigate into git repos too
+      item.addEventListener('dblclick', () => {
+        browseFolders(item.dataset.path);
+      });
+    });
+  } catch (error) {
+    folderList.innerHTML = `<p class="placeholder" style="padding: 20px;">Error: ${escapeHtml(error.message)}</p>`;
+  }
+}
 
 addRepoBtn.addEventListener('click', () => {
   addRepoForm.classList.remove('hidden');
-  repoPathInput.focus();
+  selectedRepoPath = null;
+  submitRepoBtn.disabled = true;
+  browseFolders();
 });
 
 cancelRepoBtn.addEventListener('click', () => {
   addRepoForm.classList.add('hidden');
-  repoPathInput.value = '';
+  selectedRepoPath = null;
 });
 
 submitRepoBtn.addEventListener('click', () => {
-  const path = repoPathInput.value.trim();
-  if (path) {
-    addRepo(path);
+  if (selectedRepoPath) {
+    addRepo(selectedRepoPath);
     addRepoForm.classList.add('hidden');
-    repoPathInput.value = '';
+    selectedRepoPath = null;
   }
 });
 
-repoPathInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    submitRepoBtn.click();
+browserUpBtn.addEventListener('click', async () => {
+  if (currentBrowsePath) {
+    // Go to parent directory
+    const parent = currentBrowsePath.split('/').slice(0, -1).join('/') || '/';
+    browseFolders(parent);
   }
 });
 
