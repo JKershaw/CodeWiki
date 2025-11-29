@@ -493,17 +493,6 @@ export class Executor {
       }
       console.error(`${'='.repeat(60)}\n`);
 
-      // Mark commit as processed even on failure to prevent infinite retry loops
-      // The error is logged above so issues can be diagnosed
-      if (internalCommitId) {
-        await this.repos.commits.addProcessingRecord(internalCommitId, {
-          agentType: agent.type,
-          agentRunId,
-          processedAt: new Date(),
-        });
-        console.log(`📝 Marked commit ${workItem.targetCommitId?.slice(0, 8)} as processed by ${agent.type} (despite failure)`);
-      }
-
       return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs, agentRunId, error: errorMessage };
     }
   }
