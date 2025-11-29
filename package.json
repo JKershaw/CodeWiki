@@ -14,6 +14,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "cli": "tsx src/cli.ts",
+    "ask": "tsx src/cli.ts ask",
     "mcp": "tsx src/mcp/server.ts",
     "web": "tsx src/web/server.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
