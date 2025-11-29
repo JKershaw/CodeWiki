@@ -22,6 +22,7 @@ import { createAnthropicLLM } from './services/llm/anthropic-llm-service.js';
 import type { LLMService } from './services/llm/llm-service.js';
 import { createOrchestrator } from './agents/orchestrator/orchestrator.js';
 import { createResearchAgent } from './agents/research/research-agent.js';
+import { createSpecAgent } from './agents/spec/spec-agent.js';
 import { createExecutor } from './executor/executor.js';
 import { createRepo } from './domain/repo.js';
 
@@ -56,6 +57,9 @@ async function main() {
     case 'ask':
       await askCommand(args.slice(1));
       break;
+    case 'spec':
+      await specCommand(args.slice(1));
+      break;
     case 'query':
       await queryCommand(args.slice(1));
       break;
@@ -88,6 +92,10 @@ Commands:
                                     Uses the most recent wiki for this repo
                                     Returns just the answer text
 
+  spec "<task>"                     Generate a spec for a coding agent task
+                                    Uses the wiki to build context for implementation
+                                    Returns structured specification
+
   query <repo-path> "<question>"    Ask a question about the codebase
                                     Searches wiki and synthesizes an answer
 
@@ -98,6 +106,8 @@ Commands:
 Examples:
   npm run ask "what is the architecture?"               # Quick ask (current repo)
   npm run ask "how does authentication work?"           # Quick ask
+  npm run spec "add user authentication"                # Generate spec for task
+  npm run spec "implement rate limiting for API"        # Generate implementation spec
   npx tsx src/cli.ts process . 5                        # Process current repo
   npx tsx src/cli.ts process . 20                       # More iterations
   npx tsx src/cli.ts query . "what is the architecture?"  # Ask about architecture
@@ -411,6 +421,92 @@ async function askCommand(args: string[]) {
 
   // Output just the answer (clean for piping)
   console.log(result.answer);
+}
+
+async function specCommand(args: string[]) {
+  const task = args.join(' ');
+
+  if (!task) {
+    console.error('Error: Task description is required');
+    console.log('Usage: npm run spec "your task description here"');
+    process.exit(1);
+  }
+
+  // Use current working directory
+  const absolutePath = process.cwd();
+
+  // Initialize services
+  const repos = createRepositories({ type: 'file' });
+  const llm = createLLM();
+
+  // Find the repository - try exact match first, then find most recent
+  let repo = await repos.repos.findByFullName(absolutePath);
+
+  if (!repo) {
+    // Look for any repo that might match this path (in case of multiple wikis)
+    const allRepos = await repos.repos.findAll();
+    const matchingRepos = allRepos
+      .filter(r => r.fullName === absolutePath || absolutePath.startsWith(r.fullName))
+      .sort((a, b) => {
+        // Sort by most recently updated (using createdAt as proxy)
+        const aTime = a.createdAt?.getTime() ?? 0;
+        const bTime = b.createdAt?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+
+    repo = matchingRepos[0] ?? null;
+  }
+
+  if (!repo) {
+    console.error(`No wiki found for: ${absolutePath}`);
+    console.log('Run "npm run cli process ." first to generate a wiki.');
+    process.exit(1);
+  }
+
+  // Check if wiki has content
+  const wikiPages = await repos.wikiPages.findByRepo(repo.id);
+  if (wikiPages.length === 0) {
+    console.error('Wiki is empty. Run "npm run cli process ." first to generate wiki content.');
+    process.exit(1);
+  }
+
+  // Create spec agent and generate
+  const specAgent = createSpecAgent(repos, llm);
+  const result = await specAgent.generateSpec(repo.id, task);
+
+  // Output the spec in a readable format
+  console.log('# Coding Agent Specification\n');
+  console.log(`## Task\n${result.task}\n`);
+  console.log(`## Interpretation\n${result.interpretation}\n`);
+  console.log(`## Context\n${result.spec.context}\n`);
+
+  if (result.spec.keyFiles.length > 0) {
+    console.log('## Key Files');
+    for (const file of result.spec.keyFiles) {
+      console.log(`- ${file}`);
+    }
+    console.log('');
+  }
+
+  console.log(`## Patterns\n${result.spec.patterns}\n`);
+  console.log(`## Conventions\n${result.spec.conventions}\n`);
+  console.log(`## Dependencies\n${result.spec.dependencies}\n`);
+  console.log(`## Testing\n${result.spec.testing}\n`);
+  console.log(`## Pitfalls\n${result.spec.pitfalls}\n`);
+
+  console.log('---');
+  console.log(`Confidence: ${(result.confidence * 100).toFixed(0)}%`);
+
+  if (result.sources.length > 0) {
+    console.log('\nSources:');
+    for (const source of result.sources) {
+      console.log(`  - ${source.title} (${source.path})`);
+    }
+  }
+
+  if (result.costUsd) {
+    console.log(`\nCost: $${result.costUsd.toFixed(4)}`);
+  }
 }
 
 main().catch(error => {

@@ -20,6 +20,7 @@ import { createAnthropicLLM } from '../services/llm/anthropic-llm-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import { createOrchestrator } from '../agents/orchestrator/orchestrator.js';
 import { createResearchAgent } from '../agents/research/research-agent.js';
+import { createSpecAgent } from '../agents/spec/spec-agent.js';
 import { createExecutor } from '../executor/executor.js';
 import { createRepo } from '../domain/repo.js';
 import { v4 as uuid } from 'uuid';
@@ -291,6 +292,33 @@ app.post('/api/repos/:id/query', async (req: Request, res: Response) => {
     const llm = createLLM();
     const research = createResearchAgent(repos, llm);
     const result = await research.query(repo.id, question);
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * Generate a spec for a coding agent task.
+ */
+app.post('/api/repos/:id/spec', async (req: Request, res: Response) => {
+  try {
+    const repo = await repos.repos.findById(req.params.id!);
+    if (!repo) {
+      res.status(404).json({ error: 'Repository not found' });
+      return;
+    }
+
+    const { task } = req.body;
+    if (!task) {
+      res.status(400).json({ error: 'Task description is required' });
+      return;
+    }
+
+    const llm = createLLM();
+    const specAgent = createSpecAgent(repos, llm);
+    const result = await specAgent.generateSpec(repo.id, task);
 
     res.json(result);
   } catch (error) {

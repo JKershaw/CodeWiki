@@ -17,6 +17,7 @@
       <button class="nav-btn active" data-view="repos">Repositories</button>
       <button class="nav-btn" data-view="wiki" disabled>Wiki</button>
       <button class="nav-btn" data-view="query" disabled>Query</button>
+      <button class="nav-btn" data-view="spec" disabled>Spec</button>
     </nav>
 
     <main>
@@ -82,6 +83,31 @@
             <div id="query-answer" class="answer"></div>
             <div id="query-meta" class="meta"></div>
             <div id="query-sources" class="sources"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Spec View -->
+      <section id="spec-view" class="view">
+        <div class="section-header">
+          <h2>Spec: <span id="spec-repo-name"></span></h2>
+          <button id="back-to-repos-spec" class="btn secondary">Back to Repos</button>
+        </div>
+
+        <div class="spec-container">
+          <div class="spec-input">
+            <textarea id="spec-task" placeholder="Describe the task you want a coding agent to implement..." rows="3"></textarea>
+            <button id="submit-spec" class="btn primary">Generate Spec</button>
+          </div>
+
+          <div id="spec-result" class="spec-result hidden">
+            <div class="spec-header">
+              <h3>Generated Specification</h3>
+              <button id="copy-spec" class="btn secondary">Copy</button>
+            </div>
+            <div id="spec-content" class="spec-content"></div>
+            <div id="spec-meta" class="meta"></div>
+            <div id="spec-sources" class="sources"></div>
           </div>
         </div>
       </section>
