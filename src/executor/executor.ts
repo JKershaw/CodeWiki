@@ -4,9 +4,6 @@ import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { Agent, AgentContext } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { createAgentRun, type AgentRun } from '../domain/agent-run.js';
-import { createProcessingRun, type ProcessingRun } from '../domain/processing-run.js';
-import { createIteration, type Iteration } from '../domain/iteration.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { CodeChangeAgent } from '../agents/analysis/code-change-agent.js';
@@ -24,11 +21,61 @@ import { ProjectOverviewAgent } from '../agents/synthesis/project-overview-agent
 import { GettingStartedAgent } from '../agents/synthesis/getting-started-agent.js';
 import { BootstrapAgent } from '../agents/synthesis/bootstrap-agent.js';
 
+// Import CQRS commands
+import {
+  createStartProcessingRunCommand,
+  handleStartProcessingRun,
+  createUpdateProcessingProgressCommand,
+  handleUpdateProcessingProgress,
+  createCompleteProcessingRunCommand,
+  handleCompleteProcessingRun,
+  createFailProcessingRunCommand,
+  handleFailProcessingRun,
+  createStopProcessingRunCommand,
+  handleStopProcessingRun,
+} from '../commands/processing-run.js';
+import {
+  createStartIterationCommand,
+  handleStartIteration,
+  createUpdateIterationWorkItemCommand,
+  handleUpdateIterationWorkItem,
+  createCompleteIterationCommand,
+  handleCompleteIteration,
+  createFailIterationCommand,
+  handleFailIteration,
+  createSkipIterationCommand,
+  handleSkipIteration,
+} from '../commands/iteration.js';
+import {
+  createClaimWorkItemCommand,
+  handleClaimWorkItem,
+  createSaveWorkItemsCommand,
+  handleSaveWorkItems,
+  createCompleteWorkItemCommand,
+  handleCompleteWorkItem,
+  createFailWorkItemCommand,
+  handleFailWorkItem,
+} from '../commands/work-queue.js';
+import {
+  createCreateAgentRunCommand,
+  handleCreateAgentRun,
+  createCompleteAgentRunCommand,
+  handleCompleteAgentRun,
+  createFailAgentRunCommand,
+  handleFailAgentRun,
+} from '../commands/agent-run.js';
+import {
+  createUpdateWikiPageCommand,
+  handleUpdateWikiPage,
+} from '../commands/update-wiki-page.js';
+
 /**
  * Executor - The inner loop that runs agents from the work queue.
  *
  * Takes work items and fires off agents, respecting throttle limits.
  * When the work list is exhausted, it triggers the orchestrator again.
+ *
+ * All state changes flow through CQRS commands for clean separation.
  */
 export class Executor {
   private agents: Map<string, Agent> = new Map();
@@ -92,15 +139,22 @@ export class Executor {
     const wiki = await getOrCreateActiveWiki(repoId, this.repos);
     const wikiId = wiki.id;
 
-    // Create a processing run record to track this execution
-    const processingRun = createProcessingRun({
-      id: uuid(),
-      repoId,
-      wikiId,
-      totalIterations: iterations,
-    });
-    await this.repos.processingRuns.save(processingRun);
-    summary.processingRunId = processingRun.id;
+    // Create a processing run record to track this execution (via CQRS command)
+    const processingRunId = uuid();
+    const startRunResult = await handleStartProcessingRun(
+      createStartProcessingRunCommand({
+        id: processingRunId,
+        repoId,
+        wikiId,
+        totalIterations: iterations,
+      }),
+      this.repos
+    );
+
+    if (!startRunResult.success) {
+      throw new Error(`Failed to start processing run: ${startRunResult.error}`);
+    }
+    summary.processingRunId = processingRunId;
 
     this.running = true;
     this.shouldStop = false;
@@ -109,64 +163,104 @@ export class Executor {
       for (let i = 0; i < iterations && !this.shouldStop; i++) {
         const iterationNumber = i + 1;
 
-        // Create an iteration record
-        const iteration = createIteration({
-          id: uuid(),
-          processingRunId: processingRun.id,
-          iterationNumber,
-        });
-        await this.repos.iterations.save(iteration);
+        // Create an iteration record (via CQRS command)
+        const iterationId = uuid();
+        const startIterResult = await handleStartIteration(
+          createStartIterationCommand({
+            id: iterationId,
+            processingRunId,
+            iterationNumber,
+          }),
+          this.repos
+        );
+
+        if (!startIterResult.success) {
+          console.error(`Failed to start iteration: ${startIterResult.error}`);
+          continue;
+        }
 
         // Check rate limits
         if (this.llm.isRateLimited()) {
           console.log('Rate limited, waiting...');
-          await this.repos.iterations.skip(iteration.id, 'Rate limited');
+          await handleSkipIteration(
+            createSkipIterationCommand(iterationId, 'Rate limited'),
+            this.repos
+          );
           await new Promise(resolve => setTimeout(resolve, 5000));
           continue;
         }
 
-        // Get work to do (work queue is per-repo)
-        let workItem = await this.repos.workQueue.claimNext(repoId);
+        // Get work to do (work queue is per-repo) via CQRS command
+        let claimResult = await handleClaimWorkItem(
+          createClaimWorkItemCommand(repoId),
+          this.repos
+        );
+        let workItem = claimResult.success ? claimResult.data : null;
 
         // If no work, generate more
         if (!workItem) {
           const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
           if (newWork.length === 0) {
             console.log('No more work to do');
-            await this.repos.iterations.skip(iteration.id, 'No more work available');
+            await handleSkipIteration(
+              createSkipIterationCommand(iterationId, 'No more work available'),
+              this.repos
+            );
             break;
           }
 
-          await this.repos.workQueue.saveMany(newWork);
-          workItem = await this.repos.workQueue.claimNext(repoId);
+          // Save new work items via CQRS command
+          await handleSaveWorkItems(
+            createSaveWorkItemsCommand(newWork),
+            this.repos
+          );
+
+          // Try claiming again
+          claimResult = await handleClaimWorkItem(
+            createClaimWorkItemCommand(repoId),
+            this.repos
+          );
+          workItem = claimResult.success ? claimResult.data : null;
 
           if (!workItem) {
-            await this.repos.iterations.skip(iteration.id, 'No work item claimed');
+            await handleSkipIteration(
+              createSkipIterationCommand(iterationId, 'No work item claimed'),
+              this.repos
+            );
             break;
           }
         }
 
-        // Update iteration with work item details
-        await this.repos.iterations.updateWorkItem(iteration.id, {
-          workItemId: workItem.id,
-          agentType: workItem.agentType,
-        });
+        // Update iteration with work item details via CQRS command
+        await handleUpdateIterationWorkItem(
+          createUpdateIterationWorkItemCommand(iterationId, {
+            workItemId: workItem.id,
+            agentType: workItem.agentType,
+          }),
+          this.repos
+        );
 
         // Execute the work item
         const result = await this.executeWorkItem(workItem, repoId, wikiId);
 
-        // Update iteration with results
+        // Update iteration with results via CQRS command
         if (result.success) {
-          await this.repos.iterations.complete(iteration.id, {
-            agentRunId: result.agentRunId!,
-            durationMs: result.durationMs,
-            costUsd: result.cost,
-            pagesCreated: result.pagesCreated,
-            pagesUpdated: result.pagesUpdated,
-          });
+          await handleCompleteIteration(
+            createCompleteIterationCommand(iterationId, {
+              agentRunId: result.agentRunId!,
+              durationMs: result.durationMs,
+              costUsd: result.cost,
+              pagesCreated: result.pagesCreated,
+              pagesUpdated: result.pagesUpdated,
+            }),
+            this.repos
+          );
           summary.successful++;
         } else {
-          await this.repos.iterations.fail(iteration.id, result.error || 'Unknown error', result.durationMs);
+          await handleFailIteration(
+            createFailIterationCommand(iterationId, result.error || 'Unknown error', result.durationMs),
+            this.repos
+          );
           summary.failed++;
         }
 
@@ -175,30 +269,42 @@ export class Executor {
         summary.wikiPagesCreated += result.pagesCreated;
         summary.wikiPagesUpdated += result.pagesUpdated;
 
-        // Update processing run progress
-        await this.repos.processingRuns.updateProgress(processingRun.id, {
-          completedIterations: summary.iterations,
-          successfulIterations: summary.successful,
-          failedIterations: summary.failed,
-          totalCostUsd: summary.totalCost,
-          wikiPagesCreated: summary.wikiPagesCreated,
-          wikiPagesUpdated: summary.wikiPagesUpdated,
-        });
+        // Update processing run progress via CQRS command
+        await handleUpdateProcessingProgress(
+          createUpdateProcessingProgressCommand(processingRunId, {
+            completedIterations: summary.iterations,
+            successfulIterations: summary.successful,
+            failedIterations: summary.failed,
+            totalCostUsd: summary.totalCost,
+            wikiPagesCreated: summary.wikiPagesCreated,
+            wikiPagesUpdated: summary.wikiPagesUpdated,
+          }),
+          this.repos
+        );
       }
 
-      // Mark processing run as completed
-      await this.repos.processingRuns.complete(processingRun.id);
+      // Mark processing run as completed via CQRS command
+      await handleCompleteProcessingRun(
+        createCompleteProcessingRunCommand(processingRunId),
+        this.repos
+      );
     } catch (error) {
-      // Mark processing run as failed
+      // Mark processing run as failed via CQRS command
       const errorMessage = error instanceof Error ? error.message : String(error);
-      await this.repos.processingRuns.fail(processingRun.id, errorMessage);
+      await handleFailProcessingRun(
+        createFailProcessingRunCommand(processingRunId, errorMessage),
+        this.repos
+      );
       throw error;
     } finally {
       this.running = false;
 
-      // If stopped manually, mark as stopped
+      // If stopped manually, mark as stopped via CQRS command
       if (this.shouldStop) {
-        await this.repos.processingRuns.stop(processingRun.id);
+        await handleStopProcessingRun(
+          createStopProcessingRunCommand(processingRunId),
+          this.repos
+        );
       }
     }
 
@@ -228,7 +334,11 @@ export class Executor {
     if (!agent) {
       const errorMsg = `Unknown agent type: ${workItem.agentType}`;
       console.error(errorMsg);
-      await this.repos.workQueue.fail(workItem.id);
+      // Fail work item via CQRS command
+      await handleFailWorkItem(
+        createFailWorkItemCommand(workItem.id),
+        this.repos
+      );
       return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
     }
 
@@ -240,22 +350,37 @@ export class Executor {
       if (!commit) {
         const errorMsg = `Commit not found for SHA: ${workItem.targetCommitId}`;
         console.error(errorMsg);
-        await this.repos.workQueue.fail(workItem.id);
+        // Fail work item via CQRS command
+        await handleFailWorkItem(
+          createFailWorkItemCommand(workItem.id),
+          this.repos
+        );
         return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
       }
       internalCommitId = commit.id;
     }
 
-    // Create agent run record
-    const agentRun = createAgentRun({
-      id: uuid(),
-      repoId,
-      wikiId,
-      agentType: workItem.agentType,
-      ...(internalCommitId ? { targetCommitId: internalCommitId } : {}),
-    });
-    agentRun.status = 'running';
-    await this.repos.agentRuns.save(agentRun);
+    // Create agent run record via CQRS command
+    const agentRunId = uuid();
+    const createRunResult = await handleCreateAgentRun(
+      createCreateAgentRunCommand({
+        id: agentRunId,
+        repoId,
+        wikiId,
+        agentType: workItem.agentType,
+        targetCommitId: internalCommitId,
+      }),
+      this.repos
+    );
+
+    if (!createRunResult.success) {
+      console.error(`Failed to create agent run: ${createRunResult.error}`);
+      await handleFailWorkItem(
+        createFailWorkItemCommand(workItem.id),
+        this.repos
+      );
+      return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: createRunResult.error || 'Failed to create agent run' };
+    }
 
     const context: AgentContext = {
       repoId,
@@ -280,58 +405,52 @@ export class Executor {
 
       const durationMs = Date.now() - startTime;
 
-      // Complete the agent run
-      await this.repos.agentRuns.complete(
-        agentRun.id,
-        result.result,
-        durationMs,
-        result.costUsd
+      // Complete the agent run via CQRS command
+      await handleCompleteAgentRun(
+        createCompleteAgentRunCommand(agentRunId, result.result, durationMs, result.costUsd),
+        this.repos
       );
 
-      // Process wiki updates
+      // Process wiki updates via CQRS command
       let pagesCreated = 0;
       let pagesUpdated = 0;
 
       for (const update of result.updates) {
-        update.agentRunId = agentRun.id;
+        update.agentRunId = agentRunId;
 
-        const existingPage = await this.repos.wikiPages.findByPath(wikiId, update.path);
+        // Use UpdateWikiPage CQRS command
+        const updateResult = await handleUpdateWikiPage(
+          createUpdateWikiPageCommand(update),
+          this.repos,
+          wikiId
+        );
 
-        if (existingPage) {
-          await this.repos.wikiPages.updateContent(existingPage.id, {
-            content: update.type === 'merge'
-              ? `${existingPage.content}\n\n---\n\n${update.content}`
-              : update.content,
-            confidence: Math.min(1, existingPage.confidence + update.confidenceDelta),
-            sourceCommitId: update.sourceCommitId,
-          });
-          pagesUpdated++;
-        } else {
-          const { createWikiPage } = await import('../domain/wiki-page.js');
-          const newPage = createWikiPage({
-            id: uuid(),
-            wikiId,
-            path: update.path,
-            title: extractTitle(update.content),
-            content: update.content,
-            sourceCommitId: update.sourceCommitId,
-          });
-          await this.repos.wikiPages.save(newPage);
-          pagesCreated++;
+        if (updateResult.success && updateResult.data) {
+          // Determine if it was a create or update based on page creation time
+          const pageAge = Date.now() - updateResult.data.createdAt.getTime();
+          if (pageAge < 1000) {
+            // Created less than 1 second ago, likely new
+            pagesCreated++;
+          } else {
+            pagesUpdated++;
+          }
         }
       }
 
-      // Mark commit as processed
+      // Mark commit as processed (still direct repo access - could be another command)
       if (internalCommitId) {
         await this.repos.commits.addProcessingRecord(internalCommitId, {
           agentType: agent.type,
-          agentRunId: agentRun.id,
+          agentRunId,
           processedAt: new Date(),
         });
       }
 
-      // Complete the work item
-      await this.repos.workQueue.complete(workItem.id, agentRun.id);
+      // Complete the work item via CQRS command
+      await handleCompleteWorkItem(
+        createCompleteWorkItemCommand(workItem.id, agentRunId),
+        this.repos
+      );
 
       console.log(`✓ ${agent.type} completed (${durationMs}ms, $${result.costUsd.toFixed(4)})`);
 
@@ -341,19 +460,28 @@ export class Executor {
         pagesCreated,
         pagesUpdated,
         durationMs,
-        agentRunId: agentRun.id,
+        agentRunId,
         error: null,
       };
     } catch (error) {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      await this.repos.agentRuns.fail(agentRun.id, errorMessage, durationMs);
-      await this.repos.workQueue.fail(workItem.id);
+      // Fail agent run via CQRS command
+      await handleFailAgentRun(
+        createFailAgentRunCommand(agentRunId, errorMessage, durationMs),
+        this.repos
+      );
+
+      // Fail work item via CQRS command
+      await handleFailWorkItem(
+        createFailWorkItemCommand(workItem.id),
+        this.repos
+      );
 
       console.error(`✗ ${agent.type} failed: ${errorMessage}`);
 
-      return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs, agentRunId: agentRun.id, error: errorMessage };
+      return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs, agentRunId, error: errorMessage };
     }
   }
 }
@@ -376,14 +504,6 @@ export interface ExecutionSummary {
   totalCost: number;
   wikiPagesCreated: number;
   wikiPagesUpdated: number;
-}
-
-/**
- * Extract title from markdown content.
- */
-function extractTitle(content: string): string {
-  const match = content.match(/^#\s+(.+)$/m);
-  return match ? match[1]! : 'Untitled';
 }
 
 /**
