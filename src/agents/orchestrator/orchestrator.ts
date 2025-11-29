@@ -21,6 +21,7 @@ const ANALYSIS_AGENTS: AgentType[] = [
 	"code-change", // General code analysis - runs first
 	"narrative", // Detects ADRs, planning docs, READMEs
 	"security", // Security audit
+	"technical-debt", // Technical debt indicators, TODOs, code smells
 	"pattern", // Design patterns and conventions
 	"dependency", // Dependency changes
 ];

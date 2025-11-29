@@ -19,6 +19,7 @@ ANALYSIS AGENTS (run on specific commits):
 - code-change: Basic analysis of what changed. Run this first on new commits.
 - narrative: Detects ADRs, planning docs, READMEs. Good for commits with .md files or significant docs.
 - security: Security audit. Important for auth, crypto, API, or sensitive changes.
+- technical-debt: Identifies code smells, TODOs/FIXMEs, SOLID violations, complexity issues. HIGH VALUE for helping developers know where to tread carefully.
 - pattern: Identifies design patterns. Good after code-change has run.
 - dependency: Tracks dependency changes. Only useful for package.json/lock file changes.
 
@@ -142,7 +143,7 @@ export interface OrchestratorDecision {
   }>;
 }
 
-const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'pattern', 'dependency'];
+const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency'];
 const META_AGENTS = ['link', 'structure', 'quality', 'consistency'];
 const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'writer'];
 const ALL_AGENTS = [...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
