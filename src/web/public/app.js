@@ -95,7 +95,7 @@ async function loadRepos() {
         <div class="card-actions">
           <button class="btn primary process-btn" data-id="${repo.id}">Process</button>
           <button class="btn wiki-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Browse Wiki</button>
-          <button class="btn query-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Query</button>
+          <button class="btn query-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Ask</button>
           <button class="btn spec-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Spec</button>
         </div>
       </div>
@@ -486,7 +486,10 @@ async function submitQuery() {
 
 document.getElementById('submit-query').addEventListener('click', submitQuery);
 document.getElementById('query-question').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') submitQuery();
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    submitQuery();
+  }
 });
 
 // Spec
