@@ -428,7 +428,8 @@ app.post('/api/repos/:id/spec', async (req: Request, res: Response) => {
 
     const llm = createLLM();
     const specAgent = createSpecAgent(repos, llm);
-    const result = await specAgent.generateSpec(repo.id, task);
+    const wiki = await getOrCreateActiveWiki(repo.id, repos);
+    const result = await specAgent.generateSpec(wiki.id, task);
 
     res.json(result);
   } catch (error) {
