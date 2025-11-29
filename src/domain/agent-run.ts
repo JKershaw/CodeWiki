@@ -47,6 +47,8 @@ export type AgentType =
   | 'overview'
   | 'project-overview'
   | 'getting-started'
+  | 'testing-guide'
+  | 'extension-guide'
   | 'history'
   | 'convention'
   // Special agents

@@ -33,6 +33,8 @@ SYNTHESIS AGENTS (create new content from existing - no targetCommitId):
 - overview: Creates category overview pages for categories with 3+ pages.
 - project-overview: Creates THE project overview at architecture/overview.md. CRITICAL for 10+ pages.
 - getting-started: Creates a practical getting started guide at guides/getting-started.md. Run when 10+ pages.
+- testing-guide: Creates a testing guide at guides/testing.md explaining test frameworks, patterns, and how to run tests. Run when 15+ pages.
+- extension-guide: Creates an extension patterns guide at guides/extension-patterns.md documenting how to add new features. Run when 15+ pages.
 - writer: Rewrites "This commit..." style pages as proper encyclopedia articles. HIGH IMPACT on readability.
 
 ## Agent Coverage Balance
@@ -65,6 +67,8 @@ These thresholds ensure even large repos (1000+ commits) get useful synthesis ea
 **15+ pages:** Wiki needs strong synthesis (40% analysis, 60% meta/synthesis)
 - PRIORITIZE project-overview if architecture/overview missing
 - PRIORITIZE getting-started if guides/getting-started missing
+- Run testing-guide if guides/testing missing
+- Run extension-guide if guides/extension-patterns missing
 - Continue writer agent for readability
 - Focus on making wiki navigable and useful
 
@@ -123,6 +127,8 @@ Consider:
 - Categories without overview: ${ctx.categoriesWithoutOverview.join(', ') || 'none'} (overview agent helps navigation)
 - Has project overview: ${ctx.hasProjectOverview ? 'YES' : 'NO - run project-overview agent!'}
 - Has getting started: ${ctx.hasGettingStarted ? 'YES' : 'NO - run getting-started agent!'}
+- Has testing guide: ${ctx.hasTestingGuide ? 'YES' : (pageCount >= 15 ? 'NO - run testing-guide agent!' : 'NO (need 15+ pages)')}
+- Has extension guide: ${ctx.hasExtensionGuide ? 'YES' : (pageCount >= 15 ? 'NO - run extension-guide agent!' : 'NO (need 15+ pages)')}
 - Pages without links: ${ctx.pagesWithoutLinks} (link agent improves discoverability)
 ${coverageGaps.length > 0 ? `
 **COVERAGE GAPS - agents with 0% coverage:** ${coverageGaps.join(', ')}
@@ -145,7 +151,7 @@ export interface OrchestratorDecision {
 
 const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency'];
 const META_AGENTS = ['link', 'structure', 'quality', 'consistency'];
-const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'writer'];
+const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'testing-guide', 'extension-guide', 'writer'];
 const ALL_AGENTS = [...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 
 /**

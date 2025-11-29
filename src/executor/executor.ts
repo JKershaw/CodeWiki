@@ -20,6 +20,8 @@ import { OverviewAgent } from '../agents/synthesis/overview-agent.js';
 import { WriterAgent } from '../agents/synthesis/writer-agent.js';
 import { ProjectOverviewAgent } from '../agents/synthesis/project-overview-agent.js';
 import { GettingStartedAgent } from '../agents/synthesis/getting-started-agent.js';
+import { TestingGuideAgent } from '../agents/synthesis/testing-guide-agent.js';
+import { ExtensionGuideAgent } from '../agents/synthesis/extension-guide-agent.js';
 import { BootstrapAgent } from '../agents/synthesis/bootstrap-agent.js';
 
 // Import CQRS commands
@@ -108,6 +110,8 @@ export class Executor {
     this.registerAgent(new WriterAgent());
     this.registerAgent(new ProjectOverviewAgent());
     this.registerAgent(new GettingStartedAgent());
+    this.registerAgent(new TestingGuideAgent());
+    this.registerAgent(new ExtensionGuideAgent());
     this.registerAgent(new BootstrapAgent());
   }
 

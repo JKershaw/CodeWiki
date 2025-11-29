@@ -38,6 +38,8 @@ export interface OrchestratorContext {
   // Key pages existence
   hasProjectOverview: boolean;
   hasGettingStarted: boolean;
+  hasTestingGuide: boolean;
+  hasExtensionGuide: boolean;
 }
 
 /**
@@ -164,6 +166,17 @@ export class ContextGatherer {
       p.path === 'guides/quickstart' ||
       p.path === 'guides/index'
     );
+    const hasTestingGuide = wikiPages.some(p =>
+      p.path === 'guides/testing' ||
+      p.path === 'guides/tests' ||
+      p.path === 'guides/testing-guide'
+    );
+    const hasExtensionGuide = wikiPages.some(p =>
+      p.path === 'guides/extension-patterns' ||
+      p.path === 'guides/extending' ||
+      p.path === 'guides/adding-features' ||
+      p.path === 'guides/patterns'
+    );
 
     return {
       totalCommits: commits.length,
@@ -180,6 +193,8 @@ export class ContextGatherer {
       pagesWithoutLinks,
       hasProjectOverview,
       hasGettingStarted,
+      hasTestingGuide,
+      hasExtensionGuide,
     };
   }
 
@@ -212,6 +227,8 @@ export class ContextGatherer {
     lines.push(`**Pages needing rewrite:** ${ctx.pagesNeedingRewrite}`);
     lines.push(`**Has project overview (architecture/overview):** ${ctx.hasProjectOverview ? 'YES' : 'NO'}`);
     lines.push(`**Has getting started (guides/getting-started):** ${ctx.hasGettingStarted ? 'YES' : 'NO'}`);
+    lines.push(`**Has testing guide (guides/testing):** ${ctx.hasTestingGuide ? 'YES' : 'NO'}`);
+    lines.push(`**Has extension guide (guides/extension-patterns):** ${ctx.hasExtensionGuide ? 'YES' : 'NO'}`);
     lines.push(`**Pages without links:** ${ctx.pagesWithoutLinks}`);
     lines.push(`**Low confidence pages:** ${ctx.lowConfidencePages}`);
     lines.push('');
