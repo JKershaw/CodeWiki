@@ -76,10 +76,12 @@ import {
 } from '../commands/update-wiki-page.js';
 
 /**
- * Threshold for triggering proactive queue refill.
- * When pending items drop to this level, async refill is triggered.
+ * Queue water marks for proactive refill.
+ * Low water mark: trigger refill when queue drops to this level
+ * High water mark: target queue size, request items to reach this level
  */
-const REFILL_THRESHOLD_MULTIPLIER = 3;
+const QUEUE_LOW_WATER_MARK = 12;
+const QUEUE_HIGH_WATER_MARK = 50;
 
 /**
  * Executor - The inner loop that runs agents from the work queue.
@@ -187,9 +189,6 @@ export class Executor {
     try {
       let iterationNumber = 0;
 
-      // Calculate refill threshold based on concurrency
-      const refillThreshold = maxConcurrency * REFILL_THRESHOLD_MULTIPLIER;
-
       while (summary.iterations < iterations && !this.shouldStop) {
         // Check rate limits before claiming work
         if (this.llm.isRateLimited()) {
@@ -200,14 +199,15 @@ export class Executor {
 
         // Check pending count and trigger proactive async refill if low
         const pendingCount = await this.repos.workQueue.countPending(repoId);
-        if (pendingCount <= refillThreshold && !this.refillInProgress) {
-          this.triggerAsyncRefill(repoId, wikiId);
+        if (pendingCount <= QUEUE_LOW_WATER_MARK && !this.refillInProgress) {
+          this.triggerAsyncRefill(repoId, wikiId, pendingCount);
         }
 
         // Get commits already processed by code-change agent (for ordering constraints)
         const processedCommits = await this.getCodeChangeProcessedCommits(repoId);
 
         // Calculate how many items we can process in this batch
+        // With a larger queue, we have more candidates to choose from after filtering
         const remainingIterations = iterations - summary.iterations;
         const batchSize = Math.min(maxConcurrency, remainingIterations);
 
@@ -237,7 +237,9 @@ export class Executor {
           // Still no work? Do synchronous generation as fallback
           if (workItems.length === 0) {
             console.log('No work items claimed, generating more...');
-            const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
+            // Request enough items to reach high water mark
+            const itemsToRequest = Math.max(10, QUEUE_HIGH_WATER_MARK);
+            const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, itemsToRequest);
             if (newWork.length === 0) {
               console.log('No more work to do');
               break;
@@ -408,22 +410,26 @@ export class Executor {
   /**
    * Trigger an asynchronous refill of the work queue.
    * Runs in the background while execution continues.
+   * Requests enough items to reach the high water mark.
    */
-  private triggerAsyncRefill(repoId: string, wikiId: string): void {
+  private triggerAsyncRefill(repoId: string, wikiId: string, currentPending: number): void {
     if (this.refillInProgress) return;
 
     this.refillInProgress = true;
-    console.log('🔄 Triggering async queue refill...');
+
+    // Calculate how many items to request to reach high water mark
+    const itemsToRequest = Math.max(10, QUEUE_HIGH_WATER_MARK - currentPending);
+    console.log(`🔄 Triggering async queue refill (requesting ${itemsToRequest} items)...`);
 
     this.refillPromise = this.orchestrator
-      .generateWorkList(repoId, wikiId, 10)
+      .generateWorkList(repoId, wikiId, itemsToRequest)
       .then(async (newWork) => {
         if (newWork.length > 0) {
           await handleSaveWorkItems(
             createSaveWorkItemsCommand(newWork),
             this.repos
           );
-          console.log(`🔄 Async refill complete: ${newWork.length} items added`);
+          console.log(`🔄 Async refill complete: ${newWork.length} items added (target was ${itemsToRequest})`);
         } else {
           console.log('🔄 Async refill complete: no new work generated');
         }
