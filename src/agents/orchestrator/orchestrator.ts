@@ -252,6 +252,9 @@ export class Orchestrator {
 		if (META_AGENTS.includes(agentType as AgentType)) {
 			return Priority.META;
 		}
+		if (agentType === "consolidation") {
+			return Priority.LOW_CONFIDENCE; // High priority - addresses detected issues
+		}
 		return Priority.SYNTHESIS;
 	}
 
@@ -506,6 +509,43 @@ export class Orchestrator {
 								priority: Priority.META,
 							})
 						);
+					}
+				}
+
+				// Strategy 4b: Consolidation agent - address findings from meta agents
+				// Runs when there are open findings that need consolidation
+				if (workItems.length < remainingSlots) {
+					const openFindings = await this.repos.findings.findOpen(wikiId);
+
+					if (openFindings.length > 0) {
+						const consolidationWorkExists =
+							await this.repos.workQueue.findByRepo(repoId, {
+								agentType: "consolidation",
+								status: "pending",
+							});
+
+						// Check if consolidation agent ran recently
+						const recentConsolidationRuns = recentRuns
+							.filter(
+								(r) =>
+									r.agentType === "consolidation" && r.status === "completed"
+							)
+							.slice(0, 1);
+
+						// Only add consolidation work if there's none pending and it hasn't run recently
+						if (
+							consolidationWorkExists.length === 0 &&
+							recentConsolidationRuns.length === 0
+						) {
+							workItems.push(
+								createWorkItem({
+									id: uuid(),
+									repoId,
+									agentType: "consolidation",
+									priority: Priority.LOW_CONFIDENCE,
+								})
+							);
+						}
 					}
 				}
 			}
@@ -810,6 +850,10 @@ export class Orchestrator {
 		);
 		if (lowConfidencePages.length > 0) return true;
 
+		// Check for open findings that need consolidation
+		const openFindings = await this.repos.findings.findOpen(wikiId);
+		if (openFindings.length > 0) return true;
+
 		return false;
 	}
 
@@ -817,12 +861,13 @@ export class Orchestrator {
 	 * Get a summary of the current work state.
 	 */
 	async getWorkSummary(repoId: string, wikiId: string): Promise<WorkSummary> {
-		const [totalCommits, pendingWork, wikiPages, openConflicts] =
+		const [totalCommits, pendingWork, wikiPages, openConflicts, openFindings] =
 			await Promise.all([
 				this.repos.commits.countByRepo(repoId),
 				this.repos.workQueue.countPending(repoId),
 				this.repos.wikiPages.findByWiki(wikiId),
 				this.repos.conflicts.findOpen(wikiId),
+				this.repos.findings.findOpen(wikiId),
 			]);
 
 		// Get per-agent coverage
@@ -857,6 +902,7 @@ export class Orchestrator {
 			wikiPages: wikiPages.length,
 			avgConfidence,
 			openConflicts: openConflicts.length,
+			openFindings: openFindings.length,
 		};
 	}
 
@@ -884,6 +930,7 @@ export interface WorkSummary {
 	wikiPages: number;
 	avgConfidence: number;
 	openConflicts: number;
+	openFindings: number;
 }
 
 /**

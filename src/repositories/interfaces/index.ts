@@ -17,6 +17,7 @@ export * from './learning-repository.js';
 export * from './orchestrator-run-repository.js';
 export * from './processing-run-repository.js';
 export * from './iteration-repository.js';
+export * from './findings-repository.js';
 
 import type { RepoRepository } from './repo-repository.js';
 import type { WikiRepository } from './wiki-repository.js';
@@ -29,6 +30,7 @@ import type { LearningRepository } from './learning-repository.js';
 import type { OrchestratorRunRepository } from './orchestrator-run-repository.js';
 import type { ProcessingRunRepository } from './processing-run-repository.js';
 import type { IterationRepository } from './iteration-repository.js';
+import type { FindingsRepository } from './findings-repository.js';
 
 /**
  * Collection of all repositories.
@@ -46,4 +48,5 @@ export interface Repositories {
   orchestratorRuns: OrchestratorRunRepository;
   processingRuns: ProcessingRunRepository;
   iterations: IterationRepository;
+  findings: FindingsRepository;
 }
