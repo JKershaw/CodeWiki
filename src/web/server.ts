@@ -27,6 +27,20 @@ import { createRepo } from '../domain/repo.js';
 import { v4 as uuid } from 'uuid';
 import { getOrCreateActiveWiki, handleCreateWiki, createCreateWikiCommand } from '../commands/create-wiki.js';
 import { handleSetActiveWiki, createSetActiveWikiCommand } from '../commands/set-active-wiki.js';
+import {
+  createRegisterRepositoryCommand,
+  handleRegisterRepository,
+  createLoadRepositoryCommitsCommand,
+  handleLoadRepositoryCommits,
+  createUpdateRepositoryStatusCommand,
+  handleUpdateRepositoryStatus,
+} from '../commands/repository.js';
+import {
+  createUpdateWikiSettingsCommand,
+  handleUpdateWikiSettings,
+  createDeleteWikiCommand,
+  handleDeleteWiki,
+} from '../commands/wiki.js';
 
 const app = express();
 const PORT = process.env['PORT'] || 3000;
@@ -131,17 +145,25 @@ app.post('/api/repos', async (req: Request, res: Response) => {
     let repo = await repos.repos.findByFullName(absolutePath);
 
     if (!repo) {
-      // Create new repo record
-      repo = createRepo({
-        id: uuid(),
-        fullName: absolutePath,
-        cloneUrl: absolutePath,
-        defaultBranch: 'main',
-      });
-      repo.status = 'pending';
-      await repos.repos.save(repo);
+      // Use RegisterRepository command
+      const repoId = uuid();
+      const registerResult = await handleRegisterRepository(
+        createRegisterRepositoryCommand({
+          id: repoId,
+          fullName: absolutePath,
+          cloneUrl: absolutePath,
+          defaultBranch: 'main',
+        }),
+        repos
+      );
 
-      // Load commits
+      if (!registerResult.success) {
+        res.status(400).json({ error: registerResult.error });
+        return;
+      }
+      repo = registerResult.data!;
+
+      // Load commits using simpleGit
       const { simpleGit } = await import('simple-git');
       const gitRepo = simpleGit(absolutePath);
       const log = await gitRepo.log(['--all']);
@@ -190,7 +212,11 @@ app.post('/api/repos', async (req: Request, res: Response) => {
         }));
       }
 
-      await repos.commits.saveMany(commits);
+      // Use LoadRepositoryCommits command
+      await handleLoadRepositoryCommits(
+        createLoadRepositoryCommitsCommand(repo.id, commits),
+        repos
+      );
     }
 
     res.json({ id: repo.id, fullName: repo.fullName, status: repo.status });
@@ -216,9 +242,11 @@ app.post('/api/repos/:id/process', async (req: Request, res: Response) => {
     // Register the local repo path
     git.registerLocalRepo(repo.id, repo.fullName);
 
-    // Update status
-    repo.status = 'processing';
-    await repos.repos.save(repo);
+    // Update status using CQRS command
+    await handleUpdateRepositoryStatus(
+      createUpdateRepositoryStatusCommand(repo.id, 'processing'),
+      repos
+    );
 
     // Create orchestrator and executor
     const orchestrator = createOrchestrator(repos);
@@ -226,12 +254,16 @@ app.post('/api/repos/:id/process', async (req: Request, res: Response) => {
 
     // Run in background (don't await)
     executor.runIterations(repo.id, iterations).then(async (result) => {
-      repo.status = 'ready';
-      await repos.repos.save(repo);
+      await handleUpdateRepositoryStatus(
+        createUpdateRepositoryStatusCommand(repo.id, 'ready'),
+        repos
+      );
       console.log(`Processing complete for ${repo.fullName}:`, result);
     }).catch(async (error) => {
-      repo.status = 'error';
-      await repos.repos.save(repo);
+      await handleUpdateRepositoryStatus(
+        createUpdateRepositoryStatusCommand(repo.id, 'error'),
+        repos
+      );
       console.error(`Processing failed for ${repo.fullName}:`, error);
     });
 
@@ -610,16 +642,24 @@ app.put('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
 
     const { name, description, branchFilter, pathFilters } = req.body;
 
-    const updatedWiki = {
-      ...wiki,
-      ...(name ? { name } : {}),
-      ...(description !== undefined ? { description } : {}),
-      ...(branchFilter !== undefined ? { branchFilter } : {}),
-      ...(pathFilters !== undefined ? { pathFilters } : {}),
-      updatedAt: new Date(),
-    };
+    // Use UpdateWikiSettings CQRS command
+    const result = await handleUpdateWikiSettings(
+      createUpdateWikiSettingsCommand(wiki.id, {
+        name,
+        description,
+        branchFilter,
+        pathFilters,
+      }),
+      repos
+    );
 
-    await repos.wikis.save(updatedWiki);
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    // Fetch updated wiki to return
+    const updatedWiki = await repos.wikis.findById(wiki.id);
     res.json(updatedWiki);
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -637,13 +677,16 @@ app.delete('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) =
       return;
     }
 
-    if (wiki.isActive) {
-      res.status(400).json({ error: 'Cannot delete the active wiki. Set another wiki as active first.' });
+    // Use DeleteWiki CQRS command (handles active check and page deletion)
+    const result = await handleDeleteWiki(
+      createDeleteWikiCommand(wiki.id),
+      repos
+    );
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
       return;
     }
-
-    await repos.wikiPages.deleteByWiki(wiki.id);
-    await repos.wikis.delete(wiki.id);
 
     res.status(204).send();
   } catch (error) {
