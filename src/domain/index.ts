@@ -18,3 +18,5 @@ export * from './agent-run.js';
 export * from './work-item.js';
 export * from './conflict.js';
 export * from './learning.js';
+export * from './processing-run.js';
+export * from './iteration.js';

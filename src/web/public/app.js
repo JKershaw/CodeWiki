@@ -133,9 +133,18 @@ async function addRepo(path) {
 
 async function processRepo(id) {
   const btn = document.querySelector(`.process-btn[data-id="${id}"]`);
+  const card = btn.closest('.card');
   const originalText = btn.textContent;
   btn.textContent = 'Starting...';
   btn.disabled = true;
+
+  // Create or get progress indicator
+  let progressDiv = card.querySelector('.processing-progress');
+  if (!progressDiv) {
+    progressDiv = document.createElement('div');
+    progressDiv.className = 'processing-progress';
+    card.querySelector('.card-actions').before(progressDiv);
+  }
 
   try {
     await api(`/repos/${id}/process`, {
@@ -145,21 +154,73 @@ async function processRepo(id) {
 
     btn.textContent = 'Processing...';
 
-    // Poll for updates
+    // Poll for updates with detailed progress
     const pollStatus = async () => {
-      const repo = await api(`/repos/${id}`);
-      if (repo.status === 'processing') {
+      try {
+        const { processing } = await api(`/repos/${id}/processing`);
+
+        if (processing && processing.status === 'running') {
+          // Update progress display
+          const percent = processing.totalIterations > 0
+            ? Math.round((processing.completedIterations / processing.totalIterations) * 100)
+            : 0;
+
+          let progressText = `Iteration ${processing.completedIterations}/${processing.totalIterations}`;
+          if (processing.currentIteration && processing.currentIteration.agentType) {
+            progressText += ` - ${formatAgentType(processing.currentIteration.agentType)}`;
+          }
+
+          progressDiv.innerHTML = `
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${percent}%"></div>
+            </div>
+            <div class="progress-text">${progressText}</div>
+          `;
+
+          btn.textContent = `Processing... ${percent}%`;
+          setTimeout(pollStatus, 1500);
+        } else {
+          // Processing complete
+          progressDiv.remove();
+          loadRepos();
+        }
+      } catch (error) {
+        console.error('Error polling status:', error);
         setTimeout(pollStatus, 2000);
-      } else {
-        loadRepos();
       }
     };
-    setTimeout(pollStatus, 2000);
+    setTimeout(pollStatus, 1000);
   } catch (error) {
     alert('Error starting processing: ' + error.message);
     btn.textContent = originalText;
     btn.disabled = false;
+    if (progressDiv) progressDiv.remove();
   }
+}
+
+function formatAgentType(type) {
+  const names = {
+    'code-change': 'Analyzing Code',
+    'narrative': 'Narrative Analysis',
+    'security': 'Security Review',
+    'technical-debt': 'Tech Debt Analysis',
+    'pattern': 'Pattern Detection',
+    'dependency': 'Dependency Analysis',
+    'structure': 'Structure Analysis',
+    'link': 'Linking Pages',
+    'quality': 'Quality Check',
+    'consistency': 'Consistency Check',
+    'guide': 'Creating Guides',
+    'overview': 'Creating Overview',
+    'project-overview': 'Project Overview',
+    'getting-started': 'Getting Started',
+    'history': 'History Analysis',
+    'convention': 'Convention Analysis',
+    'bootstrap': 'Bootstrapping Wiki',
+    'research': 'Research',
+    'writer': 'Writing Content',
+  };
+  return names[type] || type;
 }
 
 // Add Repo Form - Folder Browser

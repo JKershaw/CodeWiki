@@ -242,6 +242,72 @@ app.post('/api/repos/:id/process', async (req: Request, res: Response) => {
 });
 
 /**
+ * Get processing status for a repository.
+ * Returns the active or most recent processing run with iteration details.
+ */
+app.get('/api/repos/:id/processing', async (req: Request, res: Response) => {
+  try {
+    const repo = await repos.repos.findById(req.params.id!);
+    if (!repo) {
+      res.status(404).json({ error: 'Repository not found' });
+      return;
+    }
+
+    // Try to find an active processing run first
+    let processingRun = await repos.processingRuns.findActive(repo.id);
+
+    // If no active run, get the most recent one
+    if (!processingRun) {
+      processingRun = await repos.processingRuns.findMostRecent(repo.id);
+    }
+
+    if (!processingRun) {
+      res.json({ processing: null });
+      return;
+    }
+
+    // Get iterations for this processing run
+    const iterations = await repos.iterations.findByProcessingRun(processingRun.id);
+
+    // Find the currently running iteration (if any)
+    const currentIteration = iterations.find(i => i.status === 'running');
+
+    res.json({
+      processing: {
+        id: processingRun.id,
+        status: processingRun.status,
+        totalIterations: processingRun.totalIterations,
+        completedIterations: processingRun.completedIterations,
+        successfulIterations: processingRun.successfulIterations,
+        failedIterations: processingRun.failedIterations,
+        totalCostUsd: processingRun.totalCostUsd,
+        wikiPagesCreated: processingRun.wikiPagesCreated,
+        wikiPagesUpdated: processingRun.wikiPagesUpdated,
+        startedAt: processingRun.startedAt,
+        completedAt: processingRun.completedAt,
+        error: processingRun.error,
+        currentIteration: currentIteration ? {
+          iterationNumber: currentIteration.iterationNumber,
+          agentType: currentIteration.agentType,
+          startedAt: currentIteration.startedAt,
+        } : null,
+        iterations: iterations.map(i => ({
+          iterationNumber: i.iterationNumber,
+          status: i.status,
+          agentType: i.agentType,
+          durationMs: i.durationMs,
+          costUsd: i.costUsd,
+          pagesCreated: i.pagesCreated,
+          pagesUpdated: i.pagesUpdated,
+        })),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
  * Get wiki pages for a repository.
  * Supports optional ?wikiId query param to get pages for a specific wiki.
  */
