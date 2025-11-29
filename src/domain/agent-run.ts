@@ -52,7 +52,8 @@ export type AgentType =
   // Special agents
   | 'orchestrator'
   | 'research'
-  | 'writer';
+  | 'writer'
+  | 'bootstrap';
 
 export type AgentRunStatus =
   | 'pending'

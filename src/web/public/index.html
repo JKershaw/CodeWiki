@@ -28,9 +28,17 @@
         </div>
 
         <div id="add-repo-form" class="form-container hidden">
-          <input type="text" id="repo-path" placeholder="Enter repository path (e.g., /path/to/repo or .)" />
-          <button id="submit-repo-btn" class="btn">Add</button>
-          <button id="cancel-repo-btn" class="btn secondary">Cancel</button>
+          <div id="folder-browser">
+            <div class="browser-header">
+              <button id="browser-up-btn" class="btn secondary">↑ Up</button>
+              <span id="browser-path"></span>
+            </div>
+            <div id="folder-list"></div>
+          </div>
+          <div class="browser-actions">
+            <button id="submit-repo-btn" class="btn primary" disabled>Add Selected</button>
+            <button id="cancel-repo-btn" class="btn secondary">Cancel</button>
+          </div>
         </div>
 
         <div id="repos-list" class="card-list">

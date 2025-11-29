@@ -20,6 +20,7 @@ import { OverviewAgent } from '../agents/synthesis/overview-agent.js';
 import { WriterAgent } from '../agents/synthesis/writer-agent.js';
 import { ProjectOverviewAgent } from '../agents/synthesis/project-overview-agent.js';
 import { GettingStartedAgent } from '../agents/synthesis/getting-started-agent.js';
+import { BootstrapAgent } from '../agents/synthesis/bootstrap-agent.js';
 
 /**
  * Executor - The inner loop that runs agents from the work queue.
@@ -56,6 +57,7 @@ export class Executor {
     this.registerAgent(new WriterAgent());
     this.registerAgent(new ProjectOverviewAgent());
     this.registerAgent(new GettingStartedAgent());
+    this.registerAgent(new BootstrapAgent());
   }
 
   /**
