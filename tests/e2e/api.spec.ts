@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { homedir } from 'os';
 
 /**
  * API endpoint tests.
@@ -122,5 +123,65 @@ test.describe('API Endpoints', () => {
     expect(response.ok()).toBeTruthy();
     const data = await response.json();
     expect(data.message).toContain('started');
+  });
+
+  // Filesystem browse endpoint tests
+  test('GET /api/filesystem/browse returns directories', async ({ request }) => {
+    const response = await request.get('/api/filesystem/browse');
+
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+    expect(data.currentPath).toBeDefined();
+    expect(data.directories).toBeDefined();
+    expect(Array.isArray(data.directories)).toBeTruthy();
+  });
+
+  test('GET /api/filesystem/browse with path navigates to subdirectory', async ({ request }) => {
+    const home = homedir();
+    const response = await request.get(`/api/filesystem/browse?path=${encodeURIComponent(home)}`);
+
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+    expect(data.currentPath).toBe(home);
+    // At home directory, parent should be null
+    expect(data.parent).toBeNull();
+  });
+
+  test('GET /api/filesystem/browse blocks access outside home directory', async ({ request }) => {
+    const response = await request.get('/api/filesystem/browse?path=/etc');
+
+    expect(response.status()).toBe(403);
+    const data = await response.json();
+    expect(data.error).toContain('Access denied');
+  });
+
+  test('GET /api/filesystem/browse blocks path traversal attacks', async ({ request }) => {
+    const home = homedir();
+    const response = await request.get(`/api/filesystem/browse?path=${encodeURIComponent(home + '/../../../etc')}`);
+
+    expect(response.status()).toBe(403);
+  });
+
+  test('GET /api/filesystem/browse returns 400 for non-directory path', async ({ request }) => {
+    const home = homedir();
+    // Try to browse a file that likely exists
+    const response = await request.get(`/api/filesystem/browse?path=${encodeURIComponent(home + '/.bashrc')}`);
+
+    // Either 400 (not a directory) or 500 (file not found) is acceptable
+    expect([400, 500]).toContain(response.status());
+  });
+
+  test('GET /api/filesystem/browse includes isGitRepo flag', async ({ request }) => {
+    const response = await request.get('/api/filesystem/browse');
+
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+
+    // Each directory should have isGitRepo property
+    for (const dir of data.directories) {
+      expect(dir.name).toBeDefined();
+      expect(dir.path).toBeDefined();
+      expect(typeof dir.isGitRepo).toBe('boolean');
+    }
   });
 });

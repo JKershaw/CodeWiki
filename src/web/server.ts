@@ -318,11 +318,19 @@ app.get('/api/repos/:id/commits', async (req: Request, res: Response) => {
 
 /**
  * Browse filesystem directories.
+ * Restricted to home directory and subdirectories for security.
  */
 app.get('/api/filesystem/browse', async (req: Request, res: Response) => {
   try {
-    const requestedPath = (req.query.path as string) || homedir();
+    const home = homedir();
+    const requestedPath = (req.query.path as string) || home;
     const absolutePath = resolve(requestedPath);
+
+    // Security: only allow browsing within home directory
+    if (!absolutePath.startsWith(home) && absolutePath !== home) {
+      res.status(403).json({ error: 'Access denied: can only browse within home directory' });
+      return;
+    }
 
     // Check if path exists and is a directory
     const pathStat = await stat(absolutePath);
@@ -352,8 +360,8 @@ app.get('/api/filesystem/browse', async (req: Request, res: Response) => {
         return a.name.localeCompare(b.name);
       });
 
-    // Get parent directory (unless at root)
-    const parent = absolutePath === '/' ? null : dirname(absolutePath);
+    // Get parent directory (null if at home or root)
+    const parent = absolutePath === '/' || absolutePath === home ? null : dirname(absolutePath);
 
     res.json({
       currentPath: absolutePath,
