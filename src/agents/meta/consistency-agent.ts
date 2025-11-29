@@ -59,7 +59,29 @@ export class ConsistencyAgent implements Agent {
 
     const allIssues = [...quickIssues, ...analysis.issues];
 
-    if (allIssues.length === 0) {
+    // Build all findings: issues + terminology + suggestions
+    const allFindings = [
+      ...allIssues.map(issue => createFinding({
+        type: 'CONSISTENCY',
+        description: issue.description,
+        relatedPaths: issue.affectedPages,
+        importance: issue.severity,
+      })),
+      ...analysis.terminologyMap.map(term => createFinding({
+        type: 'TERMINOLOGY',
+        description: `Inconsistent terminology: ${term.terms.join(' / ')} - ${term.description}`,
+        relatedPaths: [],
+        importance: 'medium',
+      })),
+      ...analysis.suggestions.map(suggestion => createFinding({
+        type: 'SUGGESTION',
+        description: suggestion,
+        relatedPaths: [],
+        importance: 'low',
+      })),
+    ];
+
+    if (allFindings.length === 0) {
       return {
         result: createAgentResult({
           summary: `Wiki is consistent across ${pages.length} pages`,
@@ -71,15 +93,19 @@ export class ConsistencyAgent implements Agent {
       };
     }
 
+    const issueCount = allIssues.length;
+    const termCount = analysis.terminologyMap.length;
+    const suggestionCount = analysis.suggestions.length;
+
+    const summaryParts = [];
+    if (issueCount > 0) summaryParts.push(`${issueCount} issue${issueCount !== 1 ? 's' : ''}`);
+    if (termCount > 0) summaryParts.push(`${termCount} terminology inconsistenc${termCount !== 1 ? 'ies' : 'y'}`);
+    if (suggestionCount > 0) summaryParts.push(`${suggestionCount} suggestion${suggestionCount !== 1 ? 's' : ''}`);
+
     return {
       result: createAgentResult({
-        summary: `Found ${allIssues.length} consistency issues across ${pages.length} pages`,
-        findings: allIssues.map(issue => createFinding({
-          type: 'CONSISTENCY',
-          description: issue.description,
-          relatedPaths: issue.affectedPages,
-          importance: issue.severity,
-        })),
+        summary: `Found ${summaryParts.join(', ')} across ${pages.length} pages`,
+        findings: allFindings,
         confidence: analysis.confidence,
       }),
       updates,
