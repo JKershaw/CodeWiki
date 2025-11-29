@@ -221,17 +221,31 @@ export abstract class BaseLLMService implements LLMService {
 
 /**
  * Cost per 1M tokens for different models.
+ * Uses OpenRouter model naming format (provider/model-name).
  */
 export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
-  'gpt-4': { input: 30, output: 60 },
-  'gpt-4-turbo': { input: 10, output: 30 },
-  'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-  'claude-3-opus': { input: 15, output: 75 },
-  'claude-3-sonnet': { input: 3, output: 15 },
-  'claude-3-haiku': { input: 0.25, output: 1.25 },
-  'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
-  'claude-3-5-haiku-20241022': { input: 0.8, output: 4 },
-  'claude-haiku-4-5-20250929': { input: 1, output: 5 },  // Haiku 4.5 - good for JSON
+  // OpenAI models
+  'openai/gpt-4': { input: 30, output: 60 },
+  'openai/gpt-4-turbo': { input: 10, output: 30 },
+  'openai/gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+  'openai/gpt-4o': { input: 2.5, output: 10 },
+  'openai/gpt-4o-mini': { input: 0.15, output: 0.6 },
+  // Anthropic models
+  'anthropic/claude-3-opus': { input: 15, output: 75 },
+  'anthropic/claude-3-sonnet': { input: 3, output: 15 },
+  'anthropic/claude-3-haiku': { input: 0.25, output: 1.25 },
+  'anthropic/claude-sonnet-4.5': { input: 3, output: 15 },
+  'anthropic/claude-haiku-4.5': { input: 1, output: 5 },
+  'anthropic/claude-3.5-haiku': { input: 0.8, output: 4 },
+  // Google models
+  'google/gemini-2.5-pro': { input: 1.25, output: 10 },
+  'google/gemini-2.5-flash': { input: 0.15, output: 0.6 },
+  // DeepSeek models (very cheap)
+  'deepseek/deepseek-chat': { input: 0.14, output: 0.28 },
+  'deepseek/deepseek-r1': { input: 0.55, output: 2.19 },
+  // MiniMax models
+  'minimax/minimax-m2': { input: 0.255, output: 1.02 },
+  // Mock
   'mock': { input: 0, output: 0 },
 };
 

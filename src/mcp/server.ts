@@ -23,7 +23,7 @@ import {
 import { resolve } from 'path';
 
 import { createRepositories } from '../repositories/index.js';
-import { createAnthropicLLM } from '../services/llm/anthropic-llm-service.js';
+import { createOpenRouterLLM } from '../services/llm/openrouter-llm-service.js';
 import { createMockLLMForCodeAnalysis } from '../services/llm/mock-llm-service.js';
 import { createResearchAgent } from '../agents/research/research-agent.js';
 import { createSpecAgent } from '../agents/spec/spec-agent.js';
@@ -34,9 +34,10 @@ import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 const repos = createRepositories({ type: 'file' });
 
 function createLLM() {
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
+  const apiKey = process.env['OPENROUTER_API_KEY'];
   if (apiKey) {
-    return createAnthropicLLM({ apiKey });
+    const model = process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5';
+    return createOpenRouterLLM({ apiKey, model });
   }
   return createMockLLMForCodeAnalysis();
 }

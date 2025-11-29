@@ -18,7 +18,7 @@ import { resolve } from 'path';
 import { createRepositories } from './repositories/index.js';
 import { createGitService } from './services/git/git-service.js';
 import { createMockLLMForCodeAnalysis } from './services/llm/mock-llm-service.js';
-import { createAnthropicLLM } from './services/llm/anthropic-llm-service.js';
+import { createOpenRouterLLM } from './services/llm/openrouter-llm-service.js';
 import type { LLMService } from './services/llm/llm-service.js';
 import { createOrchestrator } from './agents/orchestrator/orchestrator.js';
 import { createResearchAgent } from './agents/research/research-agent.js';
@@ -31,14 +31,15 @@ import { getOrCreateActiveWiki } from './commands/create-wiki.js';
  * Create the appropriate LLM service based on environment.
  */
 function createLLM(): LLMService {
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
+  const apiKey = process.env['OPENROUTER_API_KEY'];
 
   if (apiKey) {
-    console.log('🤖 Using Anthropic Claude API\n');
-    return createAnthropicLLM({ apiKey });
+    const model = process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5';
+    console.log(`Using OpenRouter API (model: ${model})\n`);
+    return createOpenRouterLLM({ apiKey, model });
   }
 
-  console.log('🤖 Using mock LLM (set ANTHROPIC_API_KEY for real analysis)\n');
+  console.log('Using mock LLM (set OPENROUTER_API_KEY for real analysis)\n');
   return createMockLLMForCodeAnalysis();
 }
 
