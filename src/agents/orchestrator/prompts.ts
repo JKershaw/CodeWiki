@@ -155,6 +155,34 @@ const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'te
 const ALL_AGENTS = [...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 
 /**
+ * Attempt to repair common JSON issues from LLM responses.
+ * LLMs frequently produce slightly malformed JSON that can be fixed.
+ */
+function repairJson(jsonStr: string): string {
+  let repaired = jsonStr;
+
+  // Remove trailing commas before ] or } (very common LLM error)
+  // This regex handles commas followed by optional whitespace before ] or }
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+  // Remove JavaScript-style comments (some LLMs add them)
+  repaired = repaired.replace(/\/\/[^\n]*/g, '');
+  repaired = repaired.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Fix unescaped newlines in strings (common in "reason" fields)
+  // This is a heuristic - we look for strings and escape literal newlines
+  repaired = repaired.replace(/"([^"\\]|\\.)*"/g, (match) => {
+    // Only fix if there are actual unescaped newlines
+    if (match.includes('\n') && !match.includes('\\n')) {
+      return match.replace(/\n/g, '\\n');
+    }
+    return match;
+  });
+
+  return repaired;
+}
+
+/**
  * Parse the LLM response into a structured decision.
  */
 export function parseOrchestratorResponse(
@@ -176,56 +204,92 @@ export function parseOrchestratorResponse(
     jsonStr = objectMatch[0];
   }
 
-  const parsed = JSON.parse(jsonStr);
+  // Try to parse the JSON, with repair attempts on failure
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (firstError) {
+    // Try to repair common JSON issues and parse again
+    const repairedJson = repairJson(jsonStr);
+    try {
+      parsed = JSON.parse(repairedJson);
+      console.log('🔧 Repaired malformed JSON from LLM response');
+    } catch (secondError) {
+      // Log details for debugging
+      console.error('Failed to parse orchestrator response JSON:');
+      console.error('  First error:', firstError instanceof Error ? firstError.message : firstError);
+      console.error('  Second error (after repair):', secondError instanceof Error ? secondError.message : secondError);
+      console.error('  Response length:', response.length);
+      console.error('  JSON string length:', jsonStr.length);
+      // Log a truncated preview for debugging
+      const preview = jsonStr.length > 500 ? jsonStr.slice(0, 500) + '...' : jsonStr;
+      console.error('  JSON preview:', preview);
 
-  // Validate structure
-  if (!parsed.reasoning || typeof parsed.reasoning !== 'string') {
-    parsed.reasoning = 'No reasoning provided';
+      // Throw error to trigger fallback to deterministic mode in caller
+      throw new Error(`Failed to parse orchestrator JSON response: ${firstError instanceof Error ? firstError.message : 'Unknown error'}`);
+    }
   }
 
-  if (!Array.isArray(parsed.workItems)) {
-    parsed.workItems = [];
-  }
+  // Validate structure and extract with proper types
+  const reasoning: string = (typeof parsed.reasoning === 'string')
+    ? parsed.reasoning
+    : 'No reasoning provided';
+
+  const rawWorkItems: unknown[] = Array.isArray(parsed.workItems)
+    ? parsed.workItems
+    : [];
 
   // Validate and filter work items
   const validWorkItems: OrchestratorDecision['workItems'] = [];
 
-  for (const item of parsed.workItems) {
+  for (const rawItem of rawWorkItems) {
+    // Type guard for work item structure
+    if (typeof rawItem !== 'object' || rawItem === null) {
+      continue;
+    }
+
+    const item = rawItem as Record<string, unknown>;
+
     // Check agent type is valid
-    if (!ALL_AGENTS.includes(item.agentType)) {
+    if (typeof item.agentType !== 'string' || !ALL_AGENTS.includes(item.agentType)) {
       console.warn(`Invalid agent type: ${item.agentType}`);
       continue;
     }
 
+    const targetCommitId = typeof item.targetCommitId === 'string' ? item.targetCommitId : undefined;
+
     // Analysis agents need a valid commit ID
     if (ANALYSIS_AGENTS.includes(item.agentType)) {
-      if (!item.targetCommitId) {
+      if (!targetCommitId) {
         console.warn(`Analysis agent ${item.agentType} missing targetCommitId`);
         continue;
       }
-      if (!validCommitIds.has(item.targetCommitId)) {
-        console.warn(`Invalid commit ID for ${item.agentType}: ${item.targetCommitId}`);
+      if (!validCommitIds.has(targetCommitId)) {
+        console.warn(`Invalid commit ID for ${item.agentType}: ${targetCommitId}`);
         continue;
       }
     }
 
     // Meta/synthesis agents should NOT have commit ID
+    let finalCommitId = targetCommitId;
     if ([...META_AGENTS, ...SYNTHESIS_AGENTS].includes(item.agentType)) {
-      if (item.targetCommitId) {
+      if (targetCommitId) {
         console.warn(`Meta/synthesis agent ${item.agentType} should not have targetCommitId`);
-        delete item.targetCommitId;
+        finalCommitId = undefined;
       }
     }
 
+    const reason = typeof item.reason === 'string' ? item.reason : 'No reason provided';
+
     validWorkItems.push({
       agentType: item.agentType,
-      targetCommitId: item.targetCommitId,
-      reason: item.reason || 'No reason provided',
+      ...(finalCommitId ? { targetCommitId: finalCommitId } : {}),
+      reason,
     });
   }
 
   return {
-    reasoning: parsed.reasoning,
+    reasoning,
     workItems: validWorkItems,
   };
 }
