@@ -47,6 +47,55 @@ export async function handleClaimWorkItem(
 }
 
 // ============================================================================
+// ClaimWorkItemBatch Command
+// ============================================================================
+
+/**
+ * Command to claim a batch of pending work items for parallel execution.
+ * Respects ordering constraints defined in the work queue repository.
+ */
+export interface ClaimWorkItemBatchCommand extends Command {
+  readonly type: 'ClaimWorkItemBatch';
+  readonly repoId: string;
+  readonly maxItems: number;
+  /** Set of commit SHAs that have been processed by code-change agent */
+  readonly processedCommits: Set<string>;
+}
+
+export function createClaimWorkItemBatchCommand(
+  repoId: string,
+  maxItems: number,
+  processedCommits: Set<string>
+): ClaimWorkItemBatchCommand {
+  return {
+    type: 'ClaimWorkItemBatch',
+    repoId,
+    maxItems,
+    processedCommits,
+  };
+}
+
+/**
+ * Handler for ClaimWorkItemBatch command.
+ * Returns the claimed work items, or empty array if no work is available.
+ */
+export async function handleClaimWorkItemBatch(
+  command: ClaimWorkItemBatchCommand,
+  repos: Repositories
+): Promise<CommandResult<WorkItem[]>> {
+  try {
+    const workItems = await repos.workQueue.claimBatch(
+      command.repoId,
+      command.maxItems,
+      command.processedCommits
+    );
+    return success(workItems);
+  } catch (error) {
+    return failure(`Failed to claim work item batch: ${error}`);
+  }
+}
+
+// ============================================================================
 // SaveWorkItems Command
 // ============================================================================
 

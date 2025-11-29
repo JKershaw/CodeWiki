@@ -53,6 +53,8 @@ import {
 import {
   createClaimWorkItemCommand,
   handleClaimWorkItem,
+  createClaimWorkItemBatchCommand,
+  handleClaimWorkItemBatch,
   createSaveWorkItemsCommand,
   handleSaveWorkItems,
   createCompleteWorkItemCommand,
@@ -127,8 +129,8 @@ export class Executor {
   }
 
   /**
-   * Run a fixed number of iterations.
-   * Each iteration processes one work item.
+   * Run a fixed number of iterations, processing work items in parallel batches.
+   * Respects ordering constraints and maxConcurrency from repo config.
    *
    * @param repoId - Repository to process
    * @param iterations - Number of work items to process
@@ -148,6 +150,10 @@ export class Executor {
     // Get or create the active wiki for this repo
     const wiki = await getOrCreateActiveWiki(repoId, this.repos);
     const wikiId = wiki.id;
+
+    // Get repo config for maxConcurrency
+    const repo = await this.repos.repos.findById(repoId);
+    const maxConcurrency = repo?.config.maxConcurrency ?? 1;
 
     // Create a processing run record to track this execution (via CQRS command)
     const processingRunId = uuid();
@@ -170,61 +176,36 @@ export class Executor {
     this.shouldStop = false;
 
     try {
-      for (let i = 0; i < iterations && !this.shouldStop; i++) {
-        const iterationNumber = i + 1;
+      let iterationNumber = 0;
 
-        // Create an iteration record (via CQRS command)
-        const iterationId = uuid();
-        const startIterResult = await handleStartIteration(
-          createStartIterationCommand({
-            id: iterationId,
-            processingRunId,
-            iterationNumber,
-          }),
-          this.repos
-        );
-
-        if (!startIterResult.success) {
-          console.error(`Failed to start iteration: ${startIterResult.error}`);
-          continue;
-        }
-
-        // Check rate limits
+      while (summary.iterations < iterations && !this.shouldStop) {
+        // Check rate limits before claiming work
         if (this.llm.isRateLimited()) {
           console.log('Rate limited, waiting...');
-          await handleSkipIteration(
-            createSkipIterationCommand(iterationId, 'Rate limited'),
-            this.repos
-          );
           await new Promise(resolve => setTimeout(resolve, 5000));
           continue;
         }
 
-        // Get work to do (work queue is per-repo) via CQRS command
-        let claimResult = await handleClaimWorkItem(
-          createClaimWorkItemCommand(repoId),
+        // Get commits already processed by code-change agent (for ordering constraints)
+        const processedCommits = await this.getCodeChangeProcessedCommits(repoId);
+
+        // Calculate how many items we can process in this batch
+        const remainingIterations = iterations - summary.iterations;
+        const batchSize = Math.min(maxConcurrency, remainingIterations);
+
+        // Try to claim a batch of work items
+        let claimResult = await handleClaimWorkItemBatch(
+          createClaimWorkItemBatchCommand(repoId, batchSize, processedCommits),
           this.repos
         );
-        let workItem = claimResult.success ? claimResult.data : null;
+        let workItems = claimResult.success ? claimResult.data ?? [] : [];
 
         // If no work, generate more
-        if (!workItem) {
-          // Show orchestrator status while generating work (can take time with LLM)
-          await handleUpdateIterationWorkItem(
-            createUpdateIterationWorkItemCommand(iterationId, {
-              workItemId: 'orchestrating',
-              agentType: 'orchestrator',
-            }),
-            this.repos
-          );
-
+        if (workItems.length === 0) {
+          console.log('No work items claimed, generating more...');
           const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
           if (newWork.length === 0) {
             console.log('No more work to do');
-            await handleSkipIteration(
-              createSkipIterationCommand(iterationId, 'No more work available'),
-              this.repos
-            );
             break;
           }
 
@@ -234,59 +215,98 @@ export class Executor {
             this.repos
           );
 
-          // Try claiming again
-          claimResult = await handleClaimWorkItem(
-            createClaimWorkItemCommand(repoId),
+          // Try claiming again with fresh processedCommits
+          const freshProcessedCommits = await this.getCodeChangeProcessedCommits(repoId);
+          claimResult = await handleClaimWorkItemBatch(
+            createClaimWorkItemBatchCommand(repoId, batchSize, freshProcessedCommits),
             this.repos
           );
-          workItem = claimResult.success ? claimResult.data : null;
+          workItems = claimResult.success ? claimResult.data ?? [] : [];
 
-          if (!workItem) {
-            await handleSkipIteration(
-              createSkipIterationCommand(iterationId, 'No work item claimed'),
-              this.repos
-            );
+          if (workItems.length === 0) {
+            console.log('Still no work items after generation, stopping');
             break;
           }
         }
 
-        // Update iteration with work item details via CQRS command
-        await handleUpdateIterationWorkItem(
-          createUpdateIterationWorkItemCommand(iterationId, {
-            workItemId: workItem.id,
-            agentType: workItem.agentType,
-          }),
-          this.repos
-        );
+        // Log batch info
+        const agentTypes = workItems.map(w => w.agentType).join(', ');
+        console.log(`\n▶ Processing batch of ${workItems.length} items: [${agentTypes}]`);
 
-        // Execute the work item
-        const result = await this.executeWorkItem(workItem, repoId, wikiId);
+        // Create iteration records for each work item in the batch
+        const iterationContexts: Array<{ iterationId: string; workItem: WorkItem }> = [];
+        for (const workItem of workItems) {
+          iterationNumber++;
+          const iterationId = uuid();
 
-        // Update iteration with results via CQRS command
-        if (result.success) {
-          await handleCompleteIteration(
-            createCompleteIterationCommand(iterationId, {
-              agentRunId: result.agentRunId!,
-              durationMs: result.durationMs,
-              costUsd: result.cost,
-              pagesCreated: result.pagesCreated,
-              pagesUpdated: result.pagesUpdated,
+          const startIterResult = await handleStartIteration(
+            createStartIterationCommand({
+              id: iterationId,
+              processingRunId,
+              iterationNumber,
             }),
             this.repos
           );
-          summary.successful++;
-        } else {
-          await handleFailIteration(
-            createFailIterationCommand(iterationId, result.error || 'Unknown error', result.durationMs),
-            this.repos
-          );
-          summary.failed++;
+
+          if (startIterResult.success) {
+            // Update iteration with work item details
+            await handleUpdateIterationWorkItem(
+              createUpdateIterationWorkItemCommand(iterationId, {
+                workItemId: workItem.id,
+                agentType: workItem.agentType,
+              }),
+              this.repos
+            );
+            iterationContexts.push({ iterationId, workItem });
+          } else {
+            console.error(`Failed to start iteration: ${startIterResult.error}`);
+          }
         }
 
-        summary.iterations++;
-        summary.totalCost += result.cost;
-        summary.wikiPagesCreated += result.pagesCreated;
-        summary.wikiPagesUpdated += result.pagesUpdated;
+        // Execute all work items in parallel
+        const results = await Promise.allSettled(
+          iterationContexts.map(async ({ iterationId, workItem }) => {
+            const result = await this.executeWorkItem(workItem, repoId, wikiId);
+            return { iterationId, workItem, result };
+          })
+        );
+
+        // Process results and update iteration records
+        for (const settledResult of results) {
+          if (settledResult.status === 'fulfilled') {
+            const { iterationId, result } = settledResult.value;
+
+            if (result.success) {
+              await handleCompleteIteration(
+                createCompleteIterationCommand(iterationId, {
+                  agentRunId: result.agentRunId!,
+                  durationMs: result.durationMs,
+                  costUsd: result.cost,
+                  pagesCreated: result.pagesCreated,
+                  pagesUpdated: result.pagesUpdated,
+                }),
+                this.repos
+              );
+              summary.successful++;
+            } else {
+              await handleFailIteration(
+                createFailIterationCommand(iterationId, result.error || 'Unknown error', result.durationMs),
+                this.repos
+              );
+              summary.failed++;
+            }
+
+            summary.iterations++;
+            summary.totalCost += result.cost;
+            summary.wikiPagesCreated += result.pagesCreated;
+            summary.wikiPagesUpdated += result.pagesUpdated;
+          } else {
+            // Promise rejected - unexpected error
+            console.error(`Unexpected error in parallel execution: ${settledResult.reason}`);
+            summary.failed++;
+            summary.iterations++;
+          }
+        }
 
         // Update processing run progress via CQRS command
         await handleUpdateProcessingProgress(
@@ -328,6 +348,26 @@ export class Executor {
     }
 
     return summary;
+  }
+
+  /**
+   * Get the set of commit SHAs that have been processed by the code-change agent.
+   * Used for ordering constraints in batch claiming.
+   */
+  private async getCodeChangeProcessedCommits(repoId: string): Promise<Set<string>> {
+    const commits = await this.repos.commits.findByRepo(repoId, { limit: 1000 });
+    const processedShas = new Set<string>();
+
+    for (const commit of commits) {
+      const hasCodeChange = commit.processedBy.some(
+        record => record.agentType === 'code-change'
+      );
+      if (hasCodeChange) {
+        processedShas.add(commit.sha);
+      }
+    }
+
+    return processedShas;
   }
 
   /**
