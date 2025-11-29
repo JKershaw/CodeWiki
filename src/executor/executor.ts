@@ -5,6 +5,8 @@ import type { LLMService } from '../services/llm/llm-service.js';
 import type { Agent, AgentContext } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
 import { createAgentRun, type AgentRun } from '../domain/agent-run.js';
+import { createProcessingRun, type ProcessingRun } from '../domain/processing-run.js';
+import { createIteration, type Iteration } from '../domain/iteration.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { CodeChangeAgent } from '../agents/analysis/code-change-agent.js';
@@ -77,6 +79,7 @@ export class Executor {
    */
   async runIterations(repoId: string, iterations: number): Promise<ExecutionSummary> {
     const summary: ExecutionSummary = {
+      processingRunId: '',
       iterations: 0,
       successful: 0,
       failed: 0,
@@ -89,14 +92,35 @@ export class Executor {
     const wiki = await getOrCreateActiveWiki(repoId, this.repos);
     const wikiId = wiki.id;
 
+    // Create a processing run record to track this execution
+    const processingRun = createProcessingRun({
+      id: uuid(),
+      repoId,
+      wikiId,
+      totalIterations: iterations,
+    });
+    await this.repos.processingRuns.save(processingRun);
+    summary.processingRunId = processingRun.id;
+
     this.running = true;
     this.shouldStop = false;
 
     try {
       for (let i = 0; i < iterations && !this.shouldStop; i++) {
+        const iterationNumber = i + 1;
+
+        // Create an iteration record
+        const iteration = createIteration({
+          id: uuid(),
+          processingRunId: processingRun.id,
+          iterationNumber,
+        });
+        await this.repos.iterations.save(iteration);
+
         // Check rate limits
         if (this.llm.isRateLimited()) {
           console.log('Rate limited, waiting...');
+          await this.repos.iterations.skip(iteration.id, 'Rate limited');
           await new Promise(resolve => setTimeout(resolve, 5000));
           continue;
         }
@@ -109,6 +133,7 @@ export class Executor {
           const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
           if (newWork.length === 0) {
             console.log('No more work to do');
+            await this.repos.iterations.skip(iteration.id, 'No more work available');
             break;
           }
 
@@ -116,25 +141,65 @@ export class Executor {
           workItem = await this.repos.workQueue.claimNext(repoId);
 
           if (!workItem) {
+            await this.repos.iterations.skip(iteration.id, 'No work item claimed');
             break;
           }
         }
 
+        // Update iteration with work item details
+        await this.repos.iterations.updateWorkItem(iteration.id, {
+          workItemId: workItem.id,
+          agentType: workItem.agentType,
+        });
+
         // Execute the work item
         const result = await this.executeWorkItem(workItem, repoId, wikiId);
 
-        summary.iterations++;
+        // Update iteration with results
         if (result.success) {
+          await this.repos.iterations.complete(iteration.id, {
+            agentRunId: result.agentRunId!,
+            durationMs: result.durationMs,
+            costUsd: result.cost,
+            pagesCreated: result.pagesCreated,
+            pagesUpdated: result.pagesUpdated,
+          });
           summary.successful++;
-          summary.totalCost += result.cost;
-          summary.wikiPagesCreated += result.pagesCreated;
-          summary.wikiPagesUpdated += result.pagesUpdated;
         } else {
+          await this.repos.iterations.fail(iteration.id, result.error || 'Unknown error', result.durationMs);
           summary.failed++;
         }
+
+        summary.iterations++;
+        summary.totalCost += result.cost;
+        summary.wikiPagesCreated += result.pagesCreated;
+        summary.wikiPagesUpdated += result.pagesUpdated;
+
+        // Update processing run progress
+        await this.repos.processingRuns.updateProgress(processingRun.id, {
+          completedIterations: summary.iterations,
+          successfulIterations: summary.successful,
+          failedIterations: summary.failed,
+          totalCostUsd: summary.totalCost,
+          wikiPagesCreated: summary.wikiPagesCreated,
+          wikiPagesUpdated: summary.wikiPagesUpdated,
+        });
       }
+
+      // Mark processing run as completed
+      await this.repos.processingRuns.complete(processingRun.id);
+    } catch (error) {
+      // Mark processing run as failed
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.repos.processingRuns.fail(processingRun.id, errorMessage);
+      throw error;
     } finally {
       this.running = false;
+
+      // If stopped manually, mark as stopped
+      if (this.shouldStop) {
+        await this.repos.processingRuns.stop(processingRun.id);
+      }
     }
 
     return summary;
@@ -161,9 +226,10 @@ export class Executor {
   ): Promise<WorkItemResult> {
     const agent = this.agents.get(workItem.agentType);
     if (!agent) {
-      console.error(`Unknown agent type: ${workItem.agentType}`);
+      const errorMsg = `Unknown agent type: ${workItem.agentType}`;
+      console.error(errorMsg);
       await this.repos.workQueue.fail(workItem.id);
-      return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0 };
+      return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
     }
 
     // Translate SHA to internal commit ID if we have a target commit
@@ -172,9 +238,10 @@ export class Executor {
     if (workItem.targetCommitId) {
       const commit = await this.repos.commits.findBySha(repoId, workItem.targetCommitId);
       if (!commit) {
-        console.error(`Commit not found for SHA: ${workItem.targetCommitId}`);
+        const errorMsg = `Commit not found for SHA: ${workItem.targetCommitId}`;
+        console.error(errorMsg);
         await this.repos.workQueue.fail(workItem.id);
-        return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0 };
+        return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
       }
       internalCommitId = commit.id;
     }
@@ -273,6 +340,9 @@ export class Executor {
         cost: result.costUsd,
         pagesCreated,
         pagesUpdated,
+        durationMs,
+        agentRunId: agentRun.id,
+        error: null,
       };
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -283,7 +353,7 @@ export class Executor {
 
       console.error(`✗ ${agent.type} failed: ${errorMessage}`);
 
-      return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0 };
+      return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs, agentRunId: agentRun.id, error: errorMessage };
     }
   }
 }
@@ -293,9 +363,13 @@ interface WorkItemResult {
   cost: number;
   pagesCreated: number;
   pagesUpdated: number;
+  durationMs: number;
+  agentRunId: string | null;
+  error: string | null;
 }
 
 export interface ExecutionSummary {
+  processingRunId: string;
   iterations: number;
   successful: number;
   failed: number;
