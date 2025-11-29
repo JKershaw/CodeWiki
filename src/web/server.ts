@@ -275,6 +275,66 @@ app.post('/api/repos/:id/process', async (req: Request, res: Response) => {
 });
 
 /**
+ * Get the work queue (job list) for a repository.
+ * Returns pending, claimed, completed, and failed work items.
+ */
+app.get('/api/repos/:id/work-queue', async (req: Request, res: Response) => {
+  try {
+    const repo = await repos.repos.findById(req.params.id!);
+    if (!repo) {
+      res.status(404).json({ error: 'Repository not found' });
+      return;
+    }
+
+    // Get work items by status
+    const [pending, claimed, completed, failed] = await Promise.all([
+      repos.workQueue.findByRepo(repo.id, { status: 'pending' }),
+      repos.workQueue.findByRepo(repo.id, { status: 'claimed' }),
+      repos.workQueue.findByRepo(repo.id, { status: 'completed' }),
+      repos.workQueue.findByRepo(repo.id, { status: 'failed' }),
+    ]);
+
+    // Sort pending by priority (highest first)
+    pending.sort((a, b) => b.priority - a.priority);
+
+    // Sort claimed by claimedAt (most recent first)
+    claimed.sort((a, b) =>
+      (b.claimedAt?.getTime() ?? 0) - (a.claimedAt?.getTime() ?? 0)
+    );
+
+    // Format work items for the response
+    const formatItem = (item: typeof pending[0]) => ({
+      id: item.id,
+      agentType: item.agentType,
+      targetCommitId: item.targetCommitId,
+      targetPagePath: item.targetPagePath,
+      priority: item.priority,
+      status: item.status,
+      createdAt: item.createdAt,
+      claimedAt: item.claimedAt,
+      completedAt: item.completedAt,
+    });
+
+    res.json({
+      workQueue: {
+        pending: pending.map(formatItem),
+        claimed: claimed.map(formatItem),
+        completed: completed.slice(0, 20).map(formatItem), // Limit completed to last 20
+        failed: failed.slice(0, 10).map(formatItem), // Limit failed to last 10
+        counts: {
+          pending: pending.length,
+          claimed: claimed.length,
+          completed: completed.length,
+          failed: failed.length,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
  * Get processing status for a repository.
  * Returns the active or most recent processing run with iteration details.
  */
