@@ -36,7 +36,7 @@ const META_AGENTS: AgentType[] = [
  * Orchestrator configuration.
  */
 export interface OrchestratorConfig {
-  /** Use LLM for decision making (default: false) */
+  /** Use LLM for decision making (default: true) */
   useLLM?: boolean;
   /** Model to use for orchestration (default: anthropic/claude-haiku-4.5) */
   model?: string;
@@ -62,7 +62,7 @@ export class Orchestrator {
   ) {
     this.contextGatherer = new ContextGatherer(repos);
     this.config = {
-      useLLM: config?.useLLM ?? false,
+      useLLM: config?.useLLM ?? true,
       model: config?.model ?? 'anthropic/claude-haiku-4.5',
     };
   }

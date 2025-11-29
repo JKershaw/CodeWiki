@@ -34,6 +34,15 @@ SYNTHESIS AGENTS (create new content from existing - no targetCommitId):
 - getting-started: Creates a practical getting started guide at guides/getting-started.md. Run when 10+ pages.
 - writer: Rewrites "This commit..." style pages as proper encyclopedia articles. HIGH IMPACT on readability.
 
+## Agent Coverage Balance
+
+When selecting analysis agents for commits, ensure diverse coverage:
+- If an agent has 0% coverage, prioritize running it on at least one commit
+- Aim for balanced coverage across all analysis agents over time
+- Don't run the same agent type 5+ times in a row unless others are complete
+
+Example: If code-change is at 50% and security is at 0%, include security work items.
+
 ## Decision Guidelines (Page-Count Based)
 
 These thresholds ensure even large repos (1000+ commits) get useful synthesis early:
@@ -95,6 +104,11 @@ export function buildUserPrompt(ctx: OrchestratorContext, contextString: string,
     ? 'Balanced approach - 50% analysis, 50% synthesis. Run overview agent for categories with 3+ pages.'
     : 'Prioritize synthesis and overview - 40% analysis, 60% synthesis. Project overview is critical if missing.';
 
+  // Find agents with 0% coverage that have pending commits
+  const coverageGaps = Object.entries(ctx.commitsByAgent)
+    .filter(([_, data]) => data.pending > 0 && data.processed === 0)
+    .map(([agent]) => agent);
+
   return `${contextString}
 
 ## Your Task
@@ -109,7 +123,10 @@ Consider:
 - Has project overview: ${ctx.hasProjectOverview ? 'YES' : 'NO - run project-overview agent!'}
 - Has getting started: ${ctx.hasGettingStarted ? 'YES' : 'NO - run getting-started agent!'}
 - Pages without links: ${ctx.pagesWithoutLinks} (link agent improves discoverability)
-
+${coverageGaps.length > 0 ? `
+**COVERAGE GAPS - agents with 0% coverage:** ${coverageGaps.join(', ')}
+Consider including work for these agents to ensure diverse analysis.
+` : ''}
 Return your response as valid JSON.`;
 }
 
