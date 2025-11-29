@@ -93,6 +93,7 @@ async function loadRepos() {
           </div>
         </div>
         <div class="card-actions">
+          <input type="number" class="iteration-input" data-id="${repo.id}" value="5" min="1" max="50" title="Number of iterations">
           <button class="btn primary process-btn" data-id="${repo.id}">Process</button>
           <button class="btn wiki-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Browse Wiki</button>
           <button class="btn query-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Ask</button>
@@ -133,10 +134,13 @@ async function addRepo(path) {
 
 async function processRepo(id) {
   const btn = document.querySelector(`.process-btn[data-id="${id}"]`);
+  const iterationInput = document.querySelector(`.iteration-input[data-id="${id}"]`);
+  const iterations = parseInt(iterationInput.value, 10) || 5;
   const card = btn.closest('.card');
   const originalText = btn.textContent;
   btn.textContent = 'Starting...';
   btn.disabled = true;
+  iterationInput.disabled = true;
 
   // Create or get progress indicator
   let progressDiv = card.querySelector('.processing-progress');
@@ -149,7 +153,7 @@ async function processRepo(id) {
   try {
     await api(`/repos/${id}/process`, {
       method: 'POST',
-      body: JSON.stringify({ iterations: 5 }),
+      body: JSON.stringify({ iterations }),
     });
 
     btn.textContent = 'Processing...';
@@ -194,6 +198,7 @@ async function processRepo(id) {
     alert('Error starting processing: ' + error.message);
     btn.textContent = originalText;
     btn.disabled = false;
+    iterationInput.disabled = false;
     if (progressDiv) progressDiv.remove();
   }
 }

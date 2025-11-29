@@ -295,6 +295,28 @@ nav {
 .card-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.iteration-input {
+  width: 60px;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.iteration-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.iteration-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Processing Progress */
