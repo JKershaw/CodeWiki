@@ -53,6 +53,9 @@ async function main() {
     case 'process':
       await processCommand(args.slice(1));
       break;
+    case 'ask':
+      await askCommand(args.slice(1));
+      break;
     case 'query':
       await queryCommand(args.slice(1));
       break;
@@ -81,6 +84,10 @@ Commands:
                                     Default: 10 iterations
                                     Uses LLM-powered intelligent orchestration
 
+  ask "<question>"                  Quick query for the current directory
+                                    Uses the most recent wiki for this repo
+                                    Returns just the answer text
+
   query <repo-path> "<question>"    Ask a question about the codebase
                                     Searches wiki and synthesizes an answer
 
@@ -89,6 +96,8 @@ Commands:
   list                              List all connected repositories
 
 Examples:
+  npm run ask "what is the architecture?"               # Quick ask (current repo)
+  npm run ask "how does authentication work?"           # Quick ask
   npx tsx src/cli.ts process . 5                        # Process current repo
   npx tsx src/cli.ts process . 20                       # More iterations
   npx tsx src/cli.ts query . "what is the architecture?"  # Ask about architecture
@@ -347,6 +356,61 @@ async function queryCommand(args: string[]) {
   }
 
   console.log('');
+}
+
+async function askCommand(args: string[]) {
+  const question = args.join(' ');
+
+  if (!question) {
+    console.error('Error: Question is required');
+    console.log('Usage: npm run ask "your question here"');
+    process.exit(1);
+  }
+
+  // Use current working directory
+  const absolutePath = process.cwd();
+
+  // Initialize services
+  const repos = createRepositories({ type: 'file' });
+  const llm = createLLM();
+
+  // Find the repository - try exact match first, then find most recent
+  let repo = await repos.repos.findByFullName(absolutePath);
+
+  if (!repo) {
+    // Look for any repo that might match this path (in case of multiple wikis)
+    const allRepos = await repos.repos.findAll();
+    const matchingRepos = allRepos
+      .filter(r => r.fullName === absolutePath || absolutePath.startsWith(r.fullName))
+      .sort((a, b) => {
+        // Sort by most recently updated (using createdAt as proxy)
+        const aTime = a.createdAt?.getTime() ?? 0;
+        const bTime = b.createdAt?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+
+    repo = matchingRepos[0] ?? null;
+  }
+
+  if (!repo) {
+    console.error(`No wiki found for: ${absolutePath}`);
+    console.log('Run "npm run cli process ." first to generate a wiki.');
+    process.exit(1);
+  }
+
+  // Check if wiki has content
+  const wikiPages = await repos.wikiPages.findByRepo(repo.id);
+  if (wikiPages.length === 0) {
+    console.error('Wiki is empty. Run "npm run cli process ." first to generate wiki content.');
+    process.exit(1);
+  }
+
+  // Create research agent and query
+  const research = createResearchAgent(repos, llm);
+  const result = await research.query(repo.id, question);
+
+  // Output just the answer (clean for piping)
+  console.log(result.answer);
 }
 
 main().catch(error => {
