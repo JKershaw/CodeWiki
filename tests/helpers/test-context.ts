@@ -109,7 +109,6 @@ export async function createTestRepo(
     defaultBranch: 'main',
     status: 'ready',
     config: {
-      maxConcurrency: 1,
       throttle: { maxCallsPerMinute: 100, maxCostPerHour: 10 },
       enabledAgents: ['code-change'],
     },

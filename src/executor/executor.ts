@@ -162,9 +162,8 @@ export class Executor {
     const wiki = await getOrCreateActiveWiki(repoId, this.repos);
     const wikiId = wiki.id;
 
-    // Get repo config for maxConcurrency
-    const repo = await this.repos.repos.findById(repoId);
-    const maxConcurrency = repo?.config.maxConcurrency ?? 1;
+    // Get maxConcurrency from env with default of 4
+    const maxConcurrency = parseInt(process.env.MAX_CONCURRENCY ?? '4', 10);
 
     // Create a processing run record to track this execution (via CQRS command)
     const processingRunId = uuid();
