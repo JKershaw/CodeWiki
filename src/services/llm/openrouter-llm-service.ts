@@ -1,11 +1,3 @@
-import { OpenRouter } from '@openrouter/sdk';
-import type {
-  ChatResponse,
-  Message,
-  ToolDefinitionJson,
-  AssistantMessage,
-  ChatMessageToolCall,
-} from '@openrouter/sdk/models';
 import {
   BaseLLMService,
   CompletionOptions,
@@ -16,12 +8,79 @@ import {
   calculateCost,
 } from './llm-service.js';
 
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+/**
+ * OpenAI-compatible message format.
+ */
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+}
+
+interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface ToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+interface ChatResponse {
+  choices: Array<{
+    message: {
+      content: string | null;
+      tool_calls?: ToolCall[];
+    };
+    finish_reason: string;
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+  };
+}
+
+/**
+ * Get a fetch function that works with proxies if configured.
+ */
+async function getProxyFetch(): Promise<typeof fetch> {
+  const proxyUrl = process.env['HTTPS_PROXY'] || process.env['HTTP_PROXY'] ||
+                   process.env['https_proxy'] || process.env['http_proxy'];
+
+  if (!proxyUrl) {
+    return fetch;
+  }
+
+  const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+  const dispatcher = new ProxyAgent(proxyUrl);
+
+  return (async (input: string | URL, init?: RequestInit) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const options: any = { ...init, dispatcher };
+    const response = await undiciFetch(input as string, options);
+    return response as unknown as Response;
+  }) as typeof fetch;
+}
+
 /**
  * OpenRouter LLM service implementation.
- * Uses the OpenRouter SDK to access 300+ models through a unified API.
+ * Uses direct API calls for simplicity and control.
  */
 export class OpenRouterLLMService extends BaseLLMService {
-  private client: OpenRouter;
+  private apiKey: string;
+  private fetchFn: typeof fetch | null = null;
 
   constructor(
     apiKey: string,
@@ -32,53 +91,63 @@ export class OpenRouterLLMService extends BaseLLMService {
       maxRequestsPerMinute: rateLimit?.maxRequestsPerMinute ?? 50,
       maxCostPerHour: rateLimit?.maxCostPerHour ?? 5,
     });
+    this.apiKey = apiKey;
+  }
 
-    this.client = new OpenRouter({
-      apiKey,
+  private async getFetch(): Promise<typeof fetch> {
+    if (!this.fetchFn) {
+      this.fetchFn = await getProxyFetch();
+    }
+    return this.fetchFn;
+  }
+
+  private async callAPI(body: Record<string, unknown>): Promise<ChatResponse> {
+    const fetchFn = await this.getFetch();
+
+    const response = await fetchFn(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenRouter API error (${response.status}): ${error}`);
+    }
+
+    return response.json() as Promise<ChatResponse>;
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResult> {
     await this.waitForRateLimit();
 
-    const messages: Message[] = [];
+    const messages: ChatMessage[] = [];
 
-    // Add system message if provided
     if (options.system) {
+      messages.push({ role: 'system', content: options.system });
+    }
+
+    for (const m of options.messages) {
       messages.push({
-        role: 'system',
-        content: options.system,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
       });
     }
 
-    // Add conversation messages
-    for (const m of options.messages) {
-      if (m.role === 'user') {
-        messages.push({
-          role: 'user',
-          content: m.content,
-        });
-      } else if (m.role === 'assistant') {
-        messages.push({
-          role: 'assistant',
-          content: m.content,
-        });
-      }
-    }
-
     try {
-      const response = await this.client.chat.send({
+      const response = await this.callAPI({
         model: this.model,
-        maxTokens: options.maxTokens ?? 2000,
+        max_tokens: options.maxTokens ?? 2000,
         messages,
         ...(options.stopSequences ? { stop: options.stopSequences } : {}),
-        stream: false,
-      }) as ChatResponse;
+      });
 
-      const message = response.choices[0]?.message;
-      const content = typeof message?.content === 'string' ? message.content : '';
-      const inputTokens = response.usage?.promptTokens ?? 0;
-      const outputTokens = response.usage?.completionTokens ?? 0;
+      const content = response.choices[0]?.message?.content ?? '';
+      const inputTokens = response.usage?.prompt_tokens ?? 0;
+      const outputTokens = response.usage?.completion_tokens ?? 0;
 
       const result: CompletionResult = {
         content,
@@ -86,7 +155,7 @@ export class OpenRouterLLMService extends BaseLLMService {
         outputTokens,
         costUsd: calculateCost(this.model, inputTokens, outputTokens),
         model: this.model,
-        truncated: response.choices[0]?.finishReason === 'length',
+        truncated: response.choices[0]?.finish_reason === 'length',
       };
 
       this.trackUsage(result);
@@ -102,9 +171,8 @@ export class OpenRouterLLMService extends BaseLLMService {
   async completeWithTools(options: ToolUseOptions): Promise<ToolUseResult> {
     await this.waitForRateLimit();
 
-    // Convert tools to OpenRouter format
-    const tools: ToolDefinitionJson[] = options.tools.map(t => ({
-      type: 'function' as const,
+    const tools: ToolDefinition[] = options.tools.map(t => ({
+      type: 'function',
       function: {
         name: t.name,
         description: t.description,
@@ -112,28 +180,17 @@ export class OpenRouterLLMService extends BaseLLMService {
       },
     }));
 
-    // Build initial messages
-    const messages: Message[] = [];
+    const messages: ChatMessage[] = [];
 
     if (options.system) {
-      messages.push({
-        role: 'system',
-        content: options.system,
-      });
+      messages.push({ role: 'system', content: options.system });
     }
 
     for (const m of options.messages) {
-      if (m.role === 'user') {
-        messages.push({
-          role: 'user',
-          content: m.content,
-        });
-      } else if (m.role === 'assistant') {
-        messages.push({
-          role: 'assistant',
-          content: m.content,
-        });
-      }
+      messages.push({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      });
     }
 
     const maxRounds = options.maxToolRounds ?? 5;
@@ -145,37 +202,30 @@ export class OpenRouterLLMService extends BaseLLMService {
 
     try {
       while (toolRounds < maxRounds) {
-        const response = await this.client.chat.send({
+        const response = await this.callAPI({
           model: this.model,
-          maxTokens: options.maxTokens ?? 4000,
+          max_tokens: options.maxTokens ?? 4000,
           messages,
           tools,
-          toolChoice: 'auto',
-          stream: false,
-        }) as ChatResponse;
+          tool_choice: 'auto',
+        });
 
-        totalInputTokens += response.usage?.promptTokens ?? 0;
-        totalOutputTokens += response.usage?.completionTokens ?? 0;
+        totalInputTokens += response.usage?.prompt_tokens ?? 0;
+        totalOutputTokens += response.usage?.completion_tokens ?? 0;
 
         const choice = response.choices[0];
-        const assistantMessage = choice?.message as AssistantMessage | undefined;
-
-        // Extract text content
-        const textContent = typeof assistantMessage?.content === 'string'
-          ? assistantMessage.content
-          : '';
-
-        // Check for tool calls
-        const toolCallsInResponse = assistantMessage?.toolCalls ?? [];
+        const assistantMessage = choice?.message;
+        const textContent = assistantMessage?.content ?? '';
+        const toolCallsInResponse = assistantMessage?.tool_calls ?? [];
 
         // If no tool calls, we're done
-        if (toolCallsInResponse.length === 0 || choice?.finishReason === 'stop') {
+        if (toolCallsInResponse.length === 0 || choice?.finish_reason === 'stop') {
           finalContent = textContent;
           break;
         }
 
         // Execute all tool calls
-        const toolCalls = toolCallsInResponse.map((tc: ChatMessageToolCall) => ({
+        const toolCalls = toolCallsInResponse.map(tc => ({
           id: tc.id,
           name: tc.function.name,
           input: JSON.parse(tc.function.arguments) as Record<string, unknown>,
@@ -195,49 +245,38 @@ export class OpenRouterLLMService extends BaseLLMService {
         // Add assistant message with tool calls
         messages.push({
           role: 'assistant',
-          content: textContent || undefined,
-          toolCalls: toolCallsInResponse.map((tc: ChatMessageToolCall) => ({
-            id: tc.id,
-            type: 'function' as const,
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments,
-            },
-          })),
+          content: textContent || null,
+          tool_calls: toolCallsInResponse,
         });
 
-        // Add tool results as separate messages
+        // Add tool results
         for (const r of toolResults) {
           messages.push({
             role: 'tool',
             content: r.result,
-            toolCallId: r.id,
+            tool_call_id: r.id,
           });
         }
 
         toolRounds++;
       }
 
-      // If we exhausted tool rounds without getting final content, make one more call WITHOUT tools
+      // If we exhausted tool rounds, force a final response
       if (finalContent === '' && messages.length > 0) {
         messages.push({
           role: 'user',
           content: 'You have gathered enough information. Now write the complete markdown output based on what you learned. Do not use any more tools.',
         });
 
-        const finalResponse = await this.client.chat.send({
+        const finalResponse = await this.callAPI({
           model: this.model,
-          maxTokens: options.maxTokens ?? 4000,
+          max_tokens: options.maxTokens ?? 4000,
           messages,
-          stream: false,
-          // Omit tools to force text output
-        }) as ChatResponse;
+        });
 
-        totalInputTokens += finalResponse.usage?.promptTokens ?? 0;
-        totalOutputTokens += finalResponse.usage?.completionTokens ?? 0;
-
-        const finalMessage = finalResponse.choices[0]?.message;
-        finalContent = typeof finalMessage?.content === 'string' ? finalMessage.content : '';
+        totalInputTokens += finalResponse.usage?.prompt_tokens ?? 0;
+        totalOutputTokens += finalResponse.usage?.completion_tokens ?? 0;
+        finalContent = finalResponse.choices[0]?.message?.content ?? '';
       }
 
       const result: ToolUseResult = {
