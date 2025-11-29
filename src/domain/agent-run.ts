@@ -51,6 +51,9 @@ export type AgentType =
   | 'extension-guide'
   | 'history'
   | 'convention'
+  // Navigation agents - improve discoverability
+  | 'wiki-index'
+  | 'toc'
   // Special agents
   | 'orchestrator'
   | 'research'
