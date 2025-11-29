@@ -1,14 +1,21 @@
 /**
- * Unit tests for markdown parsing.
- * Tests the marked library configuration used in the frontend.
+ * Unit tests for markdown parsing and sanitization.
+ * Tests the marked library and DOMPurify configuration used in the frontend.
  *
  * These tests verify that the marked library produces expected HTML output
- * for the markdown features we use in CodeWiki.
+ * for the markdown features we use in CodeWiki, and that DOMPurify properly
+ * sanitizes the output to prevent XSS attacks.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { marked } from 'marked';
+import { JSDOM } from 'jsdom';
+import DOMPurify from 'dompurify';
+
+// Set up jsdom window for DOMPurify
+const window = new JSDOM('').window;
+const purify = DOMPurify(window);
 
 // Configure marked the same way as in app.js
 marked.setOptions({
@@ -18,11 +25,12 @@ marked.setOptions({
 
 /**
  * Wrapper function that mirrors the frontend markdownToHtml function.
- * TODO: Add DOMPurify sanitization for user-generated content.
+ * Parses markdown to HTML and sanitizes with DOMPurify.
  */
 function markdownToHtml(md: string): string {
   if (!md) return '';
-  return marked.parse(md) as string;
+  const rawHtml = marked.parse(md) as string;
+  return purify.sanitize(rawHtml);
 }
 
 describe('markdownToHtml', () => {
@@ -224,6 +232,89 @@ const user = await authenticate(credentials);
       assert.ok(html.includes('<table>'), 'Should have table');
       assert.ok(html.includes('<hr'), 'Should have horizontal rule');
       assert.ok(html.includes('<em>Last updated'), 'Should have italic text');
+    });
+  });
+
+  describe('XSS sanitization', () => {
+    it('removes script tags', () => {
+      const md = 'Hello <script>alert("xss")</script> world';
+      const html = markdownToHtml(md);
+
+      assert.ok(!html.includes('<script>'), 'Should remove script tags');
+      assert.ok(!html.includes('alert'), 'Should remove script content');
+      assert.ok(html.includes('Hello'), 'Should preserve safe content');
+      assert.ok(html.includes('world'), 'Should preserve safe content');
+    });
+
+    it('removes javascript: URLs in links', () => {
+      const md = '[Click me](javascript:alert("xss"))';
+      const html = markdownToHtml(md);
+
+      assert.ok(!html.includes('javascript:'), 'Should remove javascript: protocol');
+    });
+
+    it('sanitizes malformed image syntax with XSS attempt', () => {
+      const md = '![alt](image.jpg" onerror="alert(\'xss\'))';
+      const html = markdownToHtml(md);
+
+      // Marked treats malformed image syntax as plain text (not an img tag)
+      // This is safe because the text is not executable HTML
+      assert.ok(!html.includes('<img'), 'Should not create img tag from malformed syntax');
+      // The malformed syntax becomes plain text in a paragraph
+      assert.ok(html.includes('<p>'), 'Should wrap in paragraph as plain text');
+    });
+
+    it('removes event handlers from HTML', () => {
+      const md = '<div onclick="alert(\'xss\')">Click me</div>';
+      const html = markdownToHtml(md);
+
+      assert.ok(!html.includes('onclick'), 'Should remove onclick handler');
+    });
+
+    it('removes iframe tags', () => {
+      const md = '<iframe src="https://evil.com"></iframe>';
+      const html = markdownToHtml(md);
+
+      assert.ok(!html.includes('<iframe'), 'Should remove iframe tags');
+    });
+
+    it('preserves safe HTML in markdown', () => {
+      const md = 'This is <strong>bold</strong> and <em>italic</em>';
+      const html = markdownToHtml(md);
+
+      assert.ok(html.includes('<strong>bold</strong>'), 'Should preserve strong tags');
+      assert.ok(html.includes('<em>italic</em>'), 'Should preserve em tags');
+    });
+
+    it('handles complex XSS attempts', () => {
+      // Note: Marked escapes some raw HTML tags to text (like <img> and <svg>)
+      // while parsing others as HTML (like <body> and <input>).
+      // DOMPurify removes dangerous attributes from actual HTML elements.
+      const md = `
+# Safe Title
+
+<div onclick="alert('XSS')">test</div>
+<a href="javascript:alert('XSS')">link</a>
+<input onfocus=alert('XSS') autofocus>
+
+Normal paragraph with **bold** text.
+`;
+      const html = markdownToHtml(md);
+
+      // Event handlers should be stripped from actual HTML elements
+      assert.ok(!html.includes('onclick='), 'Should remove onclick');
+      assert.ok(!html.includes('onfocus='), 'Should remove onfocus');
+      assert.ok(!html.includes('javascript:'), 'Should remove javascript: protocol');
+      assert.ok(html.includes('<h1>Safe Title</h1>'), 'Should preserve safe content');
+      assert.ok(html.includes('<strong>bold</strong>'), 'Should preserve bold text');
+    });
+
+    it('sanitizes data: URLs', () => {
+      const md = '[link](data:text/html,<script>alert("xss")</script>)';
+      const html = markdownToHtml(md);
+
+      // DOMPurify should remove or neutralize the data: URL
+      assert.ok(!html.includes('data:text/html'), 'Should remove dangerous data: URLs');
     });
   });
 });

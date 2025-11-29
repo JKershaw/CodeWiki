@@ -669,13 +669,10 @@ function escapeHtml(text) {
 
 /**
  * Convert markdown to HTML using the marked library.
- *
- * TODO: Add DOMPurify sanitization for user-generated content.
- * When implementing, wrap the return like:
- *   return DOMPurify.sanitize(marked.parse(md));
+ * Output is sanitized with DOMPurify to prevent XSS attacks.
  *
  * @param {string} md - Markdown content to convert
- * @returns {string} HTML string
+ * @returns {string} Sanitized HTML string
  */
 function markdownToHtml(md) {
   if (!md) return '';
@@ -686,7 +683,9 @@ function markdownToHtml(md) {
     breaks: true,     // Convert \n to <br>
   });
 
-  return marked.parse(md);
+  // Parse markdown and sanitize to prevent XSS
+  const rawHtml = marked.parse(md);
+  return DOMPurify.sanitize(rawHtml);
 }
 
 // Initialize
