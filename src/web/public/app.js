@@ -224,6 +224,7 @@ function formatAgentType(type) {
     'bootstrap': 'Bootstrapping Wiki',
     'research': 'Research',
     'writer': 'Writing Content',
+    'orchestrator': 'Planning...',
   };
   return names[type] || type;
 }

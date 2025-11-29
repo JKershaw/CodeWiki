@@ -249,8 +249,8 @@ app.post('/api/repos/:id/process', async (req: Request, res: Response) => {
       repos
     );
 
-    // Create orchestrator and executor
-    const orchestrator = createOrchestrator(repos);
+    // Create orchestrator and executor (uses LLM-powered orchestration)
+    const orchestrator = createOrchestrator(repos, llm, { useLLM: true });
     const executor = createExecutor(repos, git, llm, orchestrator);
 
     // Run in background (don't await)

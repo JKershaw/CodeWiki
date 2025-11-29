@@ -199,6 +199,15 @@ export class Executor {
 
         // If no work, generate more
         if (!workItem) {
+          // Show orchestrator status while generating work (can take time with LLM)
+          await handleUpdateIterationWorkItem(
+            createUpdateIterationWorkItemCommand(iterationId, {
+              workItemId: 'orchestrating',
+              agentType: 'orchestrator',
+            }),
+            this.repos
+          );
+
           const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
           if (newWork.length === 0) {
             console.log('No more work to do');
