@@ -117,6 +117,34 @@ That's my recommendation.`;
     });
   });
 
+  describe('truncated JSON repair', () => {
+    it('should repair truncated JSON with complete work items', () => {
+      // Simulates LLM response cut off after a complete work item
+      const response = `{
+  "reasoning": "Truncated but recoverable",
+  "workItems": [
+    { "agentType": "writer", "reason": "First item complete" },
+    { "agentType": "link", "reason": "Second item complete" },`;
+      // Missing closing ] and }
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'Truncated but recoverable');
+      assert.strictEqual(result.workItems.length, 2);
+    });
+
+    it('should repair JSON truncated after trailing comma', () => {
+      const response = `{
+  "reasoning": "Test truncation",
+  "workItems": [
+    { "agentType": "overview", "reason": "Complete" },
+  `;
+      // Cut off with trailing comma
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.workItems.length, 1);
+    });
+  });
+
   describe('error handling for unparseable JSON', () => {
     it('should throw for completely invalid JSON', () => {
       const response = 'This is not JSON at all, just random text.';
@@ -127,7 +155,8 @@ That's my recommendation.`;
       );
     });
 
-    it('should throw for truncated JSON', () => {
+    it('should throw for truncated JSON mid-property', () => {
+      // Truncated in the middle of a property value - can't be repaired
       const response = `{
   "reasoning": "This got cut off",
   "workItems": [
