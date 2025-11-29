@@ -474,8 +474,11 @@ async function specCommand(args: string[]) {
     process.exit(1);
   }
 
+  // Get active wiki
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+
   // Check if wiki has content
-  const wikiPages = await repos.wikiPages.findByRepo(repo.id);
+  const wikiPages = await repos.wikiPages.findByWiki(wiki.id);
   if (wikiPages.length === 0) {
     console.error('Wiki is empty. Run "npm run cli process ." first to generate wiki content.');
     process.exit(1);
@@ -483,7 +486,7 @@ async function specCommand(args: string[]) {
 
   // Create spec agent and generate
   const specAgent = createSpecAgent(repos, llm);
-  const result = await specAgent.generateSpec(repo.id, task);
+  const result = await specAgent.generateSpec(wiki.id, task);
 
   // Output the spec in a readable format
   console.log('# Coding Agent Specification\n');
