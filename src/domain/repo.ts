@@ -27,8 +27,6 @@ export type RepoStatus =
   | 'error';       // Processing encountered an error
 
 export interface RepoConfig {
-  /** Max concurrent agents */
-  maxConcurrency: number;
   /** Throttle settings for rate limiting */
   throttle: ThrottleConfig;
   /** Which agent types are enabled */
@@ -55,7 +53,6 @@ export function createRepo(params: {
     defaultBranch: params.defaultBranch,
     status: 'pending',
     config: {
-      maxConcurrency: 1,
       throttle: {
         maxCallsPerMinute: 10,
         maxCostPerHour: 1.0,
