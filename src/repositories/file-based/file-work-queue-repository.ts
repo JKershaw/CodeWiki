@@ -221,4 +221,19 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
     );
     return found !== null;
   }
+
+  async getPendingKeys(repoId: string): Promise<Set<string>> {
+    const items = await this.store.find(w =>
+      w.repoId === repoId &&
+      (w.status === 'pending' || w.status === 'claimed')
+    );
+
+    const keys = new Set<string>();
+    for (const item of items) {
+      // Key format: "agentType:targetCommitId" or "agentType:null"
+      const key = `${item.agentType}:${item.targetCommitId ?? 'null'}`;
+      keys.add(key);
+    }
+    return keys;
+  }
 }
