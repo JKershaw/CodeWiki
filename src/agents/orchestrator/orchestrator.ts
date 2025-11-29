@@ -303,7 +303,8 @@ export class Orchestrator {
         if (workItems.length >= remainingSlots) break;
 
         // Check if work already exists for this commit + agent
-        const exists = await this.repos.workQueue.exists(repoId, agentType, commit.id);
+        // Use commit.sha to match how work items are created (targetCommitId uses SHA)
+        const exists = await this.repos.workQueue.exists(repoId, agentType, commit.sha);
         if (exists) continue;
 
         const isRecent = commit.committedAt > oneWeekAgo;

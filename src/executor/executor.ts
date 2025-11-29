@@ -466,6 +466,7 @@ export class Executor {
     } catch (error) {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
 
       // Fail agent run via CQRS command
       await handleFailAgentRun(
@@ -479,7 +480,18 @@ export class Executor {
         this.repos
       );
 
-      console.error(`✗ ${agent.type} failed: ${errorMessage}`);
+      // Log detailed error information for debugging
+      console.error(`\n${'='.repeat(60)}`);
+      console.error(`✗ AGENT FAILURE: ${agent.type}`);
+      console.error(`${'='.repeat(60)}`);
+      console.error(`Work Item ID: ${workItem.id}`);
+      console.error(`Target Commit: ${workItem.targetCommitId ?? 'N/A (wiki-level agent)'}`);
+      console.error(`Duration: ${durationMs}ms`);
+      console.error(`Error: ${errorMessage}`);
+      if (errorStack) {
+        console.error(`Stack trace:\n${errorStack}`);
+      }
+      console.error(`${'='.repeat(60)}\n`);
 
       return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs, agentRunId, error: errorMessage };
     }
