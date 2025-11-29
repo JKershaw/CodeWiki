@@ -184,4 +184,23 @@ test.describe('API Endpoints', () => {
       expect(typeof dir.isGitRepo).toBe('boolean');
     }
   });
+
+  test('POST /api/repos/:id/spec requires task', async ({ request }) => {
+    // First get a repo
+    const reposResponse = await request.get('/api/repos');
+    const repos = await reposResponse.json();
+
+    if (repos.length === 0) {
+      test.skip();
+      return;
+    }
+
+    const response = await request.post(`/api/repos/${repos[0].id}/spec`, {
+      data: {},
+    });
+
+    expect(response.status()).toBe(400);
+    const data = await response.json();
+    expect(data.error).toContain('Task');
+  });
 });
