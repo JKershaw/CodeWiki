@@ -667,33 +667,25 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+/**
+ * Convert markdown to HTML using the marked library.
+ * Output is sanitized with DOMPurify to prevent XSS attacks.
+ *
+ * @param {string} md - Markdown content to convert
+ * @returns {string} Sanitized HTML string
+ */
 function markdownToHtml(md) {
-  // Simple markdown to HTML conversion
-  return md
-    // Headers
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    // Bold
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    // Code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Lists
-    .replace(/^\- (.*$)/gim, '<li>$1</li>')
-    // Line breaks
-    .replace(/\n\n/g, '</p><p>')
-    // Wrap in paragraphs
-    .replace(/^(?!<[hplu])/gm, '')
-    // Horizontal rule
-    .replace(/^---$/gim, '<hr>')
-    // Clean up
-    .replace(/<li>/g, '<ul><li>')
-    .replace(/<\/li>\n(?!<li>)/g, '</li></ul>')
-    .replace(/<\/li><ul>/g, '</li>');
+  if (!md) return '';
+
+  // Configure marked for GitHub Flavored Markdown
+  marked.setOptions({
+    gfm: true,        // GitHub Flavored Markdown
+    breaks: true,     // Convert \n to <br>
+  });
+
+  // Parse markdown and sanitize to prevent XSS
+  const rawHtml = marked.parse(md);
+  return DOMPurify.sanitize(rawHtml);
 }
 
 // Initialize
