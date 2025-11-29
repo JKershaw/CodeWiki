@@ -16,7 +16,7 @@
     <nav id="nav">
       <button class="nav-btn active" data-view="repos">Repositories</button>
       <button class="nav-btn" data-view="wiki" disabled>Wiki</button>
-      <button class="nav-btn" data-view="query" disabled>Query</button>
+      <button class="nav-btn" data-view="query" disabled>Ask</button>
       <button class="nav-btn" data-view="spec" disabled>Spec</button>
     </nav>
 
@@ -74,20 +74,26 @@
       <!-- Query View -->
       <section id="query-view" class="view">
         <div class="section-header">
-          <h2>Query: <span id="query-repo-name"></span></h2>
+          <h2>Ask: <span id="query-repo-name"></span></h2>
           <button id="back-to-repos-query" class="btn secondary">Back to Repos</button>
         </div>
 
-        <div class="query-container">
-          <div class="query-input">
-            <input type="text" id="query-question" placeholder="Ask a question about the codebase..." />
-            <button id="submit-query" class="btn primary">Ask</button>
+        <div class="agent-container">
+          <div class="agent-input-section">
+            <label for="query-question">Ask a question about the codebase</label>
+            <textarea id="query-question" placeholder="e.g., How does authentication work? What patterns are used for API endpoints?" rows="6"></textarea>
+            <div class="agent-actions">
+              <button id="submit-query" class="btn primary">Ask</button>
+            </div>
           </div>
 
-          <div id="query-result" class="query-result hidden">
-            <div id="query-answer" class="answer"></div>
-            <div id="query-meta" class="meta"></div>
-            <div id="query-sources" class="sources"></div>
+          <div id="query-result" class="agent-result hidden">
+            <div class="result-header">
+              <h3>Answer</h3>
+            </div>
+            <div id="query-answer" class="result-content"></div>
+            <div id="query-meta" class="result-meta"></div>
+            <div id="query-sources" class="result-sources"></div>
           </div>
         </div>
       </section>
@@ -99,20 +105,23 @@
           <button id="back-to-repos-spec" class="btn secondary">Back to Repos</button>
         </div>
 
-        <div class="spec-container">
-          <div class="spec-input">
-            <textarea id="spec-task" placeholder="Describe the task you want a coding agent to implement..." rows="3"></textarea>
-            <button id="submit-spec" class="btn primary">Generate Spec</button>
+        <div class="agent-container">
+          <div class="agent-input-section">
+            <label for="spec-task">Describe the task for a coding agent</label>
+            <textarea id="spec-task" placeholder="e.g., Add a new API endpoint for user preferences that follows the existing patterns..." rows="6"></textarea>
+            <div class="agent-actions">
+              <button id="submit-spec" class="btn primary">Generate Spec</button>
+            </div>
           </div>
 
-          <div id="spec-result" class="spec-result hidden">
-            <div class="spec-header">
+          <div id="spec-result" class="agent-result hidden">
+            <div class="result-header">
               <h3>Generated Specification</h3>
               <button id="copy-spec" class="btn secondary">Copy</button>
             </div>
-            <div id="spec-content" class="spec-content"></div>
-            <div id="spec-meta" class="meta"></div>
-            <div id="spec-sources" class="sources"></div>
+            <div id="spec-content" class="result-content"></div>
+            <div id="spec-meta" class="result-meta"></div>
+            <div id="spec-sources" class="result-sources"></div>
           </div>
         </div>
       </section>

@@ -460,76 +460,195 @@ nav {
   transition: width 0.3s;
 }
 
-/* Query */
-.query-container {
-  max-width: 800px;
+/* Agent Pages (Ask & Spec) */
+.agent-container {
+  max-width: 900px;
 }
 
-.query-input {
-  display: flex;
-  gap: 10px;
+.agent-input-section {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 25px;
   margin-bottom: 30px;
 }
 
-.query-input input {
-  flex: 1;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+.agent-input-section label {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 500;
   color: var(--text-primary);
-  padding: 15px 20px;
-  border-radius: 8px;
-  font-size: 1rem;
+  margin-bottom: 12px;
 }
 
-.query-input input:focus {
+.agent-input-section textarea {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 16px 20px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 150px;
+}
+
+.agent-input-section textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-.query-result {
+.agent-input-section textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+.agent-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.agent-actions .btn {
+  padding: 12px 28px;
+  font-size: 1rem;
+}
+
+/* Agent Results */
+.agent-result {
   background: var(--bg-secondary);
   border-radius: 8px;
   padding: 25px;
 }
 
-.query-result.hidden {
+.agent-result.hidden {
   display: none;
 }
 
-.query-result .answer {
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 20px;
-  line-height: 1.8;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
 }
 
-.query-result .meta {
+.result-header h3 {
+  color: var(--accent);
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.result-content {
+  line-height: 1.8;
+  margin-bottom: 20px;
+}
+
+.result-content h1,
+.result-content h2,
+.result-content h3,
+.result-content h4 {
+  color: var(--text-primary);
+  margin: 20px 0 10px;
+}
+
+.result-content h4 {
+  color: var(--accent);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.result-content p {
+  margin-bottom: 12px;
+}
+
+.result-content ul,
+.result-content ol {
+  margin-left: 20px;
+  margin-bottom: 15px;
+}
+
+.result-content li {
+  margin-bottom: 5px;
+}
+
+.result-content code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.9em;
+}
+
+.result-content pre {
+  background: var(--code-bg);
+  padding: 15px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 15px;
+}
+
+.result-content pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Spec Sections */
+.spec-section {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.spec-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.spec-section h4 {
+  color: var(--accent);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.result-meta {
   display: flex;
   gap: 20px;
-  margin-bottom: 20px;
   padding: 15px;
   background: var(--bg-card);
   border-radius: 6px;
+  margin-bottom: 20px;
 }
 
-.query-result .sources {
+.result-sources {
   border-top: 1px solid var(--border);
   padding-top: 20px;
 }
 
-.query-result .sources h4 {
-  margin-bottom: 10px;
+.result-sources h4 {
+  margin-bottom: 12px;
   color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .source-item {
-  padding: 10px;
+  padding: 12px 15px;
   background: var(--bg-card);
   border-radius: 6px;
   margin-bottom: 8px;
 }
 
 .source-item .title {
-  font-weight: bold;
+  font-weight: 600;
   margin-bottom: 5px;
+  color: var(--text-primary);
 }
 
 .source-item .path {

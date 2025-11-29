@@ -123,12 +123,15 @@ test.describe('Wiki Query', () => {
     const queryBtn = page.locator('.query-btn:not([disabled])').first();
     await queryBtn.click();
 
-    // Enter a question and press Enter
+    // Enter a question and press Enter (textarea requires Enter without Shift to submit)
     await page.fill('#query-question', 'What is the architecture?');
     await page.press('#query-question', 'Enter');
 
-    // Should trigger search
-    await expect(page.locator('#query-answer')).toContainText(/Searching|Loading/);
+    // Should trigger search - result container should become visible
+    await expect(page.locator('#query-result')).not.toHaveClass(/hidden/, { timeout: 60000 });
+
+    // Confirm query was submitted by checking for actual response
+    await expect(page.locator('#query-meta')).toContainText('Confidence', { timeout: 60000 });
   });
 
   test('can navigate back to repos from query', async ({ page, request }) => {
