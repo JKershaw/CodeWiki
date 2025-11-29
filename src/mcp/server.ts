@@ -11,6 +11,7 @@
  * - list_wiki_pages: List all wiki pages for a repository
  * - get_wiki_page: Get the content of a specific wiki page
  * - get_repo_status: Get processing status for a repository
+ * - generate_spec: Generate a specification for a coding task
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -25,6 +26,7 @@ import { createRepositories } from '../repositories/index.js';
 import { createAnthropicLLM } from '../services/llm/anthropic-llm-service.js';
 import { createMockLLMForCodeAnalysis } from '../services/llm/mock-llm-service.js';
 import { createResearchAgent } from '../agents/research/research-agent.js';
+import { createSpecAgent } from '../agents/spec/spec-agent.js';
 import { createOrchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 
@@ -41,6 +43,7 @@ function createLLM() {
 
 const llm = createLLM();
 const research = createResearchAgent(repos, llm);
+const specAgent = createSpecAgent(repos, llm);
 const orchestrator = createOrchestrator(repos);
 
 // Create MCP server
@@ -130,6 +133,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['repo_path'],
         },
       },
+      {
+        name: 'generate_spec',
+        description:
+          'Generate a specification for a coding task. Given a task description, returns structured context ' +
+          'from the wiki that a coding agent needs to implement the task, including relevant architecture, ' +
+          'patterns, conventions, key files, dependencies, testing approach, and potential pitfalls. ' +
+          'Examples: "add user authentication", "implement rate limiting", "refactor the payment module"',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repo_path: {
+              type: 'string',
+              description: 'Path to the repository (absolute or relative)',
+            },
+            task: {
+              type: 'string',
+              description: 'Description of the coding task to generate a spec for',
+            },
+          },
+          required: ['repo_path', 'task'],
+        },
+      },
     ],
   };
 });
@@ -151,6 +176,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'get_repo_status':
         return await handleGetRepoStatus(args as { repo_path: string });
+
+      case 'generate_spec':
+        return await handleGenerateSpec(args as { repo_path: string; task: string });
 
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -285,6 +313,44 @@ async function handleGetRepoStatus(args: { repo_path: string }) {
   response += `- **Average Confidence:** ${(summary.avgConfidence * 100).toFixed(1)}%\n`;
   response += `- **Pending Work:** ${summary.pendingWork}\n`;
   response += `- **Open Conflicts:** ${summary.openConflicts}\n`;
+
+  return {
+    content: [{ type: 'text', text: response }],
+  };
+}
+
+async function handleGenerateSpec(args: { repo_path: string; task: string }) {
+  const repo = await findRepo(args.repo_path);
+  const result = await specAgent.generateSpec(repo.id, args.task);
+
+  let response = `# Coding Agent Specification\n\n`;
+  response += `**Confidence:** ${(result.confidence * 100).toFixed(0)}%\n\n`;
+
+  response += `## Task\n\n${result.task}\n\n`;
+  response += `## Interpretation\n\n${result.interpretation}\n\n`;
+  response += `## Context\n\n${result.spec.context}\n\n`;
+
+  if (result.spec.keyFiles.length > 0) {
+    response += `## Key Files\n\n`;
+    for (const file of result.spec.keyFiles) {
+      response += `- \`${file}\`\n`;
+    }
+    response += '\n';
+  }
+
+  response += `## Patterns\n\n${result.spec.patterns}\n\n`;
+  response += `## Conventions\n\n${result.spec.conventions}\n\n`;
+  response += `## Dependencies\n\n${result.spec.dependencies}\n\n`;
+  response += `## Testing\n\n${result.spec.testing}\n\n`;
+  response += `## Pitfalls\n\n${result.spec.pitfalls}\n\n`;
+
+  if (result.sources.length > 0) {
+    response += '## Sources\n\n';
+    for (const source of result.sources) {
+      response += `- **${source.title}** (\`${source.path}\`)\n`;
+      response += `  Relevance: ${(source.relevance * 100).toFixed(0)}%\n`;
+    }
+  }
 
   return {
     content: [{ type: 'text', text: response }],
