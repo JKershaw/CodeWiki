@@ -650,6 +650,85 @@ export class Orchestrator {
 				}
 			}
 
+			// Testing Guide Agent: trigger when 15+ pages but no guides/testing
+			if (workItems.length < remainingSlots && wikiPages.length >= 15) {
+				const hasTestingGuide = wikiPages.some(
+					(p) =>
+						p.path === "guides/testing" ||
+						p.path === "guides/tests" ||
+						p.path === "guides/testing-guide"
+				);
+
+				if (!hasTestingGuide) {
+					const testingGuideWorkExists =
+						await this.repos.workQueue.findByRepo(repoId, {
+							agentType: "testing-guide",
+							status: "pending",
+						});
+
+					const recentTestingGuideRuns = synthRuns
+						.filter(
+							(r: AgentRun) =>
+								r.agentType === "testing-guide" && r.status === "completed"
+						)
+						.slice(0, 1);
+
+					if (
+						testingGuideWorkExists.length === 0 &&
+						recentTestingGuideRuns.length === 0
+					) {
+						workItems.push(
+							createWorkItem({
+								id: uuid(),
+								repoId,
+								agentType: "testing-guide",
+								priority: Priority.SYNTHESIS,
+							})
+						);
+					}
+				}
+			}
+
+			// Extension Guide Agent: trigger when 15+ pages but no guides/extension-patterns
+			if (workItems.length < remainingSlots && wikiPages.length >= 15) {
+				const hasExtensionGuide = wikiPages.some(
+					(p) =>
+						p.path === "guides/extension-patterns" ||
+						p.path === "guides/extending" ||
+						p.path === "guides/adding-features" ||
+						p.path === "guides/patterns"
+				);
+
+				if (!hasExtensionGuide) {
+					const extensionGuideWorkExists =
+						await this.repos.workQueue.findByRepo(repoId, {
+							agentType: "extension-guide",
+							status: "pending",
+						});
+
+					const recentExtensionGuideRuns = synthRuns
+						.filter(
+							(r: AgentRun) =>
+								r.agentType === "extension-guide" && r.status === "completed"
+						)
+						.slice(0, 1);
+
+					if (
+						extensionGuideWorkExists.length === 0 &&
+						recentExtensionGuideRuns.length === 0
+					) {
+						workItems.push(
+							createWorkItem({
+								id: uuid(),
+								repoId,
+								agentType: "extension-guide",
+								priority: Priority.SYNTHESIS,
+							})
+						);
+					}
+				}
+			}
+
 			// Writer Agent: trigger for pages with commit-style content that needs rewriting
 			if (workItems.length < remainingSlots) {
 				// Check for pages that need rewriting (have "This commit..." style)
