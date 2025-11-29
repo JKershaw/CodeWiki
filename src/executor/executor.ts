@@ -24,6 +24,8 @@ import { GettingStartedAgent } from '../agents/synthesis/getting-started-agent.j
 import { TestingGuideAgent } from '../agents/synthesis/testing-guide-agent.js';
 import { ExtensionGuideAgent } from '../agents/synthesis/extension-guide-agent.js';
 import { BootstrapAgent } from '../agents/synthesis/bootstrap-agent.js';
+import { WikiIndexAgent } from '../agents/synthesis/wiki-index-agent.js';
+import { TableOfContentsAgent } from '../agents/synthesis/toc-agent.js';
 
 // Import CQRS commands
 import {
@@ -117,6 +119,10 @@ export class Executor {
     this.registerAgent(new TestingGuideAgent());
     this.registerAgent(new ExtensionGuideAgent());
     this.registerAgent(new BootstrapAgent());
+
+    // Register navigation agents
+    this.registerAgent(new WikiIndexAgent());
+    this.registerAgent(new TableOfContentsAgent());
   }
 
   /**

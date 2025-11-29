@@ -8,3 +8,9 @@ export * from './getting-started-agent.js';
 export * from './testing-guide-agent.js';
 export * from './extension-guide-agent.js';
 export * from './bootstrap-agent.js';
+
+/**
+ * Navigation agents - improve wiki discoverability.
+ */
+export * from './wiki-index-agent.js';
+export * from './toc-agent.js';

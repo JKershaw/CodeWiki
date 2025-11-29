@@ -819,6 +819,94 @@ export class Orchestrator {
 					}
 				}
 			}
+
+			// Wiki Index Agent: trigger when 10+ pages but no navigation/wiki-index
+			if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+				const hasWikiIndex = wikiPages.some(
+					(p) =>
+						p.path === "navigation/wiki-index" ||
+						p.path === "navigation/index" ||
+						p.path === "guides/wiki-index"
+				);
+
+				if (!hasWikiIndex) {
+					const wikiIndexWorkExists = await this.repos.workQueue.findByRepo(
+						repoId,
+						{
+							agentType: "wiki-index",
+							status: "pending",
+						}
+					);
+
+					const recentWikiIndexRuns = synthRuns
+						.filter(
+							(r: AgentRun) =>
+								r.agentType === "wiki-index" && r.status === "completed"
+						)
+						.slice(0, 1);
+
+					if (
+						wikiIndexWorkExists.length === 0 &&
+						recentWikiIndexRuns.length === 0
+					) {
+						workItems.push(
+							createWorkItem({
+								id: uuid(),
+								repoId,
+								agentType: "wiki-index",
+								priority: Priority.SYNTHESIS,
+							})
+						);
+					}
+				}
+			}
+
+			// TOC Agent: trigger when 5+ pages to add table of contents to long pages
+			if (workItems.length < remainingSlots && wikiPages.length >= 5) {
+				// Check if there are pages that might need TOC (with multiple headings)
+				const pagesNeedingToc = wikiPages.filter((page) => {
+					// Skip navigation pages
+					if (page.path.includes("navigation/") || page.path.endsWith("/index"))
+						return false;
+					// Skip low confidence pages
+					if (page.confidence < 0.5) return false;
+					// Check if page already has TOC
+					const lowerContent = page.content.toLowerCase();
+					if (
+						lowerContent.includes("## table of contents") ||
+						lowerContent.includes("## contents") ||
+						lowerContent.includes("## toc")
+					)
+						return false;
+					// Count headings (h2 and below)
+					const headingCount = (page.content.match(/^#{2,6}\s+/gm) || []).length;
+					return headingCount >= 3;
+				});
+
+				if (pagesNeedingToc.length > 0) {
+					const tocWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+						agentType: "toc",
+						status: "pending",
+					});
+
+					const recentTocRuns = synthRuns
+						.filter(
+							(r: AgentRun) => r.agentType === "toc" && r.status === "completed"
+						)
+						.slice(0, 1);
+
+					if (tocWorkExists.length === 0 && recentTocRuns.length === 0) {
+						workItems.push(
+							createWorkItem({
+								id: uuid(),
+								repoId,
+								agentType: "toc",
+								priority: Priority.SYNTHESIS,
+							})
+						);
+					}
+				}
+			}
 		}
 
 		return workItems;
