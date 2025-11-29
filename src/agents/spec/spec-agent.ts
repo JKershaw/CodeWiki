@@ -23,9 +23,9 @@ export class SpecAgent {
   /**
    * Generate a specification for a coding task.
    */
-  async generateSpec(repoId: string, task: string): Promise<SpecResult> {
+  async generateSpec(wikiId: string, task: string): Promise<SpecResult> {
     // Search for relevant wiki pages
-    const relevantPages = await this.findRelevantPages(repoId, task);
+    const relevantPages = await this.findRelevantPages(wikiId, task);
 
     if (relevantPages.length === 0) {
       return {
@@ -85,11 +85,11 @@ export class SpecAgent {
    * Find wiki pages relevant to the task.
    */
   private async findRelevantPages(
-    repoId: string,
+    wikiId: string,
     task: string
   ): Promise<RelevantPage[]> {
-    // Get all wiki pages for this repo
-    const allPages = await this.repos.wikiPages.findByRepo(repoId);
+    // Get all wiki pages for this wiki
+    const allPages = await this.repos.wikiPages.findByWiki(wikiId);
 
     if (allPages.length === 0) {
       return [];
