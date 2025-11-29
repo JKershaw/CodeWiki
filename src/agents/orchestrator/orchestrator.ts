@@ -75,6 +75,12 @@ export class Orchestrator {
    * @returns Work items to be processed
    */
   async generateWorkList(repoId: string, maxItems: number = 10): Promise<WorkItem[]> {
+    // Strategy 0: Bootstrap ALWAYS runs first on empty wikis (regardless of LLM mode)
+    const bootstrapWork = await this.checkBootstrapNeeded(repoId);
+    if (bootstrapWork) {
+      return [bootstrapWork];
+    }
+
     // Check if we should use LLM
     if (this.config.useLLM && this.llm) {
       try {
@@ -86,6 +92,47 @@ export class Orchestrator {
     }
 
     return this.generateDeterministic(repoId, maxItems);
+  }
+
+  /**
+   * Check if bootstrap is needed for an empty wiki.
+   * Returns a bootstrap work item if needed, null otherwise.
+   */
+  private async checkBootstrapNeeded(repoId: string): Promise<WorkItem | null> {
+    const wikiPages = await this.repos.wikiPages.findByRepo(repoId);
+
+    // Only bootstrap empty wikis
+    if (wikiPages.length > 0) {
+      return null;
+    }
+
+    // Check if bootstrap work already pending
+    const bootstrapWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+      agentType: 'bootstrap',
+      status: 'pending',
+    });
+
+    if (bootstrapWorkExists.length > 0) {
+      return null; // Already pending, let it run
+    }
+
+    // Check if bootstrap has already completed
+    const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
+    const bootstrapCompleted = recentRuns.some(
+      r => r.agentType === 'bootstrap' && r.status === 'completed'
+    );
+
+    if (bootstrapCompleted) {
+      return null; // Already done
+    }
+
+    // Need to bootstrap
+    return createWorkItem({
+      id: uuid(),
+      repoId,
+      agentType: 'bootstrap',
+      priority: Priority.USER_REQUEST, // Highest priority
+    });
   }
 
   /**
