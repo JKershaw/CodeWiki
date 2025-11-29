@@ -137,8 +137,11 @@ function replacer(key: string, value: unknown): unknown {
 
 /**
  * JSON reviver to restore Date objects.
+ * Handles both the wrapped format { __type: 'Date', value: '...' }
+ * and plain ISO date strings for known date field names.
  */
 function reviver(key: string, value: unknown): unknown {
+  // Handle wrapped date format
   if (
     typeof value === 'object' &&
     value !== null &&
@@ -147,6 +150,14 @@ function reviver(key: string, value: unknown): unknown {
     'value' in value
   ) {
     return new Date((value as Record<string, unknown>).value as string);
+  }
+  // Handle plain ISO date strings for common date field names
+  if (
+    typeof value === 'string' &&
+    (key === 'createdAt' || key === 'updatedAt' || key === 'processedAt' || key === 'startedAt' || key === 'completedAt') &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)
+  ) {
+    return new Date(value);
   }
   return value;
 }

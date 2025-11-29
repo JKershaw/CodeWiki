@@ -427,7 +427,11 @@ export class Executor {
 
         if (updateResult.success && updateResult.data) {
           // Determine if it was a create or update based on page creation time
-          const pageAge = Date.now() - updateResult.data.createdAt.getTime();
+          // Handle both Date objects and ISO strings (from JSON deserialization)
+          const createdAt = updateResult.data.createdAt instanceof Date
+            ? updateResult.data.createdAt
+            : new Date(updateResult.data.createdAt);
+          const pageAge = Date.now() - createdAt.getTime();
           if (pageAge < 1000) {
             // Created less than 1 second ago, likely new
             pagesCreated++;
