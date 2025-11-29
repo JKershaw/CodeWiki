@@ -203,4 +203,90 @@ test.describe('API Endpoints', () => {
     const data = await response.json();
     expect(data.error).toContain('Task');
   });
+
+  // Work queue endpoint tests
+  test('GET /api/repos/:id/work-queue returns work queue structure', async ({ request }) => {
+    // First get a repo
+    const reposResponse = await request.get('/api/repos');
+    const repos = await reposResponse.json();
+
+    if (repos.length === 0) {
+      // Add a repo first
+      await request.post('/api/repos', { data: { path: '.' } });
+      const newReposResponse = await request.get('/api/repos');
+      const newRepos = await newReposResponse.json();
+      if (newRepos.length === 0) {
+        test.skip();
+        return;
+      }
+    }
+
+    const updatedReposResponse = await request.get('/api/repos');
+    const updatedRepos = await updatedReposResponse.json();
+
+    const response = await request.get(`/api/repos/${updatedRepos[0].id}/work-queue`);
+    expect(response.ok()).toBeTruthy();
+
+    const data = await response.json();
+    expect(data.workQueue).toBeDefined();
+    expect(data.workQueue.pending).toBeDefined();
+    expect(data.workQueue.claimed).toBeDefined();
+    expect(data.workQueue.completed).toBeDefined();
+    expect(data.workQueue.failed).toBeDefined();
+    expect(data.workQueue.counts).toBeDefined();
+    expect(Array.isArray(data.workQueue.pending)).toBeTruthy();
+    expect(Array.isArray(data.workQueue.claimed)).toBeTruthy();
+    expect(Array.isArray(data.workQueue.completed)).toBeTruthy();
+    expect(Array.isArray(data.workQueue.failed)).toBeTruthy();
+    expect(typeof data.workQueue.counts.pending).toBe('number');
+    expect(typeof data.workQueue.counts.claimed).toBe('number');
+    expect(typeof data.workQueue.counts.completed).toBe('number');
+    expect(typeof data.workQueue.counts.failed).toBe('number');
+  });
+
+  test('GET /api/repos/:id/work-queue returns 404 for unknown repo', async ({ request }) => {
+    const response = await request.get('/api/repos/unknown-id-12345/work-queue');
+
+    expect(response.status()).toBe(404);
+  });
+
+  test('GET /api/repos/:id/work-queue items have correct structure', async ({ request }) => {
+    // First get a repo and trigger processing to generate work items
+    const reposResponse = await request.get('/api/repos');
+    let repos = await reposResponse.json();
+
+    if (repos.length === 0) {
+      await request.post('/api/repos', { data: { path: '.' } });
+      const newReposResponse = await request.get('/api/repos');
+      repos = await newReposResponse.json();
+      if (repos.length === 0) {
+        test.skip();
+        return;
+      }
+    }
+
+    const response = await request.get(`/api/repos/${repos[0].id}/work-queue`);
+    expect(response.ok()).toBeTruthy();
+
+    const data = await response.json();
+
+    // Check structure of work items if any exist
+    const allItems = [
+      ...data.workQueue.pending,
+      ...data.workQueue.claimed,
+      ...data.workQueue.completed,
+      ...data.workQueue.failed,
+    ];
+
+    for (const item of allItems) {
+      expect(item.id).toBeDefined();
+      expect(item.agentType).toBeDefined();
+      expect(item.priority).toBeDefined();
+      expect(item.status).toBeDefined();
+      expect(item.createdAt).toBeDefined();
+      // targetCommitId and targetPagePath can be null
+      expect('targetCommitId' in item).toBeTruthy();
+      expect('targetPagePath' in item).toBeTruthy();
+    }
+  });
 });
