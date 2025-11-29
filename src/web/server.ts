@@ -7,6 +7,9 @@
 import express, { type Request, type Response } from 'express';
 import { resolve, join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { readdir, stat } from 'fs/promises';
+import { existsSync } from 'fs';
+import { homedir } from 'os';
 import { createRepositories } from '../repositories/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -308,6 +311,55 @@ app.get('/api/repos/:id/commits', async (req: Request, res: Response) => {
 
     const commits = await repos.commits.findByRepo(repo.id);
     res.json(commits);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * Browse filesystem directories.
+ */
+app.get('/api/filesystem/browse', async (req: Request, res: Response) => {
+  try {
+    const requestedPath = (req.query.path as string) || homedir();
+    const absolutePath = resolve(requestedPath);
+
+    // Check if path exists and is a directory
+    const pathStat = await stat(absolutePath);
+    if (!pathStat.isDirectory()) {
+      res.status(400).json({ error: 'Path is not a directory' });
+      return;
+    }
+
+    // Read directory contents
+    const entries = await readdir(absolutePath, { withFileTypes: true });
+
+    // Filter to directories only and check for git repos
+    const directories = entries
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+      .map((entry) => {
+        const fullPath = join(absolutePath, entry.name);
+        const isGitRepo = existsSync(join(fullPath, '.git'));
+        return {
+          name: entry.name,
+          path: fullPath,
+          isGitRepo,
+        };
+      })
+      .sort((a, b) => {
+        // Git repos first, then alphabetical
+        if (a.isGitRepo !== b.isGitRepo) return a.isGitRepo ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    // Get parent directory (unless at root)
+    const parent = absolutePath === '/' ? null : dirname(absolutePath);
+
+    res.json({
+      currentPath: absolutePath,
+      parent,
+      directories,
+    });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
