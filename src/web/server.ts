@@ -4,6 +4,7 @@
  * Provides a web interface for managing repositories and browsing wikis.
  */
 
+import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
 import { resolve, join, dirname } from 'path';
 import { fileURLToPath } from 'url';
