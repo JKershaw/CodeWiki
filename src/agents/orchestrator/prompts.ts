@@ -169,15 +169,62 @@ function repairJson(jsonStr: string): string {
   repaired = repaired.replace(/\/\/[^\n]*/g, '');
   repaired = repaired.replace(/\/\*[\s\S]*?\*\//g, '');
 
-  // Fix unescaped newlines in strings (common in "reason" fields)
-  // This is a heuristic - we look for strings and escape literal newlines
+  // Fix unescaped control characters in strings
+  // Process each string to escape problematic characters
   repaired = repaired.replace(/"([^"\\]|\\.)*"/g, (match) => {
-    // Only fix if there are actual unescaped newlines
-    if (match.includes('\n') && !match.includes('\\n')) {
-      return match.replace(/\n/g, '\\n');
+    let fixed = match;
+    // Escape literal newlines
+    if (fixed.includes('\n')) {
+      fixed = fixed.replace(/\n/g, '\\n');
     }
-    return match;
+    // Escape literal carriage returns
+    if (fixed.includes('\r')) {
+      fixed = fixed.replace(/\r/g, '\\r');
+    }
+    // Escape literal tabs
+    if (fixed.includes('\t')) {
+      fixed = fixed.replace(/\t/g, '\\t');
+    }
+    return fixed;
   });
+
+  // Handle truncated JSON - try to close open brackets/braces
+  // Count open vs close brackets
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let prevChar = '';
+
+  for (const char of repaired) {
+    if (char === '"' && prevChar !== '\\') {
+      inString = !inString;
+    } else if (!inString) {
+      if (char === '{') openBraces++;
+      else if (char === '}') openBraces--;
+      else if (char === '[') openBrackets++;
+      else if (char === ']') openBrackets--;
+    }
+    prevChar = char;
+  }
+
+  // If we have unclosed brackets/braces, the JSON was likely truncated
+  if (openBraces > 0 || openBrackets > 0) {
+    // Try to find a safe truncation point - last complete object in array
+    // Look for the last complete "}" that ends a work item
+    const lastCompleteItem = repaired.lastIndexOf('}');
+    if (lastCompleteItem > 0) {
+      // Check if there's content after this that looks like a truncated item
+      const afterLastComplete = repaired.slice(lastCompleteItem + 1).trim();
+      if (afterLastComplete.startsWith(',') || afterLastComplete === '') {
+        // Truncate to the last complete item and close the structure
+        repaired = repaired.slice(0, lastCompleteItem + 1);
+        // Remove any trailing comma
+        repaired = repaired.replace(/,\s*$/, '');
+        // Close the workItems array and main object
+        repaired += '\n  ]\n}';
+      }
+    }
+  }
 
   return repaired;
 }
@@ -220,10 +267,22 @@ export function parseOrchestratorResponse(
       console.error('  First error:', firstError instanceof Error ? firstError.message : firstError);
       console.error('  Second error (after repair):', secondError instanceof Error ? secondError.message : secondError);
       console.error('  Response length:', response.length);
-      console.error('  JSON string length:', jsonStr.length);
-      // Log a truncated preview for debugging
-      const preview = jsonStr.length > 500 ? jsonStr.slice(0, 500) + '...' : jsonStr;
-      console.error('  JSON preview:', preview);
+      console.error('  Original JSON length:', jsonStr.length);
+      console.error('  Repaired JSON length:', repairedJson.length);
+
+      // Try to extract error position and show context
+      const errorMsg = secondError instanceof Error ? secondError.message : String(secondError);
+      const posMatch = errorMsg.match(/position (\d+)/);
+      if (posMatch && posMatch[1]) {
+        const pos = parseInt(posMatch[1], 10);
+        const start = Math.max(0, pos - 100);
+        const end = Math.min(repairedJson.length, pos + 50);
+        console.error(`  Context around error position ${pos}:`);
+        console.error(`    ...${repairedJson.slice(start, pos)}<<<ERROR>>>${repairedJson.slice(pos, end)}...`);
+      }
+
+      // Log the last 200 chars to see how the JSON ends
+      console.error('  Last 200 chars of repaired JSON:', repairedJson.slice(-200));
 
       // Throw error to trigger fallback to deterministic mode in caller
       throw new Error(`Failed to parse orchestrator JSON response: ${firstError instanceof Error ? firstError.message : 'Unknown error'}`);
