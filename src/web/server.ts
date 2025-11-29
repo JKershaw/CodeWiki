@@ -17,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { createGitService } from '../services/git/git-service.js';
 import { createMockLLMForCodeAnalysis } from '../services/llm/mock-llm-service.js';
-import { createAnthropicLLM } from '../services/llm/anthropic-llm-service.js';
+import { createOpenRouterLLM } from '../services/llm/openrouter-llm-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import { createOrchestrator } from '../agents/orchestrator/orchestrator.js';
 import { createResearchAgent } from '../agents/research/research-agent.js';
@@ -36,9 +36,10 @@ const repos = createRepositories({ type: 'file' });
 const git = createGitService();
 
 function createLLM(): LLMService {
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
+  const apiKey = process.env['OPENROUTER_API_KEY'];
   if (apiKey) {
-    return createAnthropicLLM({ apiKey });
+    const model = process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5';
+    return createOpenRouterLLM({ apiKey, model });
   }
   return createMockLLMForCodeAnalysis();
 }

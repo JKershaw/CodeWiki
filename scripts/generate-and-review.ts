@@ -10,7 +10,7 @@ import 'dotenv/config';
 import { createFileRepositories } from '../dist/repositories/file-based/index.js';
 import { createOrchestrator } from '../dist/agents/orchestrator/orchestrator.js';
 import { createExecutor } from '../dist/executor/executor.js';
-import { createAnthropicLLM } from '../dist/services/llm/anthropic-llm-service.js';
+import { createOpenRouterLLM } from '../dist/services/llm/openrouter-llm-service.js';
 import { createRepo } from '../dist/domain/repo.js';
 import { createCommit } from '../dist/domain/commit.js';
 import { createGitService } from '../dist/services/git/git-service.js';
@@ -39,10 +39,9 @@ async function main() {
   // Initialize services
   const repos = createFileRepositories(DATA_DIR);
   const git = createGitService();
-  const llm = createAnthropicLLM({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    model: 'claude-sonnet-4-20250514',
-    maxTokensPerMinute: 40000,
+  const llm = createOpenRouterLLM({
+    apiKey: process.env['OPENROUTER_API_KEY'],
+    model: process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5',
   });
 
   const orchestrator = createOrchestrator(repos);
