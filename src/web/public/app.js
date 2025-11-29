@@ -150,6 +150,14 @@ async function processRepo(id) {
     card.querySelector('.card-actions').before(progressDiv);
   }
 
+  // Create or get job list container
+  let jobListDiv = card.querySelector('.job-list-container');
+  if (!jobListDiv) {
+    jobListDiv = document.createElement('div');
+    jobListDiv.className = 'job-list-container';
+    progressDiv.after(jobListDiv);
+  }
+
   try {
     await api(`/repos/${id}/process`, {
       method: 'POST',
@@ -161,7 +169,14 @@ async function processRepo(id) {
     // Poll for updates with detailed progress
     const pollStatus = async () => {
       try {
-        const { processing } = await api(`/repos/${id}/processing`);
+        // Fetch both processing status and work queue in parallel
+        const [processingData, workQueueData] = await Promise.all([
+          api(`/repos/${id}/processing`),
+          api(`/repos/${id}/work-queue`),
+        ]);
+
+        const { processing } = processingData;
+        const { workQueue } = workQueueData;
 
         if (processing && processing.status === 'running') {
           // Update progress display
@@ -181,11 +196,15 @@ async function processRepo(id) {
             <div class="progress-text">${progressText}</div>
           `;
 
+          // Update job list display
+          jobListDiv.innerHTML = renderJobList(workQueue);
+
           btn.textContent = `Processing... ${percent}%`;
           setTimeout(pollStatus, 1500);
         } else {
           // Processing complete
           progressDiv.remove();
+          jobListDiv.remove();
           loadRepos();
         }
       } catch (error) {
@@ -200,7 +219,109 @@ async function processRepo(id) {
     btn.disabled = false;
     iterationInput.disabled = false;
     if (progressDiv) progressDiv.remove();
+    if (jobListDiv) jobListDiv.remove();
   }
+}
+
+/**
+ * Render the job list (work queue) as HTML.
+ */
+function renderJobList(workQueue) {
+  const { pending, claimed, completed, failed, counts } = workQueue;
+
+  // Build the sections
+  let html = '<div class="job-list">';
+
+  // Header with counts
+  html += `
+    <div class="job-list-header">
+      <span class="job-list-title">Job Queue</span>
+      <div class="job-list-counts">
+        <span class="job-count pending" title="Pending">${counts.pending}</span>
+        <span class="job-count claimed" title="In Progress">${counts.claimed}</span>
+        <span class="job-count completed" title="Completed">${counts.completed}</span>
+        ${counts.failed > 0 ? `<span class="job-count failed" title="Failed">${counts.failed}</span>` : ''}
+      </div>
+    </div>
+  `;
+
+  // In-progress jobs (claimed)
+  if (claimed.length > 0) {
+    html += '<div class="job-section">';
+    html += '<div class="job-section-title">In Progress</div>';
+    html += '<div class="job-items">';
+    for (const job of claimed) {
+      html += renderJobItem(job, 'claimed');
+    }
+    html += '</div></div>';
+  }
+
+  // Pending jobs (show first 10)
+  if (pending.length > 0) {
+    html += '<div class="job-section">';
+    html += `<div class="job-section-title">Pending${pending.length > 10 ? ` (showing 10 of ${pending.length})` : ''}</div>`;
+    html += '<div class="job-items">';
+    for (const job of pending.slice(0, 10)) {
+      html += renderJobItem(job, 'pending');
+    }
+    html += '</div></div>';
+  }
+
+  // Recently completed (show last 5)
+  if (completed.length > 0) {
+    html += '<div class="job-section">';
+    html += '<div class="job-section-title">Recently Completed</div>';
+    html += '<div class="job-items">';
+    for (const job of completed.slice(0, 5)) {
+      html += renderJobItem(job, 'completed');
+    }
+    html += '</div></div>';
+  }
+
+  // Failed jobs
+  if (failed.length > 0) {
+    html += '<div class="job-section">';
+    html += '<div class="job-section-title">Failed</div>';
+    html += '<div class="job-items">';
+    for (const job of failed.slice(0, 5)) {
+      html += renderJobItem(job, 'failed');
+    }
+    html += '</div></div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Render a single job item as HTML.
+ */
+function renderJobItem(job, status) {
+  const agentName = formatAgentType(job.agentType);
+  const target = job.targetCommitId
+    ? `<span class="job-target" title="${escapeHtml(job.targetCommitId)}">${escapeHtml(job.targetCommitId.substring(0, 7))}</span>`
+    : job.targetPagePath
+    ? `<span class="job-target">${escapeHtml(job.targetPagePath)}</span>`
+    : '';
+
+  return `
+    <div class="job-item ${status}">
+      <span class="job-agent">${escapeHtml(agentName)}</span>
+      ${target}
+      <span class="job-priority" title="Priority: ${job.priority}">${getPriorityLabel(job.priority)}</span>
+    </div>
+  `;
+}
+
+/**
+ * Get a human-readable priority label.
+ */
+function getPriorityLabel(priority) {
+  if (priority >= 100) return 'Urgent';
+  if (priority >= 80) return 'High';
+  if (priority >= 50) return 'Normal';
+  if (priority >= 20) return 'Low';
+  return 'Background';
 }
 
 function formatAgentType(type) {
