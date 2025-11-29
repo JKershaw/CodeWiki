@@ -321,9 +321,24 @@ You have access to tools to explore the actual source code beyond just the diff:
 
 WORKFLOW - Use tools to understand context:
 1. If the diff shows changes to a file, use read_file to see the COMPLETE file
-2. Search for related test files (e.g., "**/*.test.ts" or "**/*-test.ts")
+2. Search for related test files (e.g., "**/*.test.ts", "**/*-test.ts", "**/*.spec.ts")
 3. Read imports/dependencies to understand how the changed code fits in
 4. Only then write your analysis with full context
+
+TEST-BASED USAGE EXAMPLES - Extract real code examples from tests:
+When documenting a component, function, or module, use search_files to find related test files and extract real usage examples from them. Test code demonstrates how the component is actually meant to be used with verified, working API calls.
+
+Why this matters:
+- Tests are verified working code - they pass CI and reflect actual usage patterns
+- Test examples show correct API signatures, avoiding invented or incorrect examples
+- Tests often cover edge cases and configuration options developers need to know about
+
+How to find and use test examples:
+1. Use search_files with patterns like "**/*.test.ts", "**/*-test.ts", "**/*.spec.ts"
+2. Look for tests related to the changed files (e.g., if analyzing "auth.ts", search for "auth.test.ts")
+3. Read the test file to find describe/it blocks showing how the component is called
+4. Include relevant test snippets as usage examples in your documentation
+5. Prioritize examples from tests over inventing your own - real test code is more trustworthy
 
 CRITICAL: Write as encyclopedia articles, NOT commit summaries.
 
