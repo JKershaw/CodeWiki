@@ -208,6 +208,37 @@ export class Orchestrator {
 
     const remainingSlots = maxItems - pendingWork;
 
+    // Strategy 0: Bootstrap empty wikis FIRST
+    // This must run before any commit processing to establish foundation pages
+    if (wikiPages.length === 0) {
+      const bootstrapWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+        agentType: 'bootstrap',
+        status: 'pending',
+      });
+
+      if (bootstrapWorkExists.length === 0) {
+        // Check if bootstrap has already run (by looking for completed runs)
+        const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
+        const bootstrapCompleted = recentRuns.some(
+          r => r.agentType === 'bootstrap' && r.status === 'completed'
+        );
+
+        if (!bootstrapCompleted) {
+          workItems.push(createWorkItem({
+            id: uuid(),
+            repoId,
+            agentType: 'bootstrap',
+            priority: Priority.USER_REQUEST, // Highest priority
+          }));
+          // Return immediately - bootstrap must complete before other work
+          return workItems;
+        }
+      } else {
+        // Bootstrap is already pending, don't add other work
+        return [];
+      }
+    }
+
     // Strategy 1: Process unprocessed commits with all analysis agents
     // Each commit should be processed by all analysis agents for comprehensive coverage
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
