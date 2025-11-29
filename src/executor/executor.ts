@@ -78,10 +78,17 @@ import {
 } from '../commands/update-wiki-page.js';
 
 /**
+ * Threshold for triggering proactive queue refill.
+ * When pending items drop to this level, async refill is triggered.
+ */
+const REFILL_THRESHOLD_MULTIPLIER = 3;
+
+/**
  * Executor - The inner loop that runs agents from the work queue.
  *
  * Takes work items and fires off agents, respecting throttle limits.
  * When the work list is exhausted, it triggers the orchestrator again.
+ * Proactively refills the queue in the background to avoid blocking.
  *
  * All state changes flow through CQRS commands for clean separation.
  */
@@ -89,6 +96,8 @@ export class Executor {
   private agents: Map<string, Agent> = new Map();
   private running = false;
   private shouldStop = false;
+  private refillInProgress = false;
+  private refillPromise: Promise<void> | null = null;
 
   constructor(
     private readonly repos: Repositories,
@@ -184,12 +193,21 @@ export class Executor {
     try {
       let iterationNumber = 0;
 
+      // Calculate refill threshold based on concurrency
+      const refillThreshold = maxConcurrency * REFILL_THRESHOLD_MULTIPLIER;
+
       while (summary.iterations < iterations && !this.shouldStop) {
         // Check rate limits before claiming work
         if (this.llm.isRateLimited()) {
           console.log('Rate limited, waiting...');
           await new Promise(resolve => setTimeout(resolve, 5000));
           continue;
+        }
+
+        // Check pending count and trigger proactive async refill if low
+        const pendingCount = await this.repos.workQueue.countPending(repoId);
+        if (pendingCount <= refillThreshold && !this.refillInProgress) {
+          this.triggerAsyncRefill(repoId, wikiId);
         }
 
         // Get commits already processed by code-change agent (for ordering constraints)
@@ -206,32 +224,49 @@ export class Executor {
         );
         let workItems = claimResult.success ? claimResult.data ?? [] : [];
 
-        // If no work, generate more
+        // If no work, wait for async refill or do synchronous generation
         if (workItems.length === 0) {
-          console.log('No work items claimed, generating more...');
-          const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
-          if (newWork.length === 0) {
-            console.log('No more work to do');
-            break;
+          // If async refill is in progress, wait for it
+          if (this.refillPromise) {
+            console.log('Waiting for async refill to complete...');
+            await this.refillPromise;
+
+            // Try claiming again after refill
+            const freshProcessedCommits = await this.getCodeChangeProcessedCommits(repoId);
+            claimResult = await handleClaimWorkItemBatch(
+              createClaimWorkItemBatchCommand(repoId, batchSize, freshProcessedCommits),
+              this.repos
+            );
+            workItems = claimResult.success ? claimResult.data ?? [] : [];
           }
 
-          // Save new work items via CQRS command
-          await handleSaveWorkItems(
-            createSaveWorkItemsCommand(newWork),
-            this.repos
-          );
-
-          // Try claiming again with fresh processedCommits
-          const freshProcessedCommits = await this.getCodeChangeProcessedCommits(repoId);
-          claimResult = await handleClaimWorkItemBatch(
-            createClaimWorkItemBatchCommand(repoId, batchSize, freshProcessedCommits),
-            this.repos
-          );
-          workItems = claimResult.success ? claimResult.data ?? [] : [];
-
+          // Still no work? Do synchronous generation as fallback
           if (workItems.length === 0) {
-            console.log('Still no work items after generation, stopping');
-            break;
+            console.log('No work items claimed, generating more...');
+            const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
+            if (newWork.length === 0) {
+              console.log('No more work to do');
+              break;
+            }
+
+            // Save new work items via CQRS command
+            await handleSaveWorkItems(
+              createSaveWorkItemsCommand(newWork),
+              this.repos
+            );
+
+            // Try claiming again with fresh processedCommits
+            const freshProcessedCommits = await this.getCodeChangeProcessedCommits(repoId);
+            claimResult = await handleClaimWorkItemBatch(
+              createClaimWorkItemBatchCommand(repoId, batchSize, freshProcessedCommits),
+              this.repos
+            );
+            workItems = claimResult.success ? claimResult.data ?? [] : [];
+
+            if (workItems.length === 0) {
+              console.log('Still no work items after generation, stopping');
+              break;
+            }
           }
         }
 
@@ -374,6 +409,38 @@ export class Executor {
     }
 
     return processedShas;
+  }
+
+  /**
+   * Trigger an asynchronous refill of the work queue.
+   * Runs in the background while execution continues.
+   */
+  private triggerAsyncRefill(repoId: string, wikiId: string): void {
+    if (this.refillInProgress) return;
+
+    this.refillInProgress = true;
+    console.log('🔄 Triggering async queue refill...');
+
+    this.refillPromise = this.orchestrator
+      .generateWorkList(repoId, wikiId, 10)
+      .then(async (newWork) => {
+        if (newWork.length > 0) {
+          await handleSaveWorkItems(
+            createSaveWorkItemsCommand(newWork),
+            this.repos
+          );
+          console.log(`🔄 Async refill complete: ${newWork.length} items added`);
+        } else {
+          console.log('🔄 Async refill complete: no new work generated');
+        }
+      })
+      .catch((err) => {
+        console.error('🔄 Async refill failed:', err);
+      })
+      .finally(() => {
+        this.refillInProgress = false;
+        this.refillPromise = null;
+      });
   }
 
   /**
