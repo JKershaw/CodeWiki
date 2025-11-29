@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createTestContext, createTestRepo, type TestContext } from '../helpers/index.js';
 import { LinkAgent } from '../../src/agents/meta/link-agent.js';
 import { QualityAgent } from '../../src/agents/meta/quality-agent.js';
+import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 
 describe('Wiki Analysis', () => {
   let ctx: TestContext;
@@ -29,11 +30,12 @@ describe('Wiki Analysis', () => {
 
     it('suggests links between related wiki pages', async () => {
       await createTestRepo(ctx, repoId);
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
       // Create wiki pages directly in the repository
       await ctx.repos.wikiPages.save({
         id: 'page-1',
-        repoId,
+        wikiId: wiki.id,
         path: 'commits/abc1234',
         title: 'Add User Authentication',
         content: '# Add User Authentication\n\nImplemented JWT-based auth in src/auth.ts.',
@@ -47,7 +49,7 @@ describe('Wiki Analysis', () => {
 
       await ctx.repos.wikiPages.save({
         id: 'page-2',
-        repoId,
+        wikiId: wiki.id,
         path: 'security/auth-review',
         title: 'Authentication Security Review',
         content: '# Authentication Security Review\n\nSecurity analysis of the JWT implementation.',
@@ -61,7 +63,7 @@ describe('Wiki Analysis', () => {
 
       await ctx.repos.wikiPages.save({
         id: 'page-3',
-        repoId,
+        wikiId: wiki.id,
         path: 'architecture/api-design',
         title: 'API Design Patterns',
         content: '# API Design Patterns\n\nREST API design with authentication middleware.',
@@ -81,7 +83,8 @@ describe('Wiki Analysis', () => {
 CONFIDENCE: 0.85`);
 
       const agent = new LinkAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // Verify link suggestions were found
       assert.ok(result.result.findings.length > 0, 'Should find link suggestions');
@@ -100,11 +103,12 @@ CONFIDENCE: 0.85`);
     it('skips analysis when pages already have links', async () => {
       const repoWithLinks = 'link-test-repo-2';
       await createTestRepo(ctx, repoWithLinks);
+      const wiki = await getOrCreateActiveWiki(repoWithLinks, ctx.repos);
 
       // Create pages that already have links
       await ctx.repos.wikiPages.save({
         id: 'linked-1',
-        repoId: repoWithLinks,
+        wikiId: wiki.id,
         path: 'page-a',
         title: 'Page A',
         content: '# Page A',
@@ -118,7 +122,7 @@ CONFIDENCE: 0.85`);
 
       await ctx.repos.wikiPages.save({
         id: 'linked-2',
-        repoId: repoWithLinks,
+        wikiId: wiki.id,
         path: 'page-b',
         title: 'Page B',
         content: '# Page B',
@@ -131,7 +135,8 @@ CONFIDENCE: 0.85`);
       });
 
       const agent = new LinkAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoWithLinks));
+      const agentCtx = await ctx.agentContext(repoWithLinks);
+      const result = await agent.runOnWiki(agentCtx);
 
       assert.strictEqual(result.result.summary, 'All pages already have links analyzed');
       assert.strictEqual(result.updates.length, 0);
@@ -148,11 +153,12 @@ CONFIDENCE: 0.85`);
 
     it('identifies quality issues in wiki pages', async () => {
       await createTestRepo(ctx, repoId);
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
       // Create pages with varying quality
       await ctx.repos.wikiPages.save({
         id: 'good-page',
-        repoId,
+        wikiId: wiki.id,
         path: 'commits/abc1234',
         title: 'Well-Written Page',
         content: `# Well-Written Page
@@ -174,7 +180,7 @@ The implementation follows standard patterns and is well-documented.`,
 
       await ctx.repos.wikiPages.save({
         id: 'poor-page',
-        repoId,
+        wikiId: wiki.id,
         path: 'guides/short',
         title: 'Short Guide',
         content: 'Too short.',
@@ -188,7 +194,7 @@ The implementation follows standard patterns and is well-documented.`,
 
       await ctx.repos.wikiPages.save({
         id: 'no-refs-page',
-        repoId,
+        wikiId: wiki.id,
         path: 'guides/no-refs',
         title: 'Guide Without References',
         content: `# Guide Without References
@@ -214,7 +220,8 @@ IMPROVEMENTS:
 CONFIDENCE: 0.8`);
 
       const agent = new QualityAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(repoId));
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // Should identify issues
       assert.ok(result.result.findings.length > 0, 'Should find quality issues');
@@ -224,12 +231,13 @@ CONFIDENCE: 0.8`);
     it('returns healthy status for high-quality pages', async () => {
       const healthyRepoId = 'quality-healthy-repo';
       await createTestRepo(ctx, healthyRepoId);
+      const wiki = await getOrCreateActiveWiki(healthyRepoId, ctx.repos);
 
       // Create high-quality pages
       for (let i = 1; i <= 3; i++) {
         await ctx.repos.wikiPages.save({
           id: `healthy-${i}`,
-          repoId: healthyRepoId,
+          wikiId: wiki.id,
           path: `commits/commit${i}`,
           title: `Quality Page ${i}`,
           content: `# Quality Page ${i}
@@ -247,7 +255,8 @@ comprehensive documentation that helps developers understand the system.`,
       }
 
       const agent = new QualityAgent();
-      const result = await agent.runOnWiki(ctx.agentContext(healthyRepoId));
+      const agentCtx = await ctx.agentContext(healthyRepoId);
+      const result = await agent.runOnWiki(agentCtx);
 
       // For healthy pages, QualityAgent returns without LLM call
       assert.ok(result.result.summary.includes('meet quality standards'));

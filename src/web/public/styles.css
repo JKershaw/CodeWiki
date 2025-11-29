@@ -138,6 +138,33 @@ nav {
   font-size: 1.5rem;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wiki-selector {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.wiki-selector:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wiki-selector option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 /* Forms */
 .form-container {
   background: var(--bg-secondary);
@@ -190,6 +217,21 @@ nav {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 15px;
+}
+
+.card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wiki-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
 
 .card-title {

@@ -4,6 +4,7 @@
 
 // State
 let currentRepo = null;
+let currentWiki = null;
 let currentPage = null;
 
 // DOM Elements
@@ -63,7 +64,14 @@ async function loadRepos() {
       <div class="card" data-repo-id="${repo.id}">
         <div class="card-header">
           <h3 class="card-title">${escapeHtml(repo.fullName)}</h3>
-          <span class="card-status ${repo.status}">${repo.status}</span>
+          <div class="card-header-right">
+            ${repo.activeWiki ? `
+              <span class="wiki-badge" title="Active wiki">
+                ${escapeHtml(repo.activeWiki.name)}${repo.wikiCount > 1 ? ` (+${repo.wikiCount - 1})` : ''}
+              </span>
+            ` : ''}
+            <span class="card-status ${repo.status}">${repo.status}</span>
+          </div>
         </div>
         <div class="card-stats">
           <div class="stat">
@@ -191,15 +199,49 @@ async function openWiki(repoId) {
   document.querySelector('[data-view="query"]').disabled = false;
 
   showView('wiki');
-  loadWikiPages(repoId);
+
+  // Load wikis for selector
+  await loadWikiSelector(repoId);
 }
 
-async function loadWikiPages(repoId) {
+async function loadWikiSelector(repoId) {
+  const selector = document.getElementById('wiki-selector');
+
+  try {
+    const wikis = await api(`/repos/${repoId}/wikis`);
+
+    selector.innerHTML = wikis.map(wiki => `
+      <option value="${wiki.id}" ${wiki.isActive ? 'selected' : ''}>
+        ${escapeHtml(wiki.name)}${wiki.isActive ? ' (active)' : ''}
+      </option>
+    `).join('');
+
+    // Set current wiki
+    const activeWiki = wikis.find(w => w.isActive) || wikis[0];
+    if (activeWiki) {
+      currentWiki = activeWiki;
+      loadWikiPages(repoId, activeWiki.id);
+    }
+  } catch (error) {
+    selector.innerHTML = '<option value="">Error loading wikis</option>';
+  }
+}
+
+// Wiki selector change handler
+document.getElementById('wiki-selector').addEventListener('change', async (e) => {
+  if (currentRepo && e.target.value) {
+    currentWiki = { id: e.target.value };
+    loadWikiPages(currentRepo.id, e.target.value);
+  }
+});
+
+async function loadWikiPages(repoId, wikiId) {
   const sidebar = document.getElementById('wiki-categories');
   sidebar.innerHTML = '<p class="loading">Loading...</p>';
 
   try {
-    const { grouped } = await api(`/repos/${repoId}/wiki`);
+    const url = wikiId ? `/repos/${repoId}/wiki?wikiId=${wikiId}` : `/repos/${repoId}/wiki`;
+    const { grouped } = await api(url);
 
     sidebar.innerHTML = Object.entries(grouped).map(([category, pages]) => `
       <div class="wiki-category">
@@ -211,14 +253,14 @@ async function loadWikiPages(repoId) {
     `).join('');
 
     sidebar.querySelectorAll('.wiki-page-link').forEach(link => {
-      link.addEventListener('click', () => loadWikiPage(repoId, link.dataset.path));
+      link.addEventListener('click', () => loadWikiPage(repoId, link.dataset.path, wikiId));
     });
   } catch (error) {
     sidebar.innerHTML = `<p class="placeholder">Error: ${escapeHtml(error.message)}</p>`;
   }
 }
 
-async function loadWikiPage(repoId, path) {
+async function loadWikiPage(repoId, path, wikiId) {
   const content = document.getElementById('wiki-content');
   content.innerHTML = '<p class="loading">Loading...</p>';
 
@@ -228,7 +270,8 @@ async function loadWikiPage(repoId, path) {
   });
 
   try {
-    const page = await api(`/repos/${repoId}/wiki/${path}`);
+    const url = wikiId ? `/repos/${repoId}/wiki/${path}?wikiId=${wikiId}` : `/repos/${repoId}/wiki/${path}`;
+    const page = await api(url);
     currentPage = page;
 
     content.innerHTML = `
