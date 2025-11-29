@@ -93,4 +93,11 @@ export interface WorkQueueRepository {
    * Check if work for a specific commit and agent type already exists.
    */
   exists(repoId: string, agentType: AgentType, targetCommitId: string): Promise<boolean>;
+
+  /**
+   * Get all pending/claimed work as a Set of keys for fast deduplication.
+   * Keys are formatted as "agentType:targetCommitId" (or "agentType:null" for wiki-level work).
+   * Used by Orchestrator to check for duplicates in O(1) instead of O(n) database calls.
+   */
+  getPendingKeys(repoId: string): Promise<Set<string>>;
 }

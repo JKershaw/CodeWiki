@@ -161,6 +161,9 @@ export class Orchestrator {
 	): Promise<WorkItem[]> {
 		const startTime = Date.now();
 
+		// Fetch existing work keys upfront for O(1) deduplication
+		const existingWorkKeys = await this.repos.workQueue.getPendingKeys(repoId);
+
 		// Gather context
 		const context = await this.contextGatherer.gather(repoId, wikiId);
 		const contextString = this.contextGatherer.formatForPrompt(context);
@@ -203,20 +206,17 @@ export class Orchestrator {
 		orchestratorRun.durationMs = Date.now() - startTime;
 		orchestratorRun.usedLLM = true;
 
-		// Convert to work items
+		// Convert to work items (using Set lookup for deduplication)
 		const workItems: WorkItem[] = [];
 		for (const item of decision.workItems) {
 			if (workItems.length >= maxItems) break;
 
-			// Check if work already exists (only for items with commit targets)
-			if (item.targetCommitId) {
-				const exists = await this.repos.workQueue.exists(
-					repoId,
-					item.agentType as AgentType,
-					item.targetCommitId
-				);
-				if (exists) continue;
-			}
+			// Check if work already exists using O(1) Set lookup
+			const key = `${item.agentType}:${item.targetCommitId ?? "null"}`;
+			if (existingWorkKeys.has(key)) continue;
+
+			// Also track items we're adding in this batch to avoid self-duplicates
+			existingWorkKeys.add(key);
 
 			const workItem = createWorkItem({
 				id: uuid(),
@@ -268,6 +268,9 @@ export class Orchestrator {
 		maxItems: number
 	): Promise<WorkItem[]> {
 		const workItems: WorkItem[] = [];
+
+		// Fetch existing work keys upfront for O(1) deduplication
+		const existingWorkKeys = await this.repos.workQueue.getPendingKeys(repoId);
 
 		// Get current state
 		const [wikiPages, pendingWork, openConflicts, commits] = await Promise.all([
@@ -338,14 +341,12 @@ export class Orchestrator {
 			for (const commit of unprocessedCommits) {
 				if (workItems.length >= remainingSlots) break;
 
-				// Check if work already exists for this commit + agent
-				// Use commit.sha to match how work items are created (targetCommitId uses SHA)
-				const exists = await this.repos.workQueue.exists(
-					repoId,
-					agentType,
-					commit.sha
-				);
-				if (exists) continue;
+				// Check if work already exists using O(1) Set lookup
+				const key = `${agentType}:${commit.sha}`;
+				if (existingWorkKeys.has(key)) continue;
+
+				// Track items we're adding to avoid self-duplicates
+				existingWorkKeys.add(key);
 
 				const isRecent = commit.committedAt > oneWeekAgo;
 				const priority = isRecent
@@ -393,13 +394,10 @@ export class Orchestrator {
 				const pagesWithoutLinks = wikiPages.filter((p) => p.links.length === 0);
 
 				if (pagesWithoutLinks.length > 0) {
-					// Check if link agent work already exists
-					const linkWorkExists = await this.repos.workQueue.findByRepo(repoId, {
-						agentType: "link",
-						status: "pending",
-					});
-
-					if (linkWorkExists.length === 0) {
+					// Check if link agent work already exists using O(1) Set lookup
+					const linkKey = "link:null";
+					if (!existingWorkKeys.has(linkKey)) {
+						existingWorkKeys.add(linkKey);
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
@@ -419,18 +417,12 @@ export class Orchestrator {
 						)
 						.slice(0, 1);
 
-					const structureWorkExists = await this.repos.workQueue.findByRepo(
-						repoId,
-						{
-							agentType: "structure",
-							status: "pending",
-						}
-					);
-
+					const structureKey = "structure:null";
 					if (
-						structureWorkExists.length === 0 &&
+						!existingWorkKeys.has(structureKey) &&
 						recentStructureRuns.length === 0
 					) {
+						existingWorkKeys.add(structureKey);
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
@@ -449,14 +441,6 @@ export class Orchestrator {
 					);
 
 					if (lowConfidencePages.length > 0) {
-						const qualityWorkExists = await this.repos.workQueue.findByRepo(
-							repoId,
-							{
-								agentType: "quality",
-								status: "pending",
-							}
-						);
-
 						// Check if quality agent ran recently
 						const recentQualityRuns = recentRuns
 							.filter(
@@ -464,10 +448,12 @@ export class Orchestrator {
 							)
 							.slice(0, 1);
 
+						const qualityKey = "quality:null";
 						if (
-							qualityWorkExists.length === 0 &&
+							!existingWorkKeys.has(qualityKey) &&
 							recentQualityRuns.length === 0
 						) {
+							existingWorkKeys.add(qualityKey);
 							workItems.push(
 								createWorkItem({
 									id: uuid(),
@@ -482,14 +468,6 @@ export class Orchestrator {
 
 				// Run consistency agent when wiki has enough pages (5+)
 				if (workItems.length < remainingSlots && wikiPages.length >= 5) {
-					const consistencyWorkExists = await this.repos.workQueue.findByRepo(
-						repoId,
-						{
-							agentType: "consistency",
-							status: "pending",
-						}
-					);
-
 					// Check if consistency agent ran recently
 					const recentConsistencyRuns = recentRuns
 						.filter(
@@ -497,10 +475,12 @@ export class Orchestrator {
 						)
 						.slice(0, 1);
 
+					const consistencyKey = "consistency:null";
 					if (
-						consistencyWorkExists.length === 0 &&
+						!existingWorkKeys.has(consistencyKey) &&
 						recentConsistencyRuns.length === 0
 					) {
+						existingWorkKeys.add(consistencyKey);
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
@@ -518,12 +498,6 @@ export class Orchestrator {
 					const openFindings = await this.repos.findings.findOpen(wikiId);
 
 					if (openFindings.length > 0) {
-						const consolidationWorkExists =
-							await this.repos.workQueue.findByRepo(repoId, {
-								agentType: "consolidation",
-								status: "pending",
-							});
-
 						// Check if consolidation agent ran recently
 						const recentConsolidationRuns = recentRuns
 							.filter(
@@ -532,11 +506,13 @@ export class Orchestrator {
 							)
 							.slice(0, 1);
 
+						const consolidationKey = "consolidation:null";
 						// Only add consolidation work if there's none pending and it hasn't run recently
 						if (
-							consolidationWorkExists.length === 0 &&
+							!existingWorkKeys.has(consolidationKey) &&
 							recentConsolidationRuns.length === 0
 						) {
+							existingWorkKeys.add(consolidationKey);
 							workItems.push(
 								createWorkItem({
 									id: uuid(),
@@ -580,15 +556,6 @@ export class Orchestrator {
 				);
 
 				if (!hasOverview) {
-					// Check if overview work already pending
-					const overviewWorkExists = await this.repos.workQueue.findByRepo(
-						repoId,
-						{
-							agentType: "overview",
-							status: "pending",
-						}
-					);
-
 					// Check if overview agent ran recently
 					const recentOverviewRuns = synthRuns
 						.filter(
@@ -597,10 +564,12 @@ export class Orchestrator {
 						)
 						.slice(0, 1);
 
+					const overviewKey = "overview:null";
 					if (
-						overviewWorkExists.length === 0 &&
+						!existingWorkKeys.has(overviewKey) &&
 						recentOverviewRuns.length === 0
 					) {
+						existingWorkKeys.add(overviewKey);
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
@@ -623,12 +592,6 @@ export class Orchestrator {
 				);
 
 				if (!hasProjectOverview) {
-					const projectOverviewWorkExists =
-						await this.repos.workQueue.findByRepo(repoId, {
-							agentType: "project-overview",
-							status: "pending",
-						});
-
 					const recentProjectOverviewRuns = synthRuns
 						.filter(
 							(r: AgentRun) =>
@@ -636,10 +599,12 @@ export class Orchestrator {
 						)
 						.slice(0, 1);
 
+					const projectOverviewKey = "project-overview:null";
 					if (
-						projectOverviewWorkExists.length === 0 &&
+						!existingWorkKeys.has(projectOverviewKey) &&
 						recentProjectOverviewRuns.length === 0
 					) {
+						existingWorkKeys.add(projectOverviewKey);
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
@@ -662,12 +627,6 @@ export class Orchestrator {
 				);
 
 				if (!hasGettingStarted) {
-					const gettingStartedWorkExists =
-						await this.repos.workQueue.findByRepo(repoId, {
-							agentType: "getting-started",
-							status: "pending",
-						});
-
 					const recentGettingStartedRuns = synthRuns
 						.filter(
 							(r: AgentRun) =>
@@ -675,10 +634,12 @@ export class Orchestrator {
 						)
 						.slice(0, 1);
 
+					const gettingStartedKey = "getting-started:null";
 					if (
-						gettingStartedWorkExists.length === 0 &&
+						!existingWorkKeys.has(gettingStartedKey) &&
 						recentGettingStartedRuns.length === 0
 					) {
+						existingWorkKeys.add(gettingStartedKey);
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
@@ -701,12 +662,6 @@ export class Orchestrator {
 				);
 
 				if (!hasTestingGuide) {
-					const testingGuideWorkExists =
-						await this.repos.workQueue.findByRepo(repoId, {
-							agentType: "testing-guide",
-							status: "pending",
-						});
-
 					const recentTestingGuideRuns = synthRuns
 						.filter(
 							(r: AgentRun) =>
@@ -714,10 +669,12 @@ export class Orchestrator {
 						)
 						.slice(0, 1);
 
+					const testingGuideKey = "testing-guide:null";
 					if (
-						testingGuideWorkExists.length === 0 &&
+						!existingWorkKeys.has(testingGuideKey) &&
 						recentTestingGuideRuns.length === 0
 					) {
+						existingWorkKeys.add(testingGuideKey);
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
@@ -741,12 +698,6 @@ export class Orchestrator {
 				);
 
 				if (!hasExtensionGuide) {
-					const extensionGuideWorkExists =
-						await this.repos.workQueue.findByRepo(repoId, {
-							agentType: "extension-guide",
-							status: "pending",
-						});
-
 					const recentExtensionGuideRuns = synthRuns
 						.filter(
 							(r: AgentRun) =>
@@ -755,7 +706,7 @@ export class Orchestrator {
 						.slice(0, 1);
 
 					if (
-						extensionGuideWorkExists.length === 0 &&
+						!existingWorkKeys.has("extension-guide:null") &&
 						recentExtensionGuideRuns.length === 0
 					) {
 						workItems.push(
@@ -799,15 +750,7 @@ export class Orchestrator {
 				});
 
 				if (pagesNeedingRewrite.length > 0) {
-					const writerWorkExists = await this.repos.workQueue.findByRepo(
-						repoId,
-						{
-							agentType: "writer",
-							status: "pending",
-						}
-					);
-
-					if (writerWorkExists.length === 0) {
+					if (!existingWorkKeys.has("writer:null")) {
 						workItems.push(
 							createWorkItem({
 								id: uuid(),
