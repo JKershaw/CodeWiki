@@ -24,7 +24,7 @@ export interface CreateAgentRunCommand extends Command {
   readonly repoId: string;
   readonly wikiId: string;
   readonly agentType: AgentType;
-  readonly targetCommitId?: string;
+  readonly targetCommitId?: string | undefined;
 }
 
 export function createCreateAgentRunCommand(params: {
@@ -32,7 +32,7 @@ export function createCreateAgentRunCommand(params: {
   repoId: string;
   wikiId: string;
   agentType: AgentType;
-  targetCommitId?: string;
+  targetCommitId?: string | undefined;
 }): CreateAgentRunCommand {
   return {
     type: 'CreateAgentRun',
