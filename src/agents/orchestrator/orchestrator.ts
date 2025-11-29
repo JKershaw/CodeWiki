@@ -71,31 +71,32 @@ export class Orchestrator {
    * Run the orchestrator to produce a prioritized work list.
    *
    * @param repoId - The repository to orchestrate
+   * @param wikiId - The wiki to update
    * @param maxItems - Maximum number of work items to generate
    * @returns Work items to be processed
    */
-  async generateWorkList(repoId: string, maxItems: number = 10): Promise<WorkItem[]> {
+  async generateWorkList(repoId: string, wikiId: string, maxItems: number = 10): Promise<WorkItem[]> {
     // Check if we should use LLM
     if (this.config.useLLM && this.llm) {
       try {
-        return await this.generateWithLLM(repoId, maxItems);
+        return await this.generateWithLLM(repoId, wikiId, maxItems);
       } catch (error) {
         console.warn('LLM orchestration failed, falling back to deterministic:', error);
         // Fall through to deterministic
       }
     }
 
-    return this.generateDeterministic(repoId, maxItems);
+    return this.generateDeterministic(repoId, wikiId, maxItems);
   }
 
   /**
    * Generate work list using LLM reasoning.
    */
-  private async generateWithLLM(repoId: string, maxItems: number): Promise<WorkItem[]> {
+  private async generateWithLLM(repoId: string, wikiId: string, maxItems: number): Promise<WorkItem[]> {
     const startTime = Date.now();
 
     // Gather context
-    const context = await this.contextGatherer.gather(repoId);
+    const context = await this.contextGatherer.gather(repoId, wikiId);
     const contextString = this.contextGatherer.formatForPrompt(context);
 
     // Build prompt
@@ -185,7 +186,7 @@ export class Orchestrator {
    * Generate work list using deterministic strategies.
    * This is the fallback when LLM is not available or fails.
    */
-  private async generateDeterministic(repoId: string, maxItems: number): Promise<WorkItem[]> {
+  private async generateDeterministic(repoId: string, wikiId: string, maxItems: number): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
 
     // Get current state
@@ -195,9 +196,9 @@ export class Orchestrator {
       openConflicts,
       commits,
     ] = await Promise.all([
-      this.repos.wikiPages.findByRepo(repoId),
+      this.repos.wikiPages.findByWiki(wikiId),
       this.repos.workQueue.countPending(repoId),
-      this.repos.conflicts.findOpen(repoId),
+      this.repos.conflicts.findOpen(wikiId),
       this.repos.commits.findByRepo(repoId, { limit: 100 }),
     ]);
 
@@ -247,7 +248,7 @@ export class Orchestrator {
 
     // Strategy 3: Improve low-confidence pages
     if (workItems.length < remainingSlots) {
-      const lowConfidencePages = await this.repos.wikiPages.findLowConfidence(repoId, 0.5);
+      const lowConfidencePages = await this.repos.wikiPages.findLowConfidence(wikiId, 0.5);
       // TODO: Add quality improvement work items when we have meta agents
     }
 
@@ -499,9 +500,9 @@ export class Orchestrator {
   }
 
   /**
-   * Check if there's more work to do for a repository.
+   * Check if there's more work to do for a repository/wiki.
    */
-  async hasMoreWork(repoId: string): Promise<boolean> {
+  async hasMoreWork(repoId: string, wikiId: string): Promise<boolean> {
     // Check for pending work
     const pendingCount = await this.repos.workQueue.countPending(repoId);
     if (pendingCount > 0) return true;
@@ -513,11 +514,11 @@ export class Orchestrator {
     }
 
     // Check for open conflicts
-    const openConflicts = await this.repos.conflicts.findOpen(repoId);
+    const openConflicts = await this.repos.conflicts.findOpen(wikiId);
     if (openConflicts.length > 0) return true;
 
     // Check for low-confidence pages
-    const lowConfidencePages = await this.repos.wikiPages.findLowConfidence(repoId, 0.5);
+    const lowConfidencePages = await this.repos.wikiPages.findLowConfidence(wikiId, 0.5);
     if (lowConfidencePages.length > 0) return true;
 
     return false;
@@ -526,7 +527,7 @@ export class Orchestrator {
   /**
    * Get a summary of the current work state.
    */
-  async getWorkSummary(repoId: string): Promise<WorkSummary> {
+  async getWorkSummary(repoId: string, wikiId: string): Promise<WorkSummary> {
     const [
       totalCommits,
       pendingWork,
@@ -535,8 +536,8 @@ export class Orchestrator {
     ] = await Promise.all([
       this.repos.commits.countByRepo(repoId),
       this.repos.workQueue.countPending(repoId),
-      this.repos.wikiPages.findByRepo(repoId),
-      this.repos.conflicts.findOpen(repoId),
+      this.repos.wikiPages.findByWiki(wikiId),
+      this.repos.conflicts.findOpen(wikiId),
     ]);
 
     // Get per-agent coverage

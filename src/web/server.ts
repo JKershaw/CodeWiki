@@ -20,6 +20,7 @@ import { createResearchAgent } from '../agents/research/research-agent.js';
 import { createExecutor } from '../executor/executor.js';
 import { createRepo } from '../domain/repo.js';
 import { v4 as uuid } from 'uuid';
+import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 
 const app = express();
 const PORT = process.env['PORT'] || 3000;
@@ -51,7 +52,8 @@ app.get('/api/repos', async (_req: Request, res: Response) => {
     const reposWithStatus = await Promise.all(
       allRepos.map(async (repo) => {
         const orchestrator = createOrchestrator(repos);
-        const summary = await orchestrator.getWorkSummary(repo.id);
+        const wiki = await getOrCreateActiveWiki(repo.id, repos);
+        const summary = await orchestrator.getWorkSummary(repo.id, wiki.id);
         return {
           id: repo.id,
           fullName: repo.fullName,
@@ -78,7 +80,8 @@ app.get('/api/repos/:id', async (req: Request, res: Response) => {
     }
 
     const orchestrator = createOrchestrator(repos);
-    const summary = await orchestrator.getWorkSummary(repo.id);
+    const wiki = await getOrCreateActiveWiki(repo.id, repos);
+    const summary = await orchestrator.getWorkSummary(repo.id, wiki.id);
 
     res.json({
       id: repo.id,
@@ -229,7 +232,8 @@ app.get('/api/repos/:id/wiki', async (req: Request, res: Response) => {
       return;
     }
 
-    const pages = await repos.wikiPages.findByRepo(repo.id);
+    const wiki = await getOrCreateActiveWiki(repo.id, repos);
+    const pages = await repos.wikiPages.findByWiki(wiki.id);
 
     // Group by category (first part of path)
     const grouped: Record<string, typeof pages> = {};
@@ -256,7 +260,8 @@ app.get('/api/repos/:id/wiki/:path(*)', async (req: Request, res: Response) => {
       return;
     }
 
-    const page = await repos.wikiPages.findByPath(repo.id, req.params.path!);
+    const wiki = await getOrCreateActiveWiki(repo.id, repos);
+    const page = await repos.wikiPages.findByPath(wiki.id, req.params.path!);
     if (!page) {
       res.status(404).json({ error: 'Wiki page not found' });
       return;
@@ -287,7 +292,8 @@ app.post('/api/repos/:id/query', async (req: Request, res: Response) => {
 
     const llm = createLLM();
     const research = createResearchAgent(repos, llm);
-    const result = await research.query(repo.id, question);
+    const wiki = await getOrCreateActiveWiki(repo.id, repos);
+    const result = await research.query(wiki.id, question);
 
     res.json(result);
   } catch (error) {

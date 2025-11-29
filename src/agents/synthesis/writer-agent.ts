@@ -22,7 +22,7 @@ export class WriterAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByRepo(context.repoId);
+    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
 
     // Find pages that need rewriting
     const pagesNeedingRewrite = this.findPagesNeedingRewrite(pages);

@@ -2,6 +2,7 @@ import type { Query, QueryResult } from './types.js';
 import { found, notFound, queryError } from './types.js';
 import type { Repositories } from '../repositories/index.js';
 import type { Repo, RepoStatus } from '../domain/repo.js';
+import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 
 /**
  * Query to get repository status and processing info.
@@ -46,6 +47,9 @@ export async function handleGetRepoStatus(
       return notFound(`Repository not found: ${query.repoId}`);
     }
 
+    // Get or create active wiki for this repo
+    const wiki = await getOrCreateActiveWiki(query.repoId, repos);
+
     const [
       totalCommits,
       processedCommits,
@@ -56,9 +60,9 @@ export async function handleGetRepoStatus(
     ] = await Promise.all([
       repos.commits.countByRepo(query.repoId),
       repos.commits.countProcessedByAgent(query.repoId, 'code-change'),
-      repos.wikiPages.findByRepo(query.repoId).then(p => p.length),
+      repos.wikiPages.findByWiki(wiki.id).then(p => p.length),
       repos.workQueue.countPending(query.repoId),
-      repos.conflicts.findOpen(query.repoId).then(c => c.length),
+      repos.conflicts.findOpen(wiki.id).then(c => c.length),
       repos.agentRuns.calculateTotalCost(query.repoId),
     ]);
 

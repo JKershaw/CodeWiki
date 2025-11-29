@@ -24,6 +24,7 @@ import { createOrchestrator } from './agents/orchestrator/orchestrator.js';
 import { createResearchAgent } from './agents/research/research-agent.js';
 import { createExecutor } from './executor/executor.js';
 import { createRepo } from './domain/repo.js';
+import { getOrCreateActiveWiki } from './commands/create-wiki.js';
 
 /**
  * Create the appropriate LLM service based on environment.
@@ -214,8 +215,11 @@ async function processCommand(args: string[]) {
   const orchestrator = createOrchestrator(repos, llm, { useLLM: true });
   const executor = createExecutor(repos, git, llm, orchestrator);
 
+  // Get or create the active wiki for this repo
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+
   // Show initial status
-  const beforeSummary = await orchestrator.getWorkSummary(repo.id);
+  const beforeSummary = await orchestrator.getWorkSummary(repo.id, wiki.id);
   console.log('📊 Before processing:');
   console.log(`   Commits: ${beforeSummary.processedCommits}/${beforeSummary.totalCommits} processed (${beforeSummary.coveragePercent.toFixed(1)}%)`);
   console.log(`   Wiki pages: ${beforeSummary.wikiPages}`);
@@ -235,7 +239,7 @@ async function processCommand(args: string[]) {
   console.log(`   Total cost: $${result.totalCost.toFixed(4)}`);
 
   // Show final status
-  const afterSummary = await orchestrator.getWorkSummary(repo.id);
+  const afterSummary = await orchestrator.getWorkSummary(repo.id, wiki.id);
   console.log('\n📊 After processing:');
   console.log(`   Commits: ${afterSummary.processedCommits}/${afterSummary.totalCommits} processed (${afterSummary.coveragePercent.toFixed(1)}%)`);
   console.log(`   Wiki pages: ${afterSummary.wikiPages}`);
@@ -260,7 +264,8 @@ async function statusCommand(args: string[]) {
   }
 
   const orchestrator = createOrchestrator(repos);
-  const summary = await orchestrator.getWorkSummary(repoId);
+  const wiki = await getOrCreateActiveWiki(repoId, repos);
+  const summary = await orchestrator.getWorkSummary(repoId, wiki.id);
 
   console.log(`\n📊 Status for ${repo.fullName}`);
   console.log(`   ID: ${repo.id}`);
@@ -322,8 +327,11 @@ async function queryCommand(args: string[]) {
     process.exit(1);
   }
 
+  // Get active wiki
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+
   // Check if wiki has content
-  const wikiPages = await repos.wikiPages.findByRepo(repo.id);
+  const wikiPages = await repos.wikiPages.findByWiki(wiki.id);
   if (wikiPages.length === 0) {
     console.error('Wiki is empty. Run "process <repo-path>" first to generate wiki content.');
     process.exit(1);
@@ -333,7 +341,7 @@ async function queryCommand(args: string[]) {
 
   // Create research agent and query
   const research = createResearchAgent(repos, llm);
-  const result = await research.query(repo.id, question);
+  const result = await research.query(wiki.id, question);
 
   // Display results
   console.log('━'.repeat(60));
@@ -398,8 +406,11 @@ async function askCommand(args: string[]) {
     process.exit(1);
   }
 
+  // Get active wiki
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+
   // Check if wiki has content
-  const wikiPages = await repos.wikiPages.findByRepo(repo.id);
+  const wikiPages = await repos.wikiPages.findByWiki(wiki.id);
   if (wikiPages.length === 0) {
     console.error('Wiki is empty. Run "npm run cli process ." first to generate wiki content.');
     process.exit(1);
@@ -407,7 +418,7 @@ async function askCommand(args: string[]) {
 
   // Create research agent and query
   const research = createResearchAgent(repos, llm);
-  const result = await research.query(repo.id, question);
+  const result = await research.query(wiki.id, question);
 
   // Output just the answer (clean for piping)
   console.log(result.answer);

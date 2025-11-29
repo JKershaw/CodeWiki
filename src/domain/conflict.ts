@@ -3,8 +3,8 @@
  */
 export interface Conflict {
   id: string;
-  /** Reference to the repo */
-  repoId: string;
+  /** Reference to the wiki */
+  wikiId: string;
   /** Wiki page where the conflict was detected */
   pagePathaffected: string;
   /** Type of conflict */
@@ -57,7 +57,7 @@ export interface ConflictResolution {
 
 export function createConflict(params: {
   id: string;
-  repoId: string;
+  wikiId: string;
   pagePath: string;
   type: ConflictType;
   description: string;
@@ -65,7 +65,7 @@ export function createConflict(params: {
 }): Conflict {
   return {
     id: params.id,
-    repoId: params.repoId,
+    wikiId: params.wikiId,
     pagePathaffected: params.pagePath,
     type: params.type,
     description: params.description,

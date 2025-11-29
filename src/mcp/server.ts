@@ -26,6 +26,7 @@ import { createAnthropicLLM } from '../services/llm/anthropic-llm-service.js';
 import { createMockLLMForCodeAnalysis } from '../services/llm/mock-llm-service.js';
 import { createResearchAgent } from '../agents/research/research-agent.js';
 import { createOrchestrator } from '../agents/orchestrator/orchestrator.js';
+import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 
 // Initialize services
 const repos = createRepositories({ type: 'file' });
@@ -179,7 +180,8 @@ async function findRepo(repoPath: string) {
 
 async function handleQueryWiki(args: { repo_path: string; question: string }) {
   const repo = await findRepo(args.repo_path);
-  const result = await research.query(repo.id, args.question);
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+  const result = await research.query(wiki.id, args.question);
 
   let response = `## Answer\n\n${result.answer}\n\n`;
   response += `**Confidence:** ${(result.confidence * 100).toFixed(0)}%\n\n`;
@@ -200,7 +202,8 @@ async function handleQueryWiki(args: { repo_path: string; question: string }) {
 
 async function handleListWikiPages(args: { repo_path: string }) {
   const repo = await findRepo(args.repo_path);
-  const pages = await repos.wikiPages.findByRepo(repo.id);
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+  const pages = await repos.wikiPages.findByWiki(wiki.id);
 
   if (pages.length === 0) {
     return {
@@ -241,7 +244,8 @@ async function handleListWikiPages(args: { repo_path: string }) {
 
 async function handleGetWikiPage(args: { repo_path: string; page_path: string }) {
   const repo = await findRepo(args.repo_path);
-  const page = await repos.wikiPages.findByPath(repo.id, args.page_path);
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+  const page = await repos.wikiPages.findByPath(wiki.id, args.page_path);
 
   if (!page) {
     return {
@@ -268,7 +272,8 @@ async function handleGetWikiPage(args: { repo_path: string; page_path: string })
 
 async function handleGetRepoStatus(args: { repo_path: string }) {
   const repo = await findRepo(args.repo_path);
-  const summary = await orchestrator.getWorkSummary(repo.id);
+  const wiki = await getOrCreateActiveWiki(repo.id, repos);
+  const summary = await orchestrator.getWorkSummary(repo.id, wiki.id);
 
   let response = `# Repository Status\n\n`;
   response += `**Path:** ${repo.fullName}\n`;

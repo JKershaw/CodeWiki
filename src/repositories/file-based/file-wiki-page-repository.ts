@@ -13,26 +13,26 @@ export class FileWikiPageRepository implements WikiPageRepository {
     return this.store.get(id);
   }
 
-  async findByPath(repoId: string, path: string): Promise<WikiPage | null> {
-    return this.store.findOne(p => p.repoId === repoId && p.path === path);
+  async findByPath(wikiId: string, path: string): Promise<WikiPage | null> {
+    return this.store.findOne(p => p.wikiId === wikiId && p.path === path);
   }
 
-  async findByRepo(repoId: string): Promise<WikiPage[]> {
-    return this.store.find(p => p.repoId === repoId);
+  async findByWiki(wikiId: string): Promise<WikiPage[]> {
+    return this.store.find(p => p.wikiId === wikiId);
   }
 
-  async findLowConfidence(repoId: string, threshold: number): Promise<WikiPage[]> {
-    return this.store.find(p => p.repoId === repoId && p.confidence < threshold);
+  async findLowConfidence(wikiId: string, threshold: number): Promise<WikiPage[]> {
+    return this.store.find(p => p.wikiId === wikiId && p.confidence < threshold);
   }
 
-  async findRecentlyUpdated(repoId: string, since: Date): Promise<WikiPage[]> {
-    return this.store.find(p => p.repoId === repoId && p.updatedAt >= since);
+  async findRecentlyUpdated(wikiId: string, since: Date): Promise<WikiPage[]> {
+    return this.store.find(p => p.wikiId === wikiId && p.updatedAt >= since);
   }
 
-  async search(repoId: string, query: string): Promise<WikiPage[]> {
+  async search(wikiId: string, query: string): Promise<WikiPage[]> {
     const lowerQuery = query.toLowerCase();
     return this.store.find(p =>
-      p.repoId === repoId &&
+      p.wikiId === wikiId &&
       (p.title.toLowerCase().includes(lowerQuery) ||
        p.content.toLowerCase().includes(lowerQuery))
     );
@@ -46,8 +46,8 @@ export class FileWikiPageRepository implements WikiPageRepository {
     await this.store.delete(id);
   }
 
-  async deleteByRepo(repoId: string): Promise<void> {
-    await this.store.deleteMany(p => p.repoId === repoId);
+  async deleteByWiki(wikiId: string): Promise<void> {
+    await this.store.deleteMany(p => p.wikiId === wikiId);
   }
 
   async updateContent(id: string, updates: {

@@ -10,27 +10,27 @@ export interface ConflictRepository {
   findById(id: string): Promise<Conflict | null>;
 
   /**
-   * Find all conflicts for a repo.
+   * Find all conflicts for a wiki.
    */
-  findByRepo(repoId: string, options?: {
+  findByWiki(wikiId: string, options?: {
     status?: ConflictStatus;
     type?: ConflictType;
   }): Promise<Conflict[]>;
 
   /**
-   * Find open conflicts for a repo.
+   * Find open conflicts for a wiki.
    */
-  findOpen(repoId: string): Promise<Conflict[]>;
+  findOpen(wikiId: string): Promise<Conflict[]>;
 
   /**
    * Find conflicts for a specific wiki page.
    */
-  findByPage(repoId: string, pagePath: string): Promise<Conflict[]>;
+  findByPage(wikiId: string, pagePath: string): Promise<Conflict[]>;
 
   /**
    * Count conflicts by status.
    */
-  countByStatus(repoId: string): Promise<Record<ConflictStatus, number>>;
+  countByStatus(wikiId: string): Promise<Record<ConflictStatus, number>>;
 
   /**
    * Save a conflict (create or update).
@@ -43,9 +43,9 @@ export interface ConflictRepository {
   delete(id: string): Promise<void>;
 
   /**
-   * Delete all conflicts for a repo.
+   * Delete all conflicts for a wiki.
    */
-  deleteByRepo(repoId: string): Promise<void>;
+  deleteByWiki(wikiId: string): Promise<void>;
 
   /**
    * Resolve a conflict.

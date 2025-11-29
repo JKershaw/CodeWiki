@@ -25,7 +25,7 @@ export class GettingStartedAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByRepo(context.repoId);
+    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
 
     // Check if we have enough pages
     if (pages.length < this.MIN_PAGES_FOR_GUIDE) {

@@ -8,8 +8,10 @@ import type { GitService } from '../services/git/git-service.js';
  * Context provided to agents when they run.
  */
 export interface AgentContext {
-  /** Repository ID being processed */
+  /** Repository ID (for git access) */
   repoId: string;
+  /** Wiki ID being updated */
+  wikiId: string;
   /** All repositories for data access */
   repos: Repositories;
   /** Git service for repository access */

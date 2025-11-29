@@ -3,8 +3,10 @@
  */
 export interface AgentRun {
   id: string;
-  /** Reference to the repo */
+  /** Reference to the repo (for git access) */
   repoId: string;
+  /** Reference to the wiki being updated */
+  wikiId: string;
   /** Type of agent that ran */
   agentType: AgentType;
   /** Target commit (for commit-focused agents) */
@@ -81,12 +83,14 @@ export interface AgentFinding {
 export function createAgentRun(params: {
   id: string;
   repoId: string;
+  wikiId: string;
   agentType: AgentType;
   targetCommitId?: string;
 }): AgentRun {
   return {
     id: params.id,
     repoId: params.repoId,
+    wikiId: params.wikiId,
     agentType: params.agentType,
     targetCommitId: params.targetCommitId ?? null,
     status: 'pending',

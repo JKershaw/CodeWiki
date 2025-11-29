@@ -7,6 +7,7 @@
 
 export * from './file-store.js';
 export * from './file-repo-repository.js';
+export * from './file-wiki-repository.js';
 export * from './file-commit-repository.js';
 export * from './file-wiki-page-repository.js';
 export * from './file-agent-run-repository.js';
@@ -17,6 +18,7 @@ export * from './file-orchestrator-run-repository.js';
 
 import type { Repositories } from '../interfaces/index.js';
 import { FileRepoRepository } from './file-repo-repository.js';
+import { FileWikiRepository } from './file-wiki-repository.js';
 import { FileCommitRepository } from './file-commit-repository.js';
 import { FileWikiPageRepository } from './file-wiki-page-repository.js';
 import { FileAgentRunRepository } from './file-agent-run-repository.js';
@@ -34,6 +36,7 @@ import { FileOrchestratorRunRepository } from './file-orchestrator-run-repositor
 export function createFileRepositories(baseDir = '.codewiki-data'): Repositories {
   return {
     repos: new FileRepoRepository(baseDir),
+    wikis: new FileWikiRepository(baseDir),
     commits: new FileCommitRepository(baseDir),
     wikiPages: new FileWikiPageRepository(baseDir),
     agentRuns: new FileAgentRunRepository(baseDir),
