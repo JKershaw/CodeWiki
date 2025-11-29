@@ -243,6 +243,8 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   // DeepSeek models (very cheap)
   'deepseek/deepseek-chat': { input: 0.14, output: 0.28 },
   'deepseek/deepseek-r1': { input: 0.55, output: 2.19 },
+  // MiniMax models
+  'minimax/minimax-m2': { input: 0.255, output: 1.02 },
   // Mock
   'mock': { input: 0, output: 0 },
 };
