@@ -26,11 +26,13 @@
  * - CompleteIteration: Mark iteration as completed
  * - FailIteration: Mark iteration as failed
  * - SkipIteration: Mark iteration as skipped
- *
- * Future commands (to be implemented):
- * - ResolveConflict: Manually resolve a detected conflict
- * - SetThrottle: Adjust processing throttle settings
- * - AddLearning: Record a learning from an AI session
+ * - RegisterRepository: Register a new repository
+ * - LoadRepositoryCommits: Load commits into a repository
+ * - UpdateRepositoryStatus: Update repository status
+ * - MarkCommitProcessed: Mark a commit as processed by an agent
+ * - UpdateWikiSettings: Update wiki configuration
+ * - DeleteWiki: Delete a wiki and its pages
+ * - SaveOrchestratorRun: Save orchestrator run results
  */
 
 export * from './types.js';
@@ -42,3 +44,6 @@ export * from './work-queue.js';
 export * from './agent-run.js';
 export * from './processing-run.js';
 export * from './iteration.js';
+export * from './repository.js';
+export * from './wiki.js';
+export * from './orchestrator-run.js';
