@@ -61,6 +61,25 @@ export interface WorkQueueRepository {
   claimNext(repoId: string): Promise<WorkItem | null>;
 
   /**
+   * Claim a batch of work items for parallel execution.
+   * Respects ordering constraints:
+   * - Bootstrap must run alone
+   * - code-change must complete on a commit before other analysis agents
+   * - Meta agents only run when no analysis work is pending
+   * - Same commit won't be claimed by multiple agents in one batch
+   *
+   * @param repoId - Repository to claim work for
+   * @param maxItems - Maximum number of items to claim
+   * @param processedCommits - Set of commit SHAs already processed by code-change agent
+   * @returns Array of claimed work items (may be empty if no work available)
+   */
+  claimBatch(
+    repoId: string,
+    maxItems: number,
+    processedCommits: Set<string>
+  ): Promise<WorkItem[]>;
+
+  /**
    * Complete a work item.
    */
   complete(id: string, agentRunId: string): Promise<void>;
