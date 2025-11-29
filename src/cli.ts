@@ -389,7 +389,7 @@ async function askCommand(args: string[]) {
         return bTime - aTime;
       });
 
-    repo = matchingRepos[0];
+    repo = matchingRepos[0] ?? null;
   }
 
   if (!repo) {
