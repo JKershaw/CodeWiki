@@ -86,7 +86,7 @@ export function createAgentRun(params: {
   repoId: string;
   wikiId: string;
   agentType: AgentType;
-  targetCommitId?: string;
+  targetCommitId?: string | undefined;
 }): AgentRun {
   return {
     id: params.id,
