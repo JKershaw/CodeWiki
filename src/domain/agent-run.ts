@@ -55,7 +55,9 @@ export type AgentType =
   | 'orchestrator'
   | 'research'
   | 'writer'
-  | 'bootstrap';
+  | 'bootstrap'
+  // Consolidation agent - self-healing wiki maintenance
+  | 'consolidation';
 
 export type AgentRunStatus =
   | 'pending'

@@ -17,6 +17,7 @@ export * from './file-learning-repository.js';
 export * from './file-orchestrator-run-repository.js';
 export * from './file-processing-run-repository.js';
 export * from './file-iteration-repository.js';
+export * from './file-findings-repository.js';
 
 import type { Repositories } from '../interfaces/index.js';
 import { FileRepoRepository } from './file-repo-repository.js';
@@ -30,6 +31,7 @@ import { FileLearningRepository } from './file-learning-repository.js';
 import { FileOrchestratorRunRepository } from './file-orchestrator-run-repository.js';
 import { FileProcessingRunRepository } from './file-processing-run-repository.js';
 import { FileIterationRepository } from './file-iteration-repository.js';
+import { FileFindingsRepository } from './file-findings-repository.js';
 
 /**
  * Create all file-based repositories.
@@ -50,5 +52,6 @@ export function createFileRepositories(baseDir = '.codewiki-data'): Repositories
     orchestratorRuns: new FileOrchestratorRunRepository(baseDir),
     processingRuns: new FileProcessingRunRepository(baseDir),
     iterations: new FileIterationRepository(baseDir),
+    findings: new FileFindingsRepository(baseDir),
   };
 }

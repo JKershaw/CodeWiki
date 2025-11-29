@@ -95,6 +95,37 @@ export async function handleUpdateWikiPage(
       return success(updated!);
     }
 
+    if (update.type === 'delete') {
+      if (!existing) {
+        return failure(`Page not found at path: ${update.path}`);
+      }
+
+      // Update any pages that link to the deleted page
+      if (update.redirectTo) {
+        const allPages = await repos.wikiPages.findByWiki(wikiId);
+        for (const page of allPages) {
+          if (page.links.includes(update.path)) {
+            // Update the page content to redirect links
+            const updatedContent = page.content.replace(
+              new RegExp(`\\[([^\\]]+)\\]\\(${escapeRegExp(update.path)}(\\.md)?\\)`, 'g'),
+              `[$1](${update.redirectTo}.md)`
+            );
+            if (updatedContent !== page.content) {
+              await repos.wikiPages.updateContent(page.id, {
+                content: updatedContent,
+              });
+            }
+          }
+        }
+      }
+
+      // Delete the page
+      await repos.wikiPages.delete(existing.id);
+
+      // Return the deleted page (for tracking what was removed)
+      return success(existing);
+    }
+
     return failure(`Unknown update type: ${update.type}`);
   } catch (error) {
     return failure(`Failed to update wiki page: ${error}`);
@@ -117,4 +148,11 @@ function extractTitle(content: string): string {
 function mergeContent(existing: string, incoming: string): string {
   // For now, just append with a separator
   return `${existing}\n\n---\n\n${incoming}`;
+}
+
+/**
+ * Escape special regex characters in a string.
+ */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

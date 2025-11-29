@@ -1,7 +1,9 @@
+import { v4 as uuid } from 'uuid';
 import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
+import { createFinding as createDomainFinding, type FindingType } from '../../domain/finding.js';
 
 /**
  * Consistency Agent - Detects inconsistencies across wiki pages.
@@ -81,6 +83,9 @@ export class ConsistencyAgent implements Agent {
       })),
     ];
 
+    // Save findings to repository for consolidation agent to address
+    await this.saveFindings(allIssues, analysis, context);
+
     if (allFindings.length === 0) {
       return {
         result: createAgentResult({
@@ -111,6 +116,96 @@ export class ConsistencyAgent implements Agent {
       updates,
       costUsd: completion.costUsd,
     };
+  }
+
+  /**
+   * Save detected issues as findings in the repository.
+   * These will be processed by the ConsolidationAgent.
+   */
+  private async saveFindings(
+    issues: ConsistencyIssue[],
+    analysis: ConsistencyAnalysis,
+    context: AgentContext
+  ): Promise<void> {
+    const findingsToSave = [];
+
+    // Map issue types to FindingType
+    const typeMap: Record<string, FindingType> = {
+      broken_link: 'broken_link',
+      duplicate_title: 'duplicate_title',
+      similar_content: 'similar_content',
+      orphaned_page: 'orphaned_page',
+      category_mismatch: 'category_mismatch',
+      terminology: 'terminology',
+      contradiction: 'contradiction',
+    };
+
+    // Save issues as findings
+    for (const issue of issues) {
+      const findingType = typeMap[issue.type] ?? 'low_quality';
+
+      // Check if a similar finding already exists
+      const exists = await context.repos.findings.existsSimilar(
+        context.wikiId,
+        findingType,
+        issue.affectedPages
+      );
+
+      if (!exists) {
+        // Build metadata for broken links
+        let metadata: { brokenLinkPath: string } | undefined;
+        if (issue.type === 'broken_link') {
+          const brokenPath = issue.description.match(/non-existent page: (.+)$/)?.[1];
+          if (brokenPath) {
+            metadata = { brokenLinkPath: brokenPath };
+          }
+        }
+
+        const finding = createDomainFinding({
+          id: uuid(),
+          wikiId: context.wikiId,
+          repoId: context.repoId,
+          sourceAgentRunId: '', // Will be filled by executor
+          type: findingType,
+          description: issue.description,
+          affectedPaths: issue.affectedPages,
+          severity: issue.severity,
+          ...(metadata ? { metadata } : {}),
+        });
+        findingsToSave.push(finding);
+      }
+    }
+
+    // Save terminology issues
+    for (const term of analysis.terminologyMap) {
+      const exists = await context.repos.findings.existsSimilar(
+        context.wikiId,
+        'terminology',
+        []
+      );
+
+      if (!exists) {
+        const finding = createDomainFinding({
+          id: uuid(),
+          wikiId: context.wikiId,
+          repoId: context.repoId,
+          sourceAgentRunId: '',
+          type: 'terminology',
+          description: `Inconsistent terminology: ${term.terms.join(' / ')} - ${term.description}`,
+          affectedPaths: [],
+          severity: 'medium',
+          metadata: {
+            terms: term.terms,
+          },
+        });
+        findingsToSave.push(finding);
+      }
+    }
+
+    if (findingsToSave.length > 0) {
+      await context.repos.findings.saveMany(findingsToSave);
+      console.log(`📋 ConsistencyAgent: Saved ${findingsToSave.length} findings for consolidation`);
+    }
   }
 
   private runQuickChecks(pages: WikiPage[]): ConsistencyIssue[] {

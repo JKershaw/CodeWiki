@@ -27,12 +27,12 @@ export interface WikiPage {
 
 export interface WikiPageUpdate {
   /** Type of update */
-  type: 'create' | 'update' | 'merge';
+  type: 'create' | 'update' | 'merge' | 'delete';
   /** Target page path */
   path: string;
   /** Page title (optional, extracted from content if not provided) */
   title?: string;
-  /** New or updated content */
+  /** New or updated content (not required for delete) */
   content: string;
   /** Commit that triggered this update */
   sourceCommitId: string;
@@ -40,6 +40,10 @@ export interface WikiPageUpdate {
   agentRunId: string;
   /** Suggested confidence adjustment */
   confidenceDelta: number;
+  /** For delete: optional redirect to another page after deletion */
+  redirectTo?: string;
+  /** For consolidation: ID of finding that triggered this update */
+  findingId?: string;
 }
 
 export function createWikiPage(params: {
