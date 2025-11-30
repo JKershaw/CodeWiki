@@ -488,7 +488,37 @@ export class Orchestrator {
 			}
 		}
 
-		// Strategy 2: Process unprocessed commits with all analysis agents
+		// Strategy 2: Codebase exploration (document undocumented code)
+		// Run BEFORE commit analysis to establish current codebase state first
+		// This provides better context for understanding how commits changed things historically
+		if (workItems.length < remainingSlots && this.git) {
+			// Calculate directory coverage
+			const context = await this.contextGatherer.gather(repoId, wikiId);
+			const lowCoverageDirs = context.directoryCoverage
+				.filter(d => d.coveragePercent < 20)
+				.slice(0, 3); // Limit to top 3 most undocumented
+
+			for (const dir of lowCoverageDirs) {
+				if (workItems.length >= remainingSlots) break;
+
+				// Check if codebase-explorer work for this path already exists
+				const key = `codebase-explorer:path:${dir.path}`;
+				if (existingWorkKeys.has(key)) continue;
+
+				existingWorkKeys.add(key);
+				workItems.push(
+					createWorkItem({
+						id: uuid(),
+						repoId,
+						agentType: "codebase-explorer",
+						priority: Priority.EXPLORATION,
+						targetPath: dir.path,
+					})
+				);
+			}
+		}
+
+		// Strategy 3: Process unprocessed commits with all analysis agents
 		// Each commit should be processed by all analysis agents for comprehensive coverage
 		const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -532,12 +562,12 @@ export class Orchestrator {
 			}
 		}
 
-		// Strategy 3: Address open conflicts (high priority)
+		// Strategy 4: Address open conflicts (high priority)
 		if (workItems.length < remainingSlots && openConflicts.length > 0) {
 			// TODO: Add conflict resolution work items when we have a conflict resolution agent
 		}
 
-		// Strategy 4: Improve low-confidence pages
+		// Strategy 5: Improve low-confidence pages
 		if (workItems.length < remainingSlots) {
 			// Use CQRS query to find low confidence pages
 			const lowConfQuery = createListLowConfidencePagesQuery(wikiId, 0.5);
@@ -546,7 +576,7 @@ export class Orchestrator {
 			// TODO: Add quality improvement work items when we have meta agents
 		}
 
-		// Strategy 5: Meta agents (run on wiki after analysis is complete)
+		// Strategy 6: Meta agents (run on wiki after analysis is complete)
 		// Only run meta agents when all commits have been analyzed by code-change
 		if (workItems.length < remainingSlots && wikiPages.length >= 2) {
 			// Use CQRS query to find unprocessed commits
@@ -667,7 +697,7 @@ export class Orchestrator {
 					}
 				}
 
-				// Strategy 4b: Consolidation agent - address findings from meta agents
+				// Strategy 6b: Consolidation agent - address findings from meta agents
 				// Runs when there are open findings that need consolidation
 				if (workItems.length < remainingSlots) {
 					// Use CQRS query to find open findings
@@ -705,7 +735,7 @@ export class Orchestrator {
 			}
 		}
 
-		// Strategy 6: Synthesis work (when we have enough raw material)
+		// Strategy 7: Synthesis work (when we have enough raw material)
 		if (workItems.length < remainingSlots && wikiPages.length >= 5) {
 			// Fetch recent agent runs for synthesis checks via CQRS query
 			const synthRunsQuery = createListAgentRunsQuery(repoId);
@@ -1032,35 +1062,6 @@ export class Orchestrator {
 						);
 					}
 				}
-			}
-		}
-
-		// Strategy 7: Codebase exploration (document undocumented code)
-		// Run codebase-explorer when we have directory coverage data showing low coverage
-		if (workItems.length < remainingSlots && this.git) {
-			// Calculate directory coverage
-			const context = await this.contextGatherer.gather(repoId, wikiId);
-			const lowCoverageDirs = context.directoryCoverage
-				.filter(d => d.coveragePercent < 20)
-				.slice(0, 3); // Limit to top 3 most undocumented
-
-			for (const dir of lowCoverageDirs) {
-				if (workItems.length >= remainingSlots) break;
-
-				// Check if codebase-explorer work for this path already exists
-				const key = `codebase-explorer:path:${dir.path}`;
-				if (existingWorkKeys.has(key)) continue;
-
-				existingWorkKeys.add(key);
-				workItems.push(
-					createWorkItem({
-						id: uuid(),
-						repoId,
-						agentType: "codebase-explorer",
-						priority: Priority.EXPLORATION,
-						targetPath: dir.path,
-					})
-				);
 			}
 		}
 
