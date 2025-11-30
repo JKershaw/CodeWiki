@@ -82,7 +82,7 @@
       "question": "How is sensitive configuration like API keys handled?",
       "category": "security",
       "difficulty": "easy",
-      "verificationHints": ["src/config/", ".env.example"]
+      "verificationHints": ["src/services/llm/openrouter-llm-service.ts", "src/cli.ts", "src/web/server.ts", ".env"]
     },
     {
       "id": "howto-agent",
