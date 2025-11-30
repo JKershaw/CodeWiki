@@ -4,6 +4,10 @@
 
 import { Router, type Request, type Response } from 'express';
 import type { Dependencies } from './index.js';
+import {
+  createRequestStopProcessingRunCommand,
+  handleRequestStopProcessingRun,
+} from '../../commands/processing-run.js';
 
 /**
  * Create processing status routes.
@@ -132,6 +136,50 @@ export function createProcessingRoutes(deps: Dependencies): Router {
             pagesUpdated: i.pagesUpdated,
           })),
         },
+      });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * Request to stop the active processing run for a repository.
+   * Sets status to 'stopping', allowing current work to finish.
+   */
+  router.patch('/api/repos/:id/processing/stop', async (req: Request, res: Response) => {
+    try {
+      const repo = await repos.repos.findById(req.params.id!);
+      if (!repo) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+
+      // Find the active processing run
+      const processingRun = await repos.processingRuns.findActive(repo.id);
+      if (!processingRun) {
+        res.status(404).json({ error: 'No active processing run found' });
+        return;
+      }
+
+      if (processingRun.status !== 'running') {
+        res.status(400).json({ error: `Processing run is not running (status: ${processingRun.status})` });
+        return;
+      }
+
+      // Request graceful stop via CQRS command
+      const result = await handleRequestStopProcessingRun(
+        createRequestStopProcessingRunCommand(processingRun.id),
+        repos
+      );
+
+      if (!result.success) {
+        res.status(500).json({ error: result.error });
+        return;
+      }
+
+      res.json({
+        message: 'Stop requested, finishing current work...',
+        processingRunId: processingRun.id,
       });
     } catch (error) {
       res.status(500).json({ error: String(error) });

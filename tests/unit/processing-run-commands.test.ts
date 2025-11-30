@@ -17,6 +17,10 @@ import {
   handleFailProcessingRun,
   createStopProcessingRunCommand,
   handleStopProcessingRun,
+  createRequestStopProcessingRunCommand,
+  handleRequestStopProcessingRun,
+  createConfirmStopProcessingRunCommand,
+  handleConfirmStopProcessingRun,
 } from '../../src/commands/processing-run.js';
 import { createProcessingRun } from '../../src/domain/processing-run.js';
 import type { Repositories } from '../../src/repositories/index.js';
@@ -61,6 +65,20 @@ function createMockRepos(): Repositories {
       }
     },
     stop: async (id) => {
+      const run = processingRuns.get(id);
+      if (run) {
+        run.status = 'stopped';
+        run.completedAt = new Date();
+      }
+    },
+    requestStop: async (id) => {
+      const run = processingRuns.get(id);
+      if (run) {
+        run.status = 'stopping';
+        run.totalIterations = run.completedIterations;
+      }
+    },
+    confirmStop: async (id) => {
       const run = processingRuns.get(id);
       if (run) {
         run.status = 'stopped';
@@ -289,6 +307,126 @@ describe('Processing Run Commands', () => {
     it('has correct command type', () => {
       const command = createStopProcessingRunCommand('run-1');
       assert.strictEqual(command.type, 'StopProcessingRun');
+    });
+  });
+
+  describe('RequestStopProcessingRun', () => {
+    it('sets status to stopping and resets totalIterations', async () => {
+      const repos = createMockRepos();
+      const runId = uuid();
+
+      const run = createProcessingRun({
+        id: runId,
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        totalIterations: 10,
+      });
+      run.completedIterations = 5;
+      await repos.processingRuns.save(run);
+
+      const command = createRequestStopProcessingRunCommand(runId);
+      const result = await handleRequestStopProcessingRun(command, repos);
+
+      assert.strictEqual(result.success, true);
+
+      const stopping = await repos.processingRuns.findById(runId);
+      assert.strictEqual(stopping?.status, 'stopping');
+      assert.strictEqual(stopping?.totalIterations, 5); // Reset to completedIterations
+    });
+
+    it('fails when processing run is not running', async () => {
+      const repos = createMockRepos();
+      const runId = uuid();
+
+      const run = createProcessingRun({
+        id: runId,
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        totalIterations: 10,
+      });
+      run.status = 'completed';
+      await repos.processingRuns.save(run);
+
+      const command = createRequestStopProcessingRunCommand(runId);
+      const result = await handleRequestStopProcessingRun(command, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('not running'));
+    });
+
+    it('fails when processing run does not exist', async () => {
+      const repos = createMockRepos();
+
+      const command = createRequestStopProcessingRunCommand('nonexistent');
+      const result = await handleRequestStopProcessingRun(command, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('not found'));
+    });
+
+    it('has correct command type', () => {
+      const command = createRequestStopProcessingRunCommand('run-1');
+      assert.strictEqual(command.type, 'RequestStopProcessingRun');
+    });
+  });
+
+  describe('ConfirmStopProcessingRun', () => {
+    it('sets status to stopped when status is stopping', async () => {
+      const repos = createMockRepos();
+      const runId = uuid();
+
+      const run = createProcessingRun({
+        id: runId,
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        totalIterations: 10,
+      });
+      run.status = 'stopping';
+      await repos.processingRuns.save(run);
+
+      const command = createConfirmStopProcessingRunCommand(runId);
+      const result = await handleConfirmStopProcessingRun(command, repos);
+
+      assert.strictEqual(result.success, true);
+
+      const stopped = await repos.processingRuns.findById(runId);
+      assert.strictEqual(stopped?.status, 'stopped');
+      assert.ok(stopped?.completedAt);
+    });
+
+    it('fails when processing run is not stopping', async () => {
+      const repos = createMockRepos();
+      const runId = uuid();
+
+      const run = createProcessingRun({
+        id: runId,
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        totalIterations: 10,
+      });
+      // Status is 'running', not 'stopping'
+      await repos.processingRuns.save(run);
+
+      const command = createConfirmStopProcessingRunCommand(runId);
+      const result = await handleConfirmStopProcessingRun(command, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('not stopping'));
+    });
+
+    it('fails when processing run does not exist', async () => {
+      const repos = createMockRepos();
+
+      const command = createConfirmStopProcessingRunCommand('nonexistent');
+      const result = await handleConfirmStopProcessingRun(command, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('not found'));
+    });
+
+    it('has correct command type', () => {
+      const command = createConfirmStopProcessingRunCommand('run-1');
+      assert.strictEqual(command.type, 'ConfirmStopProcessingRun');
     });
   });
 });
