@@ -70,7 +70,7 @@ export function createProcessingRoutes(deps: Dependencies): Router {
         id: item.id,
         agentType: item.agentType,
         targetCommitId: item.targetCommitId,
-        targetPagePath: item.targetPagePath,
+        targetPath: item.targetPath,
         priority: item.priority,
         status: item.status,
         createdAt: item.createdAt,

@@ -34,8 +34,8 @@ export interface WikiPageUpdate {
   title?: string;
   /** New or updated content (not required for delete) */
   content: string;
-  /** Commit that triggered this update */
-  sourceCommitId: string;
+  /** Commit that triggered this update (optional for exploration agents) */
+  sourceCommitId?: string;
   /** Agent that requested this update */
   agentRunId: string;
   /** Suggested confidence adjustment */
@@ -52,7 +52,7 @@ export function createWikiPage(params: {
   path: string;
   title: string;
   content: string;
-  sourceCommitId: string;
+  sourceCommitId?: string;
 }): WikiPage {
   return {
     id: params.id,
@@ -61,7 +61,7 @@ export function createWikiPage(params: {
     title: params.title,
     content: params.content,
     confidence: 0.5, // Start at medium confidence
-    sourceCommits: [params.sourceCommitId],
+    sourceCommits: params.sourceCommitId ? [params.sourceCommitId] : [],
     links: [],
     backlinks: [],
     createdAt: new Date(),

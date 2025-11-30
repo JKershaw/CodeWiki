@@ -1,5 +1,8 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type { Repositories } from '../../repositories/index.js';
 import type { AgentType } from '../../domain/agent-run.js';
+import type { GitService } from '../../services/git/git-service.js';
 
 // Import CQRS queries
 import {
@@ -10,6 +13,20 @@ import {
   createListAgentRunsQuery,
   handleListAgentRuns,
 } from '../../queries/index.js';
+
+/**
+ * Directory coverage information for the orchestrator.
+ */
+export interface DirectoryCoverage {
+  /** Relative path from repo root (e.g., "src/services/llm") */
+  path: string;
+  /** Number of source files in this directory */
+  fileCount: number;
+  /** Number of wiki mentions of this directory or its files */
+  wikiMentions: number;
+  /** Coverage percentage (wikiMentions / fileCount * 100) */
+  coveragePercent: number;
+}
 
 /**
  * Snapshot of wiki state for orchestrator decision-making.
@@ -50,6 +67,9 @@ export interface OrchestratorContext {
   hasGettingStarted: boolean;
   hasTestingGuide: boolean;
   hasExtensionGuide: boolean;
+
+  // Directory coverage - which parts of the codebase are documented
+  directoryCoverage: DirectoryCoverage[];
 }
 
 /**
@@ -67,7 +87,10 @@ const ANALYSIS_AGENTS: AgentType[] = [
  * Gathers context about the current wiki state for orchestrator decisions.
  */
 export class ContextGatherer {
-  constructor(private readonly repos: Repositories) {}
+  constructor(
+    private readonly repos: Repositories,
+    private readonly git?: GitService
+  ) {}
 
   /**
    * Gather a complete snapshot of the wiki state.
@@ -196,6 +219,9 @@ export class ContextGatherer {
       p.path === 'guides/patterns'
     );
 
+    // Calculate directory coverage (which parts of the codebase are documented)
+    const directoryCoverage = await this.calculateDirectoryCoverage(repoId, wikiPages);
+
     return {
       totalCommits: commits.length,
       commitsByAgent,
@@ -213,7 +239,120 @@ export class ContextGatherer {
       hasGettingStarted,
       hasTestingGuide,
       hasExtensionGuide,
+      directoryCoverage,
     };
+  }
+
+  /**
+   * Calculate coverage of source directories in the wiki.
+   * Scans the repository's src/ directory and checks how well each
+   * subdirectory is documented in the wiki.
+   */
+  private async calculateDirectoryCoverage(
+    repoId: string,
+    wikiPages: Array<{ path: string; content: string }>
+  ): Promise<DirectoryCoverage[]> {
+    // If we don't have git service, return empty coverage
+    if (!this.git) {
+      return [];
+    }
+
+    const repoPath = this.git.getRepoPath(repoId);
+    const srcPath = path.join(repoPath, 'src');
+
+    // Check if src directory exists
+    if (!fs.existsSync(srcPath)) {
+      return [];
+    }
+
+    // Combine all wiki content for searching
+    const allWikiContent = wikiPages.map(p => p.content).join('\n').toLowerCase();
+    const allWikiPaths = wikiPages.map(p => p.path.toLowerCase()).join('\n');
+
+    const coverage: DirectoryCoverage[] = [];
+
+    // Scan first-level directories under src/
+    const srcEntries = fs.readdirSync(srcPath, { withFileTypes: true });
+
+    for (const entry of srcEntries) {
+      if (!entry.isDirectory()) continue;
+
+      const dirPath = path.join(srcPath, entry.name);
+      const relativePath = `src/${entry.name}`;
+
+      // Count source files recursively (only .ts, .js files)
+      const fileCount = this.countSourceFiles(dirPath);
+      if (fileCount === 0) continue;
+
+      // Check for wiki mentions of this directory
+      // Look for: directory name, path references, and file names from this dir
+      const searchTerms = [
+        entry.name.toLowerCase(),
+        relativePath.toLowerCase(),
+        relativePath.replace(/\//g, '-').toLowerCase(),
+      ];
+
+      // Count distinct mentions
+      let wikiMentions = 0;
+      for (const term of searchTerms) {
+        // Count pages that mention this term
+        const mentionCount = wikiPages.filter(p =>
+          p.content.toLowerCase().includes(term) ||
+          p.path.toLowerCase().includes(term)
+        ).length;
+        wikiMentions = Math.max(wikiMentions, mentionCount);
+      }
+
+      // Calculate coverage percentage
+      // Use min(wikiMentions, fileCount) to cap at 100%
+      const coveragePercent = fileCount > 0
+        ? Math.min(100, (wikiMentions / fileCount) * 100)
+        : 0;
+
+      coverage.push({
+        path: relativePath,
+        fileCount,
+        wikiMentions,
+        coveragePercent: Math.round(coveragePercent),
+      });
+    }
+
+    // Sort by coverage (lowest first to highlight gaps)
+    coverage.sort((a, b) => a.coveragePercent - b.coveragePercent);
+
+    return coverage;
+  }
+
+  /**
+   * Count source files in a directory recursively.
+   */
+  private countSourceFiles(dirPath: string): number {
+    let count = 0;
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+
+      if (entry.isDirectory()) {
+        // Skip node_modules and common non-source directories
+        if (['node_modules', 'dist', 'build', '.git', '__pycache__'].includes(entry.name)) {
+          continue;
+        }
+        count += this.countSourceFiles(fullPath);
+      } else if (entry.isFile()) {
+        // Count TypeScript and JavaScript files
+        if (entry.name.endsWith('.ts') || entry.name.endsWith('.js')) {
+          // Skip test files and declaration files
+          if (!entry.name.includes('.test.') &&
+              !entry.name.includes('.spec.') &&
+              !entry.name.endsWith('.d.ts')) {
+            count++;
+          }
+        }
+      }
+    }
+
+    return count;
   }
 
   /**
@@ -267,6 +406,42 @@ export class ContextGatherer {
       const status = run.success ? 'success' : 'failed';
       lines.push(`- ${run.agentType}: ${status}, ${run.pagesAffected} pages affected`);
     }
+    lines.push('');
+
+    // Directory coverage (which parts of the codebase are documented)
+    if (ctx.directoryCoverage.length > 0) {
+      lines.push('## Directory Coverage (Source Code Documentation)\n');
+      lines.push('Shows how well each source directory is documented in the wiki:');
+      lines.push('');
+
+      // Find directories with very low coverage (candidates for codebase-explorer)
+      const lowCoverageDirs = ctx.directoryCoverage.filter(d => d.coveragePercent < 20);
+      const mediumCoverageDirs = ctx.directoryCoverage.filter(d => d.coveragePercent >= 20 && d.coveragePercent < 50);
+      const goodCoverageDirs = ctx.directoryCoverage.filter(d => d.coveragePercent >= 50);
+
+      if (lowCoverageDirs.length > 0) {
+        lines.push('**⚠️ UNDOCUMENTED (< 20% coverage) - use codebase-explorer:**');
+        for (const dir of lowCoverageDirs) {
+          lines.push(`- ${dir.path}: ${dir.coveragePercent}% (${dir.fileCount} files, ${dir.wikiMentions} wiki mentions)`);
+        }
+        lines.push('');
+      }
+
+      if (mediumCoverageDirs.length > 0) {
+        lines.push('**Partially documented (20-50% coverage):**');
+        for (const dir of mediumCoverageDirs) {
+          lines.push(`- ${dir.path}: ${dir.coveragePercent}% (${dir.fileCount} files, ${dir.wikiMentions} wiki mentions)`);
+        }
+        lines.push('');
+      }
+
+      if (goodCoverageDirs.length > 0) {
+        lines.push('**Well documented (50%+ coverage):**');
+        for (const dir of goodCoverageDirs) {
+          lines.push(`- ${dir.path}: ${dir.coveragePercent}% (${dir.fileCount} files, ${dir.wikiMentions} wiki mentions)`);
+        }
+      }
+    }
 
     return lines.join('\n');
   }
@@ -275,6 +450,6 @@ export class ContextGatherer {
 /**
  * Create a context gatherer instance.
  */
-export function createContextGatherer(repos: Repositories): ContextGatherer {
-  return new ContextGatherer(repos);
+export function createContextGatherer(repos: Repositories, git?: GitService): ContextGatherer {
+  return new ContextGatherer(repos, git);
 }

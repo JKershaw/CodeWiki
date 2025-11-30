@@ -4,6 +4,7 @@ import type { WorkItem } from "../../domain/work-item.js";
 import { createWorkItem, Priority } from "../../domain/work-item.js";
 import type { AgentType, AgentRun } from "../../domain/agent-run.js";
 import type { LLMService } from "../../services/llm/llm-service.js";
+import type { GitService } from "../../services/git/git-service.js";
 import { ContextGatherer } from "./context-gatherer.js";
 import {
 	ORCHESTRATOR_SYSTEM_PROMPT,
@@ -91,9 +92,10 @@ export class Orchestrator {
 	constructor(
 		private readonly repos: Repositories,
 		private readonly llm?: LLMService,
-		config?: OrchestratorConfig
+		config?: OrchestratorConfig,
+		private readonly git?: GitService
 	) {
-		this.contextGatherer = new ContextGatherer(repos);
+		this.contextGatherer = new ContextGatherer(repos, git);
 		this.config = {
 			useLLM: config?.useLLM ?? true,
 			model: config?.model ?? "anthropic/claude-haiku-4.5",
@@ -251,7 +253,10 @@ export class Orchestrator {
 			if (workItems.length >= maxItems) break;
 
 			// Check if work already exists using O(1) Set lookup
-			const key = `${item.agentType}:${item.targetCommitId ?? "null"}`;
+			// For exploration agents, use targetPath instead of targetCommitId
+			const key = item.targetPath
+				? `${item.agentType}:path:${item.targetPath}`
+				: `${item.agentType}:${item.targetCommitId ?? "null"}`;
 			if (existingWorkKeys.has(key)) continue;
 
 			// Also track items we're adding in this batch to avoid self-duplicates
@@ -263,6 +268,7 @@ export class Orchestrator {
 				agentType: item.agentType as AgentType,
 				priority: this.getPriority(item.agentType),
 				...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
+				...(item.targetPath ? { targetPath: item.targetPath } : {}),
 			});
 
 			workItems.push(workItem);
@@ -287,6 +293,9 @@ export class Orchestrator {
 	private getPriority(agentType: string): number {
 		if (ANALYSIS_AGENTS.includes(agentType as AgentType)) {
 			return Priority.RECENT_COMMIT;
+		}
+		if (agentType === "codebase-explorer") {
+			return Priority.EXPLORATION; // Higher than synthesis, documents undocumented code
 		}
 		if (META_AGENTS.includes(agentType as AgentType)) {
 			return Priority.META;
@@ -919,6 +928,35 @@ export class Orchestrator {
 			}
 		}
 
+		// Strategy 6: Codebase exploration (document undocumented code)
+		// Run codebase-explorer when we have directory coverage data showing low coverage
+		if (workItems.length < remainingSlots && this.git) {
+			// Calculate directory coverage
+			const context = await this.contextGatherer.gather(repoId, wikiId);
+			const lowCoverageDirs = context.directoryCoverage
+				.filter(d => d.coveragePercent < 20)
+				.slice(0, 3); // Limit to top 3 most undocumented
+
+			for (const dir of lowCoverageDirs) {
+				if (workItems.length >= remainingSlots) break;
+
+				// Check if codebase-explorer work for this path already exists
+				const key = `codebase-explorer:path:${dir.path}`;
+				if (existingWorkKeys.has(key)) continue;
+
+				existingWorkKeys.add(key);
+				workItems.push(
+					createWorkItem({
+						id: uuid(),
+						repoId,
+						agentType: "codebase-explorer",
+						priority: Priority.EXPLORATION,
+						targetPath: dir.path,
+					})
+				);
+			}
+		}
+
 		return workItems;
 	}
 
@@ -1060,7 +1098,8 @@ export interface WorkSummary {
 export function createOrchestrator(
 	repos: Repositories,
 	llm?: LLMService,
-	config?: OrchestratorConfig
+	config?: OrchestratorConfig,
+	git?: GitService
 ): Orchestrator {
-	return new Orchestrator(repos, llm, config);
+	return new Orchestrator(repos, llm, config, git);
 }

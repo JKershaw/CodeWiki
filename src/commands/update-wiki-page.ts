@@ -39,14 +39,17 @@ export async function handleUpdateWikiPage(
         return failure(`Page already exists at path: ${update.path}`);
       }
 
-      const page = createWikiPage({
+      const createParams: Parameters<typeof createWikiPage>[0] = {
         id: uuid(),
         wikiId,
         path: update.path,
         title: extractTitle(update.content),
         content: update.content,
-        sourceCommitId: update.sourceCommitId,
-      });
+      };
+      if (update.sourceCommitId) {
+        createParams.sourceCommitId = update.sourceCommitId;
+      }
+      const page = createWikiPage(createParams);
 
       await repos.wikiPages.save(page);
       return success(page);
@@ -57,11 +60,14 @@ export async function handleUpdateWikiPage(
         return failure(`Page not found at path: ${update.path}`);
       }
 
-      await repos.wikiPages.updateContent(existing.id, {
+      const updateParams: { content: string; confidence?: number; sourceCommitId?: string } = {
         content: update.content,
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
-        sourceCommitId: update.sourceCommitId,
-      });
+      };
+      if (update.sourceCommitId) {
+        updateParams.sourceCommitId = update.sourceCommitId;
+      }
+      await repos.wikiPages.updateContent(existing.id, updateParams);
 
       const updated = await repos.wikiPages.findById(existing.id);
       return success(updated!);
@@ -70,14 +76,17 @@ export async function handleUpdateWikiPage(
     if (update.type === 'merge') {
       if (!existing) {
         // If page doesn't exist, create it
-        const page = createWikiPage({
+        const createParams: Parameters<typeof createWikiPage>[0] = {
           id: uuid(),
           wikiId,
           path: update.path,
           title: extractTitle(update.content),
           content: update.content,
-          sourceCommitId: update.sourceCommitId,
-        });
+        };
+        if (update.sourceCommitId) {
+          createParams.sourceCommitId = update.sourceCommitId;
+        }
+        const page = createWikiPage(createParams);
 
         await repos.wikiPages.save(page);
         return success(page);
@@ -85,11 +94,14 @@ export async function handleUpdateWikiPage(
 
       // Merge content (append new content to existing)
       const mergedContent = mergeContent(existing.content, update.content);
-      await repos.wikiPages.updateContent(existing.id, {
+      const mergeUpdateParams: { content: string; confidence?: number; sourceCommitId?: string } = {
         content: mergedContent,
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
-        sourceCommitId: update.sourceCommitId,
-      });
+      };
+      if (update.sourceCommitId) {
+        mergeUpdateParams.sourceCommitId = update.sourceCommitId;
+      }
+      await repos.wikiPages.updateContent(existing.id, mergeUpdateParams);
 
       const updated = await repos.wikiPages.findById(existing.id);
       return success(updated!);
