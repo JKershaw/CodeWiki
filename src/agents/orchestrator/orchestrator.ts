@@ -203,20 +203,43 @@ export class Orchestrator {
 	/**
 	 * Check if wiki-editor is needed due to pending edit requests.
 	 * Returns a wiki-editor work item if needed, null otherwise.
+	 *
+	 * Uses three thresholds:
+	 * - Urgent: > 20 pending edits (always trigger to prevent unbounded growth)
+	 * - During analysis: >= 5 pending edits (batch for efficiency)
+	 * - Post-analysis: > 0 pending edits (clean up remaining)
 	 */
 	private async checkPendingEditsNeeded(
 		repoId: string,
 		wikiId: string
 	): Promise<WorkItem | null> {
 		const PENDING_EDITS_THRESHOLD = 5;
+		const PENDING_EDITS_URGENT = 20;
 
 		// Check pending edit request count
 		const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
 		const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
 		const pendingEditCount = pendingEditsResult.data || 0;
 
-		if (pendingEditCount < PENDING_EDITS_THRESHOLD) {
-			return null; // Below threshold
+		if (pendingEditCount === 0) {
+			return null; // Nothing to process
+		}
+
+		// Always trigger if queue is getting too large (prevent unbounded growth)
+		const isUrgent = pendingEditCount > PENDING_EDITS_URGENT;
+
+		if (!isUrgent) {
+			// Check if analysis is complete (no unprocessed commits by code-change)
+			const unprocessedQuery = createListUnprocessedCommitsQuery(repoId, "code-change");
+			const unprocessedResult = await handleListUnprocessedCommits(unprocessedQuery, this.repos);
+			const unprocessedCommits = unprocessedResult.data || [];
+			const analysisComplete = unprocessedCommits.length === 0;
+
+			// During analysis: only trigger at threshold (batch for efficiency)
+			// Post-analysis: trigger for any pending edits (cleanup)
+			if (!analysisComplete && pendingEditCount < PENDING_EDITS_THRESHOLD) {
+				return null; // Below threshold during analysis
+			}
 		}
 
 		// Check if wiki-editor work already pending
@@ -538,29 +561,9 @@ export class Orchestrator {
 				const runsResult = await handleListAgentRuns(runsQuery, this.repos);
 				const recentRuns = runsResult.data || [];
 
-				// Wiki Editor Agent: also run post-analysis to clean up any remaining edits
-				// Strategy 1 handles the >= 5 threshold during analysis, but we need to
-				// process remaining edits (1-4) after analysis completes
-				if (workItems.length < remainingSlots) {
-					const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
-					const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
-					const pendingEditCount = pendingEditsResult.data || 0;
-
-					if (pendingEditCount > 0) {
-						const wikiEditorKey = "wiki-editor:null";
-						if (!existingWorkKeys.has(wikiEditorKey)) {
-							existingWorkKeys.add(wikiEditorKey);
-							workItems.push(
-								createWorkItem({
-									id: uuid(),
-									repoId,
-									agentType: "wiki-editor",
-									priority: Priority.USER_REQUEST - 1, // Same high priority as Strategy 1
-								})
-							);
-						}
-					}
-				}
+				// Note: wiki-editor scheduling is handled exclusively by Strategy 1
+				// (checkPendingEditsNeeded) which runs before any LLM/deterministic path.
+				// This ensures consistent priority (99) and avoids deduplication conflicts.
 
 				// Check for pages without links (need link agent)
 				const pagesWithoutLinks = wikiPages.filter((p) => p.links.length === 0);
