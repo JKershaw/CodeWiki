@@ -1598,6 +1598,7 @@ async function runAutoBenchmark() {
 
   const iterationsPerCycle = parseInt(document.getElementById('auto-benchmark-iterations').value, 10) || 5;
   const maxCycles = parseInt(document.getElementById('auto-benchmark-max-cycles').value, 10) || 10;
+  const includeQuality = document.getElementById('auto-benchmark-include-quality').checked;
 
   autoBenchmarkRunning = true;
   autoBenchmarkStopping = false;
@@ -1617,10 +1618,13 @@ async function runAutoBenchmark() {
   stopBtn.disabled = false;
   document.getElementById('auto-benchmark-iterations').disabled = true;
   document.getElementById('auto-benchmark-max-cycles').disabled = true;
+  document.getElementById('auto-benchmark-include-quality').disabled = true;
   progressDiv.classList.remove('hidden');
 
-  // Also disable regular benchmark button during auto-benchmark
+  // Also disable benchmark buttons during auto-benchmark
   document.getElementById('run-benchmark-btn').disabled = true;
+  document.getElementById('run-quality-benchmark-btn').disabled = true;
+  document.getElementById('run-both-benchmarks-btn').disabled = true;
 
   try {
     for (let cycle = 1; cycle <= maxCycles; cycle++) {
@@ -1647,13 +1651,27 @@ async function runAutoBenchmark() {
         break;
       }
 
-      // Phase 2: Run benchmark
-      phaseSpan.textContent = 'Running benchmark...';
-      statusText.textContent = 'Starting benchmark...';
+      // Phase 2: Run benchmarks (accuracy and optionally quality in parallel)
+      const benchmarkLabel = includeQuality ? 'benchmarks' : 'benchmark';
+      phaseSpan.textContent = `Running ${benchmarkLabel}...`;
+      statusText.textContent = `Starting ${benchmarkLabel}...`;
 
-      await runBenchmarkAndWait(currentRepo.id, () => {
-        statusText.textContent = 'Benchmark in progress...';
-      });
+      if (includeQuality) {
+        // Run both accuracy and quality benchmarks in parallel
+        await Promise.all([
+          runBenchmarkAndWait(currentRepo.id, () => {
+            statusText.textContent = 'Benchmarks in progress...';
+          }),
+          runQualityBenchmarkAndWait(currentRepo.id, () => {
+            statusText.textContent = 'Benchmarks in progress...';
+          }),
+        ]);
+      } else {
+        // Run only accuracy benchmark
+        await runBenchmarkAndWait(currentRepo.id, () => {
+          statusText.textContent = 'Benchmark in progress...';
+        });
+      }
 
       // Update progress after cycle completes
       const cycleProgress = (cycle / maxCycles) * 100;
@@ -1678,7 +1696,10 @@ async function runAutoBenchmark() {
     stopBtn.classList.add('hidden');
     document.getElementById('auto-benchmark-iterations').disabled = false;
     document.getElementById('auto-benchmark-max-cycles').disabled = false;
+    document.getElementById('auto-benchmark-include-quality').disabled = false;
     document.getElementById('run-benchmark-btn').disabled = false;
+    document.getElementById('run-quality-benchmark-btn').disabled = false;
+    document.getElementById('run-both-benchmarks-btn').disabled = false;
   }
 }
 
@@ -1727,7 +1748,7 @@ async function runIterationsAndWait(repoId, iterations, onProgress) {
 }
 
 /**
- * Run a benchmark and wait for completion.
+ * Run an accuracy benchmark and wait for completion.
  */
 async function runBenchmarkAndWait(repoId, onProgress) {
   // Start benchmark
@@ -1750,6 +1771,50 @@ async function runBenchmarkAndWait(repoId, onProgress) {
       try {
         const data = await api(`/repos/${repoId}/benchmarks?limit=1`);
         const benchmarks = data.benchmarks || [];
+        const latest = benchmarks[0];
+
+        if (!latest || latest.status !== 'running') {
+          resolve();
+          return;
+        }
+
+        if (onProgress) {
+          onProgress();
+        }
+
+        setTimeout(poll, 3000);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    setTimeout(poll, 500);
+  });
+}
+
+/**
+ * Run a quality benchmark and wait for completion.
+ */
+async function runQualityBenchmarkAndWait(repoId, onProgress) {
+  // Start quality benchmark
+  const response = await fetch(`/api/repos/${repoId}/quality-benchmarks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+
+  if (response.status === 409) {
+    // Already running, just wait for it
+  } else if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to start quality benchmark');
+  }
+
+  // Poll until complete
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const data = await api(`/repos/${repoId}/quality-benchmarks?limit=1`);
+        const benchmarks = data.qualityBenchmarks || [];
         const latest = benchmarks[0];
 
         if (!latest || latest.status !== 'running') {
