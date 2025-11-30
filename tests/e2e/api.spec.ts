@@ -289,4 +289,66 @@ test.describe('API Endpoints', () => {
       expect('targetPagePath' in item).toBeTruthy();
     }
   });
+
+  // Stop processing endpoint tests
+  test('PATCH /api/repos/:id/processing/stop returns 404 for unknown repo', async ({ request }) => {
+    const response = await request.patch('/api/repos/unknown-id-12345/processing/stop');
+
+    expect(response.status()).toBe(404);
+    const data = await response.json();
+    expect(data.error).toContain('not found');
+  });
+
+  test('PATCH /api/repos/:id/processing/stop returns 404 when not processing', async ({ request }) => {
+    // First get a repo
+    const reposResponse = await request.get('/api/repos');
+    let repos = await reposResponse.json();
+
+    if (repos.length === 0) {
+      await request.post('/api/repos', { data: { path: '.' } });
+      const newReposResponse = await request.get('/api/repos');
+      repos = await newReposResponse.json();
+      if (repos.length === 0) {
+        test.skip();
+        return;
+      }
+    }
+
+    // Try to stop when no processing is active
+    const response = await request.patch(`/api/repos/${repos[0].id}/processing/stop`);
+
+    // Should return 404 (no active processing) or 400 (not in running state)
+    expect([404, 400]).toContain(response.status());
+    const data = await response.json();
+    expect(data.error).toBeDefined();
+  });
+
+  test('GET /api/repos/:id/processing returns processing status structure', async ({ request }) => {
+    // First get a repo
+    const reposResponse = await request.get('/api/repos');
+    let repos = await reposResponse.json();
+
+    if (repos.length === 0) {
+      await request.post('/api/repos', { data: { path: '.' } });
+      const newReposResponse = await request.get('/api/repos');
+      repos = await newReposResponse.json();
+      if (repos.length === 0) {
+        test.skip();
+        return;
+      }
+    }
+
+    const response = await request.get(`/api/repos/${repos[0].id}/processing`);
+    expect(response.ok()).toBeTruthy();
+
+    const data = await response.json();
+    expect(data.processing).toBeDefined();
+    // processing can be null if no active run, or an object with status
+    if (data.processing) {
+      expect(data.processing.status).toBeDefined();
+      expect(['pending', 'running', 'stopping', 'stopped', 'completed', 'failed']).toContain(data.processing.status);
+      expect(typeof data.processing.completedIterations).toBe('number');
+      expect(typeof data.processing.totalIterations).toBe('number');
+    }
+  });
 });
