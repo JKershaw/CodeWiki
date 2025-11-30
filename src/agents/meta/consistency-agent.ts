@@ -3,13 +3,16 @@ import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
-import { createFinding as createDomainFinding, type FindingType } from '../../domain/finding.js';
+import type { FindingType } from '../../domain/finding.js';
 import {
   createListWikiPagesQuery,
   handleListWikiPages,
-  createFindingExistsSimilarQuery,
-  handleFindingExistsSimilar,
 } from '../../queries/index.js';
+import {
+  createCreateFindingsCommand,
+  handleCreateFindings,
+  type CreateFindingInput,
+} from '../../commands/index.js';
 
 /**
  * Consistency Agent - Detects inconsistencies across wiki pages.
@@ -136,7 +139,7 @@ export class ConsistencyAgent implements Agent {
     analysis: ConsistencyAnalysis,
     context: AgentContext
   ): Promise<void> {
-    const findingsToSave = [];
+    const findingInputs: CreateFindingInput[] = [];
 
     // Map issue types to FindingType
     const typeMap: Record<string, FindingType> = {
@@ -149,76 +152,62 @@ export class ConsistencyAgent implements Agent {
       contradiction: 'contradiction',
     };
 
-    // Save issues as findings
+    // Build finding inputs from issues
     for (const issue of issues) {
       const findingType = typeMap[issue.type] ?? 'low_quality';
 
-      // Check if a similar finding already exists via CQRS query
-      const existsQuery = createFindingExistsSimilarQuery(
-        context.wikiId,
-        findingType,
-        issue.affectedPages
-      );
-      const existsResult = await handleFindingExistsSimilar(existsQuery, context.repos);
-      const exists = existsResult.data || false;
-
-      if (!exists) {
-        // Build metadata for broken links
-        let metadata: { brokenLinkPath: string } | undefined;
-        if (issue.type === 'broken_link') {
-          const brokenPath = issue.description.match(/non-existent page: (.+)$/)?.[1];
-          if (brokenPath) {
-            metadata = { brokenLinkPath: brokenPath };
-          }
+      // Build metadata for broken links
+      let metadata: { brokenLinkPath: string } | undefined;
+      if (issue.type === 'broken_link') {
+        const brokenPath = issue.description.match(/non-existent page: (.+)$/)?.[1];
+        if (brokenPath) {
+          metadata = { brokenLinkPath: brokenPath };
         }
+      }
 
-        const finding = createDomainFinding({
-          id: uuid(),
-          wikiId: context.wikiId,
-          repoId: context.repoId,
-          sourceAgentRunId: '', // Will be filled by executor
-          type: findingType,
-          description: issue.description,
-          affectedPaths: issue.affectedPages,
-          severity: issue.severity,
-          ...(metadata ? { metadata } : {}),
-        });
-        findingsToSave.push(finding);
+      const input: CreateFindingInput = {
+        id: uuid(),
+        type: findingType,
+        description: issue.description,
+        affectedPaths: issue.affectedPages,
+        severity: issue.severity,
+      };
+
+      if (metadata) {
+        findingInputs.push({ ...input, metadata });
+      } else {
+        findingInputs.push(input);
       }
     }
 
-    // Save terminology issues
+    // Build finding inputs from terminology issues
     for (const term of analysis.terminologyMap) {
-      // Check if a similar finding already exists via CQRS query
-      const existsQuery = createFindingExistsSimilarQuery(
-        context.wikiId,
-        'terminology',
-        []
-      );
-      const existsResult = await handleFindingExistsSimilar(existsQuery, context.repos);
-      const exists = existsResult.data || false;
-
-      if (!exists) {
-        const finding = createDomainFinding({
-          id: uuid(),
-          wikiId: context.wikiId,
-          repoId: context.repoId,
-          sourceAgentRunId: '',
-          type: 'terminology',
-          description: `Inconsistent terminology: ${term.terms.join(' / ')} - ${term.description}`,
-          affectedPaths: [],
-          severity: 'medium',
-          metadata: {
-            terms: term.terms,
-          },
-        });
-        findingsToSave.push(finding);
-      }
+      findingInputs.push({
+        id: uuid(),
+        type: 'terminology',
+        description: `Inconsistent terminology: ${term.terms.join(' / ')} - ${term.description}`,
+        affectedPaths: [],
+        severity: 'medium',
+        metadata: {
+          terms: term.terms,
+        },
+      });
     }
 
-    if (findingsToSave.length > 0) {
-      await context.repos.findings.saveMany(findingsToSave);
-      console.log(`📋 ConsistencyAgent: Saved ${findingsToSave.length} findings for consolidation`);
+    if (findingInputs.length > 0) {
+      // Use CQRS command with skipDuplicates to avoid creating duplicate findings
+      const command = createCreateFindingsCommand({
+        wikiId: context.wikiId,
+        repoId: context.repoId,
+        sourceAgentRunId: '', // Will be filled by executor
+        findings: findingInputs,
+        skipDuplicates: true,
+      });
+      const result = await handleCreateFindings(command, context.repos);
+
+      if (result.success && result.data) {
+        console.log(`📋 ConsistencyAgent: Saved ${result.data.length} findings for consolidation`);
+      }
     }
   }
 
