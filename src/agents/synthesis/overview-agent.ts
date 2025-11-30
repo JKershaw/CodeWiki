@@ -2,6 +2,7 @@ import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
  * Overview Agent - Creates category overview pages that synthesize all pages in a category.
@@ -20,7 +21,10 @@ export class OverviewAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const pages = pagesResult.data || [];
 
     // Group pages by category
     const categories = this.groupByCategory(pages);
@@ -74,7 +78,10 @@ export class OverviewAgent implements Agent {
    * Run on a specific category to generate its overview.
    */
   async runOnCategory(category: string, context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const pages = pagesResult.data || [];
     const categoryPages = pages.filter(p => p.path.startsWith(category + '/'));
 
     if (categoryPages.length < this.MIN_PAGES_FOR_OVERVIEW) {

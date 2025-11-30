@@ -3,6 +3,7 @@ import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { codebaseTools, type ToolContext, type ToolDefinition } from '../../services/llm/index.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
  * Project Overview Agent - Creates a project-level overview page.
@@ -25,7 +26,10 @@ export class ProjectOverviewAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const pages = pagesResult.data || [];
 
     // Check if we have enough pages
     if (pages.length < this.MIN_PAGES_FOR_OVERVIEW) {

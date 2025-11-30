@@ -27,6 +27,18 @@ import { createExecutor } from './executor/executor.js';
 import { createRepo } from './domain/repo.js';
 import { getOrCreateActiveWiki } from './commands/create-wiki.js';
 
+// Import CQRS queries
+import {
+  createGetRepositoryQuery,
+  handleGetRepository,
+  createGetRepositoryByFullNameQuery,
+  handleGetRepositoryByFullName,
+  createListRepositoriesQuery,
+  handleListRepositories,
+  createListWikiPagesQuery,
+  handleListWikiPages,
+} from './queries/index.js';
+
 /**
  * Create the appropriate LLM service based on environment.
  */
@@ -138,8 +150,10 @@ async function processCommand(args: string[]) {
   const git = createGitService();
   const llm = createLLM();
 
-  // Check if repo already exists
-  let repo = await repos.repos.findByFullName(absolutePath);
+  // Check if repo already exists (via CQRS query)
+  const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
+  const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
+  let repo = repoResult.data ?? null;
 
   if (!repo) {
     // Create new repo record
@@ -267,12 +281,16 @@ async function statusCommand(args: string[]) {
   }
 
   const repos = createRepositories({ type: 'file' });
-  const repo = await repos.repos.findById(repoId);
+  // Use CQRS query to find repository
+  const repoQuery = createGetRepositoryQuery(repoId);
+  const repoResult = await handleGetRepository(repoQuery, repos);
 
-  if (!repo) {
+  if (!repoResult.success || !repoResult.data) {
     console.error(`Repository not found: ${repoId}`);
     process.exit(1);
   }
+
+  const repo = repoResult.data;
 
   const orchestrator = createOrchestrator(repos);
   const wiki = await getOrCreateActiveWiki(repoId, repos);
@@ -290,7 +308,10 @@ async function statusCommand(args: string[]) {
 
 async function listCommand() {
   const repos = createRepositories({ type: 'file' });
-  const allRepos = await repos.repos.findAll();
+  // Use CQRS query to list repositories
+  const listQuery = createListRepositoriesQuery();
+  const listResult = await handleListRepositories(listQuery, repos);
+  const allRepos = listResult.data || [];
 
   if (allRepos.length === 0) {
     console.log('\nNo repositories connected.\n');
@@ -329,20 +350,25 @@ async function queryCommand(args: string[]) {
   const repos = createRepositories({ type: 'file' });
   const llm = createLLM();
 
-  // Find the repository
-  const repo = await repos.repos.findByFullName(absolutePath);
+  // Find the repository via CQRS query
+  const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
+  const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
 
-  if (!repo) {
+  if (!repoResult.success || !repoResult.data) {
     console.error(`Repository not found: ${absolutePath}`);
     console.log('Run "process <repo-path>" first to index the repository.');
     process.exit(1);
   }
 
+  const repo = repoResult.data;
+
   // Get active wiki
   const wiki = await getOrCreateActiveWiki(repo.id, repos);
 
-  // Check if wiki has content
-  const wikiPages = await repos.wikiPages.findByWiki(wiki.id);
+  // Check if wiki has content via CQRS query
+  const pagesQuery = createListWikiPagesQuery(wiki.id);
+  const pagesResult = await handleListWikiPages(pagesQuery, repos);
+  const wikiPages = pagesResult.data || [];
   if (wikiPages.length === 0) {
     console.error('Wiki is empty. Run "process <repo-path>" first to generate wiki content.');
     process.exit(1);
@@ -393,12 +419,16 @@ async function askCommand(args: string[]) {
   const repos = createRepositories({ type: 'file' });
   const llm = createLLM();
 
-  // Find the repository - try exact match first, then find most recent
-  let repo = await repos.repos.findByFullName(absolutePath);
+  // Find the repository - try exact match first, then find most recent (via CQRS queries)
+  const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
+  const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
+  let repo = repoResult.data ?? null;
 
   if (!repo) {
     // Look for any repo that might match this path (in case of multiple wikis)
-    const allRepos = await repos.repos.findAll();
+    const listQuery = createListRepositoriesQuery();
+    const listResult = await handleListRepositories(listQuery, repos);
+    const allRepos = listResult.data || [];
     const matchingRepos = allRepos
       .filter(r => r.fullName === absolutePath || absolutePath.startsWith(r.fullName))
       .sort((a, b) => {
@@ -420,8 +450,10 @@ async function askCommand(args: string[]) {
   // Get active wiki
   const wiki = await getOrCreateActiveWiki(repo.id, repos);
 
-  // Check if wiki has content
-  const wikiPages = await repos.wikiPages.findByWiki(wiki.id);
+  // Check if wiki has content via CQRS query
+  const pagesQuery = createListWikiPagesQuery(wiki.id);
+  const pagesResult = await handleListWikiPages(pagesQuery, repos);
+  const wikiPages = pagesResult.data || [];
   if (wikiPages.length === 0) {
     console.error('Wiki is empty. Run "npm run cli process ." first to generate wiki content.');
     process.exit(1);
@@ -451,12 +483,16 @@ async function specCommand(args: string[]) {
   const repos = createRepositories({ type: 'file' });
   const llm = createLLM();
 
-  // Find the repository - try exact match first, then find most recent
-  let repo = await repos.repos.findByFullName(absolutePath);
+  // Find the repository - try exact match first, then find most recent (via CQRS queries)
+  const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
+  const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
+  let repo = repoResult.data ?? null;
 
   if (!repo) {
     // Look for any repo that might match this path (in case of multiple wikis)
-    const allRepos = await repos.repos.findAll();
+    const listQuery = createListRepositoriesQuery();
+    const listResult = await handleListRepositories(listQuery, repos);
+    const allRepos = listResult.data || [];
     const matchingRepos = allRepos
       .filter(r => r.fullName === absolutePath || absolutePath.startsWith(r.fullName))
       .sort((a, b) => {
@@ -478,8 +514,10 @@ async function specCommand(args: string[]) {
   // Get active wiki
   const wiki = await getOrCreateActiveWiki(repo.id, repos);
 
-  // Check if wiki has content
-  const wikiPages = await repos.wikiPages.findByWiki(wiki.id);
+  // Check if wiki has content via CQRS query
+  const pagesQuery = createListWikiPagesQuery(wiki.id);
+  const pagesResult = await handleListWikiPages(pagesQuery, repos);
+  const wikiPages = pagesResult.data || [];
   if (wikiPages.length === 0) {
     console.error('Wiki is empty. Run "npm run cli process ." first to generate wiki content.');
     process.exit(1);

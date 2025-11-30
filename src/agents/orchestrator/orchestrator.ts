@@ -12,6 +12,34 @@ import {
 } from "./prompts.js";
 import { createOrchestratorRun } from "../../domain/orchestrator-run.js";
 
+// Import CQRS queries
+import {
+	createListWikiPagesQuery,
+	handleListWikiPages,
+	createListWorkItemsQuery,
+	handleListWorkItems,
+	createGetPendingWorkKeysQuery,
+	handleGetPendingWorkKeys,
+	createCountPendingWorkQuery,
+	handleCountPendingWork,
+	createListAgentRunsQuery,
+	handleListAgentRuns,
+	createListCommitsQuery,
+	handleListCommits,
+	createListUnprocessedCommitsQuery,
+	handleListUnprocessedCommits,
+	createCountCommitsByRepoQuery,
+	handleCountCommitsByRepo,
+	createCountProcessedByAgentQuery,
+	handleCountProcessedByAgent,
+	createListOpenConflictsQuery,
+	handleListOpenConflicts,
+	createListOpenFindingsQuery,
+	handleListOpenFindings,
+	createListLowConfidencePagesQuery,
+	handleListLowConfidencePages,
+} from "../../queries/index.js";
+
 /**
  * Analysis agents that process commits.
  * Order matters - code-change runs first to establish base wiki content,
@@ -115,25 +143,32 @@ export class Orchestrator {
 		repoId: string,
 		wikiId: string
 	): Promise<WorkItem | null> {
-		const wikiPages = await this.repos.wikiPages.findByWiki(wikiId);
+		// Use CQRS query to list wiki pages
+		const pagesQuery = createListWikiPagesQuery(wikiId);
+		const pagesResult = await handleListWikiPages(pagesQuery, this.repos);
+		const wikiPages = pagesResult.data || [];
 
 		// Only bootstrap empty wikis
 		if (wikiPages.length > 0) {
 			return null;
 		}
 
-		// Check if bootstrap work already pending
-		const bootstrapWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+		// Check if bootstrap work already pending via CQRS query
+		const workQuery = createListWorkItemsQuery(repoId, {
 			agentType: "bootstrap",
 			status: "pending",
 		});
+		const workResult = await handleListWorkItems(workQuery, this.repos);
+		const bootstrapWorkExists = workResult.data || [];
 
 		if (bootstrapWorkExists.length > 0) {
 			return null; // Already pending, let it run
 		}
 
-		// Check if bootstrap has already completed
-		const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
+		// Check if bootstrap has already completed via CQRS query
+		const runsQuery = createListAgentRunsQuery(repoId);
+		const runsResult = await handleListAgentRuns(runsQuery, this.repos);
+		const recentRuns = runsResult.data || [];
 		const bootstrapCompleted = recentRuns.some(
 			(r) => r.agentType === "bootstrap" && r.status === "completed"
 		);
@@ -161,8 +196,10 @@ export class Orchestrator {
 	): Promise<WorkItem[]> {
 		const startTime = Date.now();
 
-		// Fetch existing work keys upfront for O(1) deduplication
-		const existingWorkKeys = await this.repos.workQueue.getPendingKeys(repoId);
+		// Fetch existing work keys upfront for O(1) deduplication via CQRS query
+		const keysQuery = createGetPendingWorkKeysQuery(repoId);
+		const keysResult = await handleGetPendingWorkKeys(keysQuery, this.repos);
+		const existingWorkKeys = keysResult.data || new Set<string>();
 
 		// Gather context
 		const context = await this.contextGatherer.gather(repoId, wikiId);
@@ -188,8 +225,10 @@ export class Orchestrator {
 			temperature: 0.3,
 		});
 
-		// Get valid commit SHAs for validation (use sha, not internal id)
-		const commits = await this.repos.commits.findByRepo(repoId, { limit: 100 });
+		// Get valid commit SHAs for validation (use sha, not internal id) via CQRS query
+		const commitsQuery = createListCommitsQuery(repoId, { limit: 100 });
+		const commitsResult = await handleListCommits(commitsQuery, this.repos);
+		const commits = commitsResult.data || [];
 		const validCommitIds = new Set(commits.map((c) => c.sha));
 
 		// Parse response
@@ -269,16 +308,28 @@ export class Orchestrator {
 	): Promise<WorkItem[]> {
 		const workItems: WorkItem[] = [];
 
-		// Fetch existing work keys upfront for O(1) deduplication
-		const existingWorkKeys = await this.repos.workQueue.getPendingKeys(repoId);
+		// Fetch existing work keys upfront for O(1) deduplication via CQRS query
+		const keysQuery = createGetPendingWorkKeysQuery(repoId);
+		const keysResult = await handleGetPendingWorkKeys(keysQuery, this.repos);
+		const existingWorkKeys = keysResult.data || new Set<string>();
 
-		// Get current state
-		const [wikiPages, pendingWork, openConflicts, commits] = await Promise.all([
-			this.repos.wikiPages.findByWiki(wikiId),
-			this.repos.workQueue.countPending(repoId),
-			this.repos.conflicts.findOpen(wikiId),
-			this.repos.commits.findByRepo(repoId, { limit: 100 }),
+		// Get current state via CQRS queries
+		const pagesQuery = createListWikiPagesQuery(wikiId);
+		const pendingQuery = createCountPendingWorkQuery(repoId);
+		const conflictsQuery = createListOpenConflictsQuery(wikiId);
+		const commitsQuery = createListCommitsQuery(repoId, { limit: 100 });
+
+		const [pagesResult, pendingResult, conflictsResult, commitsResult] = await Promise.all([
+			handleListWikiPages(pagesQuery, this.repos),
+			handleCountPendingWork(pendingQuery, this.repos),
+			handleListOpenConflicts(conflictsQuery, this.repos),
+			handleListCommits(commitsQuery, this.repos),
 		]);
+
+		const wikiPages = pagesResult.data || [];
+		const pendingWork = pendingResult.data || 0;
+		const openConflicts = conflictsResult.data || [];
+		const commits = commitsResult.data || [];
 
 		// If there's already pending work, don't add more
 		if (pendingWork >= maxItems) {
@@ -290,17 +341,19 @@ export class Orchestrator {
 		// Strategy 0: Bootstrap empty wikis FIRST
 		// This must run before any commit processing to establish foundation pages
 		if (wikiPages.length === 0) {
-			const bootstrapWorkExists = await this.repos.workQueue.findByRepo(
-				repoId,
-				{
-					agentType: "bootstrap",
-					status: "pending",
-				}
-			);
+			// Check if bootstrap work already pending via CQRS query
+			const bootstrapWorkQuery = createListWorkItemsQuery(repoId, {
+				agentType: "bootstrap",
+				status: "pending",
+			});
+			const bootstrapWorkResult = await handleListWorkItems(bootstrapWorkQuery, this.repos);
+			const bootstrapWorkExists = bootstrapWorkResult.data || [];
 
 			if (bootstrapWorkExists.length === 0) {
-				// Check if bootstrap has already run (by looking for completed runs)
-				const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
+				// Check if bootstrap has already run (by looking for completed runs) via CQRS query
+				const runsQuery = createListAgentRunsQuery(repoId);
+				const runsResult = await handleListAgentRuns(runsQuery, this.repos);
+				const recentRuns = runsResult.data || [];
 				const bootstrapCompleted = recentRuns.some(
 					(r) => r.agentType === "bootstrap" && r.status === "completed"
 				);
@@ -330,8 +383,10 @@ export class Orchestrator {
 		for (const agentType of ANALYSIS_AGENTS) {
 			if (workItems.length >= remainingSlots) break;
 
-			const unprocessedCommits =
-				await this.repos.commits.findUnprocessedByAgent(repoId, agentType);
+			// Use CQRS query to find unprocessed commits
+			const unprocessedQuery = createListUnprocessedCommitsQuery(repoId, agentType);
+			const unprocessedResult = await handleListUnprocessedCommits(unprocessedQuery, this.repos);
+			const unprocessedCommits = unprocessedResult.data || [];
 
 			// Sort by date - recent commits first
 			unprocessedCommits.sort(
@@ -372,23 +427,27 @@ export class Orchestrator {
 
 		// Strategy 3: Improve low-confidence pages
 		if (workItems.length < remainingSlots) {
-			const lowConfidencePages = await this.repos.wikiPages.findLowConfidence(
-				wikiId,
-				0.5
-			);
+			// Use CQRS query to find low confidence pages
+			const lowConfQuery = createListLowConfidencePagesQuery(wikiId, 0.5);
+			const lowConfResult = await handleListLowConfidencePages(lowConfQuery, this.repos);
+			const lowConfidencePages = lowConfResult.data || [];
 			// TODO: Add quality improvement work items when we have meta agents
 		}
 
 		// Strategy 4: Meta agents (run on wiki after analysis is complete)
 		// Only run meta agents when all commits have been analyzed by code-change
 		if (workItems.length < remainingSlots && wikiPages.length >= 2) {
-			const unprocessedByCodeChange =
-				await this.repos.commits.findUnprocessedByAgent(repoId, "code-change");
+			// Use CQRS query to find unprocessed commits
+			const unprocessedQuery = createListUnprocessedCommitsQuery(repoId, "code-change");
+			const unprocessedResult = await handleListUnprocessedCommits(unprocessedQuery, this.repos);
+			const unprocessedByCodeChange = unprocessedResult.data || [];
 
 			// Only run meta agents when analysis is mostly complete
 			if (unprocessedByCodeChange.length === 0) {
-				// Fetch recent agent runs for checking if meta agents ran recently
-				const recentRuns = await this.repos.agentRuns.findByRepo(repoId);
+				// Fetch recent agent runs for checking if meta agents ran recently via CQRS query
+				const runsQuery = createListAgentRunsQuery(repoId);
+				const runsResult = await handleListAgentRuns(runsQuery, this.repos);
+				const recentRuns = runsResult.data || [];
 
 				// Check for pages without links (need link agent)
 				const pagesWithoutLinks = wikiPages.filter((p) => p.links.length === 0);
@@ -495,7 +554,10 @@ export class Orchestrator {
 				// Strategy 4b: Consolidation agent - address findings from meta agents
 				// Runs when there are open findings that need consolidation
 				if (workItems.length < remainingSlots) {
-					const openFindings = await this.repos.findings.findOpen(wikiId);
+					// Use CQRS query to find open findings
+					const findingsQuery = createListOpenFindingsQuery(wikiId);
+					const findingsResult = await handleListOpenFindings(findingsQuery, this.repos);
+					const openFindings = findingsResult.data || [];
 
 					if (openFindings.length > 0) {
 						// Check if consolidation agent ran recently
@@ -529,8 +591,10 @@ export class Orchestrator {
 
 		// Strategy 5: Synthesis work (when we have enough raw material)
 		if (workItems.length < remainingSlots && wikiPages.length >= 5) {
-			// Fetch recent agent runs for synthesis checks
-			const synthRuns = await this.repos.agentRuns.findByRepo(repoId);
+			// Fetch recent agent runs for synthesis checks via CQRS query
+			const synthRunsQuery = createListAgentRunsQuery(repoId);
+			const synthRunsResult = await handleListAgentRuns(synthRunsQuery, this.repos);
+			const synthRuns = synthRunsResult.data || [];
 
 			// Group pages by category
 			const categories = new Map<string, typeof wikiPages>();
@@ -773,13 +837,13 @@ export class Orchestrator {
 				);
 
 				if (!hasWikiIndex) {
-					const wikiIndexWorkExists = await this.repos.workQueue.findByRepo(
-						repoId,
-						{
-							agentType: "wiki-index",
-							status: "pending",
-						}
-					);
+					// Use CQRS query to check for existing wiki-index work
+					const wikiIndexWorkQuery = createListWorkItemsQuery(repoId, {
+						agentType: "wiki-index",
+						status: "pending",
+					});
+					const wikiIndexWorkResult = await handleListWorkItems(wikiIndexWorkQuery, this.repos);
+					const wikiIndexWorkExists = wikiIndexWorkResult.data || [];
 
 					const recentWikiIndexRuns = synthRuns
 						.filter(
@@ -827,10 +891,13 @@ export class Orchestrator {
 				});
 
 				if (pagesNeedingToc.length > 0) {
-					const tocWorkExists = await this.repos.workQueue.findByRepo(repoId, {
+					// Use CQRS query to check for existing toc work
+					const tocWorkQuery = createListWorkItemsQuery(repoId, {
 						agentType: "toc",
 						status: "pending",
 					});
+					const tocWorkResult = await handleListWorkItems(tocWorkQuery, this.repos);
+					const tocWorkExists = tocWorkResult.data || [];
 
 					const recentTocRuns = synthRuns
 						.filter(
@@ -859,30 +926,37 @@ export class Orchestrator {
 	 * Check if there's more work to do for a repository/wiki.
 	 */
 	async hasMoreWork(repoId: string, wikiId: string): Promise<boolean> {
-		// Check for pending work
-		const pendingCount = await this.repos.workQueue.countPending(repoId);
+		// Check for pending work via CQRS query
+		const pendingQuery = createCountPendingWorkQuery(repoId);
+		const pendingResult = await handleCountPendingWork(pendingQuery, this.repos);
+		const pendingCount = pendingResult.data || 0;
 		if (pendingCount > 0) return true;
 
 		// Check for unprocessed commits across all analysis agents
 		for (const agentType of ANALYSIS_AGENTS) {
-			const unprocessedCommits =
-				await this.repos.commits.findUnprocessedByAgent(repoId, agentType);
+			// Use CQRS query to find unprocessed commits
+			const unprocessedQuery = createListUnprocessedCommitsQuery(repoId, agentType);
+			const unprocessedResult = await handleListUnprocessedCommits(unprocessedQuery, this.repos);
+			const unprocessedCommits = unprocessedResult.data || [];
 			if (unprocessedCommits.length > 0) return true;
 		}
 
-		// Check for open conflicts
-		const openConflicts = await this.repos.conflicts.findOpen(wikiId);
+		// Check for open conflicts via CQRS query
+		const conflictsQuery = createListOpenConflictsQuery(wikiId);
+		const conflictsResult = await handleListOpenConflicts(conflictsQuery, this.repos);
+		const openConflicts = conflictsResult.data || [];
 		if (openConflicts.length > 0) return true;
 
-		// Check for low-confidence pages
-		const lowConfidencePages = await this.repos.wikiPages.findLowConfidence(
-			wikiId,
-			0.5
-		);
+		// Check for low-confidence pages via CQRS query
+		const lowConfQuery = createListLowConfidencePagesQuery(wikiId, 0.5);
+		const lowConfResult = await handleListLowConfidencePages(lowConfQuery, this.repos);
+		const lowConfidencePages = lowConfResult.data || [];
 		if (lowConfidencePages.length > 0) return true;
 
-		// Check for open findings that need consolidation
-		const openFindings = await this.repos.findings.findOpen(wikiId);
+		// Check for open findings that need consolidation via CQRS query
+		const findingsQuery = createListOpenFindingsQuery(wikiId);
+		const findingsResult = await handleListOpenFindings(findingsQuery, this.repos);
+		const openFindings = findingsResult.data || [];
 		if (openFindings.length > 0) return true;
 
 		return false;
@@ -892,31 +966,47 @@ export class Orchestrator {
 	 * Get a summary of the current work state.
 	 */
 	async getWorkSummary(repoId: string, wikiId: string): Promise<WorkSummary> {
-		const [totalCommits, pendingWork, wikiPages, openConflicts, openFindings] =
-			await Promise.all([
-				this.repos.commits.countByRepo(repoId),
-				this.repos.workQueue.countPending(repoId),
-				this.repos.wikiPages.findByWiki(wikiId),
-				this.repos.conflicts.findOpen(wikiId),
-				this.repos.findings.findOpen(wikiId),
-			]);
+		// Use CQRS queries to get all data
+		const totalCommitsQuery = createCountCommitsByRepoQuery(repoId);
+		const pendingWorkQuery = createCountPendingWorkQuery(repoId);
+		const wikiPagesQuery = createListWikiPagesQuery(wikiId);
+		const openConflictsQuery = createListOpenConflictsQuery(wikiId);
+		const openFindingsQuery = createListOpenFindingsQuery(wikiId);
 
-		// Get per-agent coverage
+		const [
+			totalCommitsResult,
+			pendingWorkResult,
+			wikiPagesResult,
+			openConflictsResult,
+			openFindingsResult,
+		] = await Promise.all([
+			handleCountCommitsByRepo(totalCommitsQuery, this.repos),
+			handleCountPendingWork(pendingWorkQuery, this.repos),
+			handleListWikiPages(wikiPagesQuery, this.repos),
+			handleListOpenConflicts(openConflictsQuery, this.repos),
+			handleListOpenFindings(openFindingsQuery, this.repos),
+		]);
+
+		const totalCommits = totalCommitsResult.data || 0;
+		const pendingWork = pendingWorkResult.data || 0;
+		const wikiPages = wikiPagesResult.data || [];
+		const openConflicts = openConflictsResult.data || [];
+		const openFindings = openFindingsResult.data || [];
+
+		// Get per-agent coverage via CQRS queries
 		const agentCoverage: Record<string, number> = {};
 		for (const agentType of ANALYSIS_AGENTS) {
-			const processed = await this.repos.commits.countProcessedByAgent(
-				repoId,
-				agentType
-			);
+			const processedQuery = createCountProcessedByAgentQuery(repoId, agentType);
+			const processedResult = await handleCountProcessedByAgent(processedQuery, this.repos);
+			const processed = processedResult.data || 0;
 			agentCoverage[agentType] =
 				totalCommits > 0 ? (processed / totalCommits) * 100 : 0;
 		}
 
-		// Overall coverage is based on code-change (primary agent)
-		const processedCommits = await this.repos.commits.countProcessedByAgent(
-			repoId,
-			"code-change"
-		);
+		// Overall coverage is based on code-change (primary agent) via CQRS query
+		const codeChangeProcessedQuery = createCountProcessedByAgentQuery(repoId, "code-change");
+		const codeChangeProcessedResult = await handleCountProcessedByAgent(codeChangeProcessedQuery, this.repos);
+		const processedCommits = codeChangeProcessedResult.data || 0;
 
 		const avgConfidence =
 			wikiPages.length > 0

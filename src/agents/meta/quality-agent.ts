@@ -2,6 +2,7 @@ import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
  * Quality Agent - Reviews wiki content quality and suggests improvements.
@@ -26,7 +27,10 @@ export class QualityAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const pages = pagesResult.data || [];
 
     if (pages.length < 2) {
       return {

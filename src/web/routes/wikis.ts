@@ -13,6 +13,18 @@ import {
 } from '../../commands/wiki.js';
 import type { Dependencies } from './index.js';
 
+// Import CQRS queries
+import {
+  createGetRepositoryQuery,
+  handleGetRepository,
+  createGetWikiQuery,
+  handleGetWiki,
+  createListWikisQuery,
+  handleListWikis,
+  createListWikiPagesQuery,
+  handleListWikiPages,
+} from '../../queries/index.js';
+
 /**
  * Create wiki management routes.
  */
@@ -25,14 +37,19 @@ export function createWikisRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id/wikis', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
-      const wikis = await repos.wikis.findByRepo(repo.id);
-      res.json(wikis);
+      // Use CQRS query to list wikis
+      const wikisQuery = createListWikisQuery(repo.id);
+      const wikisResult = await handleListWikis(wikisQuery, repos);
+      res.json(wikisResult.data || []);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
@@ -43,11 +60,14 @@ export function createWikisRoutes(deps: Dependencies): Router {
    */
   router.post('/api/repos/:id/wikis', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
       const { name, description, branchFilter, pathFilters, setActive } = req.body;
       if (!name) {
@@ -81,13 +101,19 @@ export function createWikisRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
     try {
-      const wiki = await repos.wikis.findById(req.params.wikiId!);
-      if (!wiki || wiki.repoId !== req.params.id) {
+      // Use CQRS query to get wiki
+      const wikiQuery = createGetWikiQuery(req.params.wikiId!);
+      const wikiResult = await handleGetWiki(wikiQuery, repos);
+      if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== req.params.id) {
         res.status(404).json({ error: 'Wiki not found' });
         return;
       }
+      const wiki = wikiResult.data;
 
-      const pages = await repos.wikiPages.findByWiki(wiki.id);
+      // Use CQRS query to get wiki pages
+      const pagesQuery = createListWikiPagesQuery(wiki.id);
+      const pagesResult = await handleListWikiPages(pagesQuery, repos);
+      const pages = pagesResult.data || [];
 
       res.json({
         ...wiki,
@@ -108,11 +134,14 @@ export function createWikisRoutes(deps: Dependencies): Router {
    */
   router.put('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
     try {
-      const wiki = await repos.wikis.findById(req.params.wikiId!);
-      if (!wiki || wiki.repoId !== req.params.id) {
+      // Use CQRS query to get wiki
+      const wikiQuery = createGetWikiQuery(req.params.wikiId!);
+      const wikiResult = await handleGetWiki(wikiQuery, repos);
+      if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== req.params.id) {
         res.status(404).json({ error: 'Wiki not found' });
         return;
       }
+      const wiki = wikiResult.data;
 
       const { name, description, branchFilter, pathFilters } = req.body;
 
@@ -132,9 +161,10 @@ export function createWikisRoutes(deps: Dependencies): Router {
         return;
       }
 
-      // Fetch updated wiki to return
-      const updatedWiki = await repos.wikis.findById(wiki.id);
-      res.json(updatedWiki);
+      // Fetch updated wiki via CQRS query
+      const updatedWikiQuery = createGetWikiQuery(wiki.id);
+      const updatedWikiResult = await handleGetWiki(updatedWikiQuery, repos);
+      res.json(updatedWikiResult.data);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
@@ -145,11 +175,14 @@ export function createWikisRoutes(deps: Dependencies): Router {
    */
   router.delete('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
     try {
-      const wiki = await repos.wikis.findById(req.params.wikiId!);
-      if (!wiki || wiki.repoId !== req.params.id) {
+      // Use CQRS query to get wiki
+      const wikiQuery = createGetWikiQuery(req.params.wikiId!);
+      const wikiResult = await handleGetWiki(wikiQuery, repos);
+      if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== req.params.id) {
         res.status(404).json({ error: 'Wiki not found' });
         return;
       }
+      const wiki = wikiResult.data;
 
       // Use DeleteWiki CQRS command (handles active check and page deletion)
       const result = await handleDeleteWiki(
@@ -173,11 +206,14 @@ export function createWikisRoutes(deps: Dependencies): Router {
    */
   router.post('/api/repos/:id/wikis/:wikiId/activate', async (req: Request, res: Response) => {
     try {
-      const wiki = await repos.wikis.findById(req.params.wikiId!);
-      if (!wiki || wiki.repoId !== req.params.id) {
+      // Use CQRS query to get wiki
+      const wikiQuery = createGetWikiQuery(req.params.wikiId!);
+      const wikiResult = await handleGetWiki(wikiQuery, repos);
+      if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== req.params.id) {
         res.status(404).json({ error: 'Wiki not found' });
         return;
       }
+      const wiki = wikiResult.data;
 
       const command = createSetActiveWikiCommand(wiki.id);
       const result = await handleSetActiveWiki(command, repos);

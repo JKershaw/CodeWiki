@@ -3,6 +3,7 @@ import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
  * Link Agent - Manages cross-references between wiki pages.
@@ -19,7 +20,10 @@ export class LinkAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const pages = pagesResult.data || [];
 
     if (pages.length < 2) {
       return {

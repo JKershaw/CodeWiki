@@ -1,6 +1,7 @@
 import type { Repositories } from '../../repositories/index.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
  * Research Agent - A shared service for querying the wiki.
@@ -75,12 +76,15 @@ export class ResearchAgent {
     wikiId: string,
     question: string
   ): Promise<RelevantPage[]> {
-    // Get all wiki pages for this wiki
-    const allPages = await this.repos.wikiPages.findByWiki(wikiId);
+    // Get all wiki pages for this wiki via CQRS query
+    const query = createListWikiPagesQuery(wikiId);
+    const result = await handleListWikiPages(query, this.repos);
 
-    if (allPages.length === 0) {
+    if (!result.success || !result.data || result.data.length === 0) {
       return [];
     }
+
+    const allPages = result.data;
 
     // Extract keywords from the question
     const keywords = this.extractKeywords(question);

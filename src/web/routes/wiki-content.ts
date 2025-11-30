@@ -6,6 +6,18 @@ import { Router, type Request, type Response } from 'express';
 import { getOrCreateActiveWiki } from '../../commands/create-wiki.js';
 import type { Dependencies } from './index.js';
 
+// Import CQRS queries
+import {
+  createGetRepositoryQuery,
+  handleGetRepository,
+  createGetWikiQuery,
+  handleGetWiki,
+  createListWikiPagesQuery,
+  handleListWikiPages,
+  createGetWikiPageQuery,
+  handleGetWikiPage,
+} from '../../queries/index.js';
+
 /**
  * Create wiki content routes.
  */
@@ -19,24 +31,33 @@ export function createWikiContentRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id/wiki', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
       // Use specified wiki or active wiki
       let wiki;
       if (req.query.wikiId) {
-        wiki = await repos.wikis.findById(req.query.wikiId as string);
-        if (!wiki || wiki.repoId !== repo.id) {
+        // Use CQRS query to get wiki
+        const wikiQuery = createGetWikiQuery(req.query.wikiId as string);
+        const wikiResult = await handleGetWiki(wikiQuery, repos);
+        if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== repo.id) {
           res.status(404).json({ error: 'Wiki not found' });
           return;
         }
+        wiki = wikiResult.data;
       } else {
         wiki = await getOrCreateActiveWiki(repo.id, repos);
       }
-      const pages = await repos.wikiPages.findByWiki(wiki.id);
+      // Use CQRS query to get wiki pages
+      const pagesQuery = createListWikiPagesQuery(wiki.id);
+      const pagesResult = await handleListWikiPages(pagesQuery, repos);
+      const pages = pagesResult.data || [];
 
       // Group by category (first part of path)
       const grouped: Record<string, typeof pages> = {};
@@ -58,30 +79,38 @@ export function createWikiContentRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id/wiki/:path(*)', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
       // Use specified wiki or active wiki
       let wiki;
       if (req.query.wikiId) {
-        wiki = await repos.wikis.findById(req.query.wikiId as string);
-        if (!wiki || wiki.repoId !== repo.id) {
+        // Use CQRS query to get wiki
+        const wikiQuery = createGetWikiQuery(req.query.wikiId as string);
+        const wikiResult = await handleGetWiki(wikiQuery, repos);
+        if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== repo.id) {
           res.status(404).json({ error: 'Wiki not found' });
           return;
         }
+        wiki = wikiResult.data;
       } else {
         wiki = await getOrCreateActiveWiki(repo.id, repos);
       }
-      const page = await repos.wikiPages.findByPath(wiki.id, req.params.path!);
-      if (!page) {
+      // Use CQRS query to get wiki page
+      const pageQuery = createGetWikiPageQuery(wiki.id, req.params.path!);
+      const pageResult = await handleGetWikiPage(pageQuery, repos);
+      if (!pageResult.success || !pageResult.data) {
         res.status(404).json({ error: 'Wiki page not found' });
         return;
       }
 
-      res.json(page);
+      res.json(pageResult.data);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

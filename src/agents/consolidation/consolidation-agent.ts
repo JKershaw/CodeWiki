@@ -4,6 +4,15 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { FindingGroup } from '../../domain/finding.js';
 import type { FindingHandlerRegistry } from './finding-handler-registry.js';
 import { createDefaultHandlerRegistry } from './finding-handler-registry.js';
+import { createGroupOpenFindingsQuery, handleGroupOpenFindings } from '../../queries/index.js';
+import {
+  createMarkFindingInProgressCommand,
+  handleMarkFindingInProgress,
+  createMarkFindingAddressedCommand,
+  handleMarkFindingAddressed,
+  createResetFindingToOpenCommand,
+  handleResetFindingToOpen,
+} from '../../commands/index.js';
 
 /**
  * Consolidation Agent - Self-healing wiki maintenance.
@@ -33,8 +42,10 @@ export class ConsolidationAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    // Get open findings grouped for consolidation
-    const findingGroups = await context.repos.findings.groupOpenFindings(context.wikiId);
+    // Get open findings grouped for consolidation via CQRS query
+    const findingsQuery = createGroupOpenFindingsQuery(context.wikiId);
+    const findingsResult = await handleGroupOpenFindings(findingsQuery, context.repos);
+    const findingGroups = findingsResult.data || [];
 
     if (findingGroups.length === 0) {
       return {
@@ -100,16 +111,17 @@ export class ConsolidationAgent implements Agent {
   }
 
   /**
-   * Mark all findings in a group as in progress.
+   * Mark all findings in a group as in progress via CQRS commands.
    */
   private async markFindingsInProgress(group: FindingGroup, context: AgentContext): Promise<void> {
     for (const finding of group.findings) {
-      await context.repos.findings.markInProgress(finding.id, '');
+      const command = createMarkFindingInProgressCommand(finding.id, '');
+      await handleMarkFindingInProgress(command, context.repos);
     }
   }
 
   /**
-   * Mark all findings in a group as addressed.
+   * Mark all findings in a group as addressed via CQRS commands.
    */
   private async markFindingsAddressed(
     group: FindingGroup,
@@ -117,20 +129,18 @@ export class ConsolidationAgent implements Agent {
     context: AgentContext
   ): Promise<void> {
     for (const finding of group.findings) {
-      await context.repos.findings.markAddressed(finding.id, agentRunId);
+      const command = createMarkFindingAddressedCommand(finding.id, agentRunId);
+      await handleMarkFindingAddressed(command, context.repos);
     }
   }
 
   /**
-   * Reset all findings in a group back to open status.
+   * Reset all findings in a group back to open status via CQRS commands.
    */
   private async resetFindingsToOpen(group: FindingGroup, context: AgentContext): Promise<void> {
     for (const finding of group.findings) {
-      await context.repos.findings.save({
-        ...finding,
-        status: 'open',
-        addressedByAgentRunId: null,
-      });
+      const command = createResetFindingToOpenCommand(finding.id);
+      await handleResetFindingToOpen(command, context.repos);
     }
   }
 }

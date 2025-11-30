@@ -3,6 +3,7 @@ import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
+import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 
 /**
  * Code Change Agent - Standard analysis of what changed in a commit.
@@ -14,11 +15,13 @@ export class CodeChangeAgent implements Agent {
   readonly type: AgentType = 'code-change';
 
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
-    // Get the commit from the repository
-    const commit = await context.repos.commits.findById(commitId);
-    if (!commit) {
+    // Get the commit via CQRS query
+    const commitQuery = createGetCommitQuery(commitId);
+    const commitResult = await handleGetCommit(commitQuery, context.repos);
+    if (!commitResult.success || !commitResult.data) {
       throw new Error(`Commit not found: ${commitId}`);
     }
+    const commit = commitResult.data;
 
     // Get the diff for this commit
     const diff = await context.git.getCommitDiff(context.repoId, commit.sha);

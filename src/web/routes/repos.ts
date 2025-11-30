@@ -18,6 +18,20 @@ import { createOrchestrator } from '../../agents/orchestrator/orchestrator.js';
 import { createExecutor } from '../../executor/executor.js';
 import type { Dependencies } from './index.js';
 
+// Import CQRS queries
+import {
+  createGetRepositoryQuery,
+  handleGetRepository,
+  createGetRepositoryByFullNameQuery,
+  handleGetRepositoryByFullName,
+  createListRepositoriesQuery,
+  handleListRepositories,
+  createListWikisQuery,
+  handleListWikis,
+  createListCommitsQuery,
+  handleListCommits,
+} from '../../queries/index.js';
+
 /**
  * Create repository management routes.
  */
@@ -30,12 +44,19 @@ export function createReposRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos', async (_req: Request, res: Response) => {
     try {
-      const allRepos = await repos.repos.findAll();
+      // Use CQRS query to list repositories
+      const listQuery = createListRepositoriesQuery();
+      const listResult = await handleListRepositories(listQuery, repos);
+      const allRepos = listResult.data || [];
+
       const reposWithStatus = await Promise.all(
         allRepos.map(async (repo) => {
           const orchestrator = createOrchestrator(repos);
           const wiki = await getOrCreateActiveWiki(repo.id, repos);
-          const allWikis = await repos.wikis.findByRepo(repo.id);
+          // Use CQRS query to list wikis
+          const wikisQuery = createListWikisQuery(repo.id);
+          const wikisResult = await handleListWikis(wikisQuery, repos);
+          const allWikis = wikisResult.data || [];
           const summary = await orchestrator.getWorkSummary(repo.id, wiki.id);
           return {
             id: repo.id,
@@ -62,15 +83,21 @@ export function createReposRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
       const orchestrator = createOrchestrator(repos);
       const wiki = await getOrCreateActiveWiki(repo.id, repos);
-      const allWikis = await repos.wikis.findByRepo(repo.id);
+      // Use CQRS query to list wikis
+      const wikisQuery = createListWikisQuery(repo.id);
+      const wikisResult = await handleListWikis(wikisQuery, repos);
+      const allWikis = wikisResult.data || [];
       const summary = await orchestrator.getWorkSummary(repo.id, wiki.id);
 
       res.json({
@@ -103,8 +130,10 @@ export function createReposRoutes(deps: Dependencies): Router {
 
       const absolutePath = resolve(repoPath);
 
-      // Check if repo already exists
-      let repo = await repos.repos.findByFullName(absolutePath);
+      // Check if repo already exists (via CQRS query)
+      const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
+      const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
+      let repo = repoResult.data ?? null;
 
       if (!repo) {
         // Use RegisterRepository command
@@ -192,11 +221,14 @@ export function createReposRoutes(deps: Dependencies): Router {
    */
   router.post('/api/repos/:id/process', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
       const iterations = req.body.iterations || 5;
       const llm = createLLM();
@@ -240,14 +272,19 @@ export function createReposRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id/commits', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
-      const commits = await repos.commits.findByRepo(repo.id);
-      res.json(commits);
+      // Use CQRS query to get commits
+      const commitsQuery = createListCommitsQuery(repo.id);
+      const commitsResult = await handleListCommits(commitsQuery, repos);
+      res.json(commitsResult.data || []);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

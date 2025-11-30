@@ -33,6 +33,11 @@
  * - UpdateWikiSettings: Update wiki configuration
  * - DeleteWiki: Delete a wiki and its pages
  * - SaveOrchestratorRun: Save orchestrator run results
+ * - CreateFindings: Create one or more findings
+ * - MarkFindingInProgress: Mark a finding as being addressed
+ * - MarkFindingAddressed: Mark a finding as addressed
+ * - MarkFindingDismissed: Dismiss a finding
+ * - ResetFindingToOpen: Reset a finding back to open status
  */
 
 export * from './types.js';
@@ -47,3 +52,4 @@ export * from './iteration.js';
 export * from './repository.js';
 export * from './wiki.js';
 export * from './orchestrator-run.js';
+export * from './finding.js';

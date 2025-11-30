@@ -1,6 +1,7 @@
 import type { AgentContext, AgentRunResult } from '../base-agent.js';
 import type { FindingGroup, FindingType } from '../../domain/finding.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
+import { createGetWikiPageQuery, handleGetWikiPage } from '../../queries/index.js';
 
 /**
  * Result from processing a finding group.
@@ -36,14 +37,15 @@ export interface FindingHandler {
  */
 export const HandlerUtils = {
   /**
-   * Load wiki pages by their paths.
+   * Load wiki pages by their paths via CQRS queries.
    */
   async loadPages(paths: string[], context: AgentContext): Promise<WikiPage[]> {
     const pages: WikiPage[] = [];
     for (const path of paths) {
-      const page = await context.repos.wikiPages.findByPath(context.wikiId, path);
-      if (page) {
-        pages.push(page);
+      const pageQuery = createGetWikiPageQuery(context.wikiId, path);
+      const pageResult = await handleGetWikiPage(pageQuery, context.repos);
+      if (pageResult.success && pageResult.data) {
+        pages.push(pageResult.data);
       }
     }
     return pages;
