@@ -446,6 +446,31 @@ export class Orchestrator {
 			// TODO: Add quality improvement work items when we have meta agents
 		}
 
+		// Strategy 3b: Process pending edit requests periodically
+		// Wiki-editor should run when edit requests pile up, not just after all analysis completes
+		// This prevents the wiki from staying empty while hundreds of commits are processed
+		const PENDING_EDITS_THRESHOLD = 5;
+		if (workItems.length < remainingSlots) {
+			const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
+			const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
+			const pendingEditCount = pendingEditsResult.data || 0;
+
+			if (pendingEditCount >= PENDING_EDITS_THRESHOLD) {
+				const wikiEditorKey = "wiki-editor:null";
+				if (!existingWorkKeys.has(wikiEditorKey)) {
+					existingWorkKeys.add(wikiEditorKey);
+					workItems.push(
+						createWorkItem({
+							id: uuid(),
+							repoId,
+							agentType: "wiki-editor",
+							priority: Priority.META + 10, // Higher priority - edits should be applied promptly
+						})
+					);
+				}
+			}
+		}
+
 		// Strategy 4: Meta agents (run on wiki after analysis is complete)
 		// Only run meta agents when all commits have been analyzed by code-change
 		if (workItems.length < remainingSlots && wikiPages.length >= 2) {
