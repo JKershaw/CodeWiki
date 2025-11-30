@@ -27,6 +27,7 @@ EXPLORATION AGENTS (run on directories/files - require targetPath, NOT targetCom
 - codebase-explorer: Documents undocumented code directories. Use when Directory Coverage shows < 20% coverage for a directory. This agent explores the actual source code (not commits) and creates wiki pages for parts of the codebase that have never been touched by commits. CRITICAL for fixing coverage plateaus.
 
 META AGENTS (run on wiki, not commits - no targetCommitId, no targetPath):
+- wiki-editor: Processes pending edit requests from analysis agents. Run FIRST when there are pending edits. Handles out-of-order commit processing intelligently.
 - link: Adds cross-references between pages. Run when pages lack links.
 - structure: Analyzes wiki organization. Run periodically when wiki grows.
 - quality: Reviews content quality. Run on low-confidence pages.
@@ -136,6 +137,7 @@ Generate up to ${maxItems} work items that would make the wiki most useful right
 **Current wiki size: ${pageCount} pages** - ${synthesisGuidance}
 
 Consider:
+- Pending edit requests: ${ctx.pendingEditRequests}${ctx.pendingEditRequests > 0 ? ' - run wiki-editor agent FIRST!' : ''}
 - Pages needing rewrite: ${ctx.pagesNeedingRewrite} (writer agent improves readability)
 - Categories without overview: ${ctx.categoriesWithoutOverview.join(', ') || 'none'} (overview agent helps navigation)
 - Has project overview: ${ctx.hasProjectOverview ? 'YES' : 'NO - run project-overview agent!'}
@@ -169,7 +171,7 @@ export interface OrchestratorDecision {
 
 const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency'];
 const EXPLORATION_AGENTS = ['codebase-explorer'];
-const META_AGENTS = ['link', 'structure', 'quality', 'consistency'];
+const META_AGENTS = ['wiki-editor', 'link', 'structure', 'quality', 'consistency'];
 const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'testing-guide', 'extension-guide', 'writer'];
 const ALL_AGENTS = [...ANALYSIS_AGENTS, ...EXPLORATION_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 

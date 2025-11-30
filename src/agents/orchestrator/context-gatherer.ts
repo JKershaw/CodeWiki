@@ -12,6 +12,8 @@ import {
   handleListWikiPages,
   createListAgentRunsQuery,
   handleListAgentRuns,
+  createCountPendingEditRequestsQuery,
+  handleCountPendingEditRequests,
 } from '../../queries/index.js';
 
 /**
@@ -70,6 +72,9 @@ export interface OrchestratorContext {
 
   // Directory coverage - which parts of the codebase are documented
   directoryCoverage: DirectoryCoverage[];
+
+  // Pending edit requests (from analysis agents, awaiting wiki-editor)
+  pendingEditRequests: number;
 }
 
 /**
@@ -100,20 +105,24 @@ export class ContextGatherer {
     const commitsQuery = createListCommitsQuery(repoId, { limit: 100 });
     const pagesQuery = createListWikiPagesQuery(wikiId);
     const runsQuery = createListAgentRunsQuery(repoId);
+    const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
 
     const [
       commitsResult,
       pagesResult,
       runsResult,
+      pendingEditsResult,
     ] = await Promise.all([
       handleListCommits(commitsQuery, this.repos),
       handleListWikiPages(pagesQuery, this.repos),
       handleListAgentRuns(runsQuery, this.repos),
+      handleCountPendingEditRequests(pendingEditsQuery, this.repos),
     ]);
 
     const commits = commitsResult.data || [];
     const wikiPages = pagesResult.data || [];
     const agentRuns = runsResult.data || [];
+    const pendingEditRequests = pendingEditsResult.data || 0;
 
     // Calculate commits by agent
     const commitsByAgent: Record<string, { processed: number; pending: number }> = {};
@@ -240,6 +249,7 @@ export class ContextGatherer {
       hasTestingGuide,
       hasExtensionGuide,
       directoryCoverage,
+      pendingEditRequests,
     };
   }
 
@@ -388,6 +398,9 @@ export class ContextGatherer {
     lines.push(`**Has extension guide (guides/extension-patterns):** ${ctx.hasExtensionGuide ? 'YES' : 'NO'}`);
     lines.push(`**Pages without links:** ${ctx.pagesWithoutLinks}`);
     lines.push(`**Low confidence pages:** ${ctx.lowConfidencePages}`);
+    if (ctx.pendingEditRequests > 0) {
+      lines.push(`**⚠️ Pending edit requests:** ${ctx.pendingEditRequests} (run wiki-editor agent!)`);
+    }
     lines.push('');
 
     // Recent commits (show full ID so LLM can reference them exactly)
