@@ -184,7 +184,7 @@ export class Orchestrator {
 		const completion = await this.llm!.complete({
 			system: ORCHESTRATOR_SYSTEM_PROMPT,
 			messages: [{ role: "user", content: userPrompt }],
-			maxTokens: 2000,
+			maxTokens: 4000, // Increased from 2000 - large work lists were being truncated
 			temperature: 0.3,
 		});
 
