@@ -155,6 +155,21 @@ nav {
   border-color: var(--text-secondary);
 }
 
+.btn.danger {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+
+.btn.danger:hover {
+  opacity: 0.9;
+}
+
+.btn.small {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
 /* Views */
 .view {
   display: none;
@@ -387,7 +402,13 @@ nav {
 .progress-text {
   font-size: 0.85rem;
   color: var(--text-secondary);
-  text-align: center;
+}
+
+.progress-text-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
 }
 
 /* Wiki Layout */

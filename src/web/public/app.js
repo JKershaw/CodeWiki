@@ -178,7 +178,7 @@ async function processRepo(id) {
         const { processing } = processingData;
         const { workQueue } = workQueueData;
 
-        if (processing && processing.status === 'running') {
+        if (processing && (processing.status === 'running' || processing.status === 'stopping')) {
           // Update progress display
           const percent = processing.totalIterations > 0
             ? Math.round((processing.completedIterations / processing.totalIterations) * 100)
@@ -189,17 +189,31 @@ async function processRepo(id) {
             progressText += ` - ${formatAgentType(processing.currentIteration.agentType)}`;
           }
 
+          const isStopping = processing.status === 'stopping';
+          const stopButtonHtml = isStopping
+            ? `<button class="btn danger small" disabled>Stopping...</button>`
+            : `<button class="btn danger small stop-btn" data-id="${id}">Stop</button>`;
+
           progressDiv.innerHTML = `
             <div class="progress-bar">
               <div class="progress-fill" style="width: ${percent}%"></div>
             </div>
-            <div class="progress-text">${progressText}</div>
+            <div class="progress-text-row">
+              <span class="progress-text">${progressText}</span>
+              ${stopButtonHtml}
+            </div>
           `;
+
+          // Add stop button event listener
+          const stopBtn = progressDiv.querySelector('.stop-btn');
+          if (stopBtn) {
+            stopBtn.addEventListener('click', () => stopProcessing(id, stopBtn));
+          }
 
           // Update job list display
           jobListDiv.innerHTML = renderJobList(workQueue);
 
-          btn.textContent = `Processing... ${percent}%`;
+          btn.textContent = isStopping ? 'Stopping...' : `Processing... ${percent}%`;
           setTimeout(pollStatus, 1500);
         } else {
           // Processing complete
@@ -220,6 +234,22 @@ async function processRepo(id) {
     iterationInput.disabled = false;
     if (progressDiv) progressDiv.remove();
     if (jobListDiv) jobListDiv.remove();
+  }
+}
+
+async function stopProcessing(id, stopBtn) {
+  stopBtn.disabled = true;
+  stopBtn.textContent = 'Stopping...';
+
+  try {
+    await api(`/repos/${id}/processing/stop`, {
+      method: 'PATCH',
+    });
+    // Polling will detect the status change and update the UI
+  } catch (error) {
+    alert('Error stopping processing: ' + error.message);
+    stopBtn.disabled = false;
+    stopBtn.textContent = 'Stop';
   }
 }
 
