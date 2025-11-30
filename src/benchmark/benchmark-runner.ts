@@ -63,10 +63,14 @@ export class BenchmarkRunner {
     const runId = randomUUID();
 
     try {
-      // Load questions
+      // Get repo name for loading questions
+      const repo = await this.repos.repos.findById(repoId);
+      const repoName = repo?.fullName?.split('/').pop();
+
+      // Load questions (repo-specific or default fallback)
       const questions = options.questionIds?.length
-        ? await loadQuestionsByIds(options.questionIds)
-        : await loadQuestions();
+        ? await loadQuestionsByIds(options.questionIds, repoName)
+        : await loadQuestions(repoName);
 
       if (questions.length === 0) {
         throw new Error('No benchmark questions found');
