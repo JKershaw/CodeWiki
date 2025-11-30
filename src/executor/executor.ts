@@ -39,6 +39,8 @@ import {
   handleFailProcessingRun,
   createStopProcessingRunCommand,
   handleStopProcessingRun,
+  createConfirmStopProcessingRunCommand,
+  handleConfirmStopProcessingRun,
 } from '../commands/processing-run.js';
 import {
   createStartIterationCommand,
@@ -195,6 +197,14 @@ export class Executor {
       let iterationNumber = 0;
 
       while (summary.iterations < iterations && !this.shouldStop) {
+        // Check if stop has been requested via DB flag
+        const currentRun = await this.repos.processingRuns.findById(processingRunId);
+        if (currentRun?.status === 'stopping') {
+          console.log('Stop requested, finishing after current batch...');
+          this.shouldStop = true;
+          break;
+        }
+
         // Check rate limits before claiming work
         if (this.llm.isRateLimited()) {
           console.log('Rate limited, waiting...');
@@ -380,12 +390,22 @@ export class Executor {
     } finally {
       this.running = false;
 
-      // If stopped manually, mark as stopped via CQRS command
+      // If stopped, confirm or set the stopped status via CQRS
       if (this.shouldStop) {
-        await handleStopProcessingRun(
-          createStopProcessingRunCommand(processingRunId),
-          this.repos
-        );
+        const run = await this.repos.processingRuns.findById(processingRunId);
+        if (run?.status === 'stopping') {
+          // Graceful shutdown via HTTP request - confirm the stop
+          await handleConfirmStopProcessingRun(
+            createConfirmStopProcessingRunCommand(processingRunId),
+            this.repos
+          );
+        } else if (run?.status === 'running') {
+          // Direct stop() call - mark as stopped via CQRS
+          await handleStopProcessingRun(
+            createStopProcessingRunCommand(processingRunId),
+            this.repos
+          );
+        }
       }
     }
 

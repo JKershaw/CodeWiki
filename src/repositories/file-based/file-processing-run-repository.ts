@@ -36,7 +36,7 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
 
   async findActive(repoId: string): Promise<ProcessingRun | null> {
     const results = await this.store.find(r =>
-      r.repoId === repoId && r.status === 'running'
+      r.repoId === repoId && (r.status === 'running' || r.status === 'stopping')
     );
     if (results.length === 0) return null;
     return this.hydrateDates(results[0]!);
@@ -90,6 +90,24 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
   }
 
   async stop(id: string): Promise<void> {
+    await this.store.update(id, {
+      status: 'stopped',
+      completedAt: new Date(),
+    });
+  }
+
+  async requestStop(id: string): Promise<void> {
+    const run = await this.store.get(id);
+    if (!run) {
+      throw new Error(`Processing run not found: ${id}`);
+    }
+    await this.store.update(id, {
+      status: 'stopping',
+      totalIterations: run.completedIterations,
+    });
+  }
+
+  async confirmStop(id: string): Promise<void> {
     await this.store.update(id, {
       status: 'stopped',
       completedAt: new Date(),

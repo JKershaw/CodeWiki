@@ -69,4 +69,16 @@ export interface ProcessingRunRepository {
    * Mark a processing run as stopped (manually interrupted).
    */
   stop(id: string): Promise<void>;
+
+  /**
+   * Request a graceful stop of a processing run.
+   * Sets status to 'stopping' and totalIterations to completedIterations.
+   */
+  requestStop(id: string): Promise<void>;
+
+  /**
+   * Confirm a processing run has stopped after graceful shutdown.
+   * Sets status to 'stopped' and completedAt.
+   */
+  confirmStop(id: string): Promise<void>;
 }

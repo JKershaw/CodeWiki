@@ -240,3 +240,94 @@ export async function handleStopProcessingRun(
     return failure(`Failed to stop processing run: ${error}`);
   }
 }
+
+// ============================================================================
+// RequestStopProcessingRun Command
+// ============================================================================
+
+/**
+ * Command to request a graceful stop of a processing run.
+ * Sets status to 'stopping' and resets totalIterations to completedIterations.
+ * The executor will finish current work and then confirm the stop.
+ */
+export interface RequestStopProcessingRunCommand extends Command {
+  readonly type: 'RequestStopProcessingRun';
+  readonly processingRunId: string;
+}
+
+export function createRequestStopProcessingRunCommand(processingRunId: string): RequestStopProcessingRunCommand {
+  return {
+    type: 'RequestStopProcessingRun',
+    processingRunId,
+  };
+}
+
+/**
+ * Handler for RequestStopProcessingRun command.
+ */
+export async function handleRequestStopProcessingRun(
+  command: RequestStopProcessingRunCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    // Verify processing run exists and is running
+    const run = await repos.processingRuns.findById(command.processingRunId);
+    if (!run) {
+      return failure(`Processing run not found: ${command.processingRunId}`);
+    }
+
+    if (run.status !== 'running') {
+      return failure(`Processing run is not running (status: ${run.status})`);
+    }
+
+    await repos.processingRuns.requestStop(command.processingRunId);
+    return success();
+  } catch (error) {
+    return failure(`Failed to request stop for processing run: ${error}`);
+  }
+}
+
+// ============================================================================
+// ConfirmStopProcessingRun Command
+// ============================================================================
+
+/**
+ * Command to confirm a processing run has stopped.
+ * Called by the executor after finishing current work when status is 'stopping'.
+ */
+export interface ConfirmStopProcessingRunCommand extends Command {
+  readonly type: 'ConfirmStopProcessingRun';
+  readonly processingRunId: string;
+}
+
+export function createConfirmStopProcessingRunCommand(processingRunId: string): ConfirmStopProcessingRunCommand {
+  return {
+    type: 'ConfirmStopProcessingRun',
+    processingRunId,
+  };
+}
+
+/**
+ * Handler for ConfirmStopProcessingRun command.
+ */
+export async function handleConfirmStopProcessingRun(
+  command: ConfirmStopProcessingRunCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    // Verify processing run exists and is stopping
+    const run = await repos.processingRuns.findById(command.processingRunId);
+    if (!run) {
+      return failure(`Processing run not found: ${command.processingRunId}`);
+    }
+
+    if (run.status !== 'stopping') {
+      return failure(`Processing run is not stopping (status: ${run.status})`);
+    }
+
+    await repos.processingRuns.confirmStop(command.processingRunId);
+    return success();
+  } catch (error) {
+    return failure(`Failed to confirm stop for processing run: ${error}`);
+  }
+}

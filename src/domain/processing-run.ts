@@ -30,6 +30,7 @@ export interface ProcessingRun {
 
 export type ProcessingRunStatus =
   | 'running'    // Currently processing
+  | 'stopping'   // Graceful shutdown requested, finishing current work
   | 'completed'  // All iterations finished successfully
   | 'failed'     // Stopped due to error
   | 'stopped';   // Manually stopped
