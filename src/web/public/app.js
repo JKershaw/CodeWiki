@@ -902,16 +902,18 @@ function renderBenchmarkChart(benchmarks) {
   // Sort by iteration count (ascending) for the chart
   const sortedBenchmarks = [...completedBenchmarks].sort((a, b) => a.iterationCount - b.iterationCount);
 
-  const labels = sortedBenchmarks.map(b => `Iter ${b.iterationCount}`);
-  const scores = sortedBenchmarks.map(b => b.score ?? 0);
+  // Use x/y data points for proper numeric scaling
+  const dataPoints = sortedBenchmarks.map(b => ({
+    x: b.iterationCount,
+    y: b.score ?? 0
+  }));
 
   benchmarkChart = new Chart(canvas, {
     type: 'line',
     data: {
-      labels: labels,
       datasets: [{
         label: 'Score',
-        data: scores,
+        data: dataPoints,
         borderColor: '#4a9eff',
         backgroundColor: 'rgba(74, 158, 255, 0.1)',
         borderWidth: 2,
@@ -931,7 +933,7 @@ function renderBenchmarkChart(benchmarks) {
         },
         tooltip: {
           callbacks: {
-            label: (context) => `Score: ${context.parsed.y.toFixed(0)}%`
+            label: (context) => `Iteration ${context.parsed.x}: ${context.parsed.y.toFixed(0)}%`
           }
         }
       },
@@ -948,6 +950,12 @@ function renderBenchmarkChart(benchmarks) {
           },
         },
         x: {
+          type: 'linear',
+          title: {
+            display: true,
+            text: 'Iteration',
+            color: '#888',
+          },
           ticks: {
             color: '#888',
           },
