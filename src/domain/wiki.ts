@@ -33,6 +33,8 @@ export interface Wiki {
   createdAt: Date;
   /** When the wiki was last updated */
   updatedAt: Date;
+  /** Cumulative count of processing iterations completed */
+  totalIterations: number;
 }
 
 export type WikiStatus =
@@ -81,6 +83,7 @@ export function createWiki(params: {
     lastProcessedCommitSha: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    totalIterations: 0,
   };
 }
 

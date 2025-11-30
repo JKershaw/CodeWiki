@@ -142,3 +142,49 @@ export async function handleDeleteWiki(
     return failure(`Failed to delete wiki: ${error}`);
   }
 }
+
+// ============================================================================
+// IncrementWikiIterations Command
+// ============================================================================
+
+/**
+ * Command to increment the total iterations count for a wiki.
+ * Called when a processing run completes successfully.
+ */
+export interface IncrementWikiIterationsCommand extends Command {
+  readonly type: 'IncrementWikiIterations';
+  readonly wikiId: string;
+  readonly count: number;
+}
+
+export function createIncrementWikiIterationsCommand(
+  wikiId: string,
+  count: number
+): IncrementWikiIterationsCommand {
+  return {
+    type: 'IncrementWikiIterations',
+    wikiId,
+    count,
+  };
+}
+
+/**
+ * Handler for IncrementWikiIterations command.
+ * Increments the cumulative iteration count for a wiki.
+ */
+export async function handleIncrementWikiIterations(
+  command: IncrementWikiIterationsCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    const wiki = await repos.wikis.findById(command.wikiId);
+    if (!wiki) {
+      return failure(`Wiki not found: ${command.wikiId}`);
+    }
+
+    await repos.wikis.incrementIterations(command.wikiId, command.count);
+    return success();
+  } catch (error) {
+    return failure(`Failed to increment wiki iterations: ${error}`);
+  }
+}

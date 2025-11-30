@@ -9,6 +9,10 @@ import type { Command, CommandResult } from './types.js';
 import { success, failure } from './types.js';
 import type { Repositories } from '../repositories/index.js';
 import { createProcessingRun, type ProcessingRun } from '../domain/processing-run.js';
+import {
+  handleIncrementWikiIterations,
+  createIncrementWikiIterationsCommand,
+} from './wiki.js';
 
 // ============================================================================
 // StartProcessingRun Command
@@ -137,6 +141,7 @@ export function createCompleteProcessingRunCommand(processingRunId: string): Com
 
 /**
  * Handler for CompleteProcessingRun command.
+ * Also increments the wiki's cumulative iteration count.
  */
 export async function handleCompleteProcessingRun(
   command: CompleteProcessingRunCommand,
@@ -150,6 +155,15 @@ export async function handleCompleteProcessingRun(
     }
 
     await repos.processingRuns.complete(command.processingRunId);
+
+    // Increment wiki's cumulative iteration count
+    if (run.completedIterations > 0) {
+      await handleIncrementWikiIterations(
+        createIncrementWikiIterationsCommand(run.wikiId, run.completedIterations),
+        repos
+      );
+    }
+
     return success();
   } catch (error) {
     return failure(`Failed to complete processing run: ${error}`);
@@ -309,6 +323,7 @@ export function createConfirmStopProcessingRunCommand(processingRunId: string): 
 
 /**
  * Handler for ConfirmStopProcessingRun command.
+ * Also increments the wiki's cumulative iteration count for completed iterations.
  */
 export async function handleConfirmStopProcessingRun(
   command: ConfirmStopProcessingRunCommand,
@@ -326,6 +341,15 @@ export async function handleConfirmStopProcessingRun(
     }
 
     await repos.processingRuns.confirmStop(command.processingRunId);
+
+    // Increment wiki's cumulative iteration count for completed iterations
+    if (run.completedIterations > 0) {
+      await handleIncrementWikiIterations(
+        createIncrementWikiIterationsCommand(run.wikiId, run.completedIterations),
+        repos
+      );
+    }
+
     return success();
   } catch (error) {
     return failure(`Failed to confirm stop for processing run: ${error}`);
