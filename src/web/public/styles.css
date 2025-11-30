@@ -1052,6 +1052,75 @@ footer {
   font-size: 0.9rem;
 }
 
+/* Auto Benchmark Section */
+.auto-benchmark-section {
+  margin-bottom: 25px;
+  padding: 20px;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.auto-benchmark-config {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.auto-benchmark-config label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.auto-benchmark-config input[type="number"] {
+  width: 70px;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.auto-benchmark-config input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent-growth);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.auto-benchmark-config input[type="number"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auto-benchmark-progress {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.auto-benchmark-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+#auto-benchmark-cycle {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+#auto-benchmark-phase {
+  font-size: 0.85rem;
+  color: var(--accent-wisdom);
+}
+
 .benchmark-progress {
   margin-bottom: 25px;
   padding: 15px 20px;

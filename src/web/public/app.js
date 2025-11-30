@@ -1212,9 +1212,194 @@ document.getElementById('close-benchmark-detail').addEventListener('click', () =
 });
 document.getElementById('back-to-repos-benchmark').addEventListener('click', () => {
   stopBenchmarkPolling();
+  stopAutoBenchmark();
   showView('repos');
   loadRepos();
 });
+
+// Auto Benchmark
+let autoBenchmarkRunning = false;
+let autoBenchmarkStopping = false;
+
+async function runAutoBenchmark() {
+  if (!currentRepo || autoBenchmarkRunning) return;
+
+  const iterationsPerCycle = parseInt(document.getElementById('auto-benchmark-iterations').value, 10) || 5;
+  const maxCycles = parseInt(document.getElementById('auto-benchmark-max-cycles').value, 10) || 10;
+
+  autoBenchmarkRunning = true;
+  autoBenchmarkStopping = false;
+
+  // Update UI
+  const startBtn = document.getElementById('auto-benchmark-btn');
+  const stopBtn = document.getElementById('stop-auto-benchmark-btn');
+  const progressDiv = document.getElementById('auto-benchmark-progress');
+  const cycleSpan = document.getElementById('auto-benchmark-cycle');
+  const phaseSpan = document.getElementById('auto-benchmark-phase');
+  const statusText = document.getElementById('auto-benchmark-status-text');
+  const progressFill = document.getElementById('auto-benchmark-progress-fill');
+
+  startBtn.disabled = true;
+  stopBtn.classList.remove('hidden');
+  stopBtn.textContent = 'Stop';
+  stopBtn.disabled = false;
+  document.getElementById('auto-benchmark-iterations').disabled = true;
+  document.getElementById('auto-benchmark-max-cycles').disabled = true;
+  progressDiv.classList.remove('hidden');
+
+  // Also disable regular benchmark button during auto-benchmark
+  document.getElementById('run-benchmark-btn').disabled = true;
+
+  try {
+    for (let cycle = 1; cycle <= maxCycles; cycle++) {
+      if (autoBenchmarkStopping) {
+        statusText.textContent = 'Stopped by user';
+        break;
+      }
+
+      // Update cycle display
+      cycleSpan.textContent = `Cycle ${cycle}/${maxCycles}`;
+      const overallProgress = ((cycle - 1) / maxCycles) * 100;
+      progressFill.style.width = `${overallProgress}%`;
+
+      // Phase 1: Run iterations
+      phaseSpan.textContent = 'Running iterations...';
+      statusText.textContent = `Starting ${iterationsPerCycle} iterations...`;
+
+      await runIterationsAndWait(currentRepo.id, iterationsPerCycle, (completed, total) => {
+        statusText.textContent = `Iteration ${completed}/${total}`;
+      });
+
+      if (autoBenchmarkStopping) {
+        statusText.textContent = 'Stopped by user';
+        break;
+      }
+
+      // Phase 2: Run benchmark
+      phaseSpan.textContent = 'Running benchmark...';
+      statusText.textContent = 'Starting benchmark...';
+
+      await runBenchmarkAndWait(currentRepo.id, () => {
+        statusText.textContent = 'Benchmark in progress...';
+      });
+
+      // Update progress after cycle completes
+      const cycleProgress = (cycle / maxCycles) * 100;
+      progressFill.style.width = `${cycleProgress}%`;
+      statusText.textContent = `Cycle ${cycle} complete`;
+
+      // Refresh benchmark history to show new result
+      await loadBenchmarkHistory(currentRepo.id);
+    }
+
+    if (!autoBenchmarkStopping) {
+      phaseSpan.textContent = 'Complete';
+      statusText.textContent = `All ${maxCycles} cycles completed`;
+      progressFill.style.width = '100%';
+    }
+  } catch (error) {
+    statusText.textContent = `Error: ${error.message}`;
+    phaseSpan.textContent = 'Failed';
+  } finally {
+    autoBenchmarkRunning = false;
+    startBtn.disabled = false;
+    stopBtn.classList.add('hidden');
+    document.getElementById('auto-benchmark-iterations').disabled = false;
+    document.getElementById('auto-benchmark-max-cycles').disabled = false;
+    document.getElementById('run-benchmark-btn').disabled = false;
+  }
+}
+
+function stopAutoBenchmark() {
+  if (autoBenchmarkRunning) {
+    autoBenchmarkStopping = true;
+    document.getElementById('stop-auto-benchmark-btn').textContent = 'Stopping...';
+    document.getElementById('stop-auto-benchmark-btn').disabled = true;
+    document.getElementById('auto-benchmark-phase').textContent = 'Stopping after current phase...';
+  }
+}
+
+/**
+ * Run iterations and wait for completion.
+ */
+async function runIterationsAndWait(repoId, iterations, onProgress) {
+  // Start processing
+  await api(`/repos/${repoId}/process`, {
+    method: 'POST',
+    body: JSON.stringify({ iterations }),
+  });
+
+  // Poll until complete
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const data = await api(`/repos/${repoId}/processing`);
+        const { processing } = data;
+
+        if (!processing || (processing.status !== 'running' && processing.status !== 'stopping')) {
+          resolve();
+          return;
+        }
+
+        if (onProgress) {
+          onProgress(processing.completedIterations, processing.totalIterations);
+        }
+
+        setTimeout(poll, 1500);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    setTimeout(poll, 500);
+  });
+}
+
+/**
+ * Run a benchmark and wait for completion.
+ */
+async function runBenchmarkAndWait(repoId, onProgress) {
+  // Start benchmark
+  const response = await fetch(`/api/repos/${repoId}/benchmarks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+
+  if (response.status === 409) {
+    // Already running, just wait for it
+  } else if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to start benchmark');
+  }
+
+  // Poll until complete
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const data = await api(`/repos/${repoId}/benchmarks?limit=1`);
+        const benchmarks = data.benchmarks || [];
+        const latest = benchmarks[0];
+
+        if (!latest || latest.status !== 'running') {
+          resolve();
+          return;
+        }
+
+        if (onProgress) {
+          onProgress();
+        }
+
+        setTimeout(poll, 3000);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    setTimeout(poll, 500);
+  });
+}
+
+document.getElementById('auto-benchmark-btn').addEventListener('click', runAutoBenchmark);
+document.getElementById('stop-auto-benchmark-btn').addEventListener('click', stopAutoBenchmark);
 
 // Back buttons
 document.getElementById('back-to-repos').addEventListener('click', () => {
