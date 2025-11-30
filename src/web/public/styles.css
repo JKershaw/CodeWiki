@@ -1098,6 +1098,27 @@ footer {
   cursor: not-allowed;
 }
 
+.auto-benchmark-config label.checkbox-label {
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-benchmark-config label.checkbox-label:hover {
+  color: var(--text-primary);
+}
+
+.auto-benchmark-config input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-growth);
+}
+
+.auto-benchmark-config input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .auto-benchmark-progress {
   margin-top: 20px;
   padding-top: 20px;
