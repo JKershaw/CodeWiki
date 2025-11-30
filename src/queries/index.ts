@@ -31,3 +31,7 @@ export * from './list-commits.js';
 export * from './list-wiki-pages.js';
 export * from './get-work-queue.js';
 export * from './get-agent-runs.js';
+export * from './count-commits.js';
+export * from './list-conflicts.js';
+export * from './list-findings.js';
+export * from './list-low-confidence-pages.js';
