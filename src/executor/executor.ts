@@ -17,6 +17,7 @@ import { LinkAgent } from '../agents/meta/link-agent.js';
 import { StructureAgent } from '../agents/meta/structure-agent.js';
 import { QualityAgent } from '../agents/meta/quality-agent.js';
 import { ConsistencyAgent } from '../agents/meta/consistency-agent.js';
+import { WikiEditorAgent } from '../agents/meta/wiki-editor-agent.js';
 import { ConsolidationAgent } from '../agents/consolidation/consolidation-agent.js';
 import { OverviewAgent } from '../agents/synthesis/overview-agent.js';
 import { WriterAgent } from '../agents/synthesis/writer-agent.js';
@@ -88,6 +89,23 @@ import {
   handleGetCommitBySha,
 } from '../queries/index.js';
 
+// Import EditRequest for routing analysis agent output
+import { createEditRequest } from '../domain/edit-request.js';
+import type { AgentType } from '../domain/agent-run.js';
+
+/**
+ * Analysis agents whose output should be routed through the EditRequest queue.
+ * This enables intelligent handling of out-of-order commit processing.
+ */
+const ANALYSIS_AGENT_TYPES: AgentType[] = [
+  'code-change',
+  'narrative',
+  'security',
+  'technical-debt',
+  'pattern',
+  'dependency',
+];
+
 /**
  * Queue water marks for proactive refill.
  * Low water mark: trigger refill when queue drops to this level
@@ -130,6 +148,7 @@ export class Executor {
     this.registerAgent(new CodebaseExplorerAgent());
 
     // Register meta agents
+    this.registerAgent(new WikiEditorAgent());
     this.registerAgent(new LinkAgent());
     this.registerAgent(new StructureAgent());
     this.registerAgent(new QualityAgent());
@@ -516,7 +535,9 @@ export class Executor {
 
     // Translate SHA to internal commit ID if we have a target commit
     // The orchestrator returns Git SHAs, but agents expect internal UUIDs
+    // Also store the full commit for EditRequest creation
     let internalCommitId: string | undefined;
+    let commitData: { sha: string; committedAt: Date } | undefined;
     if (workItem.targetCommitId) {
       // Use CQRS query to find commit by SHA
       const commitQuery = createGetCommitByShaQuery(repoId, workItem.targetCommitId);
@@ -532,6 +553,12 @@ export class Executor {
         return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
       }
       internalCommitId = commitResult.data.id;
+      commitData = {
+        sha: commitResult.data.sha,
+        committedAt: commitResult.data.committedAt instanceof Date
+          ? commitResult.data.committedAt
+          : new Date(commitResult.data.committedAt),
+      };
     }
 
     // Create agent run record via CQRS command
@@ -591,34 +618,74 @@ export class Executor {
         this.repos
       );
 
-      // Process wiki updates via CQRS command
+      // Process wiki updates
+      // Analysis agents route through EditRequest queue for intelligent temporal handling
+      // Other agents (meta, synthesis) apply updates directly
       let pagesCreated = 0;
       let pagesUpdated = 0;
+      let editRequestsQueued = 0;
+
+      const isAnalysisAgent = ANALYSIS_AGENT_TYPES.includes(agent.type as AgentType);
+      const shouldQueueEdits = isAnalysisAgent && commitData;
 
       for (const update of result.updates) {
         update.agentRunId = agentRunId;
 
-        // Use UpdateWikiPage CQRS command
-        const updateResult = await handleUpdateWikiPage(
-          createUpdateWikiPageCommand(update),
-          this.repos,
-          wikiId
-        );
+        if (shouldQueueEdits) {
+          // Route analysis agent updates through EditRequest queue
+          // This enables the WikiEditorAgent to handle out-of-order commits intelligently
+          const editRequestParams: Parameters<typeof createEditRequest>[0] = {
+            id: uuid(),
+            repoId,
+            wikiId,
+            sourceCommitSha: commitData!.sha,
+            sourceCommitTimestamp: commitData!.committedAt,
+            sourceAgentType: agent.type as AgentType,
+            sourceAgentRunId: agentRunId,
+            targetPagePath: update.path,
+            proposedUpdateType: update.type,
+            proposedContent: update.content,
+            confidenceDelta: update.confidenceDelta,
+          };
 
-        if (updateResult.success && updateResult.data) {
-          // Determine if it was a create or update based on page creation time
-          // Handle both Date objects and ISO strings (from JSON deserialization)
-          const createdAt = updateResult.data.createdAt instanceof Date
-            ? updateResult.data.createdAt
-            : new Date(updateResult.data.createdAt);
-          const pageAge = Date.now() - createdAt.getTime();
-          if (pageAge < 1000) {
-            // Created less than 1 second ago, likely new
-            pagesCreated++;
-          } else {
-            pagesUpdated++;
+          // Only add optional properties if they have values
+          if (update.title !== undefined) {
+            editRequestParams.targetPageTitle = update.title;
+          }
+          if (update.redirectTo !== undefined) {
+            editRequestParams.redirectTo = update.redirectTo;
+          }
+
+          const editRequest = createEditRequest(editRequestParams);
+          await this.repos.editRequests.save(editRequest);
+          editRequestsQueued++;
+        } else {
+          // Apply updates directly for meta/synthesis agents
+          const updateResult = await handleUpdateWikiPage(
+            createUpdateWikiPageCommand(update),
+            this.repos,
+            wikiId
+          );
+
+          if (updateResult.success && updateResult.data) {
+            // Determine if it was a create or update based on page creation time
+            // Handle both Date objects and ISO strings (from JSON deserialization)
+            const createdAt = updateResult.data.createdAt instanceof Date
+              ? updateResult.data.createdAt
+              : new Date(updateResult.data.createdAt);
+            const pageAge = Date.now() - createdAt.getTime();
+            if (pageAge < 1000) {
+              // Created less than 1 second ago, likely new
+              pagesCreated++;
+            } else {
+              pagesUpdated++;
+            }
           }
         }
+      }
+
+      if (editRequestsQueued > 0) {
+        console.log(`  📝 Queued ${editRequestsQueued} edit request(s) for wiki-editor`);
       }
 
       // Mark commit as processed (still direct repo access - could be another command)

@@ -35,3 +35,4 @@ export * from './count-commits.js';
 export * from './list-conflicts.js';
 export * from './list-findings.js';
 export * from './list-low-confidence-pages.js';
+export * from './count-pending-edit-requests.js';
