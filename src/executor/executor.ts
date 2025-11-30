@@ -12,6 +12,7 @@ import { SecurityAgent } from '../agents/analysis/security-agent.js';
 import { TechnicalDebtAgent } from '../agents/analysis/technical-debt-agent.js';
 import { PatternAgent } from '../agents/analysis/pattern-agent.js';
 import { DependencyAgent } from '../agents/analysis/dependency-agent.js';
+import { CodebaseExplorerAgent } from '../agents/analysis/codebase-explorer-agent.js';
 import { LinkAgent } from '../agents/meta/link-agent.js';
 import { StructureAgent } from '../agents/meta/structure-agent.js';
 import { QualityAgent } from '../agents/meta/quality-agent.js';
@@ -124,6 +125,9 @@ export class Executor {
     this.registerAgent(new TechnicalDebtAgent());
     this.registerAgent(new PatternAgent());
     this.registerAgent(new DependencyAgent());
+
+    // Register exploration agents
+    this.registerAgent(new CodebaseExplorerAgent());
 
     // Register meta agents
     this.registerAgent(new LinkAgent());
@@ -539,6 +543,7 @@ export class Executor {
         wikiId,
         agentType: workItem.agentType,
         targetCommitId: internalCommitId,
+        targetPath: workItem.targetPath ?? undefined,
       }),
       this.repos
     );
@@ -566,11 +571,16 @@ export class Executor {
       let result;
 
       if (internalCommitId) {
+        // Commit-based agents (analysis agents)
         result = await agent.runOnCommit(internalCommitId, context);
+      } else if (workItem.targetPath && agent.runOnPath) {
+        // Path-based agents (exploration agents like codebase-explorer)
+        result = await agent.runOnPath(workItem.targetPath, context);
       } else if (agent.runOnWiki) {
+        // Wiki-based agents (meta/synthesis agents)
         result = await agent.runOnWiki(context);
       } else {
-        throw new Error(`Agent ${agent.type} cannot run without a commit target`);
+        throw new Error(`Agent ${agent.type} cannot run without a commit target or path`);
       }
 
       const durationMs = Date.now() - startTime;

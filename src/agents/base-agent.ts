@@ -49,6 +49,14 @@ export interface Agent {
    * Not all agents support this.
    */
   runOnWiki?(context: AgentContext): Promise<AgentRunResult>;
+
+  /**
+   * Run the agent on a specific path (directory or file) for exploration.
+   * Used by exploration agents to document undocumented parts of the codebase.
+   * @param targetPath - The path to explore (e.g., "src/services/llm" or "src/utils/helpers.ts")
+   * @param context - Agent execution context
+   */
+  runOnPath?(targetPath: string, context: AgentContext): Promise<AgentRunResult>;
 }
 
 /**

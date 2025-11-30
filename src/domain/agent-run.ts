@@ -11,6 +11,8 @@ export interface AgentRun {
   agentType: AgentType;
   /** Target commit (for commit-focused agents) */
   targetCommitId: string | null;
+  /** Target path (for exploration agents) */
+  targetPath: string | null;
   /** Status of the run */
   status: AgentRunStatus;
   /** What the agent found/decided */
@@ -60,7 +62,9 @@ export type AgentType =
   | 'writer'
   | 'bootstrap'
   // Consolidation agent - self-healing wiki maintenance
-  | 'consolidation';
+  | 'consolidation'
+  // Exploration agents - document undocumented code paths
+  | 'codebase-explorer';
 
 export type AgentRunStatus =
   | 'pending'
@@ -94,6 +98,7 @@ export function createAgentRun(params: {
   wikiId: string;
   agentType: AgentType;
   targetCommitId?: string | undefined;
+  targetPath?: string | undefined;
 }): AgentRun {
   return {
     id: params.id,
@@ -101,6 +106,7 @@ export function createAgentRun(params: {
     wikiId: params.wikiId,
     agentType: params.agentType,
     targetCommitId: params.targetCommitId ?? null,
+    targetPath: params.targetPath ?? null,
     status: 'pending',
     result: null,
     requestedUpdates: [],

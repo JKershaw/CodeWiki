@@ -25,6 +25,7 @@ export interface CreateAgentRunCommand extends Command {
   readonly wikiId: string;
   readonly agentType: AgentType;
   readonly targetCommitId?: string | undefined;
+  readonly targetPath?: string | undefined;
 }
 
 export function createCreateAgentRunCommand(params: {
@@ -33,6 +34,7 @@ export function createCreateAgentRunCommand(params: {
   wikiId: string;
   agentType: AgentType;
   targetCommitId?: string | undefined;
+  targetPath?: string | undefined;
 }): CreateAgentRunCommand {
   return {
     type: 'CreateAgentRun',
@@ -55,6 +57,7 @@ export async function handleCreateAgentRun(
       wikiId: command.wikiId,
       agentType: command.agentType,
       targetCommitId: command.targetCommitId,
+      targetPath: command.targetPath,
     });
 
     // Set to running immediately (agent is about to execute)

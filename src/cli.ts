@@ -237,7 +237,7 @@ async function processCommand(args: string[]) {
   git.registerLocalRepo(repo.id, absolutePath);
 
   // Create orchestrator and executor (always uses LLM-powered orchestration)
-  const orchestrator = createOrchestrator(repos, llm, { useLLM: true });
+  const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, git);
   const executor = createExecutor(repos, git, llm, orchestrator);
 
   // Get or create the active wiki for this repo

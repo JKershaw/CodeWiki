@@ -12,8 +12,8 @@ export interface WorkItem {
   agentType: AgentType;
   /** Target commit (for commit-focused work) */
   targetCommitId: string | null;
-  /** Target wiki page (for wiki-focused work) */
-  targetPagePath: string | null;
+  /** Target path (directory or file for exploration agents, or wiki page path) */
+  targetPath: string | null;
   /** Priority (higher = more urgent) */
   priority: number;
   /** Current status */
@@ -47,6 +47,8 @@ export const Priority = {
   LOW_CONFIDENCE: 80,
   /** Recent commits (within last week) */
   RECENT_COMMIT: 70,
+  /** Codebase exploration (documenting undocumented code) */
+  EXPLORATION: 60,
   /** Synthesis work (guides, overviews) */
   SYNTHESIS: 50,
   /** Historical commits */
@@ -63,14 +65,14 @@ export function createWorkItem(params: {
   agentType: AgentType;
   priority: number;
   targetCommitId?: string;
-  targetPagePath?: string;
+  targetPath?: string;
 }): WorkItem {
   return {
     id: params.id,
     repoId: params.repoId,
     agentType: params.agentType,
     targetCommitId: params.targetCommitId ?? null,
-    targetPagePath: params.targetPagePath ?? null,
+    targetPath: params.targetPath ?? null,
     priority: params.priority,
     status: 'pending',
     createdAt: new Date(),

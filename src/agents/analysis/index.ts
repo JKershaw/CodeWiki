@@ -7,3 +7,4 @@ export * from './security-agent.js';
 export * from './technical-debt-agent.js';
 export * from './pattern-agent.js';
 export * from './dependency-agent.js';
+export * from './codebase-explorer-agent.js';
