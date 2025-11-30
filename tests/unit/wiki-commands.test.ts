@@ -11,6 +11,8 @@ import {
   handleUpdateWikiSettings,
   createDeleteWikiCommand,
   handleDeleteWiki,
+  createIncrementWikiIterationsCommand,
+  handleIncrementWikiIterations,
 } from '../../src/commands/wiki.js';
 import { createWiki, type Wiki, type WikiStatus } from '../../src/domain/wiki.js';
 import type { Repositories } from '../../src/repositories/index.js';
@@ -63,6 +65,12 @@ function createMockRepos(): Repositories {
     updateLastProcessedCommit: async (id, sha) => {
       const wiki = wikis.get(id);
       if (wiki) wiki.lastProcessedCommitSha = sha;
+    },
+    incrementIterations: async (id, count) => {
+      const wiki = wikis.get(id);
+      if (wiki) {
+        wiki.totalIterations = (wiki.totalIterations ?? 0) + count;
+      }
     },
   };
 
@@ -315,6 +323,72 @@ describe('Wiki Commands', () => {
       const command = createDeleteWikiCommand('wiki-1');
       assert.strictEqual(command.type, 'DeleteWiki');
       assert.strictEqual(command.wikiId, 'wiki-1');
+    });
+  });
+
+  describe('IncrementWikiIterations', () => {
+    it('increments iteration count from zero', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const wiki = createWiki({
+        id: wikiId,
+        repoId: 'repo-1',
+        name: 'Test Wiki',
+      });
+      await repos.wikis.save(wiki);
+
+      const command = createIncrementWikiIterationsCommand(wikiId, 10);
+      const result = await handleIncrementWikiIterations(command, repos);
+
+      assert.strictEqual(result.success, true);
+
+      const updated = await repos.wikis.findById(wikiId);
+      assert.strictEqual(updated?.totalIterations, 10);
+    });
+
+    it('accumulates iteration count across multiple increments', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const wiki = createWiki({
+        id: wikiId,
+        repoId: 'repo-1',
+        name: 'Test Wiki',
+      });
+      await repos.wikis.save(wiki);
+
+      // First increment: 20 iterations
+      await handleIncrementWikiIterations(
+        createIncrementWikiIterationsCommand(wikiId, 20),
+        repos
+      );
+
+      // Second increment: 30 iterations
+      await handleIncrementWikiIterations(
+        createIncrementWikiIterationsCommand(wikiId, 30),
+        repos
+      );
+
+      const updated = await repos.wikis.findById(wikiId);
+      assert.strictEqual(updated?.totalIterations, 50);
+    });
+
+    it('fails when wiki does not exist', async () => {
+      const repos = createMockRepos();
+
+      const command = createIncrementWikiIterationsCommand('nonexistent', 10);
+      const result = await handleIncrementWikiIterations(command, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('not found'));
+    });
+
+    it('has correct command type', () => {
+      const command = createIncrementWikiIterationsCommand('wiki-1', 15);
+      assert.strictEqual(command.type, 'IncrementWikiIterations');
+      assert.strictEqual(command.wikiId, 'wiki-1');
+      assert.strictEqual(command.count, 15);
     });
   });
 });

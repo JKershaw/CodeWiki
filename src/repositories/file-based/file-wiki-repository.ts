@@ -64,4 +64,15 @@ export class FileWikiRepository implements WikiRepository {
   async updateLastProcessedCommit(id: string, sha: string): Promise<void> {
     await this.store.update(id, { lastProcessedCommitSha: sha, updatedAt: new Date() });
   }
+
+  async incrementIterations(id: string, count: number): Promise<void> {
+    const wiki = await this.store.get(id);
+    if (!wiki) return;
+
+    const currentTotal = wiki.totalIterations ?? 0;
+    await this.store.update(id, {
+      totalIterations: currentTotal + count,
+      updatedAt: new Date(),
+    });
+  }
 }

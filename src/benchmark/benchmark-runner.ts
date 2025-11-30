@@ -72,8 +72,8 @@ export class BenchmarkRunner {
         throw new Error('No benchmark questions found');
       }
 
-      // Get current iteration count from processing runs
-      const iterationCount = await this.getIterationCount(repoId);
+      // Get current iteration count from wiki
+      const iterationCount = await this.getIterationCount(wikiId);
 
       // Get repository path from git service
       const repoPath = this.git.getRepoPath(repoId);
@@ -224,20 +224,15 @@ export class BenchmarkRunner {
   }
 
   /**
-   * Get the current iteration count for a repository.
+   * Get the cumulative iteration count for a wiki.
    */
-  private async getIterationCount(repoId: string): Promise<number> {
-    // Get the most recent completed processing run
-    const runs = await this.repos.processingRuns.findByRepo(repoId, {
-      status: 'completed',
-      limit: 1,
-    });
-
-    if (runs.length === 0) {
+  private async getIterationCount(wikiId: string): Promise<number> {
+    const wiki = await this.repos.wikis.findById(wikiId);
+    if (!wiki) {
       return 0;
     }
 
-    return runs[0]!.completedIterations;
+    return wiki.totalIterations ?? 0;
   }
 }
 

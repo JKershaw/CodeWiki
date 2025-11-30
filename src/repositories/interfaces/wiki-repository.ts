@@ -60,4 +60,9 @@ export interface WikiRepository {
    * Update the last processed commit SHA.
    */
   updateLastProcessedCommit(id: string, sha: string): Promise<void>;
+
+  /**
+   * Increment the total iterations count for a wiki.
+   */
+  incrementIterations(id: string, count: number): Promise<void>;
 }
