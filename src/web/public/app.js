@@ -810,6 +810,7 @@ document.getElementById('copy-spec').addEventListener('click', copySpec);
 
 // Benchmark
 let benchmarkPollingInterval = null;
+let benchmarkChart = null;
 
 async function openBenchmark(repoId) {
   currentRepo = await api(`/repos/${repoId}`);
@@ -855,8 +856,12 @@ async function loadBenchmarkHistory(repoId) {
 
     if (benchmarks.length === 0) {
       container.innerHTML = '<p class="placeholder">No benchmarks yet. Run one to measure wiki quality.</p>';
+      renderBenchmarkChart([]);
       return;
     }
+
+    // Render chart if at least 2 completed benchmarks
+    renderBenchmarkChart(benchmarks);
 
     // Render benchmark cards
     container.innerHTML = benchmarks.map((benchmark, index) => {
@@ -871,6 +876,88 @@ async function loadBenchmarkHistory(repoId) {
   } catch (error) {
     container.innerHTML = `<p class="placeholder">Error loading benchmarks: ${escapeHtml(error.message)}</p>`;
   }
+}
+
+function renderBenchmarkChart(benchmarks) {
+  const chartContainer = document.getElementById('benchmark-chart-container');
+  const canvas = document.getElementById('benchmark-chart');
+
+  // Destroy existing chart
+  if (benchmarkChart) {
+    benchmarkChart.destroy();
+    benchmarkChart = null;
+  }
+
+  // Filter to completed benchmarks only
+  const completedBenchmarks = benchmarks.filter(b => b.status === 'completed');
+
+  // Hide chart if less than 2 completed benchmarks
+  if (completedBenchmarks.length < 2) {
+    chartContainer.classList.add('hidden');
+    return;
+  }
+
+  chartContainer.classList.remove('hidden');
+
+  // Sort by iteration count (ascending) for the chart
+  const sortedBenchmarks = [...completedBenchmarks].sort((a, b) => a.iterationCount - b.iterationCount);
+
+  const labels = sortedBenchmarks.map(b => `Iter ${b.iterationCount}`);
+  const scores = sortedBenchmarks.map(b => b.score ?? 0);
+
+  benchmarkChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Score',
+        data: scores,
+        borderColor: '#4a9eff',
+        backgroundColor: 'rgba(74, 158, 255, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#4a9eff',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false,
+        },
+        tooltip: {
+          callbacks: {
+            label: (context) => `Score: ${context.parsed.y.toFixed(0)}%`
+          }
+        }
+      },
+      scales: {
+        y: {
+          min: 0,
+          max: 100,
+          ticks: {
+            callback: (value) => `${value}%`,
+            color: '#888',
+          },
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)',
+          },
+        },
+        x: {
+          ticks: {
+            color: '#888',
+          },
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)',
+          },
+        }
+      }
+    }
+  });
 }
 
 function renderBenchmarkCard(benchmark, prevBenchmark) {
