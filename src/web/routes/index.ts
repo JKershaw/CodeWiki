@@ -16,6 +16,7 @@ import { createAgentsRoutes } from './agents.js';
 import { createProcessingRoutes } from './processing.js';
 import { createFilesystemRoutes } from './filesystem.js';
 import { createBenchmarksRoutes } from './benchmarks.js';
+import { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
 
 /**
  * Dependencies required by route handlers.
@@ -41,6 +42,7 @@ export function createApiRoutes(deps: Dependencies): Router {
   router.use(createProcessingRoutes(deps));
   router.use(createFilesystemRoutes(deps));
   router.use(createBenchmarksRoutes(deps));
+  router.use(createQualityBenchmarksRoutes(deps));
 
   return router;
 }
@@ -52,3 +54,4 @@ export { createAgentsRoutes } from './agents.js';
 export { createProcessingRoutes } from './processing.js';
 export { createFilesystemRoutes } from './filesystem.js';
 export { createBenchmarksRoutes } from './benchmarks.js';
+export { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
