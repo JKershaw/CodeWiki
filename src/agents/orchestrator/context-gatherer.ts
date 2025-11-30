@@ -1,6 +1,16 @@
 import type { Repositories } from '../../repositories/index.js';
 import type { AgentType } from '../../domain/agent-run.js';
 
+// Import CQRS queries
+import {
+  createListCommitsQuery,
+  handleListCommits,
+  createListWikiPagesQuery,
+  handleListWikiPages,
+  createListAgentRunsQuery,
+  handleListAgentRuns,
+} from '../../queries/index.js';
+
 /**
  * Snapshot of wiki state for orchestrator decision-making.
  */
@@ -63,16 +73,24 @@ export class ContextGatherer {
    * Gather a complete snapshot of the wiki state.
    */
   async gather(repoId: string, wikiId: string): Promise<OrchestratorContext> {
-    // Fetch all the data we need
+    // Fetch all the data we need via CQRS queries
+    const commitsQuery = createListCommitsQuery(repoId, { limit: 100 });
+    const pagesQuery = createListWikiPagesQuery(wikiId);
+    const runsQuery = createListAgentRunsQuery(repoId);
+
     const [
-      commits,
-      wikiPages,
-      agentRuns,
+      commitsResult,
+      pagesResult,
+      runsResult,
     ] = await Promise.all([
-      this.repos.commits.findByRepo(repoId, { limit: 100 }),
-      this.repos.wikiPages.findByWiki(wikiId),
-      this.repos.agentRuns.findByRepo(repoId),
+      handleListCommits(commitsQuery, this.repos),
+      handleListWikiPages(pagesQuery, this.repos),
+      handleListAgentRuns(runsQuery, this.repos),
     ]);
+
+    const commits = commitsResult.data || [];
+    const wikiPages = pagesResult.data || [];
+    const agentRuns = runsResult.data || [];
 
     // Calculate commits by agent
     const commitsByAgent: Record<string, { processed: number; pending: number }> = {};

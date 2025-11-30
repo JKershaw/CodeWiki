@@ -2,6 +2,7 @@ import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
+import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 
 /**
  * Dependency Agent - Tracks external dependency changes and their implications.
@@ -13,10 +14,13 @@ export class DependencyAgent implements Agent {
   readonly type: AgentType = 'dependency';
 
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
-    const commit = await context.repos.commits.findById(commitId);
-    if (!commit) {
+    // Get commit via CQRS query
+    const query = createGetCommitQuery(commitId);
+    const result = await handleGetCommit(query, context.repos);
+    if (!result.success || !result.data) {
       throw new Error(`Commit not found: ${commitId}`);
     }
+    const commit = result.data;
 
     // Check if this commit touches dependency files
     const isDependencyRelated = this.hasDependencyChanges(commit.diffSummary.affectedFiles);

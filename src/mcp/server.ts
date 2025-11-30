@@ -29,6 +29,14 @@ import { createResearchAgent } from '../agents/research/research-agent.js';
 import { createSpecAgent } from '../agents/spec/spec-agent.js';
 import { createOrchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
+import {
+  createGetRepositoryByFullNameQuery,
+  handleGetRepositoryByFullName,
+  createListWikiPagesQuery,
+  handleListWikiPages as executeListWikiPagesQuery,
+  createGetWikiPageQuery,
+  handleGetWikiPage as executeGetWikiPageQuery,
+} from '../queries/index.js';
 
 // Initialize services
 const repos = createRepositories({ type: 'file' });
@@ -195,16 +203,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function findRepo(repoPath: string) {
   const absolutePath = resolve(repoPath);
-  const repo = await repos.repos.findByFullName(absolutePath);
+  // Use CQRS query to find repository
+  const query = createGetRepositoryByFullNameQuery(absolutePath);
+  const result = await handleGetRepositoryByFullName(query, repos);
 
-  if (!repo) {
+  if (!result.success || !result.data) {
     throw new Error(
       `Repository not found: ${absolutePath}\n` +
         'Run "npm run cli process <repo-path>" first to index the repository.'
     );
   }
 
-  return repo;
+  return result.data;
 }
 
 async function handleQueryWiki(args: { repo_path: string; question: string }) {
@@ -232,7 +242,10 @@ async function handleQueryWiki(args: { repo_path: string; question: string }) {
 async function handleListWikiPages(args: { repo_path: string }) {
   const repo = await findRepo(args.repo_path);
   const wiki = await getOrCreateActiveWiki(repo.id, repos);
-  const pages = await repos.wikiPages.findByWiki(wiki.id);
+  // Use CQRS query to list wiki pages
+  const pagesQuery = createListWikiPagesQuery(wiki.id);
+  const pagesResult = await executeListWikiPagesQuery(pagesQuery, repos);
+  const pages = pagesResult.data || [];
 
   if (pages.length === 0) {
     return {
@@ -274,9 +287,11 @@ async function handleListWikiPages(args: { repo_path: string }) {
 async function handleGetWikiPage(args: { repo_path: string; page_path: string }) {
   const repo = await findRepo(args.repo_path);
   const wiki = await getOrCreateActiveWiki(repo.id, repos);
-  const page = await repos.wikiPages.findByPath(wiki.id, args.page_path);
+  // Use CQRS query to get wiki page
+  const pageQuery = createGetWikiPageQuery(wiki.id, args.page_path);
+  const pageResult = await executeGetWikiPageQuery(pageQuery, repos);
 
-  if (!page) {
+  if (!pageResult.success || !pageResult.data) {
     return {
       content: [
         {
@@ -286,6 +301,8 @@ async function handleGetWikiPage(args: { repo_path: string; page_path: string })
       ],
     };
   }
+
+  const page = pageResult.data;
 
   let response = `# ${page.title}\n\n`;
   response += `**Path:** \`${page.path}\`\n`;

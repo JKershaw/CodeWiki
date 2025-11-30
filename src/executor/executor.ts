@@ -79,6 +79,14 @@ import {
   handleUpdateWikiPage,
 } from '../commands/update-wiki-page.js';
 
+// Import CQRS queries
+import {
+  createListCommitsQuery,
+  handleListCommits,
+  createGetCommitByShaQuery,
+  handleGetCommitBySha,
+} from '../queries/index.js';
+
 /**
  * Queue water marks for proactive refill.
  * Low water mark: trigger refill when queue drops to this level
@@ -417,7 +425,10 @@ export class Executor {
    * Used for ordering constraints in batch claiming.
    */
   private async getCodeChangeProcessedCommits(repoId: string): Promise<Set<string>> {
-    const commits = await this.repos.commits.findByRepo(repoId, { limit: 1000 });
+    // Use CQRS query to get commits
+    const query = createListCommitsQuery(repoId, { limit: 1000 });
+    const result = await handleListCommits(query, this.repos);
+    const commits = result.data || [];
     const processedShas = new Set<string>();
 
     for (const commit of commits) {
@@ -503,8 +514,10 @@ export class Executor {
     // The orchestrator returns Git SHAs, but agents expect internal UUIDs
     let internalCommitId: string | undefined;
     if (workItem.targetCommitId) {
-      const commit = await this.repos.commits.findBySha(repoId, workItem.targetCommitId);
-      if (!commit) {
+      // Use CQRS query to find commit by SHA
+      const commitQuery = createGetCommitByShaQuery(repoId, workItem.targetCommitId);
+      const commitResult = await handleGetCommitBySha(commitQuery, this.repos);
+      if (!commitResult.success || !commitResult.data) {
         const errorMsg = `Commit not found for SHA: ${workItem.targetCommitId}`;
         console.error(errorMsg);
         // Fail work item via CQRS command
@@ -514,7 +527,7 @@ export class Executor {
         );
         return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
       }
-      internalCommitId = commit.id;
+      internalCommitId = commitResult.data.id;
     }
 
     // Create agent run record via CQRS command
