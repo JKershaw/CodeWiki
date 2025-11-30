@@ -489,8 +489,9 @@ export class Orchestrator {
 				const runsResult = await handleListAgentRuns(runsQuery, this.repos);
 				const recentRuns = runsResult.data || [];
 
-				// Wiki Editor Agent: runs FIRST when there are pending edit requests
-				// This ensures edits are applied before other meta agents analyze the wiki
+				// Wiki Editor Agent: also run post-analysis to clean up any remaining edits
+				// Strategy 1 handles the >= 5 threshold during analysis, but we need to
+				// process remaining edits (1-4) after analysis completes
 				if (workItems.length < remainingSlots) {
 					const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
 					const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
@@ -505,7 +506,7 @@ export class Orchestrator {
 									id: uuid(),
 									repoId,
 									agentType: "wiki-editor",
-									priority: Priority.META + 5, // Slightly higher than other meta agents
+									priority: Priority.USER_REQUEST - 1, // Same high priority as Strategy 1
 								})
 							);
 						}
