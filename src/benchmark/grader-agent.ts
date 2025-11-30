@@ -102,10 +102,12 @@ ${verificationContext}
 3. Provide a clear explanation of your grading decision
 
 ## Grading Criteria
-- **accurate**: The wiki's answer correctly describes what the code does. Key facts are correct.
-- **partial**: The wiki's answer is partially correct but missing important details or has minor inaccuracies.
+- **accurate**: The wiki's answer correctly and completely describes what the code does. Key facts are correct and the wiki does NOT claim to be missing information.
+- **partial**: The wiki's answer is partially correct but missing important details, has minor inaccuracies, OR the wiki provides some correct information while acknowledging gaps in its knowledge.
 - **inaccurate**: The wiki's answer is wrong or significantly misleading.
-- **no_answer**: The wiki couldn't provide an answer or said it doesn't have information.
+- **no_answer**: The wiki couldn't provide an answer, said it doesn't have information, OR the wiki's response primarily consists of stating that information is missing/unavailable.
+
+IMPORTANT: If the wiki claims it is missing information or doesn't have documentation on a topic, this is a PENALTY, not a correct answer. The wiki should be marked down for knowledge gaps, not rewarded for honestly admitting them.
 
 Start by reading the relevant code files, then provide your grade.`;
 
@@ -183,10 +185,13 @@ Guidelines:
 1. Start by reading the suggested files or searching for relevant code
 2. Compare what the wiki says against what the code actually does
 3. Be fair but rigorous - minor wording differences are OK if the concept is correct
-4. If the wiki says "I don't have information", grade as "no_answer"
+4. If the wiki says "I don't have information" or claims the information is missing/unavailable, grade as "no_answer"
 5. If the wiki makes specific claims that are wrong, grade as "inaccurate"
 6. If the wiki is correct but missing key details, grade as "partial"
-7. If the wiki accurately describes the code's behavior, grade as "accurate"
+7. If the wiki provides some correct info but also admits to gaps/missing documentation, grade as "partial"
+8. If the wiki accurately and completely describes the code's behavior without claiming missing info, grade as "accurate"
+
+IMPORTANT: The purpose of this benchmark is to measure wiki COMPLETENESS. If the wiki admits it is missing information, this is a knowledge gap that should be penalized - not rewarded for honesty. A wiki that says "I don't have this information" has FAILED to document that aspect of the codebase.
 
 End your response with:
 GRADE: [accurate|partial|inaccurate|no_answer]
