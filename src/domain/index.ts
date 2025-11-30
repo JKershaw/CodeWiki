@@ -21,3 +21,4 @@ export * from './learning.js';
 export * from './processing-run.js';
 export * from './iteration.js';
 export * from './edit-request.js';
+export * from './quality-benchmark.js';

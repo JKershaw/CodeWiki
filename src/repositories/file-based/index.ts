@@ -20,6 +20,7 @@ export * from './file-iteration-repository.js';
 export * from './file-findings-repository.js';
 export * from './file-benchmark-repository.js';
 export * from './file-edit-request-repository.js';
+export * from './file-quality-benchmark-repository.js';
 
 import type { Repositories } from '../interfaces/index.js';
 import { FileRepoRepository } from './file-repo-repository.js';
@@ -36,6 +37,7 @@ import { FileIterationRepository } from './file-iteration-repository.js';
 import { FileFindingsRepository } from './file-findings-repository.js';
 import { FileBenchmarkRepository } from './file-benchmark-repository.js';
 import { FileEditRequestRepository } from './file-edit-request-repository.js';
+import { FileQualityBenchmarkRepository } from './file-quality-benchmark-repository.js';
 
 /**
  * Create all file-based repositories.
@@ -59,5 +61,6 @@ export function createFileRepositories(baseDir = '.codewiki-data'): Repositories
     findings: new FileFindingsRepository(baseDir),
     benchmarks: new FileBenchmarkRepository(baseDir),
     editRequests: new FileEditRequestRepository(baseDir),
+    qualityBenchmarks: new FileQualityBenchmarkRepository(baseDir),
   };
 }

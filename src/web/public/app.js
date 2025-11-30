@@ -810,6 +810,7 @@ document.getElementById('copy-spec').addEventListener('click', copySpec);
 
 // Benchmark
 let benchmarkPollingInterval = null;
+let qualityBenchmarkPollingInterval = null;
 let benchmarkChart = null;
 
 async function openBenchmark(repoId) {
@@ -835,50 +836,99 @@ async function loadBenchmarkHistory(repoId) {
   const container = document.getElementById('benchmark-history');
   const statusText = document.getElementById('benchmark-status-text');
   const runBtn = document.getElementById('run-benchmark-btn');
+  const qualityRunBtn = document.getElementById('run-quality-benchmark-btn');
+  const bothRunBtn = document.getElementById('run-both-benchmarks-btn');
 
   container.innerHTML = '<p class="loading">Loading benchmark history...</p>';
 
   try {
-    const data = await api(`/repos/${repoId}/benchmarks`);
-    const benchmarks = data.benchmarks || [];
+    // Load both accuracy and quality benchmarks in parallel
+    const [accuracyData, qualityData] = await Promise.all([
+      api(`/repos/${repoId}/benchmarks`),
+      api(`/repos/${repoId}/quality-benchmarks`).catch(() => ({ qualityBenchmarks: [] })),
+    ]);
 
-    // Check if there's a running benchmark
-    const runningBenchmark = benchmarks.find(b => b.status === 'running');
-    if (runningBenchmark) {
+    const accuracyBenchmarks = accuracyData.benchmarks || [];
+    const qualityBenchmarks = qualityData.qualityBenchmarks || [];
+
+    // Check if there's a running accuracy benchmark
+    const runningAccuracy = accuracyBenchmarks.find(b => b.status === 'running');
+    const runningQuality = qualityBenchmarks.find(b => b.status === 'running');
+
+    if (runningAccuracy) {
       runBtn.disabled = true;
-      statusText.textContent = 'Benchmark in progress...';
       startBenchmarkPolling(repoId);
     } else {
       runBtn.disabled = false;
-      statusText.textContent = '';
       stopBenchmarkPolling();
     }
 
-    if (benchmarks.length === 0) {
+    if (runningQuality) {
+      qualityRunBtn.disabled = true;
+      startQualityBenchmarkPolling(repoId);
+    } else {
+      qualityRunBtn.disabled = false;
+      stopQualityBenchmarkPolling();
+    }
+
+    // Update status text
+    if (runningAccuracy && runningQuality) {
+      statusText.textContent = 'Both benchmarks in progress...';
+    } else if (runningAccuracy) {
+      statusText.textContent = 'Accuracy benchmark in progress...';
+    } else if (runningQuality) {
+      statusText.textContent = 'Quality benchmark in progress...';
+    } else {
+      statusText.textContent = '';
+    }
+
+    bothRunBtn.disabled = runningAccuracy || runningQuality;
+
+    if (accuracyBenchmarks.length === 0 && qualityBenchmarks.length === 0) {
       container.innerHTML = '<p class="placeholder">No benchmarks yet. Run one to measure wiki quality.</p>';
-      renderBenchmarkChart([]);
+      renderBenchmarkChart([], []);
       return;
     }
 
-    // Render chart if at least 2 completed benchmarks
-    renderBenchmarkChart(benchmarks);
+    // Render combined chart
+    renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks);
 
-    // Render benchmark cards
-    container.innerHTML = benchmarks.map((benchmark, index) => {
-      const prevBenchmark = benchmarks[index + 1];
-      return renderBenchmarkCard(benchmark, prevBenchmark);
-    }).join('');
+    // Render benchmark cards grouped
+    let cardsHtml = '';
 
-    // Add click handlers
-    container.querySelectorAll('.benchmark-card').forEach(card => {
+    if (accuracyBenchmarks.length > 0) {
+      cardsHtml += '<h4 class="benchmark-section-title">Accuracy Benchmarks</h4>';
+      cardsHtml += accuracyBenchmarks.map((benchmark, index) => {
+        const prevBenchmark = accuracyBenchmarks[index + 1];
+        return renderBenchmarkCard(benchmark, prevBenchmark, 'accuracy');
+      }).join('');
+    }
+
+    if (qualityBenchmarks.length > 0) {
+      cardsHtml += '<h4 class="benchmark-section-title">Quality Benchmarks</h4>';
+      cardsHtml += qualityBenchmarks.map((benchmark, index) => {
+        const prevBenchmark = qualityBenchmarks[index + 1];
+        return renderQualityBenchmarkCard(benchmark, prevBenchmark);
+      }).join('');
+    }
+
+    container.innerHTML = cardsHtml;
+
+    // Add click handlers for accuracy benchmarks
+    container.querySelectorAll('.benchmark-card[data-type="accuracy"]').forEach(card => {
       card.addEventListener('click', () => showBenchmarkDetail(card.dataset.id));
+    });
+
+    // Add click handlers for quality benchmarks
+    container.querySelectorAll('.benchmark-card[data-type="quality"]').forEach(card => {
+      card.addEventListener('click', () => showQualityBenchmarkDetail(card.dataset.id));
     });
   } catch (error) {
     container.innerHTML = `<p class="placeholder">Error loading benchmarks: ${escapeHtml(error.message)}</p>`;
   }
 }
 
-function renderBenchmarkChart(benchmarks) {
+function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks) {
   const chartContainer = document.getElementById('benchmark-chart-container');
   const canvas = document.getElementById('benchmark-chart');
 
@@ -889,10 +939,12 @@ function renderBenchmarkChart(benchmarks) {
   }
 
   // Filter to completed benchmarks only
-  const completedBenchmarks = benchmarks.filter(b => b.status === 'completed');
+  const completedAccuracy = (accuracyBenchmarks || []).filter(b => b.status === 'completed');
+  const completedQuality = (qualityBenchmarks || []).filter(b => b.status === 'completed');
 
-  // Hide chart if less than 2 completed benchmarks
-  if (completedBenchmarks.length < 2) {
+  // Hide chart if less than 2 completed benchmarks total
+  const totalCompleted = completedAccuracy.length + completedQuality.length;
+  if (totalCompleted < 2) {
     chartContainer.classList.add('hidden');
     return;
   }
@@ -900,40 +952,68 @@ function renderBenchmarkChart(benchmarks) {
   chartContainer.classList.remove('hidden');
 
   // Sort by iteration count (ascending) for the chart
-  const sortedBenchmarks = [...completedBenchmarks].sort((a, b) => a.iterationCount - b.iterationCount);
+  const sortedAccuracy = [...completedAccuracy].sort((a, b) => a.iterationCount - b.iterationCount);
+  const sortedQuality = [...completedQuality].sort((a, b) => a.iterationCount - b.iterationCount);
 
   // Use x/y data points for proper numeric scaling
-  const dataPoints = sortedBenchmarks.map(b => ({
+  const accuracyPoints = sortedAccuracy.map(b => ({
     x: b.iterationCount,
     y: b.score ?? 0
   }));
 
+  const qualityPoints = sortedQuality.map(b => ({
+    x: b.iterationCount,
+    y: b.overallScore ?? 0
+  }));
+
+  const datasets = [];
+
+  if (accuracyPoints.length > 0) {
+    datasets.push({
+      label: 'Accuracy',
+      data: accuracyPoints,
+      borderColor: '#4a9eff',
+      backgroundColor: 'rgba(74, 158, 255, 0.1)',
+      borderWidth: 2,
+      fill: false,
+      tension: 0.3,
+      pointBackgroundColor: '#4a9eff',
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    });
+  }
+
+  if (qualityPoints.length > 0) {
+    datasets.push({
+      label: 'Quality',
+      data: qualityPoints,
+      borderColor: '#10b981',
+      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+      borderWidth: 2,
+      fill: false,
+      tension: 0.3,
+      pointBackgroundColor: '#10b981',
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    });
+  }
+
   benchmarkChart = new Chart(canvas, {
     type: 'line',
-    data: {
-      datasets: [{
-        label: 'Score',
-        data: dataPoints,
-        borderColor: '#4a9eff',
-        backgroundColor: 'rgba(74, 158, 255, 0.1)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.3,
-        pointBackgroundColor: '#4a9eff',
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      }]
-    },
+    data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: false,
+          display: datasets.length > 1,
+          labels: {
+            color: '#888',
+          },
         },
         tooltip: {
           callbacks: {
-            label: (context) => `Iteration ${context.parsed.x}: ${context.parsed.y.toFixed(0)}%`
+            label: (context) => `${context.dataset.label} - Iteration ${context.parsed.x}: ${context.parsed.y.toFixed(0)}%`
           }
         }
       },
@@ -968,7 +1048,7 @@ function renderBenchmarkChart(benchmarks) {
   });
 }
 
-function renderBenchmarkCard(benchmark, prevBenchmark) {
+function renderBenchmarkCard(benchmark, prevBenchmark, type = 'accuracy') {
   const date = new Date(benchmark.startedAt).toLocaleString();
   const score = benchmark.score ?? 0;
   const scoreClass = score >= 80 ? 'high' : score >= 50 ? 'medium' : 'low';
@@ -985,7 +1065,7 @@ function renderBenchmarkCard(benchmark, prevBenchmark) {
   }
 
   return `
-    <div class="benchmark-card" data-id="${benchmark.id}">
+    <div class="benchmark-card" data-id="${benchmark.id}" data-type="${type}">
       <div class="benchmark-card-header">
         <div class="benchmark-card-left">
           <div class="benchmark-date">${escapeHtml(date)}</div>
@@ -998,6 +1078,44 @@ function renderBenchmarkCard(benchmark, prevBenchmark) {
       </div>
       <div class="benchmark-card-stats">
         <span>${benchmark.totalQuestions || 0} questions</span>
+        ${benchmark.totalCostUsd ? `<span>$${benchmark.totalCostUsd.toFixed(3)}</span>` : ''}
+        ${benchmark.completedAt ? `<span>${formatDuration(benchmark.startedAt, benchmark.completedAt)}</span>` : ''}
+      </div>
+      ${changeHtml}
+    </div>
+  `;
+}
+
+function renderQualityBenchmarkCard(benchmark, prevBenchmark) {
+  const date = new Date(benchmark.startedAt).toLocaleString();
+  const score = benchmark.overallScore ?? 0;
+  const scoreClass = score >= 80 ? 'high' : score >= 50 ? 'medium' : 'low';
+
+  let changeHtml = '';
+  if (prevBenchmark && benchmark.status === 'completed' && prevBenchmark.status === 'completed') {
+    const prevScore = prevBenchmark.overallScore ?? 0;
+    const change = score - prevScore;
+    if (change !== 0) {
+      const changeClass = change > 0 ? 'positive' : 'negative';
+      const changeSign = change > 0 ? '+' : '';
+      changeHtml = `<div class="benchmark-change ${changeClass}">${changeSign}${change.toFixed(0)}% from previous</div>`;
+    }
+  }
+
+  return `
+    <div class="benchmark-card quality" data-id="${benchmark.id}" data-type="quality">
+      <div class="benchmark-card-header">
+        <div class="benchmark-card-left">
+          <div class="benchmark-date">${escapeHtml(date)}</div>
+          <div class="benchmark-iteration">Iteration ${benchmark.iterationCount}</div>
+        </div>
+        <div class="benchmark-card-right">
+          <div class="benchmark-score ${scoreClass}">${score.toFixed(0)}%</div>
+          <span class="benchmark-status ${benchmark.status}">${benchmark.status}</span>
+        </div>
+      </div>
+      <div class="benchmark-card-stats">
+        <span>${benchmark.pagesEvaluated || 0} pages</span>
         ${benchmark.totalCostUsd ? `<span>$${benchmark.totalCostUsd.toFixed(3)}</span>` : ''}
         ${benchmark.completedAt ? `<span>${formatDuration(benchmark.startedAt, benchmark.completedAt)}</span>` : ''}
       </div>
@@ -1206,7 +1324,261 @@ function formatGrade(grade) {
   return labels[grade] || grade;
 }
 
+// Quality Benchmark Functions
+async function runQualityBenchmark() {
+  if (!currentRepo) return;
+
+  const runBtn = document.getElementById('run-quality-benchmark-btn');
+  const statusText = document.getElementById('benchmark-status-text');
+  const progressDiv = document.getElementById('benchmark-progress');
+
+  runBtn.disabled = true;
+  statusText.textContent = 'Starting quality benchmark...';
+  progressDiv.classList.remove('hidden');
+  document.getElementById('benchmark-progress-fill').style.width = '0%';
+  document.getElementById('benchmark-progress-text').textContent = 'Starting quality benchmark...';
+
+  try {
+    const response = await fetch(`/api/repos/${currentRepo.id}/quality-benchmarks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (response.status === 409) {
+      statusText.textContent = 'A quality benchmark is already running';
+      startQualityBenchmarkPolling(currentRepo.id);
+      return;
+    }
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to start quality benchmark');
+    }
+
+    statusText.textContent = 'Quality benchmark in progress...';
+    startQualityBenchmarkPolling(currentRepo.id);
+  } catch (error) {
+    runBtn.disabled = false;
+    statusText.textContent = `Error: ${error.message}`;
+    progressDiv.classList.add('hidden');
+  }
+}
+
+async function runBothBenchmarks() {
+  if (!currentRepo) return;
+
+  const bothBtn = document.getElementById('run-both-benchmarks-btn');
+  const statusText = document.getElementById('benchmark-status-text');
+
+  bothBtn.disabled = true;
+  statusText.textContent = 'Starting both benchmarks...';
+
+  try {
+    // Start both benchmarks in parallel
+    const results = await Promise.allSettled([
+      fetch(`/api/repos/${currentRepo.id}/benchmarks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      fetch(`/api/repos/${currentRepo.id}/quality-benchmarks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    ]);
+
+    statusText.textContent = 'Both benchmarks in progress...';
+    startBenchmarkPolling(currentRepo.id);
+    startQualityBenchmarkPolling(currentRepo.id);
+
+    // Refresh the view to show running status
+    await loadBenchmarkHistory(currentRepo.id);
+  } catch (error) {
+    bothBtn.disabled = false;
+    statusText.textContent = `Error: ${error.message}`;
+  }
+}
+
+function startQualityBenchmarkPolling(repoId) {
+  stopQualityBenchmarkPolling();
+
+  const progressDiv = document.getElementById('benchmark-progress');
+  progressDiv.classList.remove('hidden');
+
+  qualityBenchmarkPollingInterval = setInterval(async () => {
+    try {
+      const data = await api(`/repos/${repoId}/quality-benchmarks?limit=1`);
+      const benchmarks = data.qualityBenchmarks || [];
+      const latest = benchmarks[0];
+
+      if (!latest || latest.status !== 'running') {
+        // Benchmark completed or failed
+        stopQualityBenchmarkPolling();
+        progressDiv.classList.add('hidden');
+        await loadBenchmarkHistory(repoId);
+        return;
+      }
+
+      // Update progress
+      document.getElementById('benchmark-progress-text').textContent = 'Quality benchmark in progress... This may take a few minutes.';
+    } catch (error) {
+      console.error('Error polling quality benchmark status:', error);
+    }
+  }, 3000);
+}
+
+function stopQualityBenchmarkPolling() {
+  if (qualityBenchmarkPollingInterval) {
+    clearInterval(qualityBenchmarkPollingInterval);
+    qualityBenchmarkPollingInterval = null;
+  }
+}
+
+async function showQualityBenchmarkDetail(benchmarkId) {
+  const detailPanel = document.getElementById('benchmark-detail');
+  const contentDiv = document.getElementById('benchmark-detail-content');
+
+  detailPanel.classList.remove('hidden');
+  contentDiv.innerHTML = '<p class="loading">Loading quality benchmark details...</p>';
+
+  try {
+    const data = await api(`/repos/${currentRepo.id}/quality-benchmarks/${benchmarkId}`);
+    const benchmark = data.qualityBenchmark;
+
+    if (!benchmark) {
+      contentDiv.innerHTML = '<p class="placeholder">Quality benchmark not found</p>';
+      return;
+    }
+
+    const summary = benchmark.summary || {};
+    const results = benchmark.results || [];
+
+    // Build summary stats
+    let summaryHtml = `
+      <div class="benchmark-detail-summary">
+        <div class="benchmark-detail-stat">
+          <div class="value">${(summary.overallScore ?? 0).toFixed(0)}%</div>
+          <div class="label">Overall Score</div>
+        </div>
+        <div class="benchmark-detail-stat">
+          <div class="value">${summary.pagesEvaluated || results.length || 0}</div>
+          <div class="label">Pages</div>
+        </div>
+        <div class="benchmark-detail-stat">
+          <div class="value">${(summary.strengths || []).length}</div>
+          <div class="label">Strengths</div>
+        </div>
+        <div class="benchmark-detail-stat">
+          <div class="value">${(summary.weaknesses || []).length}</div>
+          <div class="label">Weaknesses</div>
+        </div>
+      </div>
+    `;
+
+    // By dimension breakdown
+    if (summary.byDimension) {
+      summaryHtml += `
+        <div class="benchmark-breakdown">
+          <h4>By Dimension</h4>
+          <div class="breakdown-items">
+            ${Object.entries(summary.byDimension).map(([dim, score]) => `
+              <div class="breakdown-item">
+                <span class="name">${formatDimensionName(dim)}</span>
+                <span class="score ${score >= 70 ? 'high' : score >= 50 ? 'medium' : 'low'}">${score.toFixed(0)}%</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Strengths and weaknesses
+    if ((summary.strengths || []).length > 0) {
+      summaryHtml += `
+        <div class="benchmark-breakdown">
+          <h4>Strengths</h4>
+          <div class="breakdown-items">
+            ${summary.strengths.map(dim => `
+              <div class="breakdown-item strength">
+                <span class="name">${formatDimensionName(dim)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    if ((summary.weaknesses || []).length > 0) {
+      summaryHtml += `
+        <div class="benchmark-breakdown">
+          <h4>Areas for Improvement</h4>
+          <div class="breakdown-items">
+            ${summary.weaknesses.map(dim => `
+              <div class="breakdown-item weakness">
+                <span class="name">${formatDimensionName(dim)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Individual page results
+    if (results.length > 0) {
+      summaryHtml += `
+        <div class="benchmark-questions">
+          <h4>Page Results</h4>
+          ${results.map(result => {
+            const avgScore = Object.values(result.scores || {}).reduce((a, b) => a + b, 0) / 8;
+            return `
+              <div class="question-result ${avgScore >= 70 ? 'accurate' : avgScore >= 50 ? 'partial' : 'inaccurate'}">
+                <div class="question-header">
+                  <div class="question-text">${escapeHtml(result.pageTitle || result.pagePath)}</div>
+                  <span class="grade-badge">${avgScore.toFixed(0)}%</span>
+                </div>
+                <div class="question-meta">
+                  <span>Path: ${escapeHtml(result.pagePath)}</span>
+                  ${result.durationMs ? `<span>${(result.durationMs / 1000).toFixed(1)}s</span>` : ''}
+                </div>
+                ${result.reasoning ? `<div class="question-reasoning">${escapeHtml(result.reasoning)}</div>` : ''}
+                ${(result.findings || []).length > 0 ? `
+                  <div class="question-findings">
+                    <strong>Findings:</strong>
+                    <ul>${result.findings.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    contentDiv.innerHTML = summaryHtml;
+  } catch (error) {
+    contentDiv.innerHTML = `<p class="placeholder">Error loading details: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function formatDimensionName(dimension) {
+  const names = {
+    'contextual_richness': 'Contextual Richness',
+    'coherence_consistency': 'Coherence & Consistency',
+    'completeness_coverage': 'Completeness Coverage',
+    'actionability': 'Actionability',
+    'structural_quality': 'Structural Quality',
+    'confidence_calibration': 'Confidence Calibration',
+    'machine_readability': 'Machine Readability',
+    'information_density': 'Information Density',
+  };
+  return names[dimension] || dimension;
+}
+
 document.getElementById('run-benchmark-btn').addEventListener('click', runBenchmark);
+document.getElementById('run-quality-benchmark-btn').addEventListener('click', runQualityBenchmark);
+document.getElementById('run-both-benchmarks-btn').addEventListener('click', runBothBenchmarks);
 document.getElementById('close-benchmark-detail').addEventListener('click', () => {
   document.getElementById('benchmark-detail').classList.add('hidden');
 });
@@ -1226,6 +1598,7 @@ async function runAutoBenchmark() {
 
   const iterationsPerCycle = parseInt(document.getElementById('auto-benchmark-iterations').value, 10) || 5;
   const maxCycles = parseInt(document.getElementById('auto-benchmark-max-cycles').value, 10) || 10;
+  const includeQuality = document.getElementById('auto-benchmark-include-quality').checked;
 
   autoBenchmarkRunning = true;
   autoBenchmarkStopping = false;
@@ -1245,10 +1618,13 @@ async function runAutoBenchmark() {
   stopBtn.disabled = false;
   document.getElementById('auto-benchmark-iterations').disabled = true;
   document.getElementById('auto-benchmark-max-cycles').disabled = true;
+  document.getElementById('auto-benchmark-include-quality').disabled = true;
   progressDiv.classList.remove('hidden');
 
-  // Also disable regular benchmark button during auto-benchmark
+  // Also disable benchmark buttons during auto-benchmark
   document.getElementById('run-benchmark-btn').disabled = true;
+  document.getElementById('run-quality-benchmark-btn').disabled = true;
+  document.getElementById('run-both-benchmarks-btn').disabled = true;
 
   try {
     for (let cycle = 1; cycle <= maxCycles; cycle++) {
@@ -1275,13 +1651,27 @@ async function runAutoBenchmark() {
         break;
       }
 
-      // Phase 2: Run benchmark
-      phaseSpan.textContent = 'Running benchmark...';
-      statusText.textContent = 'Starting benchmark...';
+      // Phase 2: Run benchmarks (accuracy and optionally quality in parallel)
+      const benchmarkLabel = includeQuality ? 'benchmarks' : 'benchmark';
+      phaseSpan.textContent = `Running ${benchmarkLabel}...`;
+      statusText.textContent = `Starting ${benchmarkLabel}...`;
 
-      await runBenchmarkAndWait(currentRepo.id, () => {
-        statusText.textContent = 'Benchmark in progress...';
-      });
+      if (includeQuality) {
+        // Run both accuracy and quality benchmarks in parallel
+        await Promise.all([
+          runBenchmarkAndWait(currentRepo.id, () => {
+            statusText.textContent = 'Benchmarks in progress...';
+          }),
+          runQualityBenchmarkAndWait(currentRepo.id, () => {
+            statusText.textContent = 'Benchmarks in progress...';
+          }),
+        ]);
+      } else {
+        // Run only accuracy benchmark
+        await runBenchmarkAndWait(currentRepo.id, () => {
+          statusText.textContent = 'Benchmark in progress...';
+        });
+      }
 
       // Update progress after cycle completes
       const cycleProgress = (cycle / maxCycles) * 100;
@@ -1306,7 +1696,10 @@ async function runAutoBenchmark() {
     stopBtn.classList.add('hidden');
     document.getElementById('auto-benchmark-iterations').disabled = false;
     document.getElementById('auto-benchmark-max-cycles').disabled = false;
+    document.getElementById('auto-benchmark-include-quality').disabled = false;
     document.getElementById('run-benchmark-btn').disabled = false;
+    document.getElementById('run-quality-benchmark-btn').disabled = false;
+    document.getElementById('run-both-benchmarks-btn').disabled = false;
   }
 }
 
@@ -1355,7 +1748,7 @@ async function runIterationsAndWait(repoId, iterations, onProgress) {
 }
 
 /**
- * Run a benchmark and wait for completion.
+ * Run an accuracy benchmark and wait for completion.
  */
 async function runBenchmarkAndWait(repoId, onProgress) {
   // Start benchmark
@@ -1378,6 +1771,50 @@ async function runBenchmarkAndWait(repoId, onProgress) {
       try {
         const data = await api(`/repos/${repoId}/benchmarks?limit=1`);
         const benchmarks = data.benchmarks || [];
+        const latest = benchmarks[0];
+
+        if (!latest || latest.status !== 'running') {
+          resolve();
+          return;
+        }
+
+        if (onProgress) {
+          onProgress();
+        }
+
+        setTimeout(poll, 3000);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    setTimeout(poll, 500);
+  });
+}
+
+/**
+ * Run a quality benchmark and wait for completion.
+ */
+async function runQualityBenchmarkAndWait(repoId, onProgress) {
+  // Start quality benchmark
+  const response = await fetch(`/api/repos/${repoId}/quality-benchmarks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+
+  if (response.status === 409) {
+    // Already running, just wait for it
+  } else if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to start quality benchmark');
+  }
+
+  // Poll until complete
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const data = await api(`/repos/${repoId}/quality-benchmarks?limit=1`);
+        const benchmarks = data.qualityBenchmarks || [];
         const latest = benchmarks[0];
 
         if (!latest || latest.status !== 'running') {

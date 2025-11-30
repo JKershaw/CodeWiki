@@ -136,7 +136,9 @@
 
         <div class="benchmark-container">
           <div class="benchmark-actions">
-            <button id="run-benchmark-btn" class="btn primary">Run Benchmark</button>
+            <button id="run-benchmark-btn" class="btn primary">Run Accuracy</button>
+            <button id="run-quality-benchmark-btn" class="btn primary">Run Quality</button>
+            <button id="run-both-benchmarks-btn" class="btn secondary">Run Both</button>
             <span id="benchmark-status-text" class="benchmark-status-text"></span>
           </div>
 
@@ -150,6 +152,10 @@
               <label>
                 Max cycles:
                 <input type="number" id="auto-benchmark-max-cycles" value="10" min="1" max="100">
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-benchmark-include-quality" checked>
+                Include Quality
               </label>
               <button id="auto-benchmark-btn" class="btn primary">Start Auto Benchmark</button>
               <button id="stop-auto-benchmark-btn" class="btn danger hidden">Stop</button>

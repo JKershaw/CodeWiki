@@ -1,33 +1,33 @@
 /**
- * Benchmark API routes.
+ * Quality Benchmark API routes.
  *
- * Provides endpoints to run benchmarks, view results, and compare runs.
+ * Provides endpoints to run quality benchmarks, view results, and compare runs.
  */
 
 import { Router, type Request, type Response } from 'express';
 import type { Dependencies } from './index.js';
-import { BenchmarkRunner } from '../../benchmark/benchmark-runner.js';
+import { QualityBenchmarkRunner } from '../../quality-benchmark/quality-benchmark-runner.js';
 import {
-  handleGetBenchmarkRun,
-  handleGetBenchmarkHistory,
-  handleCompareBenchmarks,
-  createGetBenchmarkRunQuery,
-  createGetBenchmarkHistoryQuery,
-  createCompareBenchmarksQuery,
-} from '../../queries/benchmark.js';
+  handleGetQualityBenchmarkRun,
+  handleGetQualityBenchmarkHistory,
+  handleCompareQualityBenchmarks,
+  createGetQualityBenchmarkRunQuery,
+  createGetQualityBenchmarkHistoryQuery,
+  createCompareQualityBenchmarksQuery,
+} from '../../queries/quality-benchmark.js';
 
 /**
- * Create benchmark routes.
+ * Create quality benchmark routes.
  */
-export function createBenchmarksRoutes(deps: Dependencies): Router {
-  const { repos, git, createLLM } = deps;
+export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
+  const { repos, createLLM } = deps;
   const router = Router();
 
   /**
-   * Start a benchmark run for a repository.
+   * Start a quality benchmark run for a repository.
    * Returns immediately with runId; client should poll for completion.
    */
-  router.post('/api/repos/:id/benchmarks', async (req: Request, res: Response) => {
+  router.post('/api/repos/:id/quality-benchmarks', async (req: Request, res: Response) => {
     try {
       const repoId = req.params.id!;
 
@@ -45,27 +45,41 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
         return;
       }
 
-      // Check if there's already a running benchmark
-      const running = await repos.benchmarks.findRunning(repoId);
+      // Check if there's already a running quality benchmark
+      const running = await repos.qualityBenchmarks.findRunning(repoId);
       if (running) {
         res.status(409).json({
-          error: 'A benchmark is already running',
+          error: 'A quality benchmark is already running',
           runId: running.id,
         });
         return;
       }
 
-      // Register the local repo path so git service can find it
-      git.registerLocalRepo(repoId, repo.fullName);
-
       // Create LLM service and runner
       const llm = createLLM();
-      const runner = new BenchmarkRunner(repos, llm, git);
+      const runner = new QualityBenchmarkRunner(repos, llm);
 
       // Parse options from request body
-      const options: { questionIds?: string[]; maxConcurrency?: number } = {};
-      if (req.body.questionIds) {
-        options.questionIds = req.body.questionIds as string[];
+      const options: {
+        selection?: {
+          maxPages?: number;
+          includeLowestConfidence?: number;
+          includeRecentlyUpdated?: number;
+        };
+        maxConcurrency?: number;
+      } = {};
+
+      if (req.body.maxPages) {
+        options.selection = options.selection || {};
+        options.selection.maxPages = req.body.maxPages as number;
+      }
+      if (req.body.includeLowestConfidence) {
+        options.selection = options.selection || {};
+        options.selection.includeLowestConfidence = req.body.includeLowestConfidence as number;
+      }
+      if (req.body.includeRecentlyUpdated) {
+        options.selection = options.selection || {};
+        options.selection.includeRecentlyUpdated = req.body.includeRecentlyUpdated as number;
       }
       if (req.body.maxConcurrency) {
         options.maxConcurrency = req.body.maxConcurrency as number;
@@ -78,18 +92,18 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
       // The benchmark creates a run record immediately
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const startedRun = await repos.benchmarks.findRunning(repoId);
+      const startedRun = await repos.qualityBenchmarks.findRunning(repoId);
 
       // Continue processing in background
       benchmarkPromise.catch(error => {
-        console.error('Benchmark failed:', error);
+        console.error('Quality benchmark failed:', error);
       });
 
       if (startedRun) {
         res.status(202).json({
           runId: startedRun.id,
           status: 'running',
-          message: 'Benchmark started, poll /api/repos/:id/benchmarks/:runId for results',
+          message: 'Quality benchmark started, poll /api/repos/:id/quality-benchmarks/:runId for results',
         });
       } else {
         // Wait for the full result if quick start failed
@@ -105,9 +119,9 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Get benchmark history for a repository.
+   * Get quality benchmark history for a repository.
    */
-  router.get('/api/repos/:id/benchmarks', async (req: Request, res: Response) => {
+  router.get('/api/repos/:id/quality-benchmarks', async (req: Request, res: Response) => {
     try {
       const repoId = req.params.id!;
 
@@ -120,8 +134,8 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
 
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
-      const result = await handleGetBenchmarkHistory(
-        createGetBenchmarkHistoryQuery(repoId, limit),
+      const result = await handleGetQualityBenchmarkHistory(
+        createGetQualityBenchmarkHistoryQuery(repoId, limit),
         repos
       );
 
@@ -131,7 +145,7 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
       }
 
       res.json({
-        benchmarks: result.data,
+        qualityBenchmarks: result.data,
       });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -139,10 +153,10 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Compare multiple benchmark runs.
+   * Compare multiple quality benchmark runs.
    * NOTE: This route must be defined BEFORE /:runId to avoid "compare" matching as a runId.
    */
-  router.get('/api/repos/:id/benchmarks/compare', async (req: Request, res: Response) => {
+  router.get('/api/repos/:id/quality-benchmarks/compare', async (req: Request, res: Response) => {
     try {
       const repoId = req.params.id!;
 
@@ -165,8 +179,8 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
         return;
       }
 
-      const result = await handleCompareBenchmarks(
-        createCompareBenchmarksQuery(runIds),
+      const result = await handleCompareQualityBenchmarks(
+        createCompareQualityBenchmarksQuery(runIds),
         repos
       );
 
@@ -184,9 +198,9 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Get a specific benchmark run.
+   * Get a specific quality benchmark run.
    */
-  router.get('/api/repos/:id/benchmarks/:runId', async (req: Request, res: Response) => {
+  router.get('/api/repos/:id/quality-benchmarks/:runId', async (req: Request, res: Response) => {
     try {
       const { id: repoId, runId } = req.params;
 
@@ -197,8 +211,8 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
         return;
       }
 
-      const result = await handleGetBenchmarkRun(
-        createGetBenchmarkRunQuery(runId!),
+      const result = await handleGetQualityBenchmarkRun(
+        createGetQualityBenchmarkRunQuery(runId!),
         repos
       );
 
@@ -209,12 +223,12 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
 
       // Verify the benchmark belongs to this repository
       if (result.data!.repoId !== repoId) {
-        res.status(404).json({ error: 'Benchmark not found for this repository' });
+        res.status(404).json({ error: 'Quality benchmark not found for this repository' });
         return;
       }
 
       res.json({
-        benchmark: result.data,
+        qualityBenchmark: result.data,
       });
     } catch (error) {
       res.status(500).json({ error: String(error) });
