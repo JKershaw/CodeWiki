@@ -39,6 +39,8 @@ import {
 	handleListOpenFindings,
 	createListLowConfidencePagesQuery,
 	handleListLowConfidencePages,
+	createCountPendingEditRequestsQuery,
+	handleCountPendingEditRequests,
 } from "../../queries/index.js";
 
 /**
@@ -60,6 +62,7 @@ const ANALYSIS_AGENTS: AgentType[] = [
  * These run after analysis agents have created content.
  */
 const META_AGENTS: AgentType[] = [
+	"wiki-editor", // Process edit requests (runs first to apply pending edits)
 	"link", // Cross-reference management
 	"structure", // Wiki organization analysis
 	"quality", // Content quality review
@@ -457,6 +460,29 @@ export class Orchestrator {
 				const runsQuery = createListAgentRunsQuery(repoId);
 				const runsResult = await handleListAgentRuns(runsQuery, this.repos);
 				const recentRuns = runsResult.data || [];
+
+				// Wiki Editor Agent: runs FIRST when there are pending edit requests
+				// This ensures edits are applied before other meta agents analyze the wiki
+				if (workItems.length < remainingSlots) {
+					const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
+					const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
+					const pendingEditCount = pendingEditsResult.data || 0;
+
+					if (pendingEditCount > 0) {
+						const wikiEditorKey = "wiki-editor:null";
+						if (!existingWorkKeys.has(wikiEditorKey)) {
+							existingWorkKeys.add(wikiEditorKey);
+							workItems.push(
+								createWorkItem({
+									id: uuid(),
+									repoId,
+									agentType: "wiki-editor",
+									priority: Priority.META + 5, // Slightly higher than other meta agents
+								})
+							);
+						}
+					}
+				}
 
 				// Check for pages without links (need link agent)
 				const pagesWithoutLinks = wikiPages.filter((p) => p.links.length === 0);
