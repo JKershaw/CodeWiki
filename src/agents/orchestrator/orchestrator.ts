@@ -388,7 +388,32 @@ export class Orchestrator {
 			}
 		}
 
-		// Strategy 1: Process unprocessed commits with all analysis agents
+		// Strategy 1: Process pending edit requests BEFORE analysis
+		// Wiki-editor should run when edit requests pile up to keep wiki updated incrementally
+		// This prevents the wiki from staying empty while hundreds of commits are processed
+		const PENDING_EDITS_THRESHOLD = 5;
+		if (workItems.length < remainingSlots) {
+			const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
+			const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
+			const pendingEditCount = pendingEditsResult.data || 0;
+
+			if (pendingEditCount >= PENDING_EDITS_THRESHOLD) {
+				const wikiEditorKey = "wiki-editor:null";
+				if (!existingWorkKeys.has(wikiEditorKey)) {
+					existingWorkKeys.add(wikiEditorKey);
+					workItems.push(
+						createWorkItem({
+							id: uuid(),
+							repoId,
+							agentType: "wiki-editor",
+							priority: Priority.USER_REQUEST - 1, // Just below bootstrap, above everything else
+						})
+					);
+				}
+			}
+		}
+
+		// Strategy 2: Process unprocessed commits with all analysis agents
 		// Each commit should be processed by all analysis agents for comprehensive coverage
 		const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -432,12 +457,12 @@ export class Orchestrator {
 			}
 		}
 
-		// Strategy 2: Address open conflicts (high priority)
+		// Strategy 3: Address open conflicts (high priority)
 		if (workItems.length < remainingSlots && openConflicts.length > 0) {
 			// TODO: Add conflict resolution work items when we have a conflict resolution agent
 		}
 
-		// Strategy 3: Improve low-confidence pages
+		// Strategy 4: Improve low-confidence pages
 		if (workItems.length < remainingSlots) {
 			// Use CQRS query to find low confidence pages
 			const lowConfQuery = createListLowConfidencePagesQuery(wikiId, 0.5);
@@ -446,32 +471,7 @@ export class Orchestrator {
 			// TODO: Add quality improvement work items when we have meta agents
 		}
 
-		// Strategy 3b: Process pending edit requests periodically
-		// Wiki-editor should run when edit requests pile up, not just after all analysis completes
-		// This prevents the wiki from staying empty while hundreds of commits are processed
-		const PENDING_EDITS_THRESHOLD = 5;
-		if (workItems.length < remainingSlots) {
-			const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
-			const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
-			const pendingEditCount = pendingEditsResult.data || 0;
-
-			if (pendingEditCount >= PENDING_EDITS_THRESHOLD) {
-				const wikiEditorKey = "wiki-editor:null";
-				if (!existingWorkKeys.has(wikiEditorKey)) {
-					existingWorkKeys.add(wikiEditorKey);
-					workItems.push(
-						createWorkItem({
-							id: uuid(),
-							repoId,
-							agentType: "wiki-editor",
-							priority: Priority.META + 10, // Higher priority - edits should be applied promptly
-						})
-					);
-				}
-			}
-		}
-
-		// Strategy 4: Meta agents (run on wiki after analysis is complete)
+		// Strategy 5: Meta agents (run on wiki after analysis is complete)
 		// Only run meta agents when all commits have been analyzed by code-change
 		if (workItems.length < remainingSlots && wikiPages.length >= 2) {
 			// Use CQRS query to find unprocessed commits
@@ -649,7 +649,7 @@ export class Orchestrator {
 			}
 		}
 
-		// Strategy 5: Synthesis work (when we have enough raw material)
+		// Strategy 6: Synthesis work (when we have enough raw material)
 		if (workItems.length < remainingSlots && wikiPages.length >= 5) {
 			// Fetch recent agent runs for synthesis checks via CQRS query
 			const synthRunsQuery = createListAgentRunsQuery(repoId);
@@ -979,7 +979,7 @@ export class Orchestrator {
 			}
 		}
 
-		// Strategy 6: Codebase exploration (document undocumented code)
+		// Strategy 7: Codebase exploration (document undocumented code)
 		// Run codebase-explorer when we have directory coverage data showing low coverage
 		if (workItems.length < remainingSlots && this.git) {
 			// Calculate directory coverage
