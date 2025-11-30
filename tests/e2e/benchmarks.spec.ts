@@ -109,9 +109,9 @@ test.describe('Benchmark API', () => {
       data: {},
     });
 
-    // Could be 202 (started), 409 (already running), or 500 (LLM not configured)
+    // Could be 202 (started), 201 (completed), 400 (no active wiki), 409 (already running), or 500 (LLM not configured)
     // We're just checking the endpoint responds correctly
-    expect([202, 201, 409, 500].includes(response.status())).toBeTruthy();
+    expect([202, 201, 400, 409, 500].includes(response.status())).toBeTruthy();
   });
 
   test('start benchmark with options', async ({ request }) => {
@@ -123,7 +123,8 @@ test.describe('Benchmark API', () => {
     });
 
     // Endpoint should accept the options even if benchmark fails
-    expect([202, 201, 409, 500].includes(response.status())).toBeTruthy();
+    // 400 could happen if there's no active wiki
+    expect([202, 201, 400, 409, 500].includes(response.status())).toBeTruthy();
   });
 
   test('returns 409 when benchmark already running', async ({ request }) => {

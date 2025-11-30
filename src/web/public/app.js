@@ -13,6 +13,7 @@ const views = {
   wiki: document.getElementById('wiki-view'),
   query: document.getElementById('query-view'),
   spec: document.getElementById('spec-view'),
+  benchmark: document.getElementById('benchmark-view'),
 };
 
 const navBtns = document.querySelectorAll('.nav-btn');
@@ -98,6 +99,7 @@ async function loadRepos() {
           <button class="btn wiki-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Browse Wiki</button>
           <button class="btn query-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Ask</button>
           <button class="btn spec-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Spec</button>
+          <button class="btn benchmark-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Benchmark</button>
         </div>
       </div>
     `).join('');
@@ -114,6 +116,9 @@ async function loadRepos() {
     });
     container.querySelectorAll('.spec-btn').forEach(btn => {
       btn.addEventListener('click', () => openSpec(btn.dataset.id));
+    });
+    container.querySelectorAll('.benchmark-btn').forEach(btn => {
+      btn.addEventListener('click', () => openBenchmark(btn.dataset.id));
     });
   } catch (error) {
     container.innerHTML = `<p class="placeholder">Error loading repositories: ${escapeHtml(error.message)}</p>`;
@@ -772,6 +777,319 @@ document.getElementById('spec-task').addEventListener('keypress', (e) => {
   }
 });
 document.getElementById('copy-spec').addEventListener('click', copySpec);
+
+// Benchmark
+let benchmarkPollingInterval = null;
+
+async function openBenchmark(repoId) {
+  currentRepo = await api(`/repos/${repoId}`);
+  document.getElementById('benchmark-repo-name').textContent = currentRepo.fullName;
+
+  // Enable nav buttons
+  document.querySelector('[data-view="wiki"]').disabled = false;
+  document.querySelector('[data-view="query"]').disabled = false;
+  document.querySelector('[data-view="spec"]').disabled = false;
+  document.querySelector('[data-view="benchmark"]').disabled = false;
+
+  showView('benchmark');
+
+  // Close detail panel if open
+  document.getElementById('benchmark-detail').classList.add('hidden');
+
+  // Load benchmark history
+  await loadBenchmarkHistory(repoId);
+}
+
+async function loadBenchmarkHistory(repoId) {
+  const container = document.getElementById('benchmark-history');
+  const statusText = document.getElementById('benchmark-status-text');
+  const runBtn = document.getElementById('run-benchmark-btn');
+
+  container.innerHTML = '<p class="loading">Loading benchmark history...</p>';
+
+  try {
+    const data = await api(`/repos/${repoId}/benchmarks`);
+    const benchmarks = data.benchmarks || [];
+
+    // Check if there's a running benchmark
+    const runningBenchmark = benchmarks.find(b => b.status === 'running');
+    if (runningBenchmark) {
+      runBtn.disabled = true;
+      statusText.textContent = 'Benchmark in progress...';
+      startBenchmarkPolling(repoId);
+    } else {
+      runBtn.disabled = false;
+      statusText.textContent = '';
+      stopBenchmarkPolling();
+    }
+
+    if (benchmarks.length === 0) {
+      container.innerHTML = '<p class="placeholder">No benchmarks yet. Run one to measure wiki quality.</p>';
+      return;
+    }
+
+    // Render benchmark cards
+    container.innerHTML = benchmarks.map((benchmark, index) => {
+      const prevBenchmark = benchmarks[index + 1];
+      return renderBenchmarkCard(benchmark, prevBenchmark);
+    }).join('');
+
+    // Add click handlers
+    container.querySelectorAll('.benchmark-card').forEach(card => {
+      card.addEventListener('click', () => showBenchmarkDetail(card.dataset.id));
+    });
+  } catch (error) {
+    container.innerHTML = `<p class="placeholder">Error loading benchmarks: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderBenchmarkCard(benchmark, prevBenchmark) {
+  const date = new Date(benchmark.startedAt).toLocaleString();
+  const score = benchmark.score ?? 0;
+  const scoreClass = score >= 80 ? 'high' : score >= 50 ? 'medium' : 'low';
+
+  let changeHtml = '';
+  if (prevBenchmark && benchmark.status === 'completed' && prevBenchmark.status === 'completed') {
+    const prevScore = prevBenchmark.score ?? 0;
+    const change = score - prevScore;
+    if (change !== 0) {
+      const changeClass = change > 0 ? 'positive' : 'negative';
+      const changeSign = change > 0 ? '+' : '';
+      changeHtml = `<div class="benchmark-change ${changeClass}">${changeSign}${change.toFixed(0)}% from previous</div>`;
+    }
+  }
+
+  return `
+    <div class="benchmark-card" data-id="${benchmark.id}">
+      <div class="benchmark-card-header">
+        <div class="benchmark-card-left">
+          <div class="benchmark-date">${escapeHtml(date)}</div>
+          <div class="benchmark-iteration">Iteration ${benchmark.iterationCount}</div>
+        </div>
+        <div class="benchmark-card-right">
+          <div class="benchmark-score ${scoreClass}">${score.toFixed(0)}%</div>
+          <span class="benchmark-status ${benchmark.status}">${benchmark.status}</span>
+        </div>
+      </div>
+      <div class="benchmark-card-stats">
+        <span>${benchmark.totalQuestions || 0} questions</span>
+        ${benchmark.totalCostUsd ? `<span>$${benchmark.totalCostUsd.toFixed(3)}</span>` : ''}
+        ${benchmark.completedAt ? `<span>${formatDuration(benchmark.startedAt, benchmark.completedAt)}</span>` : ''}
+      </div>
+      ${changeHtml}
+    </div>
+  `;
+}
+
+function formatDuration(startedAt, completedAt) {
+  const start = new Date(startedAt);
+  const end = new Date(completedAt);
+  const durationMs = end - start;
+  const seconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  }
+  return `${seconds}s`;
+}
+
+async function runBenchmark() {
+  if (!currentRepo) return;
+
+  const runBtn = document.getElementById('run-benchmark-btn');
+  const statusText = document.getElementById('benchmark-status-text');
+  const progressDiv = document.getElementById('benchmark-progress');
+
+  runBtn.disabled = true;
+  statusText.textContent = 'Starting benchmark...';
+  progressDiv.classList.remove('hidden');
+  document.getElementById('benchmark-progress-fill').style.width = '0%';
+  document.getElementById('benchmark-progress-text').textContent = 'Starting benchmark...';
+
+  try {
+    const response = await fetch(`/api/repos/${currentRepo.id}/benchmarks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (response.status === 409) {
+      statusText.textContent = 'A benchmark is already running';
+      startBenchmarkPolling(currentRepo.id);
+      return;
+    }
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to start benchmark');
+    }
+
+    statusText.textContent = 'Benchmark in progress...';
+    startBenchmarkPolling(currentRepo.id);
+  } catch (error) {
+    runBtn.disabled = false;
+    statusText.textContent = `Error: ${error.message}`;
+    progressDiv.classList.add('hidden');
+  }
+}
+
+function startBenchmarkPolling(repoId) {
+  stopBenchmarkPolling();
+
+  const progressDiv = document.getElementById('benchmark-progress');
+  progressDiv.classList.remove('hidden');
+
+  benchmarkPollingInterval = setInterval(async () => {
+    try {
+      const data = await api(`/repos/${repoId}/benchmarks?limit=1`);
+      const benchmarks = data.benchmarks || [];
+      const latest = benchmarks[0];
+
+      if (!latest || latest.status !== 'running') {
+        // Benchmark completed or failed
+        stopBenchmarkPolling();
+        progressDiv.classList.add('hidden');
+        await loadBenchmarkHistory(repoId);
+        return;
+      }
+
+      // Update progress (we don't have detailed progress, so show indeterminate)
+      document.getElementById('benchmark-progress-text').textContent = 'Benchmark in progress... This may take a few minutes.';
+    } catch (error) {
+      console.error('Error polling benchmark status:', error);
+    }
+  }, 3000);
+}
+
+function stopBenchmarkPolling() {
+  if (benchmarkPollingInterval) {
+    clearInterval(benchmarkPollingInterval);
+    benchmarkPollingInterval = null;
+  }
+}
+
+async function showBenchmarkDetail(benchmarkId) {
+  const detailPanel = document.getElementById('benchmark-detail');
+  const contentDiv = document.getElementById('benchmark-detail-content');
+
+  detailPanel.classList.remove('hidden');
+  contentDiv.innerHTML = '<p class="loading">Loading benchmark details...</p>';
+
+  try {
+    const data = await api(`/repos/${currentRepo.id}/benchmarks/${benchmarkId}`);
+    const benchmark = data.benchmark;
+
+    if (!benchmark) {
+      contentDiv.innerHTML = '<p class="placeholder">Benchmark not found</p>';
+      return;
+    }
+
+    const summary = benchmark.summary || {};
+    const results = benchmark.results || [];
+
+    // Build summary stats
+    let summaryHtml = `
+      <div class="benchmark-detail-summary">
+        <div class="benchmark-detail-stat">
+          <div class="value">${(benchmark.score ?? summary.score ?? 0).toFixed(0)}%</div>
+          <div class="label">Score</div>
+        </div>
+        <div class="benchmark-detail-stat">
+          <div class="value">${summary.totalQuestions || results.length || 0}</div>
+          <div class="label">Questions</div>
+        </div>
+        <div class="benchmark-detail-stat">
+          <div class="value">${summary.accurate || 0}</div>
+          <div class="label">Accurate</div>
+        </div>
+        <div class="benchmark-detail-stat">
+          <div class="value">${summary.partial || 0}</div>
+          <div class="label">Partial</div>
+        </div>
+      </div>
+    `;
+
+    // By category breakdown
+    if (summary.byCategory && Object.keys(summary.byCategory).length > 0) {
+      summaryHtml += `
+        <div class="benchmark-breakdown">
+          <h4>By Category</h4>
+          <div class="breakdown-items">
+            ${Object.entries(summary.byCategory).map(([cat, data]) => `
+              <div class="breakdown-item">
+                <span class="name">${escapeHtml(cat)}</span>
+                <span class="score">${data.score?.toFixed(0) || 0}%</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // By difficulty breakdown
+    if (summary.byDifficulty) {
+      summaryHtml += `
+        <div class="benchmark-breakdown">
+          <h4>By Difficulty</h4>
+          <div class="breakdown-items">
+            ${Object.entries(summary.byDifficulty).map(([diff, data]) => `
+              <div class="breakdown-item">
+                <span class="name">${escapeHtml(diff)}</span>
+                <span class="score">${data.score?.toFixed(0) || 0}%</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Individual question results
+    if (results.length > 0) {
+      summaryHtml += `
+        <div class="benchmark-questions">
+          <h4>Question Results</h4>
+          ${results.map(result => `
+            <div class="question-result ${result.grade}">
+              <div class="question-header">
+                <div class="question-text">${escapeHtml(result.questionId)}</div>
+                <span class="grade-badge ${result.grade}">${formatGrade(result.grade)}</span>
+              </div>
+              <div class="question-meta">
+                <span>Confidence: ${((result.confidence || 0) * 100).toFixed(0)}%</span>
+                ${result.durationMs ? `<span>${(result.durationMs / 1000).toFixed(1)}s</span>` : ''}
+              </div>
+              ${result.reasoning ? `<div class="question-reasoning">${escapeHtml(result.reasoning)}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    contentDiv.innerHTML = summaryHtml;
+  } catch (error) {
+    contentDiv.innerHTML = `<p class="placeholder">Error loading details: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function formatGrade(grade) {
+  const labels = {
+    'accurate': 'Accurate',
+    'partial': 'Partial',
+    'inaccurate': 'Inaccurate',
+    'no_answer': 'No Answer',
+  };
+  return labels[grade] || grade;
+}
+
+document.getElementById('run-benchmark-btn').addEventListener('click', runBenchmark);
+document.getElementById('close-benchmark-detail').addEventListener('click', () => {
+  document.getElementById('benchmark-detail').classList.add('hidden');
+});
+document.getElementById('back-to-repos-benchmark').addEventListener('click', () => {
+  stopBenchmarkPolling();
+  showView('repos');
+  loadRepos();
+});
 
 // Back buttons
 document.getElementById('back-to-repos').addEventListener('click', () => {

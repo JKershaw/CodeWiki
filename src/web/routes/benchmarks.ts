@@ -136,45 +136,8 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Get a specific benchmark run.
-   */
-  router.get('/api/repos/:id/benchmarks/:runId', async (req: Request, res: Response) => {
-    try {
-      const { id: repoId, runId } = req.params;
-
-      // Verify repository exists
-      const repo = await repos.repos.findById(repoId!);
-      if (!repo) {
-        res.status(404).json({ error: 'Repository not found' });
-        return;
-      }
-
-      const result = await handleGetBenchmarkRun(
-        createGetBenchmarkRunQuery(runId!),
-        repos
-      );
-
-      if (!result.success) {
-        res.status(404).json({ error: result.error });
-        return;
-      }
-
-      // Verify the benchmark belongs to this repository
-      if (result.data!.repoId !== repoId) {
-        res.status(404).json({ error: 'Benchmark not found for this repository' });
-        return;
-      }
-
-      res.json({
-        benchmark: result.data,
-      });
-    } catch (error) {
-      res.status(500).json({ error: String(error) });
-    }
-  });
-
-  /**
    * Compare multiple benchmark runs.
+   * NOTE: This route must be defined BEFORE /:runId to avoid "compare" matching as a runId.
    */
   router.get('/api/repos/:id/benchmarks/compare', async (req: Request, res: Response) => {
     try {
@@ -211,6 +174,44 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
 
       res.json({
         comparison: result.data,
+      });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * Get a specific benchmark run.
+   */
+  router.get('/api/repos/:id/benchmarks/:runId', async (req: Request, res: Response) => {
+    try {
+      const { id: repoId, runId } = req.params;
+
+      // Verify repository exists
+      const repo = await repos.repos.findById(repoId!);
+      if (!repo) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+
+      const result = await handleGetBenchmarkRun(
+        createGetBenchmarkRunQuery(runId!),
+        repos
+      );
+
+      if (!result.success) {
+        res.status(404).json({ error: result.error });
+        return;
+      }
+
+      // Verify the benchmark belongs to this repository
+      if (result.data!.repoId !== repoId) {
+        res.status(404).json({ error: 'Benchmark not found for this repository' });
+        return;
+      }
+
+      res.json({
+        benchmark: result.data,
       });
     } catch (error) {
       res.status(500).json({ error: String(error) });
