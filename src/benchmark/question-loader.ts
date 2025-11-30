@@ -1,11 +1,10 @@
 /**
- * Loader for benchmark questions from YAML.
+ * Loader for benchmark questions from JSON.
  */
 
 import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { parse as parseYaml } from 'yaml';
 import type { BenchmarkQuestion, BenchmarkCategory, BenchmarkDifficulty } from '../domain/benchmark.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,12 +20,12 @@ interface QuestionsFile {
 }
 
 /**
- * Load benchmark questions from the YAML file.
+ * Load benchmark questions from the JSON file.
  */
 export async function loadQuestions(): Promise<BenchmarkQuestion[]> {
-  const filePath = join(__dirname, 'questions.yaml');
+  const filePath = join(__dirname, 'questions.json');
   const content = await readFile(filePath, 'utf-8');
-  const data = parseYaml(content) as QuestionsFile;
+  const data = JSON.parse(content) as QuestionsFile;
 
   return data.questions.map(q => {
     const question: BenchmarkQuestion = {
