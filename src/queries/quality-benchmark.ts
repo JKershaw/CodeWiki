@@ -83,6 +83,7 @@ export function createGetQualityBenchmarkHistoryQuery(
 export interface QualityBenchmarkHistoryEntry {
   id: string;
   iterationCount: number;
+  pageCount: number;
   status: 'running' | 'completed' | 'failed';
   startedAt: Date;
   completedAt: Date | null;
@@ -104,6 +105,7 @@ export async function handleGetQualityBenchmarkHistory(
     const history: QualityBenchmarkHistoryEntry[] = runs.map(run => ({
       id: run.id,
       iterationCount: run.iterationCount,
+      pageCount: run.pageCount ?? 0,
       status: run.status,
       startedAt: run.startedAt,
       completedAt: run.completedAt,

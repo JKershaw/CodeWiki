@@ -966,6 +966,26 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks) {
     y: b.overallScore ?? 0
   }));
 
+  // Combine page count data from both benchmark types (deduplicate by iteration)
+  const pageCountMap = new Map();
+  [...sortedAccuracy, ...sortedQuality].forEach(b => {
+    if (b.pageCount != null && b.pageCount > 0) {
+      // Keep the highest page count for each iteration (in case of duplicates)
+      const existing = pageCountMap.get(b.iterationCount);
+      if (!existing || b.pageCount > existing) {
+        pageCountMap.set(b.iterationCount, b.pageCount);
+      }
+    }
+  });
+  const pageCountPoints = Array.from(pageCountMap.entries())
+    .map(([iteration, count]) => ({ x: iteration, y: count }))
+    .sort((a, b) => a.x - b.x);
+
+  // Calculate max page count for y-axis scaling
+  const maxPageCount = pageCountPoints.length > 0
+    ? Math.max(...pageCountPoints.map(p => p.y))
+    : 0;
+
   const datasets = [];
 
   if (accuracyPoints.length > 0) {
@@ -980,6 +1000,7 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks) {
       pointBackgroundColor: '#4a9eff',
       pointRadius: 4,
       pointHoverRadius: 6,
+      yAxisID: 'y',
     });
   }
 
@@ -995,7 +1016,77 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks) {
       pointBackgroundColor: '#10b981',
       pointRadius: 4,
       pointHoverRadius: 6,
+      yAxisID: 'y',
     });
+  }
+
+  // Add page count dataset if we have data
+  if (pageCountPoints.length > 0) {
+    datasets.push({
+      label: 'Pages',
+      data: pageCountPoints,
+      borderColor: '#f59e0b',
+      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+      borderWidth: 2,
+      fill: false,
+      tension: 0.3,
+      pointBackgroundColor: '#f59e0b',
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      yAxisID: 'y2',
+      borderDash: [5, 5],
+    });
+  }
+
+  const scales = {
+    y: {
+      type: 'linear',
+      position: 'left',
+      min: 0,
+      max: 100,
+      ticks: {
+        callback: (value) => `${value}%`,
+        color: '#888',
+      },
+      grid: {
+        color: 'rgba(255, 255, 255, 0.1)',
+      },
+    },
+    x: {
+      type: 'linear',
+      title: {
+        display: true,
+        text: 'Iteration',
+        color: '#888',
+      },
+      ticks: {
+        color: '#888',
+      },
+      grid: {
+        color: 'rgba(255, 255, 255, 0.1)',
+      },
+    }
+  };
+
+  // Add secondary y-axis for page count if we have data
+  if (pageCountPoints.length > 0) {
+    scales.y2 = {
+      type: 'linear',
+      position: 'right',
+      min: 0,
+      max: Math.ceil(maxPageCount * 1.1), // Add 10% padding
+      ticks: {
+        color: '#f59e0b',
+      },
+      grid: {
+        drawOnChartArea: false, // Don't draw grid lines for secondary axis
+      },
+      title: {
+        display: true,
+        text: 'Pages',
+        color: '#f59e0b',
+      },
+    };
   }
 
   benchmarkChart = new Chart(canvas, {
@@ -1013,37 +1104,18 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks) {
         },
         tooltip: {
           callbacks: {
-            label: (context) => `${context.dataset.label} - Iteration ${context.parsed.x}: ${context.parsed.y.toFixed(0)}%`
+            label: (context) => {
+              const label = context.dataset.label;
+              const value = context.parsed.y;
+              if (label === 'Pages') {
+                return `${label} - Iteration ${context.parsed.x}: ${value}`;
+              }
+              return `${label} - Iteration ${context.parsed.x}: ${value.toFixed(0)}%`;
+            }
           }
         }
       },
-      scales: {
-        y: {
-          min: 0,
-          max: 100,
-          ticks: {
-            callback: (value) => `${value}%`,
-            color: '#888',
-          },
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)',
-          },
-        },
-        x: {
-          type: 'linear',
-          title: {
-            display: true,
-            text: 'Iteration',
-            color: '#888',
-          },
-          ticks: {
-            color: '#888',
-          },
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)',
-          },
-        }
-      }
+      scales
     }
   });
 }
