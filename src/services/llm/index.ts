@@ -9,3 +9,4 @@ export * from './mock-llm-service.js';
 export * from './openrouter-llm-service.js';
 export * from './tools.js';
 export * from './codebase-tools.js';
+export * from './wiki-tools.js';
