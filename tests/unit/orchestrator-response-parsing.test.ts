@@ -1,6 +1,6 @@
 /**
  * Unit tests for parseOrchestratorResponse function.
- * Tests JSON parsing, repair, and validation of LLM orchestrator responses.
+ * Tests markdown parsing and validation of LLM orchestrator responses.
  */
 
 import { describe, it, mock } from 'node:test';
@@ -15,181 +15,144 @@ describe('parseOrchestratorResponse', () => {
   mock.method(console, 'log', () => {});
   mock.method(console, 'error', () => {});
 
-  describe('valid JSON parsing', () => {
-    it('should parse well-formed JSON', () => {
-      const response = JSON.stringify({
-        reasoning: 'Testing valid JSON',
-        workItems: [
-          { agentType: 'code-change', targetCommitId: 'abc123', reason: 'Test' }
-        ]
-      });
+  describe('valid markdown parsing', () => {
+    it('should parse well-formed markdown response', () => {
+      const response = `# Reasoning
+Testing valid markdown format
+
+# Work Items
+code-change,abc123,Test reason`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
 
-      assert.strictEqual(result.reasoning, 'Testing valid JSON');
+      assert.strictEqual(result.reasoning, 'Testing valid markdown format');
       assert.strictEqual(result.workItems.length, 1);
       assert.strictEqual(result.workItems[0].agentType, 'code-change');
+      assert.strictEqual(result.workItems[0].targetCommitId, 'abc123');
+      assert.strictEqual(result.workItems[0].reason, 'Test reason');
     });
 
-    it('should extract JSON from markdown code blocks', () => {
-      const response = `Here's my analysis:
-\`\`\`json
-{
-  "reasoning": "From markdown block",
-  "workItems": []
-}
-\`\`\``;
+    it('should parse multiple work items', () => {
+      const response = `# Reasoning
+Multiple items test
+
+# Work Items
+code-change,abc123,First commit analysis
+code-change,def456,Second commit analysis
+writer,,Rewrite pages for readability`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'From markdown block');
+
+      assert.strictEqual(result.workItems.length, 3);
+      assert.strictEqual(result.workItems[0].agentType, 'code-change');
+      assert.strictEqual(result.workItems[1].targetCommitId, 'def456');
+      assert.strictEqual(result.workItems[2].agentType, 'writer');
+      assert.strictEqual(result.workItems[2].targetCommitId, undefined);
     });
 
-    it('should extract JSON from response with surrounding text', () => {
-      const response = `I'll generate a work list:
-{
-  "reasoning": "Extracted from text",
-  "workItems": []
-}
-That's my recommendation.`;
+    it('should handle case-insensitive section headers', () => {
+      const response = `# REASONING
+Upper case headers
+
+# WORK ITEMS
+writer,,Test`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'Extracted from text');
-    });
-  });
-
-  describe('JSON repair functionality', () => {
-    it('should handle trailing commas in arrays', () => {
-      const response = `{
-  "reasoning": "Trailing comma test",
-  "workItems": [
-    { "agentType": "writer", "reason": "Test" },
-  ]
-}`;
-
-      const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'Trailing comma test');
+      assert.strictEqual(result.reasoning, 'Upper case headers');
       assert.strictEqual(result.workItems.length, 1);
     });
 
-    it('should handle trailing commas in objects', () => {
-      const response = `{
-  "reasoning": "Object trailing comma",
-  "workItems": [],
-}`;
+    it('should handle extra whitespace in headers', () => {
+      const response = `#   Reasoning
+With extra spaces
+
+#  Work   Items
+link,,Test links`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'Object trailing comma');
-    });
-
-    it('should handle multiple trailing commas', () => {
-      const response = `{
-  "reasoning": "Multiple trailing commas",
-  "workItems": [
-    { "agentType": "writer", "reason": "First", },
-    { "agentType": "link", "reason": "Second", },
-  ],
-}`;
-
-      const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'Multiple trailing commas');
-      assert.strictEqual(result.workItems.length, 2);
-    });
-
-    it('should handle JavaScript-style single-line comments', () => {
-      const response = `{
-  "reasoning": "Has comments", // This is a comment
-  "workItems": [] // Another comment
-}`;
-
-      const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'Has comments');
-    });
-
-    it('should handle JavaScript-style block comments', () => {
-      const response = `{
-  "reasoning": "Block comment test",
-  /* This is a block comment */
-  "workItems": []
-}`;
-
-      const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'Block comment test');
-    });
-  });
-
-  describe('truncated JSON repair', () => {
-    it('should repair truncated JSON with complete work items', () => {
-      // Simulates LLM response cut off after a complete work item
-      const response = `{
-  "reasoning": "Truncated but recoverable",
-  "workItems": [
-    { "agentType": "writer", "reason": "First item complete" },
-    { "agentType": "link", "reason": "Second item complete" },`;
-      // Missing closing ] and }
-
-      const result = parseOrchestratorResponse(response, validCommitIds);
-      assert.strictEqual(result.reasoning, 'Truncated but recoverable');
-      assert.strictEqual(result.workItems.length, 2);
-    });
-
-    it('should repair JSON truncated after trailing comma', () => {
-      const response = `{
-  "reasoning": "Test truncation",
-  "workItems": [
-    { "agentType": "overview", "reason": "Complete" },
-  `;
-      // Cut off with trailing comma
-
-      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'With extra spaces');
       assert.strictEqual(result.workItems.length, 1);
     });
+
+    it('should handle multi-line reasoning', () => {
+      const response = `# Reasoning
+First line of reasoning.
+Second line with more details.
+Third line concluding the thought.
+
+# Work Items
+writer,,Test`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(
+        result.reasoning,
+        'First line of reasoning. Second line with more details. Third line concluding the thought.'
+      );
+    });
   });
 
-  describe('error handling for unparseable JSON', () => {
-    it('should throw for completely invalid JSON', () => {
-      const response = 'This is not JSON at all, just random text.';
+  describe('comma handling in reasons', () => {
+    it('should handle reasons containing commas', () => {
+      const response = `# Reasoning
+Test commas
 
-      assert.throws(
-        () => parseOrchestratorResponse(response, validCommitIds),
-        /Failed to parse orchestrator JSON response/
-      );
+# Work Items
+code-change,abc123,This reason has, multiple, commas in it`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.workItems[0].reason, 'This reason has, multiple, commas in it');
     });
 
-    it('should throw for truncated JSON mid-property', () => {
-      // Truncated in the middle of a property value - can't be repaired
-      const response = `{
-  "reasoning": "This got cut off",
-  "workItems": [
-    { "agentType": "code-change", "targetCommitId": "abc123"`;
+    it('should handle empty targetCommitId with commas in reason', () => {
+      const response = `# Reasoning
+Test
 
-      assert.throws(
-        () => parseOrchestratorResponse(response, validCommitIds),
-        /Failed to parse orchestrator JSON response/
-      );
+# Work Items
+writer,,Rewrite pages: intro, overview, and summary`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.workItems[0].reason, 'Rewrite pages: intro, overview, and summary');
+    });
+  });
+
+  describe('truncation handling', () => {
+    it('should parse complete work items even if response is truncated', () => {
+      // Simulates response cut off mid-line
+      const response = `# Reasoning
+Truncated response test
+
+# Work Items
+code-change,abc123,First complete item
+code-change,def456,Second complete item
+code-change,ghi789,Third item that gets cut o`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      // Should get all 3 items since all lines are parseable
+      assert.strictEqual(result.workItems.length, 3);
     });
 
-    it('should throw for JSON with unrecoverable syntax errors', () => {
-      const response = `{
-  "reasoning": "Bad syntax"
-  "workItems": []
-}`;  // Missing comma between properties
+    it('should skip incomplete lines gracefully', () => {
+      const response = `# Reasoning
+Test
 
-      assert.throws(
-        () => parseOrchestratorResponse(response, validCommitIds),
-        /Failed to parse orchestrator JSON response/
-      );
+# Work Items
+code-change,abc123,Complete item
+incomplete-line-no-commas`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      // Only the complete item should be parsed
+      assert.strictEqual(result.workItems.length, 1);
     });
   });
 
   describe('work item validation', () => {
     it('should filter out invalid agent types', () => {
-      const response = JSON.stringify({
-        reasoning: 'Testing validation',
-        workItems: [
-          { agentType: 'invalid-agent', targetCommitId: 'abc123', reason: 'Bad' },
-          { agentType: 'code-change', targetCommitId: 'abc123', reason: 'Good' }
-        ]
-      });
+      const response = `# Reasoning
+Testing validation
+
+# Work Items
+invalid-agent,abc123,Bad agent type
+code-change,abc123,Good agent type`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
       assert.strictEqual(result.workItems.length, 1);
@@ -197,60 +160,65 @@ That's my recommendation.`;
     });
 
     it('should filter out analysis agents missing targetCommitId', () => {
-      const response = JSON.stringify({
-        reasoning: 'Testing validation',
-        workItems: [
-          { agentType: 'code-change', reason: 'Missing commit ID' },
-          { agentType: 'code-change', targetCommitId: 'abc123', reason: 'Has commit ID' }
-        ]
-      });
+      const response = `# Reasoning
+Testing validation
+
+# Work Items
+code-change,,Missing commit ID
+code-change,abc123,Has commit ID`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
       assert.strictEqual(result.workItems.length, 1);
     });
 
     it('should filter out analysis agents with invalid commit IDs', () => {
-      const response = JSON.stringify({
-        reasoning: 'Testing validation',
-        workItems: [
-          { agentType: 'code-change', targetCommitId: 'invalid-sha', reason: 'Bad SHA' },
-          { agentType: 'code-change', targetCommitId: 'abc123', reason: 'Valid SHA' }
-        ]
-      });
+      const response = `# Reasoning
+Testing validation
+
+# Work Items
+code-change,invalid-sha,Bad SHA
+code-change,abc123,Valid SHA`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
       assert.strictEqual(result.workItems.length, 1);
     });
 
     it('should remove targetCommitId from meta/synthesis agents', () => {
-      const response = JSON.stringify({
-        reasoning: 'Testing validation',
-        workItems: [
-          { agentType: 'writer', targetCommitId: 'abc123', reason: 'Should remove commit' }
-        ]
-      });
+      const response = `# Reasoning
+Testing validation
+
+# Work Items
+writer,abc123,Should remove commit`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
       assert.strictEqual(result.workItems.length, 1);
       assert.strictEqual(result.workItems[0].targetCommitId, undefined);
     });
 
-    it('should provide default reason when missing', () => {
-      const response = JSON.stringify({
-        reasoning: 'Testing defaults',
-        workItems: [
-          { agentType: 'writer' }
-        ]
-      });
+    it('should provide default reason when empty', () => {
+      const response = `# Reasoning
+Testing defaults
+
+# Work Items
+writer,,`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
       assert.strictEqual(result.workItems[0].reason, 'No reason provided');
     });
 
-    it('should provide default reasoning when missing', () => {
-      const response = JSON.stringify({
-        workItems: []
-      });
+    it('should provide default reasoning when section is empty', () => {
+      const response = `# Reasoning
+
+# Work Items
+writer,,Test`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'No reasoning provided');
+    });
+
+    it('should provide default reasoning when section is missing', () => {
+      const response = `# Work Items
+writer,,Test`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
       assert.strictEqual(result.reasoning, 'No reasoning provided');
@@ -258,50 +226,134 @@ That's my recommendation.`;
   });
 
   describe('edge cases', () => {
-    it('should handle empty workItems array', () => {
-      const response = JSON.stringify({
-        reasoning: 'Nothing to do',
-        workItems: []
-      });
+    it('should handle empty work items section', () => {
+      const response = `# Reasoning
+Nothing to do
+
+# Work Items`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'Nothing to do');
       assert.strictEqual(result.workItems.length, 0);
     });
 
-    it('should handle missing workItems property', () => {
-      const response = JSON.stringify({
-        reasoning: 'No work items property'
-      });
+    it('should handle missing work items section', () => {
+      const response = `# Reasoning
+No work items section provided`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'No work items section provided');
       assert.strictEqual(result.workItems.length, 0);
     });
 
-    it('should handle workItems that is not an array', () => {
-      const response = JSON.stringify({
-        reasoning: 'Work items is object',
-        workItems: { item1: 'foo' }
-      });
+    it('should handle completely empty response', () => {
+      const response = '';
 
       const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'No reasoning provided');
       assert.strictEqual(result.workItems.length, 0);
+    });
+
+    it('should skip other markdown headers', () => {
+      const response = `# Reasoning
+Test reasoning
+
+## Some other section
+This should be ignored
+
+# Work Items
+writer,,Test
+
+### Another header
+Also ignored`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'Test reasoning');
+      assert.strictEqual(result.workItems.length, 1);
+    });
+
+    it('should handle whitespace-only lines', () => {
+      const response = `# Reasoning
+Test
+
+
+
+# Work Items
+
+writer,,Test
+   `;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.workItems.length, 1);
     });
 
     it('should handle very large responses', () => {
       // Simulate a large response with many work items
-      const workItems = Array.from({ length: 100 }, (_, i) => ({
-        agentType: 'code-change',
-        targetCommitId: i % 3 === 0 ? 'abc123' : i % 3 === 1 ? 'def456' : 'ghi789',
-        reason: `Test item ${i} with some longer description to make it more realistic`
-      }));
-
-      const response = JSON.stringify({
-        reasoning: 'Large response test with a longer reasoning string that explains the strategy',
-        workItems
+      const workItems = Array.from({ length: 100 }, (_, i) => {
+        const commitId = i % 3 === 0 ? 'abc123' : i % 3 === 1 ? 'def456' : 'ghi789';
+        return `code-change,${commitId},Test item ${i} with some longer description`;
       });
+
+      const response = `# Reasoning
+Large response test with a longer reasoning string
+
+# Work Items
+${workItems.join('\n')}`;
 
       const result = parseOrchestratorResponse(response, validCommitIds);
       assert.strictEqual(result.workItems.length, 100);
+    });
+
+    it('should trim whitespace from parsed values', () => {
+      const response = `# Reasoning
+  Test with whitespace
+
+# Work Items
+  code-change  ,  abc123  ,  Reason with spaces  `;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.reasoning, 'Test with whitespace');
+      assert.strictEqual(result.workItems[0].agentType, 'code-change');
+      assert.strictEqual(result.workItems[0].targetCommitId, 'abc123');
+      assert.strictEqual(result.workItems[0].reason, 'Reason with spaces');
+    });
+  });
+
+  describe('all agent types', () => {
+    it('should accept all valid analysis agent types', () => {
+      const analysisAgents = ['code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency'];
+      const response = `# Reasoning
+Test all analysis agents
+
+# Work Items
+${analysisAgents.map(agent => `${agent},abc123,Testing ${agent}`).join('\n')}`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.workItems.length, analysisAgents.length);
+    });
+
+    it('should accept all valid meta agent types', () => {
+      const metaAgents = ['link', 'structure', 'quality', 'consistency'];
+      const response = `# Reasoning
+Test all meta agents
+
+# Work Items
+${metaAgents.map(agent => `${agent},,Testing ${agent}`).join('\n')}`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.workItems.length, metaAgents.length);
+    });
+
+    it('should accept all valid synthesis agent types', () => {
+      const synthesisAgents = ['overview', 'project-overview', 'getting-started', 'testing-guide', 'extension-guide', 'writer'];
+      const response = `# Reasoning
+Test all synthesis agents
+
+# Work Items
+${synthesisAgents.map(agent => `${agent},,Testing ${agent}`).join('\n')}`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+      assert.strictEqual(result.workItems.length, synthesisAgents.length);
     });
   });
 });

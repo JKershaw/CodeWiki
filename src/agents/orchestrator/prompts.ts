@@ -74,27 +74,30 @@ These thresholds ensure even large repos (1000+ commits) get useful synthesis ea
 
 ## Response Format
 
-Return valid JSON with this exact structure:
-{
-  "reasoning": "Brief explanation of your overall strategy for this batch",
-  "workItems": [
-    {
-      "agentType": "code-change",
-      "targetCommitId": "abc123def456...",
-      "reason": "Recent commit, establishes base wiki content"
-    },
-    {
-      "agentType": "writer",
-      "reason": "5 pages need rewriting from commit-style to article-style"
-    }
-  ]
-}
+Return your response in this exact markdown format:
+
+# Reasoning
+Brief explanation of your overall strategy for this batch (1-2 sentences)
+
+# Work Items
+agentType,targetCommitId,reason for this work item
+agentType,,reason for this work item (empty targetCommitId for meta/synthesis agents)
+
+Example:
+# Reasoning
+Focus on building base wiki content with code-change analysis, then improve readability with writer agent.
+
+# Work Items
+code-change,abc123def456789...,Recent commit that establishes base wiki content
+code-change,def789abc123456...,Contains API changes that need documentation
+writer,,5 pages need rewriting from commit-style to article-style
 
 IMPORTANT:
-- targetCommitId is REQUIRED for analysis agents (code-change, narrative, security, pattern, dependency)
-- targetCommitId must be OMITTED for meta/synthesis agents (link, structure, quality, consistency, overview, writer)
-- Use the full commit ID from the context, not abbreviated
-- Provide 1-2 sentence reasoning for each work item`;
+- One work item per line in the Work Items section
+- Format: agentType,targetCommitId,reason (comma-separated, reason can contain commas)
+- targetCommitId is REQUIRED for analysis agents (code-change, narrative, security, technical-debt, pattern, dependency)
+- targetCommitId must be EMPTY for meta/synthesis agents (link, structure, quality, consistency, overview, writer, etc.)
+- Use the full commit ID from the context, not abbreviated`;
 
 /**
  * Build the user prompt with current context.
@@ -134,7 +137,7 @@ ${coverageGaps.length > 0 ? `
 **COVERAGE GAPS - agents with 0% coverage:** ${coverageGaps.join(', ')}
 Consider including work for these agents to ensure diverse analysis.
 ` : ''}
-Return your response as valid JSON.`;
+Return your response using the markdown format specified above.`;
 }
 
 /**
@@ -155,200 +158,105 @@ const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'te
 const ALL_AGENTS = [...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 
 /**
- * Attempt to repair common JSON issues from LLM responses.
- * LLMs frequently produce slightly malformed JSON that can be fixed.
- */
-function repairJson(jsonStr: string): string {
-  let repaired = jsonStr;
-
-  // Remove trailing commas before ] or } (very common LLM error)
-  // This regex handles commas followed by optional whitespace before ] or }
-  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
-
-  // Remove JavaScript-style comments (some LLMs add them)
-  repaired = repaired.replace(/\/\/[^\n]*/g, '');
-  repaired = repaired.replace(/\/\*[\s\S]*?\*\//g, '');
-
-  // Fix unescaped control characters in strings
-  // Process each string to escape problematic characters
-  repaired = repaired.replace(/"([^"\\]|\\.)*"/g, (match) => {
-    let fixed = match;
-    // Escape literal newlines
-    if (fixed.includes('\n')) {
-      fixed = fixed.replace(/\n/g, '\\n');
-    }
-    // Escape literal carriage returns
-    if (fixed.includes('\r')) {
-      fixed = fixed.replace(/\r/g, '\\r');
-    }
-    // Escape literal tabs
-    if (fixed.includes('\t')) {
-      fixed = fixed.replace(/\t/g, '\\t');
-    }
-    return fixed;
-  });
-
-  // Handle truncated JSON - try to close open brackets/braces
-  // Count open vs close brackets
-  let openBraces = 0;
-  let openBrackets = 0;
-  let inString = false;
-  let prevChar = '';
-
-  for (const char of repaired) {
-    if (char === '"' && prevChar !== '\\') {
-      inString = !inString;
-    } else if (!inString) {
-      if (char === '{') openBraces++;
-      else if (char === '}') openBraces--;
-      else if (char === '[') openBrackets++;
-      else if (char === ']') openBrackets--;
-    }
-    prevChar = char;
-  }
-
-  // If we have unclosed brackets/braces, the JSON was likely truncated
-  if (openBraces > 0 || openBrackets > 0) {
-    // Try to find a safe truncation point - last complete object in array
-    // Look for the last complete "}" that ends a work item
-    const lastCompleteItem = repaired.lastIndexOf('}');
-    if (lastCompleteItem > 0) {
-      // Check if there's content after this that looks like a truncated item
-      const afterLastComplete = repaired.slice(lastCompleteItem + 1).trim();
-      if (afterLastComplete.startsWith(',') || afterLastComplete === '') {
-        // Truncate to the last complete item and close the structure
-        repaired = repaired.slice(0, lastCompleteItem + 1);
-        // Remove any trailing comma
-        repaired = repaired.replace(/,\s*$/, '');
-        // Close the workItems array and main object
-        repaired += '\n  ]\n}';
-      }
-    }
-  }
-
-  return repaired;
-}
-
-/**
- * Parse the LLM response into a structured decision.
+ * Parse the LLM response from markdown format into a structured decision.
+ *
+ * Expected format:
+ * # Reasoning
+ * Brief explanation...
+ *
+ * # Work Items
+ * agentType,targetCommitId,reason
+ * agentType,,reason (for meta/synthesis agents)
  */
 export function parseOrchestratorResponse(
   response: string,
   validCommitIds: Set<string>
 ): OrchestratorDecision {
-  // Try to extract JSON from the response
-  let jsonStr = response;
-
-  // Handle markdown code blocks
-  const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1]!;
-  }
-
-  // Try to find JSON object
-  const objectMatch = jsonStr.match(/\{[\s\S]*\}/);
-  if (objectMatch) {
-    jsonStr = objectMatch[0];
-  }
-
-  // Try to parse the JSON, with repair attempts on failure
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (firstError) {
-    // Try to repair common JSON issues and parse again
-    const repairedJson = repairJson(jsonStr);
-    try {
-      parsed = JSON.parse(repairedJson);
-      console.log('🔧 Repaired malformed JSON from LLM response');
-    } catch (secondError) {
-      // Log details for debugging
-      console.error('Failed to parse orchestrator response JSON:');
-      console.error('  First error:', firstError instanceof Error ? firstError.message : firstError);
-      console.error('  Second error (after repair):', secondError instanceof Error ? secondError.message : secondError);
-      console.error('  Response length:', response.length);
-      console.error('  Original JSON length:', jsonStr.length);
-      console.error('  Repaired JSON length:', repairedJson.length);
-
-      // Try to extract error position and show context
-      const errorMsg = secondError instanceof Error ? secondError.message : String(secondError);
-      const posMatch = errorMsg.match(/position (\d+)/);
-      if (posMatch && posMatch[1]) {
-        const pos = parseInt(posMatch[1], 10);
-        const start = Math.max(0, pos - 100);
-        const end = Math.min(repairedJson.length, pos + 50);
-        console.error(`  Context around error position ${pos}:`);
-        console.error(`    ...${repairedJson.slice(start, pos)}<<<ERROR>>>${repairedJson.slice(pos, end)}...`);
-      }
-
-      // Log the last 200 chars to see how the JSON ends
-      console.error('  Last 200 chars of repaired JSON:', repairedJson.slice(-200));
-
-      // Throw error to trigger fallback to deterministic mode in caller
-      throw new Error(`Failed to parse orchestrator JSON response: ${firstError instanceof Error ? firstError.message : 'Unknown error'}`);
-    }
-  }
-
-  // Validate structure and extract with proper types
-  const reasoning: string = (typeof parsed.reasoning === 'string')
-    ? parsed.reasoning
-    : 'No reasoning provided';
-
-  const rawWorkItems: unknown[] = Array.isArray(parsed.workItems)
-    ? parsed.workItems
-    : [];
-
-  // Validate and filter work items
+  const lines = response.split('\n');
+  let reasoning = '';
   const validWorkItems: OrchestratorDecision['workItems'] = [];
 
-  for (const rawItem of rawWorkItems) {
-    // Type guard for work item structure
-    if (typeof rawItem !== 'object' || rawItem === null) {
+  let currentSection: 'none' | 'reasoning' | 'workItems' = 'none';
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    // Detect section headers
+    if (/^#\s*Reasoning/i.test(trimmedLine)) {
+      currentSection = 'reasoning';
+      continue;
+    }
+    if (/^#\s*Work\s*Items/i.test(trimmedLine)) {
+      currentSection = 'workItems';
       continue;
     }
 
-    const item = rawItem as Record<string, unknown>;
-
-    // Check agent type is valid
-    if (typeof item.agentType !== 'string' || !ALL_AGENTS.includes(item.agentType)) {
-      console.warn(`Invalid agent type: ${item.agentType}`);
+    // Any other header stops the current section (e.g., "## Some other section")
+    if (trimmedLine.startsWith('#')) {
+      currentSection = 'none';
       continue;
     }
 
-    const targetCommitId = typeof item.targetCommitId === 'string' ? item.targetCommitId : undefined;
-
-    // Analysis agents need a valid commit ID
-    if (ANALYSIS_AGENTS.includes(item.agentType)) {
-      if (!targetCommitId) {
-        console.warn(`Analysis agent ${item.agentType} missing targetCommitId`);
-        continue;
-      }
-      if (!validCommitIds.has(targetCommitId)) {
-        console.warn(`Invalid commit ID for ${item.agentType}: ${targetCommitId}`);
-        continue;
-      }
+    // Skip empty lines
+    if (!trimmedLine) {
+      continue;
     }
 
-    // Meta/synthesis agents should NOT have commit ID
-    let finalCommitId = targetCommitId;
-    if ([...META_AGENTS, ...SYNTHESIS_AGENTS].includes(item.agentType)) {
-      if (targetCommitId) {
-        console.warn(`Meta/synthesis agent ${item.agentType} should not have targetCommitId`);
-        finalCommitId = undefined;
+    if (currentSection === 'reasoning') {
+      // Accumulate reasoning text (can be multiple lines)
+      reasoning += (reasoning ? ' ' : '') + trimmedLine;
+    } else if (currentSection === 'workItems') {
+      // Parse work item line: agentType,targetCommitId,reason
+      // Split with limit of 3 so reason can contain commas
+      const parts = trimmedLine.split(',');
+      if (parts.length < 3) {
+        // Skip malformed lines (need at least agentType,,reason)
+        console.warn(`Skipping malformed work item line: ${trimmedLine}`);
+        continue;
       }
+
+      const agentType = parts[0]!.trim();
+      const targetCommitId = parts[1]!.trim() || undefined;
+      // Join remaining parts as reason (in case reason contains commas)
+      const reason = parts.slice(2).join(',').trim() || 'No reason provided';
+
+      // Validate agent type
+      if (!ALL_AGENTS.includes(agentType)) {
+        console.warn(`Invalid agent type: ${agentType}`);
+        continue;
+      }
+
+      // Analysis agents need a valid commit ID
+      if (ANALYSIS_AGENTS.includes(agentType)) {
+        if (!targetCommitId) {
+          console.warn(`Analysis agent ${agentType} missing targetCommitId`);
+          continue;
+        }
+        if (!validCommitIds.has(targetCommitId)) {
+          console.warn(`Invalid commit ID for ${agentType}: ${targetCommitId}`);
+          continue;
+        }
+      }
+
+      // Meta/synthesis agents should NOT have commit ID
+      let finalCommitId = targetCommitId;
+      if ([...META_AGENTS, ...SYNTHESIS_AGENTS].includes(agentType)) {
+        if (targetCommitId) {
+          console.warn(`Meta/synthesis agent ${agentType} should not have targetCommitId`);
+          finalCommitId = undefined;
+        }
+      }
+
+      validWorkItems.push({
+        agentType,
+        ...(finalCommitId ? { targetCommitId: finalCommitId } : {}),
+        reason,
+      });
     }
-
-    const reason = typeof item.reason === 'string' ? item.reason : 'No reason provided';
-
-    validWorkItems.push({
-      agentType: item.agentType,
-      ...(finalCommitId ? { targetCommitId: finalCommitId } : {}),
-      reason,
-    });
   }
 
   return {
-    reasoning,
+    reasoning: reasoning || 'No reasoning provided',
     workItems: validWorkItems,
   };
 }

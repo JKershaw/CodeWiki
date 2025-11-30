@@ -167,6 +167,14 @@ describe('Orchestrator Bootstrap Behavior', () => {
         createdAt: new Date(),
       });
 
+      // Mock the LLM to return work items in markdown format
+      // Must be set after commit is created so we have the real SHA
+      ctx.llm.setDefaultResponse(`# Reasoning
+Process new commit with code-change agent
+
+# Work Items
+code-change,${sha},Analyze new commit`);
+
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
