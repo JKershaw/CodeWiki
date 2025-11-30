@@ -18,6 +18,7 @@
       <button class="nav-btn" data-view="wiki" disabled>Wiki</button>
       <button class="nav-btn" data-view="query" disabled>Ask</button>
       <button class="nav-btn" data-view="spec" disabled>Spec</button>
+      <button class="nav-btn" data-view="benchmark" disabled>Benchmark</button>
     </nav>
 
     <main>
@@ -123,6 +124,44 @@
             <div id="spec-meta" class="result-meta"></div>
             <div id="spec-sources" class="result-sources"></div>
           </div>
+        </div>
+      </section>
+
+      <!-- Benchmark View -->
+      <section id="benchmark-view" class="view">
+        <div class="section-header">
+          <h2>Benchmark: <span id="benchmark-repo-name"></span></h2>
+          <button id="back-to-repos-benchmark" class="btn secondary">Back to Repos</button>
+        </div>
+
+        <div class="benchmark-container">
+          <div class="benchmark-actions">
+            <button id="run-benchmark-btn" class="btn primary">Run Benchmark</button>
+            <span id="benchmark-status-text" class="benchmark-status-text"></span>
+          </div>
+
+          <div id="benchmark-progress" class="benchmark-progress hidden">
+            <div class="progress-bar">
+              <div class="progress-fill" id="benchmark-progress-fill"></div>
+            </div>
+            <div class="progress-text" id="benchmark-progress-text">Starting benchmark...</div>
+          </div>
+
+          <div class="benchmark-history-section">
+            <h3>History</h3>
+            <div id="benchmark-history" class="benchmark-history">
+              <p class="placeholder">No benchmarks yet. Run one to measure wiki quality.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Benchmark Detail Modal/Panel -->
+        <div id="benchmark-detail" class="benchmark-detail hidden">
+          <div class="benchmark-detail-header">
+            <h3>Benchmark Details</h3>
+            <button id="close-benchmark-detail" class="btn secondary">Close</button>
+          </div>
+          <div id="benchmark-detail-content"></div>
         </div>
       </section>
     </main>

@@ -15,6 +15,7 @@ import { createWikiContentRoutes } from './wiki-content.js';
 import { createAgentsRoutes } from './agents.js';
 import { createProcessingRoutes } from './processing.js';
 import { createFilesystemRoutes } from './filesystem.js';
+import { createBenchmarksRoutes } from './benchmarks.js';
 
 /**
  * Dependencies required by route handlers.
@@ -39,6 +40,7 @@ export function createApiRoutes(deps: Dependencies): Router {
   router.use(createAgentsRoutes(deps));
   router.use(createProcessingRoutes(deps));
   router.use(createFilesystemRoutes(deps));
+  router.use(createBenchmarksRoutes(deps));
 
   return router;
 }
@@ -49,3 +51,4 @@ export { createWikiContentRoutes } from './wiki-content.js';
 export { createAgentsRoutes } from './agents.js';
 export { createProcessingRoutes } from './processing.js';
 export { createFilesystemRoutes } from './filesystem.js';
+export { createBenchmarksRoutes } from './benchmarks.js';

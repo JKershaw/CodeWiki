@@ -1,0 +1,253 @@
+/**
+ * Benchmark Runner - Executes benchmark evaluations in parallel.
+ *
+ * Runs all benchmark questions simultaneously, collecting results
+ * and generating a summary of wiki quality.
+ */
+
+import { randomUUID } from 'crypto';
+import type { Repositories } from '../repositories/index.js';
+import type { LLMService } from '../services/llm/llm-service.js';
+import type { GitService } from '../services/git/git-service.js';
+import { ResearchAgent } from '../agents/research/research-agent.js';
+import { GraderAgent } from './grader-agent.js';
+import { loadQuestions, loadQuestionsByIds } from './question-loader.js';
+import {
+  handleStartBenchmark,
+  handleCompleteBenchmark,
+  handleFailBenchmark,
+  createStartBenchmarkCommand,
+  createCompleteBenchmarkCommand,
+  createFailBenchmarkCommand,
+} from '../commands/benchmark.js';
+import type {
+  BenchmarkQuestion,
+  BenchmarkResult,
+  BenchmarkRun,
+} from '../domain/benchmark.js';
+
+/**
+ * Options for running a benchmark.
+ */
+export interface BenchmarkOptions {
+  /** Specific question IDs to run (default: all) */
+  questionIds?: string[];
+  /** Maximum concurrent evaluations (default: 5) */
+  maxConcurrency?: number;
+}
+
+/**
+ * Benchmark Runner that evaluates wiki quality.
+ */
+export class BenchmarkRunner {
+  private readonly research: ResearchAgent;
+  private readonly grader: GraderAgent;
+
+  constructor(
+    private readonly repos: Repositories,
+    private readonly llm: LLMService,
+    private readonly git: GitService
+  ) {
+    this.research = new ResearchAgent(repos, llm);
+    this.grader = new GraderAgent(llm);
+  }
+
+  /**
+   * Run a benchmark evaluation.
+   */
+  async run(
+    repoId: string,
+    wikiId: string,
+    options: BenchmarkOptions = {}
+  ): Promise<BenchmarkRun> {
+    const runId = randomUUID();
+
+    try {
+      // Load questions
+      const questions = options.questionIds?.length
+        ? await loadQuestionsByIds(options.questionIds)
+        : await loadQuestions();
+
+      if (questions.length === 0) {
+        throw new Error('No benchmark questions found');
+      }
+
+      // Get current iteration count from processing runs
+      const iterationCount = await this.getIterationCount(repoId);
+
+      // Get repository path from git service
+      const repoPath = this.git.getRepoPath(repoId);
+
+      // Start benchmark run
+      const startResult = await handleStartBenchmark(
+        createStartBenchmarkCommand({
+          id: runId,
+          repoId,
+          wikiId,
+          iterationCount,
+        }),
+        this.repos
+      );
+
+      if (!startResult.success) {
+        throw new Error(startResult.error);
+      }
+
+      // Execute all questions in parallel with concurrency limit
+      const maxConcurrency = options.maxConcurrency ?? 5;
+      const results = await this.executeQuestionsParallel(
+        questions,
+        wikiId,
+        repoPath,
+        maxConcurrency
+      );
+
+      // Calculate total cost
+      const totalCostUsd = results.reduce((sum, r) => sum + r.costUsd, 0);
+
+      // Complete the benchmark
+      await handleCompleteBenchmark(
+        createCompleteBenchmarkCommand({
+          benchmarkId: runId,
+          results,
+          questions,
+          totalCostUsd,
+        }),
+        this.repos
+      );
+
+      // Fetch and return the completed run
+      const completedRun = await this.repos.benchmarks.findById(runId);
+      if (!completedRun) {
+        throw new Error('Failed to retrieve completed benchmark run');
+      }
+
+      return completedRun;
+    } catch (error) {
+      // Mark benchmark as failed
+      await handleFailBenchmark(
+        createFailBenchmarkCommand(runId, String(error)),
+        this.repos
+      );
+
+      throw error;
+    }
+  }
+
+  /**
+   * Execute questions in parallel with concurrency limit.
+   */
+  private async executeQuestionsParallel(
+    questions: BenchmarkQuestion[],
+    wikiId: string,
+    repoPath: string,
+    maxConcurrency: number
+  ): Promise<BenchmarkResult[]> {
+    const results: BenchmarkResult[] = [];
+    const pending = [...questions];
+    const inProgress: Promise<void>[] = [];
+
+    const executeOne = async (question: BenchmarkQuestion): Promise<void> => {
+      try {
+        const result = await this.evaluateQuestion(question, wikiId, repoPath);
+        results.push(result);
+      } catch (error) {
+        // Create a failed result for this question
+        results.push({
+          questionId: question.id,
+          wikiAnswer: '',
+          grade: 'no_answer',
+          confidence: 0,
+          reasoning: `Evaluation failed: ${error}`,
+          codeReferences: [],
+          durationMs: 0,
+          costUsd: 0,
+        });
+      }
+    };
+
+    // Process questions with concurrency limit
+    while (pending.length > 0 || inProgress.length > 0) {
+      // Start new tasks up to concurrency limit
+      while (pending.length > 0 && inProgress.length < maxConcurrency) {
+        const question = pending.shift()!;
+        const promise = executeOne(question).then(() => {
+          // Remove from inProgress when done
+          const idx = inProgress.indexOf(promise);
+          if (idx >= 0) inProgress.splice(idx, 1);
+        });
+        inProgress.push(promise);
+      }
+
+      // Wait for at least one to complete
+      if (inProgress.length > 0) {
+        await Promise.race(inProgress);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Evaluate a single question.
+   */
+  private async evaluateQuestion(
+    question: BenchmarkQuestion,
+    wikiId: string,
+    repoPath: string
+  ): Promise<BenchmarkResult> {
+    const startTime = Date.now();
+
+    // Ask the wiki
+    const researchResult = await this.research.query(wikiId, question.question);
+
+    // Grade the answer
+    const gradeResult = await this.grader.grade(
+      question,
+      researchResult.answer,
+      repoPath
+    );
+
+    const durationMs = Date.now() - startTime;
+    const costUsd = (researchResult.costUsd ?? 0) + gradeResult.costUsd;
+
+    return {
+      questionId: question.id,
+      wikiAnswer: researchResult.answer,
+      grade: gradeResult.grade,
+      confidence: gradeResult.confidence,
+      reasoning: gradeResult.reasoning,
+      codeReferences: gradeResult.filesChecked,
+      durationMs,
+      costUsd,
+    };
+  }
+
+  /**
+   * Get the current iteration count for a repository.
+   */
+  private async getIterationCount(repoId: string): Promise<number> {
+    // Get the most recent completed processing run
+    const runs = await this.repos.processingRuns.findByRepo(repoId, {
+      status: 'completed',
+      limit: 1,
+    });
+
+    if (runs.length === 0) {
+      return 0;
+    }
+
+    return runs[0]!.completedIterations;
+  }
+}
+
+/**
+ * Create a benchmark runner instance.
+ */
+export function createBenchmarkRunner(
+  repos: Repositories,
+  llm: LLMService,
+  git: GitService
+): BenchmarkRunner {
+  return new BenchmarkRunner(repos, llm, git);
+}
