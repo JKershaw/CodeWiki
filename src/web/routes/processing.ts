@@ -9,6 +9,14 @@ import {
   handleRequestStopProcessingRun,
 } from '../../commands/processing-run.js';
 
+// Import CQRS queries
+import {
+  createGetRepositoryQuery,
+  handleGetRepository,
+  createListWorkItemsQuery,
+  handleListWorkItems,
+} from '../../queries/index.js';
+
 /**
  * Create processing status routes.
  */
@@ -22,19 +30,32 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id/work-queue', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
-      // Get work items by status
-      const [pending, claimed, completed, failed] = await Promise.all([
-        repos.workQueue.findByRepo(repo.id, { status: 'pending' }),
-        repos.workQueue.findByRepo(repo.id, { status: 'claimed' }),
-        repos.workQueue.findByRepo(repo.id, { status: 'completed' }),
-        repos.workQueue.findByRepo(repo.id, { status: 'failed' }),
+      // Get work items by status via CQRS queries
+      const pendingQuery = createListWorkItemsQuery(repo.id, { status: 'pending' });
+      const claimedQuery = createListWorkItemsQuery(repo.id, { status: 'claimed' });
+      const completedQuery = createListWorkItemsQuery(repo.id, { status: 'completed' });
+      const failedQuery = createListWorkItemsQuery(repo.id, { status: 'failed' });
+
+      const [pendingResult, claimedResult, completedResult, failedResult] = await Promise.all([
+        handleListWorkItems(pendingQuery, repos),
+        handleListWorkItems(claimedQuery, repos),
+        handleListWorkItems(completedQuery, repos),
+        handleListWorkItems(failedQuery, repos),
       ]);
+
+      const pending = pendingResult.data || [];
+      const claimed = claimedResult.data || [];
+      const completed = completedResult.data || [];
+      const failed = failedResult.data || [];
 
       // Sort pending by priority (highest first)
       pending.sort((a, b) => b.priority - a.priority);
@@ -82,11 +103,14 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    */
   router.get('/api/repos/:id/processing', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
       // Try to find an active processing run first
       let processingRun = await repos.processingRuns.findActive(repo.id);
@@ -148,11 +172,14 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    */
   router.patch('/api/repos/:id/processing/stop', async (req: Request, res: Response) => {
     try {
-      const repo = await repos.repos.findById(req.params.id!);
-      if (!repo) {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         res.status(404).json({ error: 'Repository not found' });
         return;
       }
+      const repo = repoResult.data;
 
       // Find the active processing run
       const processingRun = await repos.processingRuns.findActive(repo.id);
