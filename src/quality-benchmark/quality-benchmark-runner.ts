@@ -91,6 +91,9 @@ export class QualityBenchmarkRunner {
       // Get current iteration count from wiki
       const iterationCount = await this.getIterationCount(wikiId);
 
+      // Page count is already known from allPages
+      const pageCount = allPages.length;
+
       // Start benchmark run
       const startResult = await handleStartQualityBenchmark(
         createStartQualityBenchmarkCommand({
@@ -98,6 +101,7 @@ export class QualityBenchmarkRunner {
           repoId,
           wikiId,
           iterationCount,
+          pageCount,
         }),
         this.repos
       );

@@ -27,6 +27,7 @@ export interface StartQualityBenchmarkCommand extends Command {
   readonly repoId: string;
   readonly wikiId: string;
   readonly iterationCount: number;
+  readonly pageCount: number;
 }
 
 export function createStartQualityBenchmarkCommand(params: {
@@ -34,6 +35,7 @@ export function createStartQualityBenchmarkCommand(params: {
   repoId: string;
   wikiId: string;
   iterationCount: number;
+  pageCount: number;
 }): StartQualityBenchmarkCommand {
   return {
     type: 'StartQualityBenchmark',
@@ -60,6 +62,7 @@ export async function handleStartQualityBenchmark(
       repoId: command.repoId,
       wikiId: command.wikiId,
       iterationCount: command.iterationCount,
+      pageCount: command.pageCount,
     });
 
     await repos.qualityBenchmarks.save(benchmarkRun);

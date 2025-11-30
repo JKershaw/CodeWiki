@@ -133,6 +133,8 @@ export interface QualityBenchmarkRun {
   wikiId: string;
   /** Wiki iteration count when benchmark was run */
   iterationCount: number;
+  /** Number of pages in the wiki when benchmark was run */
+  pageCount: number;
   /** Current status of the benchmark */
   status: QualityBenchmarkRunStatus;
   /** When the benchmark started */
@@ -163,12 +165,14 @@ export function createQualityBenchmarkRun(params: {
   repoId: string;
   wikiId: string;
   iterationCount: number;
+  pageCount: number;
 }): QualityBenchmarkRun {
   return {
     id: params.id,
     repoId: params.repoId,
     wikiId: params.wikiId,
     iterationCount: params.iterationCount,
+    pageCount: params.pageCount,
     status: 'running',
     startedAt: new Date(),
     completedAt: null,

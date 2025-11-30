@@ -114,6 +114,8 @@ export interface BenchmarkRun {
   wikiId: string;
   /** Wiki iteration count when benchmark was run */
   iterationCount: number;
+  /** Number of pages in the wiki when benchmark was run */
+  pageCount: number;
   /** Current status of the benchmark */
   status: BenchmarkRunStatus;
   /** When the benchmark started */
@@ -144,12 +146,14 @@ export function createBenchmarkRun(params: {
   repoId: string;
   wikiId: string;
   iterationCount: number;
+  pageCount: number;
 }): BenchmarkRun {
   return {
     id: params.id,
     repoId: params.repoId,
     wikiId: params.wikiId,
     iterationCount: params.iterationCount,
+    pageCount: params.pageCount,
     status: 'running',
     startedAt: new Date(),
     completedAt: null,

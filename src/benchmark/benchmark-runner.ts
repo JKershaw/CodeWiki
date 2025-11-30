@@ -79,6 +79,9 @@ export class BenchmarkRunner {
       // Get current iteration count from wiki
       const iterationCount = await this.getIterationCount(wikiId);
 
+      // Get current page count from wiki
+      const pageCount = await this.getPageCount(wikiId);
+
       // Get repository path from git service
       const repoPath = this.git.getRepoPath(repoId);
 
@@ -89,6 +92,7 @@ export class BenchmarkRunner {
           repoId,
           wikiId,
           iterationCount,
+          pageCount,
         }),
         this.repos
       );
@@ -237,6 +241,14 @@ export class BenchmarkRunner {
     }
 
     return wiki.totalIterations ?? 0;
+  }
+
+  /**
+   * Get the current page count for a wiki.
+   */
+  private async getPageCount(wikiId: string): Promise<number> {
+    const pages = await this.repos.wikiPages.findByWiki(wikiId);
+    return pages.length;
   }
 }
 

@@ -28,6 +28,7 @@ export interface StartBenchmarkCommand extends Command {
   readonly repoId: string;
   readonly wikiId: string;
   readonly iterationCount: number;
+  readonly pageCount: number;
 }
 
 export function createStartBenchmarkCommand(params: {
@@ -35,6 +36,7 @@ export function createStartBenchmarkCommand(params: {
   repoId: string;
   wikiId: string;
   iterationCount: number;
+  pageCount: number;
 }): StartBenchmarkCommand {
   return {
     type: 'StartBenchmark',
@@ -61,6 +63,7 @@ export async function handleStartBenchmark(
       repoId: command.repoId,
       wikiId: command.wikiId,
       iterationCount: command.iterationCount,
+      pageCount: command.pageCount,
     });
 
     await repos.benchmarks.save(benchmarkRun);
