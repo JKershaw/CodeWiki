@@ -4,6 +4,7 @@ import type { FindingGroup, FindingType } from '../../../domain/finding.js';
 import type { WikiPage, WikiPageUpdate } from '../../../domain/wiki-page.js';
 import type { FindingHandler, FindingHandlerResult } from '../finding-handler.js';
 import { HandlerUtils } from '../finding-handler.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../../queries/index.js';
 
 /**
  * Handler for orphaned page findings.
@@ -14,7 +15,10 @@ export class OrphanedPageHandler implements FindingHandler {
 
   async handle(group: FindingGroup, context: AgentContext): Promise<FindingHandlerResult> {
     const orphanedPages = await HandlerUtils.loadPages(group.affectedPaths, context);
-    const allPages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get all wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const allPages = pagesResult.data || [];
 
     const updates: WikiPageUpdate[] = [];
 

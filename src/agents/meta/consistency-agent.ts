@@ -4,6 +4,12 @@ import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createFinding as createDomainFinding, type FindingType } from '../../domain/finding.js';
+import {
+  createListWikiPagesQuery,
+  handleListWikiPages,
+  createFindingExistsSimilarQuery,
+  handleFindingExistsSimilar,
+} from '../../queries/index.js';
 
 /**
  * Consistency Agent - Detects inconsistencies across wiki pages.
@@ -28,7 +34,10 @@ export class ConsistencyAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const pages = pagesResult.data || [];
 
     if (pages.length < this.MIN_PAGES_FOR_ANALYSIS) {
       return {
@@ -144,12 +153,14 @@ export class ConsistencyAgent implements Agent {
     for (const issue of issues) {
       const findingType = typeMap[issue.type] ?? 'low_quality';
 
-      // Check if a similar finding already exists
-      const exists = await context.repos.findings.existsSimilar(
+      // Check if a similar finding already exists via CQRS query
+      const existsQuery = createFindingExistsSimilarQuery(
         context.wikiId,
         findingType,
         issue.affectedPages
       );
+      const existsResult = await handleFindingExistsSimilar(existsQuery, context.repos);
+      const exists = existsResult.data || false;
 
       if (!exists) {
         // Build metadata for broken links
@@ -178,11 +189,14 @@ export class ConsistencyAgent implements Agent {
 
     // Save terminology issues
     for (const term of analysis.terminologyMap) {
-      const exists = await context.repos.findings.existsSimilar(
+      // Check if a similar finding already exists via CQRS query
+      const existsQuery = createFindingExistsSimilarQuery(
         context.wikiId,
         'terminology',
         []
       );
+      const existsResult = await handleFindingExistsSimilar(existsQuery, context.repos);
+      const exists = existsResult.data || false;
 
       if (!exists) {
         const finding = createDomainFinding({

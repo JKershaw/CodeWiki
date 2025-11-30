@@ -4,6 +4,7 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { FindingGroup } from '../../domain/finding.js';
 import type { FindingHandlerRegistry } from './finding-handler-registry.js';
 import { createDefaultHandlerRegistry } from './finding-handler-registry.js';
+import { createGroupOpenFindingsQuery, handleGroupOpenFindings } from '../../queries/index.js';
 
 /**
  * Consolidation Agent - Self-healing wiki maintenance.
@@ -33,8 +34,10 @@ export class ConsolidationAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    // Get open findings grouped for consolidation
-    const findingGroups = await context.repos.findings.groupOpenFindings(context.wikiId);
+    // Get open findings grouped for consolidation via CQRS query
+    const findingsQuery = createGroupOpenFindingsQuery(context.wikiId);
+    const findingsResult = await handleGroupOpenFindings(findingsQuery, context.repos);
+    const findingGroups = findingsResult.data || [];
 
     if (findingGroups.length === 0) {
       return {

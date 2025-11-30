@@ -4,6 +4,7 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { codebaseTools } from '../../services/llm/codebase-tools.js';
 import type { ToolContext } from '../../services/llm/tools.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
  * Getting Started Agent - Creates entry point documentation for new developers.
@@ -25,7 +26,10 @@ export class GettingStartedAgent implements Agent {
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    const pages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const pages = pagesResult.data || [];
 
     // Check if we have enough pages
     if (pages.length < this.MIN_PAGES_FOR_GUIDE) {

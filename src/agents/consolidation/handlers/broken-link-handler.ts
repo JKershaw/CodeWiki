@@ -4,6 +4,7 @@ import type { FindingGroup, FindingType } from '../../../domain/finding.js';
 import type { WikiPageUpdate } from '../../../domain/wiki-page.js';
 import type { FindingHandler, FindingHandlerResult } from '../finding-handler.js';
 import { HandlerUtils } from '../finding-handler.js';
+import { createListWikiPagesQuery, handleListWikiPages } from '../../../queries/index.js';
 
 /**
  * Handler for broken link findings.
@@ -14,7 +15,10 @@ export class BrokenLinkHandler implements FindingHandler {
 
   async handle(group: FindingGroup, context: AgentContext): Promise<FindingHandlerResult> {
     const pages = await HandlerUtils.loadPages(group.affectedPaths, context);
-    const allPages = await context.repos.wikiPages.findByWiki(context.wikiId);
+    // Get all wiki pages via CQRS query
+    const pagesQuery = createListWikiPagesQuery(context.wikiId);
+    const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
+    const allPages = pagesResult.data || [];
     const validPaths = new Set(allPages.map(p => p.path));
 
     const updates: WikiPageUpdate[] = [];

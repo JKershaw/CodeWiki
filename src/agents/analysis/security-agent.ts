@@ -2,6 +2,7 @@ import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
 import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
+import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 
 /**
  * Security Agent - Audits commits for security-relevant changes.
@@ -13,10 +14,13 @@ export class SecurityAgent implements Agent {
   readonly type: AgentType = 'security';
 
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
-    const commit = await context.repos.commits.findById(commitId);
-    if (!commit) {
+    // Get the commit via CQRS query
+    const commitQuery = createGetCommitQuery(commitId);
+    const commitResult = await handleGetCommit(commitQuery, context.repos);
+    if (!commitResult.success || !commitResult.data) {
       throw new Error(`Commit not found: ${commitId}`);
     }
+    const commit = commitResult.data;
 
     const diff = await context.git.getCommitDiff(context.repoId, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
