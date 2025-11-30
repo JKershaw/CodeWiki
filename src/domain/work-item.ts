@@ -45,10 +45,10 @@ export const Priority = {
   CONFLICT_RESOLUTION: 90,
   /** Low-confidence pages */
   LOW_CONFIDENCE: 80,
+  /** Codebase exploration (documenting undocumented code) - runs before commit analysis to establish current state */
+  EXPLORATION: 75,
   /** Recent commits (within last week) */
   RECENT_COMMIT: 70,
-  /** Codebase exploration (documenting undocumented code) */
-  EXPLORATION: 60,
   /** Synthesis work (guides, overviews) */
   SYNTHESIS: 50,
   /** Historical commits */
