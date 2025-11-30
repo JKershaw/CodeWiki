@@ -124,10 +124,19 @@ export class Orchestrator {
 			return [bootstrapWork];
 		}
 
+		// Strategy 1: Pending edits ALWAYS get priority (regardless of LLM mode)
+		// This ensures wiki-editor runs when edits pile up, even if LLM forgets to include it
+		const wikiEditorWork = await this.checkPendingEditsNeeded(repoId, wikiId);
+
 		// Check if we should use LLM
 		if (this.config.useLLM && this.llm) {
 			try {
-				return await this.generateWithLLM(repoId, wikiId, maxItems);
+				const llmWork = await this.generateWithLLM(repoId, wikiId, maxItems);
+				// If we need wiki-editor and LLM didn't include it, prepend it
+				if (wikiEditorWork && !llmWork.some(w => w.agentType === "wiki-editor")) {
+					return [wikiEditorWork, ...llmWork.slice(0, maxItems - 1)];
+				}
+				return llmWork;
 			} catch (error) {
 				console.warn(
 					"LLM orchestration failed, falling back to deterministic:",
@@ -188,6 +197,46 @@ export class Orchestrator {
 			repoId,
 			agentType: "bootstrap",
 			priority: Priority.USER_REQUEST, // Highest priority
+		});
+	}
+
+	/**
+	 * Check if wiki-editor is needed due to pending edit requests.
+	 * Returns a wiki-editor work item if needed, null otherwise.
+	 */
+	private async checkPendingEditsNeeded(
+		repoId: string,
+		wikiId: string
+	): Promise<WorkItem | null> {
+		const PENDING_EDITS_THRESHOLD = 5;
+
+		// Check pending edit request count
+		const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
+		const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
+		const pendingEditCount = pendingEditsResult.data || 0;
+
+		if (pendingEditCount < PENDING_EDITS_THRESHOLD) {
+			return null; // Below threshold
+		}
+
+		// Check if wiki-editor work already pending
+		const workQuery = createListWorkItemsQuery(repoId, {
+			agentType: "wiki-editor",
+			status: "pending",
+		});
+		const workResult = await handleListWorkItems(workQuery, this.repos);
+		const wikiEditorWorkExists = workResult.data || [];
+
+		if (wikiEditorWorkExists.length > 0) {
+			return null; // Already pending
+		}
+
+		// Need wiki-editor
+		return createWorkItem({
+			id: uuid(),
+			repoId,
+			agentType: "wiki-editor",
+			priority: Priority.USER_REQUEST - 1, // Just below bootstrap
 		});
 	}
 
