@@ -140,6 +140,32 @@
             <span id="benchmark-status-text" class="benchmark-status-text"></span>
           </div>
 
+          <!-- Auto Benchmark Section -->
+          <div class="auto-benchmark-section">
+            <div class="auto-benchmark-config">
+              <label>
+                Iterations per cycle:
+                <input type="number" id="auto-benchmark-iterations" value="5" min="1" max="50">
+              </label>
+              <label>
+                Max cycles:
+                <input type="number" id="auto-benchmark-max-cycles" value="10" min="1" max="100">
+              </label>
+              <button id="auto-benchmark-btn" class="btn primary">Start Auto Benchmark</button>
+              <button id="stop-auto-benchmark-btn" class="btn danger hidden">Stop</button>
+            </div>
+            <div id="auto-benchmark-progress" class="auto-benchmark-progress hidden">
+              <div class="auto-benchmark-status">
+                <span id="auto-benchmark-cycle">Cycle 0/0</span>
+                <span id="auto-benchmark-phase">-</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="auto-benchmark-progress-fill"></div>
+              </div>
+              <div id="auto-benchmark-status-text" class="progress-text"></div>
+            </div>
+          </div>
+
           <div id="benchmark-progress" class="benchmark-progress hidden">
             <div class="progress-bar">
               <div class="progress-fill" id="benchmark-progress-fill"></div>
