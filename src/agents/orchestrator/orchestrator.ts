@@ -297,6 +297,9 @@ export class Orchestrator {
 		if (ANALYSIS_AGENTS.includes(agentType as AgentType)) {
 			return Priority.RECENT_COMMIT;
 		}
+		if (agentType === "wiki-editor") {
+			return Priority.USER_REQUEST - 1; // Just below bootstrap, processes pending edits
+		}
 		if (agentType === "codebase-explorer") {
 			return Priority.EXPLORATION; // Higher than synthesis, documents undocumented code
 		}
