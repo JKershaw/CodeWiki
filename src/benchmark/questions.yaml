@@ -1,0 +1,123 @@
+# Wiki Benchmark Questions
+#
+# These questions are used to evaluate the wiki's ability to provide
+# accurate context about the codebase. Each question is graded by
+# checking the wiki's answer against the actual code.
+
+questions:
+  # Architecture Questions
+  - id: arch-cqrs
+    question: "What pattern is used for separating read and write operations in this codebase?"
+    category: architecture
+    difficulty: easy
+    verificationHints:
+      - "src/commands/"
+      - "src/queries/"
+
+  - id: arch-agents
+    question: "How are agents organized and what categories of agents exist in the system?"
+    category: architecture
+    difficulty: medium
+    verificationHints:
+      - "src/agents/"
+
+  - id: arch-executor
+    question: "How does the executor handle concurrent agent execution?"
+    category: architecture
+    difficulty: medium
+    verificationHints:
+      - "src/executor/"
+
+  # Patterns Questions
+  - id: pattern-repository
+    question: "What is the repository pattern used for and how are repositories implemented?"
+    category: patterns
+    difficulty: easy
+    verificationHints:
+      - "src/repositories/"
+
+  - id: pattern-work-queue
+    question: "How does the work queue system prevent duplicate work items from being processed?"
+    category: patterns
+    difficulty: medium
+    verificationHints:
+      - "src/repositories/interfaces/work-queue-repository.ts"
+      - "src/commands/"
+
+  - id: pattern-confidence
+    question: "How is confidence scoring calculated for wiki pages?"
+    category: patterns
+    difficulty: hard
+    verificationHints:
+      - "src/domain/wiki-page.ts"
+      - "src/agents/"
+
+  # Decisions Questions
+  - id: decision-llm
+    question: "What LLM provider is used and how is the LLM service abstracted?"
+    category: decisions
+    difficulty: medium
+    verificationHints:
+      - "src/services/llm/"
+
+  - id: decision-storage
+    question: "How is data persistence handled and what storage options are supported?"
+    category: decisions
+    difficulty: medium
+    verificationHints:
+      - "src/repositories/file-based/"
+
+  # Conventions Questions
+  - id: convention-commands
+    question: "What naming conventions are used for CQRS command handlers and factory functions?"
+    category: conventions
+    difficulty: easy
+    verificationHints:
+      - "src/commands/"
+
+  - id: convention-agents
+    question: "How should new agent types be named and structured?"
+    category: conventions
+    difficulty: medium
+    verificationHints:
+      - "src/agents/"
+
+  # Security Questions
+  - id: security-api
+    question: "How are API endpoints protected and what security measures are in place?"
+    category: security
+    difficulty: medium
+    verificationHints:
+      - "src/web/"
+
+  - id: security-config
+    question: "How is sensitive configuration like API keys handled?"
+    category: security
+    difficulty: easy
+    verificationHints:
+      - "src/config/"
+      - ".env.example"
+
+  # How-To Questions
+  - id: howto-agent
+    question: "What are the steps to add a new agent type to the system?"
+    category: howto
+    difficulty: hard
+    verificationHints:
+      - "src/agents/"
+      - "src/commands/"
+
+  - id: howto-wiki-page
+    question: "How do you create or update a wiki page through the CQRS system?"
+    category: howto
+    difficulty: medium
+    verificationHints:
+      - "src/commands/update-wiki-page.ts"
+
+  - id: howto-processing
+    question: "How do you start processing a repository and what configuration options are available?"
+    category: howto
+    difficulty: medium
+    verificationHints:
+      - "src/executor/"
+      - "src/commands/processing-run.ts"
