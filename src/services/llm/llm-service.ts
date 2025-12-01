@@ -245,6 +245,8 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'deepseek/deepseek-r1': { input: 0.55, output: 2.19 },
   // MiniMax models
   'minimax/minimax-m2': { input: 0.255, output: 1.02 },
+  // xAI models
+  'x-ai/grok-4.1-fast:free': { input: 0, output: 0 },
   // Mock
   'mock': { input: 0, output: 0 },
 };
