@@ -630,6 +630,17 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('not available'));
     });
 
+    it('returns error message (not ENOENT) for non-existent repoPath', async () => {
+      const context = createMockContext({
+        repoPath: '/nonexistent/path/to/repo',
+      });
+
+      const result = await readSourceFileTool.execute({ path: 'README.md' }, context);
+      // Should return an error message, not throw ENOENT
+      assert.ok(result.includes('Error'));
+      assert.ok(!result.includes('ENOENT'), 'Should not expose raw ENOENT error');
+    });
+
     it('reads file content when repoPath is available', async () => {
       const context = createMockContext({
         repoPath: process.cwd(), // Use current directory as test repo

@@ -102,6 +102,9 @@ export function createSelfImprovementRoutes(
         return res.status(404).json({ error: 'Repository not found' });
       }
 
+      // Register the local repo path so git service can find it
+      git.registerLocalRepo(repo.id, repo.fullName);
+
       const wiki = await repos.wikis.findActive(repoId);
       if (!wiki) {
         return res.status(400).json({ error: 'No active wiki found' });
