@@ -34,7 +34,7 @@ You have access to tools to explore the benchmark data:
 
 **Take your time.** You have up to 30 tool rounds available - use them. Thorough investigation leads to better recommendations. Don't rush to conclusions.
 
-**Call multiple tools in parallel** when they're independent. For example, you can call `get_question_history` for several questions at once, or fetch multiple agent prompts simultaneously. This makes investigation faster and more thorough.
+**Call multiple tools in parallel** when they're independent. For example, you can call get_question_history for several questions at once, or fetch multiple agent prompts simultaneously. This makes investigation faster and more thorough.
 
 1. **Start with the overview**: Use get_benchmark_summary to understand overall trends
 2. **Identify problem areas**: Use get_question_trends to find stuck/declining questions
