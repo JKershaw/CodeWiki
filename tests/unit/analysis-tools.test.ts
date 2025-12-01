@@ -10,6 +10,7 @@ import {
   getQuestionTrendsTool,
   getQuestionHistoryTool,
   getQualityTrendsTool,
+  getQualityDimensionDetailTool,
   getPageContentTool,
   listWikiPagesTool,
   readSourceFileTool,
@@ -119,7 +120,15 @@ function createMockQualityRun(
   id: string,
   iterationCount: number,
   overallScore: number,
-  byDimension: Record<string, number>
+  byDimension: Record<string, number>,
+  results: Array<{
+    pageId: string;
+    pagePath: string;
+    pageTitle: string;
+    scores: Record<string, number>;
+    reasoning: string;
+    findings: string[];
+  }> = []
 ): QualityBenchmarkRun {
   return {
     id,
@@ -130,9 +139,13 @@ function createMockQualityRun(
     completedAt: new Date(),
     iterationCount,
     pageCount: iterationCount * 2,
-    results: [],
+    results: results.map(r => ({
+      ...r,
+      durationMs: 1000,
+      costUsd: 0.01,
+    })),
     summary: {
-      pagesEvaluated: 10,
+      pagesEvaluated: results.length || 10,
       overallScore,
       byDimension,
       strengths: overallScore > 60 ? ['Good overall'] : [],
@@ -170,6 +183,7 @@ describe('Analysis Tools', () => {
       assert.ok(toolNames.includes('get_question_history'));
       assert.ok(toolNames.includes('get_iterations_between'));
       assert.ok(toolNames.includes('get_quality_trends'));
+      assert.ok(toolNames.includes('get_quality_dimension_detail'));
       assert.ok(toolNames.includes('get_page_content'));
       assert.ok(toolNames.includes('list_wiki_pages'));
       assert.ok(toolNames.includes('get_agent_prompt'));
@@ -370,6 +384,129 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('actionability'));
       assert.ok(result.includes('40.0'));
       assert.ok(result.includes('65.0'));
+    });
+  });
+
+  describe('get_quality_dimension_detail', () => {
+    it('returns error for invalid dimension', async () => {
+      const context = createMockContext({
+        qualityBenchmarkRuns: [
+          createMockQualityRun('qr-1', 50, 70, { contextual_richness: 65 }),
+        ],
+      });
+
+      const result = await getQualityDimensionDetailTool.execute({ dimension: 'invalid' }, context);
+      assert.ok(result.includes('Invalid dimension'));
+      assert.ok(result.includes('contextual_richness'));
+    });
+
+    it('returns message when no quality runs', async () => {
+      const context = createMockContext();
+      const result = await getQualityDimensionDetailTool.execute({ dimension: 'actionability' }, context);
+      assert.ok(result.includes('No completed quality benchmark'));
+    });
+
+    it('returns message when no page results', async () => {
+      const context = createMockContext({
+        qualityBenchmarkRuns: [
+          createMockQualityRun('qr-1', 50, 70, { actionability: 65 }),
+        ],
+      });
+
+      const result = await getQualityDimensionDetailTool.execute({ dimension: 'actionability' }, context);
+      assert.ok(result.includes('No page quality results'));
+    });
+
+    it('shows per-page breakdown sorted by score', async () => {
+      const context = createMockContext({
+        qualityBenchmarkRuns: [
+          createMockQualityRun('qr-1', 50, 60, { actionability: 50 }, [
+            {
+              pageId: 'p1',
+              pagePath: 'architecture/overview',
+              pageTitle: 'Architecture Overview',
+              scores: { actionability: 80, contextual_richness: 70 },
+              reasoning: 'Good examples provided',
+              findings: ['Clear code samples'],
+            },
+            {
+              pageId: 'p2',
+              pagePath: 'api/endpoints',
+              pageTitle: 'API Endpoints',
+              scores: { actionability: 30, contextual_richness: 60 },
+              reasoning: 'Lacks concrete examples',
+              findings: ['Missing example requests', 'No error handling shown'],
+            },
+            {
+              pageId: 'p3',
+              pagePath: 'security/auth',
+              pageTitle: 'Authentication',
+              scores: { actionability: 55, contextual_richness: 75 },
+              reasoning: 'Partial examples',
+              findings: ['Some examples present'],
+            },
+          ]),
+        ],
+      });
+
+      const result = await getQualityDimensionDetailTool.execute({ dimension: 'actionability' }, context);
+
+      // Should include dimension info
+      assert.ok(result.includes('Quality Dimension: actionability'));
+      assert.ok(result.includes('What this measures'));
+      assert.ok(result.includes('Average score:'));
+
+      // Should show lowest-scoring page first
+      assert.ok(result.includes('API Endpoints'));
+      assert.ok(result.includes('30.0'));
+      assert.ok(result.includes('Missing example requests'));
+      assert.ok(result.includes('Lacks concrete examples'));
+
+      // Should include score distribution
+      assert.ok(result.includes('Score Distribution'));
+      assert.ok(result.includes('Min:'));
+      assert.ok(result.includes('Max:'));
+    });
+
+    it('respects limit parameter', async () => {
+      const context = createMockContext({
+        qualityBenchmarkRuns: [
+          createMockQualityRun('qr-1', 50, 60, { actionability: 50 }, [
+            {
+              pageId: 'p1',
+              pagePath: 'page1',
+              pageTitle: 'Page 1',
+              scores: { actionability: 30 },
+              reasoning: 'Low',
+              findings: [],
+            },
+            {
+              pageId: 'p2',
+              pagePath: 'page2',
+              pageTitle: 'Page 2',
+              scores: { actionability: 50 },
+              reasoning: 'Medium',
+              findings: [],
+            },
+            {
+              pageId: 'p3',
+              pagePath: 'page3',
+              pageTitle: 'Page 3',
+              scores: { actionability: 70 },
+              reasoning: 'High',
+              findings: [],
+            },
+          ]),
+        ],
+      });
+
+      const result = await getQualityDimensionDetailTool.execute({ dimension: 'actionability', limit: 1 }, context);
+
+      // Should only show 1 page (the lowest scoring one)
+      assert.ok(result.includes('Page 1'));
+      assert.ok(result.includes('showing 1 of 3'));
+      assert.ok(!result.includes('Page 2'));
+      assert.ok(!result.includes('Page 3'));
     });
   });
 
