@@ -49,6 +49,23 @@ async function api(path, options = {}) {
   return response.json();
 }
 
+// Configuration
+async function loadConfig() {
+  try {
+    const config = await api('/config');
+    const modelNameEl = document.getElementById('model-name');
+    if (modelNameEl) {
+      modelNameEl.textContent = config.model;
+    }
+  } catch (error) {
+    console.error('Failed to load config:', error);
+    const modelNameEl = document.getElementById('model-name');
+    if (modelNameEl) {
+      modelNameEl.textContent = 'Unknown';
+    }
+  }
+}
+
 // Repositories
 async function loadRepos() {
   const container = document.getElementById('repos-list');
@@ -1954,3 +1971,4 @@ function markdownToHtml(md) {
 
 // Initialize
 loadRepos();
+loadConfig();
