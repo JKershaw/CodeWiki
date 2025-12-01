@@ -855,6 +855,7 @@ export const getAgentPromptTool: AnalysisToolDefinition = {
       'writer': 'synthesis/writer-agent.ts',
       'wiki-index': 'synthesis/wiki-index-agent.ts',
       'toc': 'synthesis/toc-agent.ts',
+      'orchestrator': 'orchestrator/prompts.ts',
     };
 
     const filePath = agentFiles[agentType];
