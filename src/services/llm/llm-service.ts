@@ -250,6 +250,8 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'x-ai/grok-4.1-fast:free': { input: 0, output: 0 },
   // Meta Llama models
   'meta-llama/llama-4-maverick': { input: 0.136, output: 0.68 },
+  // Qwen models
+  'qwen/qwen-turbo': { input: 0.05, output: 0.2 },
   // Mock
   'mock': { input: 0, output: 0 },
 };
