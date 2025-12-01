@@ -11,7 +11,7 @@ import type { WikiPage } from '../domain/wiki-page.js';
  * Options for page selection.
  */
 export interface PageSelectionOptions {
-  /** Maximum total pages to select (default: 10) */
+  /** Maximum total pages to select (default: 20) */
   maxPages?: number;
   /** Number of lowest-confidence pages to include (default: 2) */
   includeLowestConfidence?: number;
@@ -19,7 +19,7 @@ export interface PageSelectionOptions {
   includeRecentlyUpdated?: number;
   /** Number of random pages to include (default: remaining slots) */
   includeRandom?: number;
-  /** Minimum content length to consider a page (default: 100) */
+  /** Minimum content length to consider a page (default: 0) */
   minContentLength?: number;
 }
 
@@ -52,10 +52,10 @@ export function selectPagesForEvaluation(
   options: PageSelectionOptions = {}
 ): PageSelectionResult {
   const {
-    maxPages = 10,
+    maxPages = 20,
     includeLowestConfidence = 2,
     includeRecentlyUpdated = 2,
-    minContentLength = 100,
+    minContentLength = 0,
   } = options;
 
   // Filter out pages that are too short
@@ -160,7 +160,7 @@ export const PageSelectors = {
    * Select pages with extreme characteristics for edge case testing.
    */
   selectExtremes(pages: WikiPage[], count: number = 4): WikiPage[] {
-    const eligible = pages.filter(p => p.content.length >= 100);
+    const eligible = pages.filter(p => p.content.length >= 0);
     if (eligible.length <= count) return eligible;
 
     const selected: WikiPage[] = [];
@@ -201,7 +201,7 @@ export const PageSelectors = {
    * Select pages that likely represent different content types.
    */
   selectDiverse(pages: WikiPage[], count: number = 5): WikiPage[] {
-    const eligible = pages.filter(p => p.content.length >= 100);
+    const eligible = pages.filter(p => p.content.length >= 0);
     if (eligible.length <= count) return eligible;
 
     const selected: WikiPage[] = [];
