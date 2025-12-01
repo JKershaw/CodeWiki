@@ -1057,8 +1057,8 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks, pageHistory
       fill: false,
       tension: 0.3,
       pointBackgroundColor: '#f59e0b',
-      pointRadius: 4,
-      pointHoverRadius: 6,
+      pointRadius: 0,
+      pointHoverRadius: 4,
       yAxisID: 'y2',
       borderDash: [5, 5],
     });
