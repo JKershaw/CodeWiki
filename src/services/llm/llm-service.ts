@@ -240,6 +240,7 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   // Google models
   'google/gemini-2.5-pro': { input: 1.25, output: 10 },
   'google/gemini-2.5-flash': { input: 0.15, output: 0.6 },
+  'google/gemini-2.0-flash-exp:free': { input: 0, output: 0 },
   // DeepSeek models (very cheap)
   'deepseek/deepseek-chat': { input: 0.14, output: 0.28 },
   'deepseek/deepseek-r1': { input: 0.55, output: 2.19 },
