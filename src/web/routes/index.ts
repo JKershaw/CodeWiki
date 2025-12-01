@@ -45,7 +45,7 @@ export function createApiRoutes(deps: Dependencies): Router {
   router.use(createFilesystemRoutes(deps));
   router.use(createBenchmarksRoutes(deps));
   router.use(createQualityBenchmarksRoutes(deps));
-  router.use('/api/repos/:id/self-improvements', createSelfImprovementRoutes(deps.repos, deps.createLLM()));
+  router.use('/api/repos/:id/self-improvements', createSelfImprovementRoutes(deps.repos, deps.createLLM(), deps.git));
   router.use(createConfigRoutes());
 
   return router;

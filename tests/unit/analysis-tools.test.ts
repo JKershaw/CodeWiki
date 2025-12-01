@@ -12,6 +12,9 @@ import {
   getQualityTrendsTool,
   getPageContentTool,
   listWikiPagesTool,
+  readSourceFileTool,
+  searchSourceFilesTool,
+  listSourceDirectoryTool,
   type AnalysisToolContext,
 } from '../../src/services/llm/analysis-tools.js';
 import type { BenchmarkRun } from '../../src/domain/benchmark.js';
@@ -132,6 +135,10 @@ describe('Analysis Tools', () => {
       assert.ok(toolNames.includes('get_page_content'));
       assert.ok(toolNames.includes('list_wiki_pages'));
       assert.ok(toolNames.includes('get_agent_prompt'));
+      // Codebase tools
+      assert.ok(toolNames.includes('read_source_file'));
+      assert.ok(toolNames.includes('search_source_files'));
+      assert.ok(toolNames.includes('list_source_directory'));
     });
 
     it('all tools have required properties', () => {
@@ -435,6 +442,86 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('✓ High'));
       assert.ok(result.includes('○ Medium'));
       assert.ok(result.includes('? Low'));
+    });
+  });
+
+  describe('read_source_file', () => {
+    it('returns message when repoPath not available', async () => {
+      const context = createMockContext();
+      const result = await readSourceFileTool.execute({ path: 'README.md' }, context);
+      assert.ok(result.includes('not available'));
+    });
+
+    it('reads file content when repoPath is available', async () => {
+      const context = createMockContext({
+        repoPath: process.cwd(), // Use current directory as test repo
+      });
+
+      const result = await readSourceFileTool.execute({ path: 'package.json' }, context);
+      assert.ok(result.includes('package.json'));
+      assert.ok(result.includes('codewiki'));
+    });
+
+    it('returns error for non-existent file', async () => {
+      const context = createMockContext({
+        repoPath: process.cwd(),
+      });
+
+      const result = await readSourceFileTool.execute({ path: 'nonexistent-file.xyz' }, context);
+      assert.ok(result.includes('Error'));
+    });
+  });
+
+  describe('search_source_files', () => {
+    it('returns message when repoPath not available', async () => {
+      const context = createMockContext();
+      const result = await searchSourceFilesTool.execute({ pattern: '**/*.ts' }, context);
+      assert.ok(result.includes('not available'));
+    });
+
+    it('finds files matching pattern when repoPath is available', async () => {
+      const context = createMockContext({
+        repoPath: process.cwd(),
+      });
+
+      const result = await searchSourceFilesTool.execute({ pattern: 'package.json' }, context);
+      assert.ok(result.includes('package.json'));
+    });
+
+    it('returns message when no files match', async () => {
+      const context = createMockContext({
+        repoPath: process.cwd(),
+      });
+
+      const result = await searchSourceFilesTool.execute({ pattern: '**/*.nonexistent' }, context);
+      assert.ok(result.includes('No files found'));
+    });
+  });
+
+  describe('list_source_directory', () => {
+    it('returns message when repoPath not available', async () => {
+      const context = createMockContext();
+      const result = await listSourceDirectoryTool.execute({ path: '.' }, context);
+      assert.ok(result.includes('not available'));
+    });
+
+    it('lists directory contents when repoPath is available', async () => {
+      const context = createMockContext({
+        repoPath: process.cwd(),
+      });
+
+      const result = await listSourceDirectoryTool.execute({ path: '.' }, context);
+      assert.ok(result.includes('Directory:'));
+      assert.ok(result.includes('src/') || result.includes('Directories'));
+    });
+
+    it('returns error for non-existent directory', async () => {
+      const context = createMockContext({
+        repoPath: process.cwd(),
+      });
+
+      const result = await listSourceDirectoryTool.execute({ path: 'nonexistent-dir' }, context);
+      assert.ok(result.includes('Error'));
     });
   });
 });
