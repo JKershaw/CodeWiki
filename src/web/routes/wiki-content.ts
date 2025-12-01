@@ -16,6 +16,8 @@ import {
   handleListWikiPages,
   createGetWikiPageQuery,
   handleGetWikiPage,
+  createGetWikiTreeQuery,
+  handleGetWikiTree,
 } from '../../queries/index.js';
 
 /**
@@ -68,6 +70,45 @@ export function createWikiContentRoutes(deps: Dependencies): Router {
       }
 
       res.json({ pages, grouped });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * Get wiki pages as a hierarchical tree structure.
+   * Supports optional ?wikiId query param to get tree for a specific wiki.
+   */
+  router.get('/api/repos/:id/wiki-tree', async (req: Request, res: Response) => {
+    try {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+      const repo = repoResult.data;
+
+      // Use specified wiki or active wiki
+      let wiki;
+      if (req.query.wikiId) {
+        const wikiQuery = createGetWikiQuery(req.query.wikiId as string);
+        const wikiResult = await handleGetWiki(wikiQuery, repos);
+        if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== repo.id) {
+          res.status(404).json({ error: 'Wiki not found' });
+          return;
+        }
+        wiki = wikiResult.data;
+      } else {
+        wiki = await getOrCreateActiveWiki(repo.id, repos);
+      }
+
+      // Use CQRS query to get wiki tree
+      const treeQuery = createGetWikiTreeQuery(wiki.id);
+      const treeResult = await handleGetWikiTree(treeQuery, repos);
+
+      res.json(treeResult.data || []);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
