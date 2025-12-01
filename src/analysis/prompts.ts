@@ -43,6 +43,7 @@ You have access to tools to explore the benchmark data:
 - **get_question_history**: Deep dive into a specific question's answers and grading
 - **get_iterations_between**: See what agents ran between benchmark points
 - **get_quality_trends**: Track quality dimension scores over time
+- **get_quality_dimension_detail**: Deep dive into a specific quality dimension - shows per-page scores, findings, and reasoning for lowest-scoring pages
 - **get_page_content**: Read actual wiki pages
 - **list_wiki_pages**: See wiki structure and page list
 - **get_agent_prompt**: Read an agent's system prompt to understand its instructions
@@ -70,7 +71,7 @@ Use provenance tools to answer: "Which agent is responsible for this content gap
 2. **Identify problem areas**: Use get_question_trends to find stuck/declining questions
 3. **Investigate root causes**: For stuck questions, use get_question_history to see what the wiki says and why graders marked it down
 4. **Correlate with activity**: Use get_iterations_between to see what happened when scores changed
-5. **Review quality dimensions**: Use get_quality_trends to identify weak areas
+5. **Review quality dimensions**: Use get_quality_trends to identify weak areas, then get_quality_dimension_detail to see which specific pages are dragging down each dimension
 6. **Examine content**: Read wiki pages to understand what's actually being generated
 7. **Check agent prompts**: Read MULTIPLE agent prompts to understand how the system works. This is critical for process recommendations.
 8. **Compare to source**: When wiki content is missing information, read the source code to see what exists there that agents should be extracting
