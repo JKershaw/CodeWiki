@@ -161,10 +161,12 @@ export class OpenRouterLLMService extends BaseLLMService {
           // Retry on transient HTTP errors
           if (isRetryableStatus(response.status) && attempt < MAX_RETRIES) {
             const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+            console.warn(`[LLM] Retry ${attempt}/${MAX_RETRIES} after ${response.status} error, waiting ${backoffMs}ms`);
             await sleep(backoffMs);
             continue;
           }
 
+          console.error(`[LLM] Request failed after ${attempt} attempt(s): ${lastError.message}`);
           throw lastError;
         }
 
@@ -175,10 +177,12 @@ export class OpenRouterLLMService extends BaseLLMService {
         // Retry on network errors
         if (isNetworkError(error) && attempt < MAX_RETRIES) {
           const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+          console.warn(`[LLM] Retry ${attempt}/${MAX_RETRIES} after network error, waiting ${backoffMs}ms: ${lastError.message}`);
           await sleep(backoffMs);
           continue;
         }
 
+        console.error(`[LLM] Request failed after ${attempt} attempt(s): ${lastError.message}`);
         throw lastError;
       }
     }
