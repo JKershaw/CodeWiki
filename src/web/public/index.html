@@ -188,6 +188,32 @@
               <p class="placeholder">No benchmarks yet. Run one to measure wiki quality.</p>
             </div>
           </div>
+
+          <!-- Self-Improvement Analysis Section -->
+          <div class="self-improvement-section">
+            <h3>Self-Improvement Analysis</h3>
+            <p class="section-hint">Select 2 or more completed accuracy benchmarks to analyze trends and get improvement recommendations.</p>
+            <div class="self-improvement-controls">
+              <div id="benchmark-selector" class="benchmark-selector">
+                <p class="placeholder">Run benchmarks to enable analysis.</p>
+              </div>
+              <div class="self-improvement-actions">
+                <button id="run-self-improvement-btn" class="btn primary" disabled>Analyze Selected</button>
+                <button id="select-all-benchmarks-btn" class="btn secondary">Select All</button>
+                <button id="clear-benchmark-selection-btn" class="btn secondary">Clear</button>
+              </div>
+            </div>
+            <div id="self-improvement-status" class="self-improvement-status hidden">
+              <p>Analysis in progress...</p>
+            </div>
+            <div id="self-improvement-report" class="self-improvement-report hidden">
+              <div class="report-header">
+                <h4>Analysis Report</h4>
+                <button id="close-report-btn" class="btn secondary">Close</button>
+              </div>
+              <div id="report-content" class="report-content"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Benchmark Detail Modal/Panel -->

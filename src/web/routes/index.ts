@@ -17,6 +17,7 @@ import { createProcessingRoutes } from './processing.js';
 import { createFilesystemRoutes } from './filesystem.js';
 import { createBenchmarksRoutes } from './benchmarks.js';
 import { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
+import { createSelfImprovementRoutes } from './self-improvement.js';
 import { createConfigRoutes } from './config.js';
 
 /**
@@ -44,6 +45,7 @@ export function createApiRoutes(deps: Dependencies): Router {
   router.use(createFilesystemRoutes(deps));
   router.use(createBenchmarksRoutes(deps));
   router.use(createQualityBenchmarksRoutes(deps));
+  router.use('/api/repos/:id/self-improvements', createSelfImprovementRoutes(deps.repos, deps.createLLM()));
   router.use(createConfigRoutes());
 
   return router;
@@ -57,4 +59,5 @@ export { createProcessingRoutes } from './processing.js';
 export { createFilesystemRoutes } from './filesystem.js';
 export { createBenchmarksRoutes } from './benchmarks.js';
 export { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
+export { createSelfImprovementRoutes } from './self-improvement.js';
 export { createConfigRoutes } from './config.js';

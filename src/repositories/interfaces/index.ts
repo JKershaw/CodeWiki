@@ -21,6 +21,7 @@ export * from './findings-repository.js';
 export * from './benchmark-repository.js';
 export * from './edit-request-repository.js';
 export * from './quality-benchmark-repository.js';
+export * from './self-improvement-repository.js';
 
 import type { RepoRepository } from './repo-repository.js';
 import type { WikiRepository } from './wiki-repository.js';
@@ -37,6 +38,7 @@ import type { FindingsRepository } from './findings-repository.js';
 import type { BenchmarkRepository } from './benchmark-repository.js';
 import type { EditRequestRepository } from './edit-request-repository.js';
 import type { QualityBenchmarkRepository } from './quality-benchmark-repository.js';
+import type { SelfImprovementRepository } from './self-improvement-repository.js';
 
 /**
  * Collection of all repositories.
@@ -58,4 +60,5 @@ export interface Repositories {
   benchmarks: BenchmarkRepository;
   editRequests: EditRequestRepository;
   qualityBenchmarks: QualityBenchmarkRepository;
+  selfImprovements: SelfImprovementRepository;
 }
