@@ -859,14 +859,16 @@ async function loadBenchmarkHistory(repoId) {
   container.innerHTML = '<p class="loading">Loading benchmark history...</p>';
 
   try {
-    // Load both accuracy and quality benchmarks in parallel
-    const [accuracyData, qualityData] = await Promise.all([
+    // Load benchmarks and page history in parallel
+    const [accuracyData, qualityData, pageHistoryData] = await Promise.all([
       api(`/repos/${repoId}/benchmarks`),
       api(`/repos/${repoId}/quality-benchmarks`).catch(() => ({ qualityBenchmarks: [] })),
+      api(`/repos/${repoId}/page-history`).catch(() => ({ pageHistory: [] })),
     ]);
 
     const accuracyBenchmarks = accuracyData.benchmarks || [];
     const qualityBenchmarks = qualityData.qualityBenchmarks || [];
+    const pageHistory = pageHistoryData.pageHistory || [];
 
     // Check if there's a running accuracy benchmark
     const runningAccuracy = accuracyBenchmarks.find(b => b.status === 'running');
@@ -903,12 +905,12 @@ async function loadBenchmarkHistory(repoId) {
 
     if (accuracyBenchmarks.length === 0 && qualityBenchmarks.length === 0) {
       container.innerHTML = '<p class="placeholder">No benchmarks yet. Run one to measure wiki quality.</p>';
-      renderBenchmarkChart([], []);
+      renderBenchmarkChart([], [], pageHistory);
       return;
     }
 
     // Render combined chart
-    renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks);
+    renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks, pageHistory);
 
     // Render benchmark cards grouped
     let cardsHtml = '';
@@ -945,7 +947,7 @@ async function loadBenchmarkHistory(repoId) {
   }
 }
 
-function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks) {
+function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks, pageHistory = []) {
   const chartContainer = document.getElementById('benchmark-chart-container');
   const canvas = document.getElementById('benchmark-chart');
 
@@ -983,20 +985,27 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks) {
     y: b.overallScore ?? 0
   }));
 
-  // Combine page count data from both benchmark types (deduplicate by iteration)
-  const pageCountMap = new Map();
-  [...sortedAccuracy, ...sortedQuality].forEach(b => {
-    if (b.pageCount != null && b.pageCount > 0) {
-      // Keep the highest page count for each iteration (in case of duplicates)
-      const existing = pageCountMap.get(b.iterationCount);
-      if (!existing || b.pageCount > existing) {
-        pageCountMap.set(b.iterationCount, b.pageCount);
+  // Use detailed page history if available, otherwise fall back to benchmark-derived data
+  let pageCountPoints;
+  if (pageHistory && pageHistory.length > 0) {
+    // Use detailed iteration-level page history
+    pageCountPoints = pageHistory.map(p => ({ x: p.iteration, y: p.pageCount }));
+  } else {
+    // Fall back to sparse data from benchmarks (legacy behavior)
+    const pageCountMap = new Map();
+    [...sortedAccuracy, ...sortedQuality].forEach(b => {
+      if (b.pageCount != null && b.pageCount > 0) {
+        // Keep the highest page count for each iteration (in case of duplicates)
+        const existing = pageCountMap.get(b.iterationCount);
+        if (!existing || b.pageCount > existing) {
+          pageCountMap.set(b.iterationCount, b.pageCount);
+        }
       }
-    }
-  });
-  const pageCountPoints = Array.from(pageCountMap.entries())
-    .map(([iteration, count]) => ({ x: iteration, y: count }))
-    .sort((a, b) => a.x - b.x);
+    });
+    pageCountPoints = Array.from(pageCountMap.entries())
+      .map(([iteration, count]) => ({ x: iteration, y: count }))
+      .sort((a, b) => a.x - b.x);
+  }
 
   // Calculate max page count for y-axis scaling
   const maxPageCount = pageCountPoints.length > 0

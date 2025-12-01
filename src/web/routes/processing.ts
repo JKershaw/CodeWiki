@@ -213,5 +213,68 @@ export function createProcessingRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * Get page count history for the active wiki.
+   * Returns cumulative page counts at each iteration, computed from iteration data.
+   */
+  router.get('/api/repos/:id/page-history', async (req: Request, res: Response) => {
+    try {
+      // Use CQRS query to get repository
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+      const repo = repoResult.data;
+
+      // Get active wiki
+      const wiki = await repos.wikis.findActive(repo.id);
+      if (!wiki) {
+        res.json({ pageHistory: [] });
+        return;
+      }
+
+      // Get all processing runs for this repo, sorted by start time (oldest first)
+      const processingRuns = await repos.processingRuns.findByRepo(repo.id);
+
+      // Filter to only runs for the active wiki and sort oldest first
+      const wikiRuns = processingRuns
+        .filter(run => run.wikiId === wiki.id)
+        .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+
+      // Build cumulative page count history
+      const pageHistory: Array<{ iteration: number; pageCount: number }> = [];
+      let globalIteration = 0;
+      let cumulativePages = 0;
+
+      for (const run of wikiRuns) {
+        // Get iterations for this run
+        const iterations = await repos.iterations.findByProcessingRun(run.id);
+
+        // Sort by iteration number (should already be sorted, but ensure it)
+        iterations.sort((a, b) => a.iterationNumber - b.iterationNumber);
+
+        for (const iteration of iterations) {
+          // Only count completed iterations that created pages
+          if (iteration.status === 'completed') {
+            globalIteration++;
+            cumulativePages += iteration.pagesCreated;
+
+            // Add a data point for each iteration
+            pageHistory.push({
+              iteration: globalIteration,
+              pageCount: cumulativePages,
+            });
+          }
+        }
+      }
+
+      res.json({ pageHistory });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
   return router;
 }
