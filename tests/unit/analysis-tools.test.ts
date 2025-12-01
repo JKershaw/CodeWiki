@@ -15,17 +15,55 @@ import {
   readSourceFileTool,
   searchSourceFilesTool,
   listSourceDirectoryTool,
+  getPageProvenanceTool,
+  getAgentContributionsTool,
   type AnalysisToolContext,
 } from '../../src/services/llm/analysis-tools.js';
+import type { EditRequest } from '../../src/domain/edit-request.js';
 import type { BenchmarkRun } from '../../src/domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../../src/domain/quality-benchmark.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 import type { Repositories } from '../../src/repositories/index.js';
 
+// Helper to create a mock edit request
+function createMockEditRequest(
+  id: string,
+  pagePath: string,
+  agentType: string,
+  status: 'pending' | 'applied' | 'merged-to-history' | 'skipped' = 'applied'
+): EditRequest {
+  return {
+    id,
+    repoId: 'test-repo',
+    wikiId: 'test-wiki',
+    sourceCommitSha: 'abc123',
+    sourceCommitTimestamp: new Date(),
+    sourceAgentType: agentType as EditRequest['sourceAgentType'],
+    sourceAgentRunId: `run-${id}`,
+    targetPagePath: pagePath,
+    proposedUpdateType: 'update',
+    proposedContent: 'Test content',
+    confidenceDelta: 0.1,
+    status,
+    createdAt: new Date(),
+    processedAt: new Date(),
+    processingNotes: null,
+    processedByAgentRunId: null,
+  };
+}
+
 // Helper to create mock context
 function createMockContext(overrides: Partial<AnalysisToolContext> = {}): AnalysisToolContext {
+  // Default mock editRequests repository
+  const mockEditRequests = {
+    findByPagePath: async () => [] as EditRequest[],
+    findByStatus: async () => [] as EditRequest[],
+  };
+
   return {
-    repos: {} as Repositories,
+    repos: {
+      editRequests: mockEditRequests,
+    } as unknown as Repositories,
     repoId: 'test-repo',
     wikiId: 'test-wiki',
     benchmarkRuns: [],
@@ -139,6 +177,9 @@ describe('Analysis Tools', () => {
       assert.ok(toolNames.includes('read_source_file'));
       assert.ok(toolNames.includes('search_source_files'));
       assert.ok(toolNames.includes('list_source_directory'));
+      // Provenance tools
+      assert.ok(toolNames.includes('get_page_provenance'));
+      assert.ok(toolNames.includes('get_agent_contributions'));
     });
 
     it('all tools have required properties', () => {
@@ -522,6 +563,95 @@ describe('Analysis Tools', () => {
 
       const result = await listSourceDirectoryTool.execute({ path: 'nonexistent-dir' }, context);
       assert.ok(result.includes('Error'));
+    });
+  });
+
+  describe('get_page_provenance', () => {
+    it('returns message when page not found', async () => {
+      const context = createMockContext({
+        wikiPages: [
+          createMockPage('architecture/overview', 'Overview', 'Content'),
+        ],
+      });
+
+      const result = await getPageProvenanceTool.execute({ page_path: 'unknown/page' }, context);
+      assert.ok(result.includes('not found'));
+    });
+
+    it('returns message when no edit history', async () => {
+      const context = createMockContext({
+        wikiPages: [
+          createMockPage('architecture/overview', 'Overview', 'Content'),
+        ],
+      });
+
+      const result = await getPageProvenanceTool.execute({ page_path: 'architecture/overview' }, context);
+      assert.ok(result.includes('No edit history'));
+    });
+
+    it('returns provenance with edit history', async () => {
+      const editRequests = [
+        createMockEditRequest('1', 'architecture/overview', 'code-change', 'applied'),
+        createMockEditRequest('2', 'architecture/overview', 'security', 'applied'),
+        createMockEditRequest('3', 'architecture/overview', 'code-change', 'skipped'),
+      ];
+
+      const context = createMockContext({
+        wikiPages: [
+          createMockPage('architecture/overview', 'Architecture Overview', 'Content'),
+        ],
+        repos: {
+          editRequests: {
+            findByPagePath: async () => editRequests,
+            findByStatus: async () => [],
+          },
+        } as unknown as Repositories,
+      });
+
+      const result = await getPageProvenanceTool.execute({ page_path: 'architecture/overview' }, context);
+
+      assert.ok(result.includes('Page Provenance'));
+      assert.ok(result.includes('Architecture Overview'));
+      assert.ok(result.includes('code-change'));
+      assert.ok(result.includes('security'));
+      assert.ok(result.includes('Contributions by Agent'));
+    });
+  });
+
+  describe('get_agent_contributions', () => {
+    it('returns message when no contributions found', async () => {
+      const context = createMockContext();
+
+      const result = await getAgentContributionsTool.execute({ agent_type: 'unknown-agent' }, context);
+      assert.ok(result.includes('No contributions found'));
+    });
+
+    it('returns contributions summary', async () => {
+      const editRequests = [
+        createMockEditRequest('1', 'architecture/overview', 'code-change', 'applied'),
+        createMockEditRequest('2', 'architecture/patterns', 'code-change', 'applied'),
+        createMockEditRequest('3', 'security/auth', 'code-change', 'applied'),
+      ];
+
+      const context = createMockContext({
+        repos: {
+          editRequests: {
+            findByPagePath: async () => [],
+            findByStatus: async (wikiId: string, status: string) => {
+              if (status === 'applied') return editRequests;
+              return [];
+            },
+          },
+        } as unknown as Repositories,
+      });
+
+      const result = await getAgentContributionsTool.execute({ agent_type: 'code-change' }, context);
+
+      assert.ok(result.includes('Agent Contributions: code-change'));
+      assert.ok(result.includes('Total successful edits: 3'));
+      assert.ok(result.includes('Pages affected: 3'));
+      assert.ok(result.includes('architecture/overview'));
+      assert.ok(result.includes('security/auth'));
     });
   });
 });

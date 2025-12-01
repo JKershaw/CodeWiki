@@ -19,6 +19,7 @@ import type {
   QuestionTrend,
   AgentActivitySummary,
 } from '../../domain/self-improvement.js';
+import type { EditRequest } from '../../domain/edit-request.js';
 import { loadIgnorePatterns } from '../cwignore.js';
 
 // ============================================================================
@@ -930,6 +931,178 @@ export const listSourceDirectoryTool: AnalysisToolDefinition = {
 };
 
 // ============================================================================
+// Tool: Get Page Provenance
+// ============================================================================
+
+/**
+ * Tool to get the edit history and agent provenance for a wiki page.
+ */
+export const getPageProvenanceTool: AnalysisToolDefinition = {
+  name: 'get_page_provenance',
+  description:
+    'Get the edit history for a wiki page, showing which agents created or modified it and what they contributed. ' +
+    'Use this to trace which agents are responsible for content gaps or issues on a specific page.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      page_path: {
+        type: 'string',
+        description: 'The path of the wiki page to get provenance for',
+      },
+    },
+    required: ['page_path'],
+  },
+  execute: async (input, context) => {
+    const pagePath = (input['page_path'] as string).toLowerCase();
+    const { repos, wikiId, wikiPages } = context;
+
+    // Find the page
+    const page = wikiPages.find(p => p.path.toLowerCase() === pagePath);
+    if (!page) {
+      return `Page "${pagePath}" not found in wiki.`;
+    }
+
+    // Get all edit requests for this page
+    const editRequests = await repos.editRequests.findByPagePath(wikiId, pagePath);
+
+    if (editRequests.length === 0) {
+      return `## Page Provenance: ${pagePath}\n\nNo edit history found. This page may have been created through bootstrap or direct update.`;
+    }
+
+    // Sort by creation time
+    editRequests.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    // Group by agent type
+    const byAgent: Record<string, EditRequest[]> = {};
+    for (const req of editRequests) {
+      const agent = req.sourceAgentType;
+      if (!byAgent[agent]) byAgent[agent] = [];
+      byAgent[agent]!.push(req);
+    }
+
+    // Build report
+    const sections: string[] = [];
+    sections.push(`## Page Provenance: ${page.title}`);
+    sections.push(`Path: ${page.path}`);
+    sections.push(`Current confidence: ${(page.confidence * 100).toFixed(0)}%`);
+    sections.push(`Total edits: ${editRequests.length}`);
+    sections.push('');
+
+    // Summary by agent
+    sections.push('### Contributions by Agent');
+    sections.push('| Agent | Edits | Applied | Merged | Skipped |');
+    sections.push('|-------|-------|---------|--------|---------|');
+
+    for (const [agent, edits] of Object.entries(byAgent).sort((a, b) => b[1].length - a[1].length)) {
+      const applied = edits.filter(e => e.status === 'applied').length;
+      const merged = edits.filter(e => e.status === 'merged-to-history').length;
+      const skipped = edits.filter(e => e.status === 'skipped').length;
+      sections.push(`| ${agent} | ${edits.length} | ${applied} | ${merged} | ${skipped} |`);
+    }
+    sections.push('');
+
+    // Recent edit details
+    sections.push('### Recent Edits (last 10)');
+    const recentEdits = editRequests.slice(-10);
+
+    for (const edit of recentEdits) {
+      const date = edit.createdAt.toISOString().split('T')[0];
+      sections.push(`#### ${edit.sourceAgentType} - ${date}`);
+      sections.push(`- **Status**: ${edit.status}`);
+      sections.push(`- **Type**: ${edit.proposedUpdateType}`);
+      sections.push(`- **Confidence delta**: ${edit.confidenceDelta > 0 ? '+' : ''}${edit.confidenceDelta}`);
+      if (edit.processingNotes) {
+        sections.push(`- **Notes**: ${edit.processingNotes}`);
+      }
+
+      // Show a snippet of what was proposed
+      const contentPreview = edit.proposedContent.slice(0, 200);
+      if (contentPreview.length < edit.proposedContent.length) {
+        sections.push(`- **Preview**: ${contentPreview}...`);
+      }
+      sections.push('');
+    }
+
+    return sections.join('\n');
+  },
+};
+
+// ============================================================================
+// Tool: Get Agent Contributions
+// ============================================================================
+
+/**
+ * Tool to get a summary of what pages an agent type has created/modified.
+ */
+export const getAgentContributionsTool: AnalysisToolDefinition = {
+  name: 'get_agent_contributions',
+  description:
+    'Get a summary of all wiki pages that a specific agent type has created or modified. ' +
+    'Use this to understand the scope of an agent\'s impact on the wiki.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      agent_type: {
+        type: 'string',
+        description: 'The agent type (e.g., "code-change", "security", "pattern")',
+      },
+    },
+    required: ['agent_type'],
+  },
+  execute: async (input, context) => {
+    const agentType = input['agent_type'] as string;
+    const { repos, wikiId } = context;
+
+    // Get all applied edit requests (we need to query by status)
+    const appliedEdits = await repos.editRequests.findByStatus(wikiId, 'applied');
+    const mergedEdits = await repos.editRequests.findByStatus(wikiId, 'merged-to-history');
+
+    const allEdits = [...appliedEdits, ...mergedEdits];
+    const agentEdits = allEdits.filter(e => e.sourceAgentType === agentType);
+
+    if (agentEdits.length === 0) {
+      return `No contributions found for agent type "${agentType}". This agent may not have run yet, or all its edits were skipped.`;
+    }
+
+    // Group by page path
+    const byPage: Record<string, { edits: EditRequest[]; created: boolean }> = {};
+    for (const edit of agentEdits) {
+      const path = edit.targetPagePath;
+      if (!byPage[path]) {
+        byPage[path] = { edits: [], created: false };
+      }
+      byPage[path]!.edits.push(edit);
+      if (edit.proposedUpdateType === 'create') {
+        byPage[path]!.created = true;
+      }
+    }
+
+    const sections: string[] = [];
+    sections.push(`## Agent Contributions: ${agentType}`);
+    sections.push(`Total successful edits: ${agentEdits.length}`);
+    sections.push(`Pages affected: ${Object.keys(byPage).length}`);
+    sections.push('');
+
+    // Sort by edit count
+    const sortedPages = Object.entries(byPage).sort((a, b) => b[1].edits.length - a[1].edits.length);
+
+    sections.push('### Pages Modified');
+    sections.push('| Page | Edits | Created By This Agent |');
+    sections.push('|------|-------|----------------------|');
+
+    for (const [path, data] of sortedPages.slice(0, 30)) {
+      sections.push(`| ${path} | ${data.edits.length} | ${data.created ? '✓' : ''} |`);
+    }
+
+    if (sortedPages.length > 30) {
+      sections.push(`\n... and ${sortedPages.length - 30} more pages`);
+    }
+
+    return sections.join('\n');
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -949,4 +1122,7 @@ export const analysisTools: AnalysisToolDefinition[] = [
   readSourceFileTool,
   searchSourceFilesTool,
   listSourceDirectoryTool,
+  // Provenance tools
+  getPageProvenanceTool,
+  getAgentContributionsTool,
 ];
