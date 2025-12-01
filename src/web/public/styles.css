@@ -1586,3 +1586,226 @@ footer .model-info {
 		grid-template-columns: repeat(2, 1fr);
 	}
 }
+
+/* Self-Improvement Analysis Section */
+.self-improvement-section {
+	margin-top: var(--space-lg);
+	padding: var(--space-md);
+	background: var(--bg-elevated);
+	border-radius: 8px;
+	border: 1px solid var(--border);
+}
+
+.self-improvement-section h3 {
+	color: var(--text-primary);
+	margin-bottom: var(--space-xs);
+}
+
+.section-hint {
+	color: var(--text-secondary);
+	font-size: 0.875rem;
+	margin-bottom: var(--space-md);
+}
+
+.self-improvement-controls {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-md);
+}
+
+.benchmark-selector {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-xs);
+	padding: var(--space-sm);
+	background: var(--bg-card);
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	min-height: 60px;
+	align-items: center;
+}
+
+.benchmark-selector .placeholder {
+	color: var(--text-tertiary);
+	font-size: 0.875rem;
+}
+
+.benchmark-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	background: var(--bg-elevated);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	cursor: pointer;
+	transition: all 0.2s;
+}
+
+.benchmark-checkbox:hover {
+	border-color: var(--accent-growth);
+}
+
+.benchmark-checkbox.selected {
+	background: var(--bg-selected);
+	border-color: var(--accent-growth);
+}
+
+.benchmark-checkbox input {
+	cursor: pointer;
+}
+
+.benchmark-checkbox .benchmark-label {
+	font-size: 0.8rem;
+	color: var(--text-secondary);
+}
+
+.benchmark-checkbox .benchmark-score {
+	font-size: 0.75rem;
+	color: var(--accent-growth);
+	margin-left: 4px;
+}
+
+.self-improvement-actions {
+	display: flex;
+	gap: var(--space-xs);
+	align-items: center;
+}
+
+.self-improvement-status {
+	margin-top: var(--space-md);
+	padding: var(--space-sm);
+	background: var(--bg-card);
+	border-radius: 6px;
+	color: var(--text-secondary);
+}
+
+.self-improvement-status p {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.self-improvement-status p::before {
+	content: '';
+	width: 16px;
+	height: 16px;
+	border: 2px solid var(--accent-growth);
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.self-improvement-report {
+	margin-top: var(--space-md);
+	background: var(--bg-card);
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	overflow: hidden;
+}
+
+.report-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: var(--space-sm);
+	background: var(--bg-elevated);
+	border-bottom: 1px solid var(--border);
+}
+
+.report-header h4 {
+	color: var(--text-primary);
+	margin: 0;
+}
+
+.report-content {
+	padding: var(--space-md);
+	max-height: 600px;
+	overflow-y: auto;
+	color: var(--text-primary);
+	font-size: 0.9rem;
+	line-height: 1.6;
+}
+
+.report-content h1,
+.report-content h2,
+.report-content h3 {
+	color: var(--text-primary);
+	margin-top: var(--space-md);
+	margin-bottom: var(--space-xs);
+}
+
+.report-content h1 {
+	font-size: 1.5rem;
+	border-bottom: 1px solid var(--border);
+	padding-bottom: var(--space-xs);
+}
+
+.report-content h2 {
+	font-size: 1.25rem;
+}
+
+.report-content h3 {
+	font-size: 1.1rem;
+}
+
+.report-content p {
+	margin-bottom: var(--space-sm);
+}
+
+.report-content ul,
+.report-content ol {
+	margin-left: var(--space-md);
+	margin-bottom: var(--space-sm);
+}
+
+.report-content li {
+	margin-bottom: 4px;
+}
+
+.report-content code {
+	background: var(--code-bg);
+	padding: 2px 6px;
+	border-radius: 4px;
+	font-size: 0.85em;
+}
+
+.report-content pre {
+	background: var(--code-bg);
+	padding: var(--space-sm);
+	border-radius: 6px;
+	overflow-x: auto;
+	margin-bottom: var(--space-sm);
+}
+
+.report-content table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: var(--space-sm);
+}
+
+.report-content th,
+.report-content td {
+	padding: 8px 12px;
+	text-align: left;
+	border: 1px solid var(--border);
+}
+
+.report-content th {
+	background: var(--bg-elevated);
+	color: var(--text-primary);
+}
+
+.report-content td {
+	color: var(--text-secondary);
+}
+
+.report-content strong {
+	color: var(--text-primary);
+}

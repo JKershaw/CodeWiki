@@ -942,6 +942,9 @@ async function loadBenchmarkHistory(repoId) {
     container.querySelectorAll('.benchmark-card[data-type="quality"]').forEach(card => {
       card.addEventListener('click', () => showQualityBenchmarkDetail(card.dataset.id));
     });
+
+    // Populate self-improvement benchmark selector
+    renderBenchmarkSelector(accuracyBenchmarks);
   } catch (error) {
     container.innerHTML = `<p class="placeholder">Error loading benchmarks: ${escapeHtml(error.message)}</p>`;
   }
@@ -1977,6 +1980,175 @@ function markdownToHtml(md) {
   const rawHtml = marked.parse(md);
   return DOMPurify.sanitize(rawHtml);
 }
+
+// ============================================================================
+// Self-Improvement Analysis
+// ============================================================================
+
+let selectedBenchmarkIds = new Set();
+let selfImprovementPollingInterval = null;
+
+/**
+ * Render the benchmark selector for self-improvement analysis.
+ */
+function renderBenchmarkSelector(accuracyBenchmarks) {
+  const selector = document.getElementById('benchmark-selector');
+  const runBtn = document.getElementById('run-self-improvement-btn');
+
+  const completedBenchmarks = accuracyBenchmarks.filter(b => b.status === 'completed');
+
+  if (completedBenchmarks.length === 0) {
+    selector.innerHTML = '<p class="placeholder">Run benchmarks to enable analysis.</p>';
+    runBtn.disabled = true;
+    return;
+  }
+
+  // Sort by iteration count
+  completedBenchmarks.sort((a, b) => a.iterationCount - b.iterationCount);
+
+  selector.innerHTML = completedBenchmarks.map(b => {
+    const isSelected = selectedBenchmarkIds.has(b.id);
+    const score = b.score ?? b.summary?.score ?? 0;
+    return `
+      <label class="benchmark-checkbox ${isSelected ? 'selected' : ''}" data-id="${b.id}">
+        <input type="checkbox" ${isSelected ? 'checked' : ''}>
+        <span class="benchmark-label">Iter ${b.iterationCount}</span>
+        <span class="benchmark-score">${score.toFixed(0)}%</span>
+      </label>
+    `;
+  }).join('');
+
+  // Add change handlers
+  selector.querySelectorAll('.benchmark-checkbox input').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const label = e.target.closest('.benchmark-checkbox');
+      const id = label.dataset.id;
+      if (e.target.checked) {
+        selectedBenchmarkIds.add(id);
+        label.classList.add('selected');
+      } else {
+        selectedBenchmarkIds.delete(id);
+        label.classList.remove('selected');
+      }
+      updateSelfImprovementButton();
+    });
+  });
+
+  updateSelfImprovementButton();
+}
+
+/**
+ * Update the self-improvement button state based on selection.
+ */
+function updateSelfImprovementButton() {
+  const btn = document.getElementById('run-self-improvement-btn');
+  btn.disabled = selectedBenchmarkIds.size < 2;
+}
+
+/**
+ * Start a self-improvement analysis.
+ */
+async function runSelfImprovement() {
+  if (!currentRepo || selectedBenchmarkIds.size < 2) return;
+
+  const statusEl = document.getElementById('self-improvement-status');
+  const reportEl = document.getElementById('self-improvement-report');
+  const runBtn = document.getElementById('run-self-improvement-btn');
+
+  statusEl.classList.remove('hidden');
+  reportEl.classList.add('hidden');
+  runBtn.disabled = true;
+
+  try {
+    const response = await api(`/repos/${currentRepo.id}/self-improvements`, {
+      method: 'POST',
+      body: JSON.stringify({ benchmarkRunIds: Array.from(selectedBenchmarkIds) }),
+    });
+
+    if (response.runId) {
+      // Start polling for completion
+      pollSelfImprovementStatus(response.runId);
+    }
+  } catch (error) {
+    console.error('Failed to start self-improvement:', error);
+    statusEl.innerHTML = `<p style="color: var(--error);">Failed to start analysis: ${escapeHtml(error.message)}</p>`;
+    runBtn.disabled = false;
+  }
+}
+
+/**
+ * Poll for self-improvement analysis completion.
+ */
+function pollSelfImprovementStatus(runId) {
+  const statusEl = document.getElementById('self-improvement-status');
+  const reportEl = document.getElementById('self-improvement-report');
+  const reportContent = document.getElementById('report-content');
+  const runBtn = document.getElementById('run-self-improvement-btn');
+
+  selfImprovementPollingInterval = setInterval(async () => {
+    try {
+      const response = await api(`/repos/${currentRepo.id}/self-improvements/${runId}`);
+      const run = response.run;
+
+      if (run.status === 'completed') {
+        clearInterval(selfImprovementPollingInterval);
+        selfImprovementPollingInterval = null;
+
+        statusEl.classList.add('hidden');
+        reportEl.classList.remove('hidden');
+        reportContent.innerHTML = markdownToHtml(run.report);
+        runBtn.disabled = false;
+      } else if (run.status === 'failed') {
+        clearInterval(selfImprovementPollingInterval);
+        selfImprovementPollingInterval = null;
+
+        statusEl.innerHTML = `<p style="color: var(--error);">Analysis failed: ${escapeHtml(run.error || 'Unknown error')}</p>`;
+        runBtn.disabled = false;
+      }
+    } catch (error) {
+      console.error('Failed to poll self-improvement status:', error);
+    }
+  }, 3000);
+}
+
+/**
+ * Select all benchmarks for analysis.
+ */
+function selectAllBenchmarks() {
+  const selector = document.getElementById('benchmark-selector');
+  selector.querySelectorAll('.benchmark-checkbox input').forEach(checkbox => {
+    if (!checkbox.checked) {
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+}
+
+/**
+ * Clear benchmark selection.
+ */
+function clearBenchmarkSelection() {
+  selectedBenchmarkIds.clear();
+  const selector = document.getElementById('benchmark-selector');
+  selector.querySelectorAll('.benchmark-checkbox').forEach(label => {
+    label.classList.remove('selected');
+    label.querySelector('input').checked = false;
+  });
+  updateSelfImprovementButton();
+}
+
+/**
+ * Close the self-improvement report.
+ */
+function closeReport() {
+  document.getElementById('self-improvement-report').classList.add('hidden');
+}
+
+// Add event listeners for self-improvement buttons
+document.getElementById('run-self-improvement-btn').addEventListener('click', runSelfImprovement);
+document.getElementById('select-all-benchmarks-btn').addEventListener('click', selectAllBenchmarks);
+document.getElementById('clear-benchmark-selection-btn').addEventListener('click', clearBenchmarkSelection);
+document.getElementById('close-report-btn').addEventListener('click', closeReport);
 
 // Initialize
 loadRepos();
