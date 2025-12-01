@@ -336,6 +336,11 @@ export class OpenRouterLLMService extends BaseLLMService {
           break;
         }
 
+        // Warn if response was truncated - tool call arguments may be incomplete
+        if (choice?.finish_reason === 'length' && toolCallsInResponse.length > 0) {
+          console.warn('[LLM] Response truncated (finish_reason=length) with pending tool calls - arguments may be incomplete. Consider increasing maxTokens.');
+        }
+
         // Validate and filter tool calls, logging any malformed ones
         const validToolCalls = toolCallsInResponse.filter(tc => {
           if (!isValidToolCall(tc)) {
