@@ -50,8 +50,9 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Safely parse JSON tool arguments, returning empty object on failure.
+ * Exported for testing.
  */
-function safeParseToolArguments(args: unknown): Record<string, unknown> {
+export function safeParseToolArguments(args: unknown): Record<string, unknown> {
   if (args === undefined || args === null) {
     return {};
   }
@@ -77,8 +78,9 @@ function safeParseToolArguments(args: unknown): Record<string, unknown> {
 
 /**
  * Check if a tool call has the expected structure.
+ * Exported for testing.
  */
-function isValidToolCall(tc: unknown): tc is { id: string; function: { name: string; arguments: string } } {
+export function isValidToolCall(tc: unknown): tc is { id: string; function: { name: string; arguments: string } } {
   if (typeof tc !== 'object' || tc === null) return false;
   const obj = tc as Record<string, unknown>;
   if (typeof obj['id'] !== 'string') return false;
