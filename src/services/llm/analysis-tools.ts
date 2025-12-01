@@ -960,6 +960,13 @@ export const readSourceFileTool: AnalysisToolDefinition = {
       return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
     } catch (error) {
       if (error instanceof Error) {
+        // Provide cleaner error messages for common cases
+        if (error.message.includes('ENOENT')) {
+          return `Error: File "${path}" not found in repository`;
+        }
+        if (error.message.includes('EACCES')) {
+          return `Error: Permission denied reading "${path}"`;
+        }
         return `Error reading "${path}": ${error.message}`;
       }
       return `Error reading "${path}"`;
@@ -1021,6 +1028,9 @@ export const searchSourceFilesTool: AnalysisToolDefinition = {
       return result;
     } catch (error) {
       if (error instanceof Error) {
+        if (error.message.includes('ENOENT')) {
+          return `Error: Repository path not found or not accessible`;
+        }
         return `Error searching for "${pattern}": ${error.message}`;
       }
       return `Error searching for "${pattern}"`;
@@ -1083,6 +1093,12 @@ export const listSourceDirectoryTool: AnalysisToolDefinition = {
       return result;
     } catch (error) {
       if (error instanceof Error) {
+        if (error.message.includes('ENOENT')) {
+          return `Error: Directory "${path}" not found in repository`;
+        }
+        if (error.message.includes('ENOTDIR')) {
+          return `Error: "${path}" is not a directory`;
+        }
         return `Error listing "${path}": ${error.message}`;
       }
       return `Error listing "${path}"`;
