@@ -28,8 +28,8 @@ import { v4 as uuid } from 'uuid';
 // Agent Configuration
 // ============================================================================
 
-const DEFAULT_MAX_TOOL_ROUNDS = 15;
-const DEFAULT_MAX_TOKENS = 8000;
+const DEFAULT_MAX_TOOL_ROUNDS = 30;
+const DEFAULT_MAX_TOKENS = 16000;
 
 // ============================================================================
 // Self-Improvement Agent
