@@ -248,6 +248,8 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'minimax/minimax-m2': { input: 0.255, output: 1.02 },
   // xAI models
   'x-ai/grok-4.1-fast:free': { input: 0, output: 0 },
+  // Meta Llama models
+  'meta-llama/llama-4-maverick': { input: 0.136, output: 0.68 },
   // Mock
   'mock': { input: 0, output: 0 },
 };
@@ -260,7 +262,7 @@ export function calculateCost(
   inputTokens: number,
   outputTokens: number
 ): number {
-  const costs = MODEL_COSTS[model] ?? MODEL_COSTS['gpt-4']!;
+  const costs = MODEL_COSTS[model] ?? MODEL_COSTS['openai/gpt-4']!;
   const inputCost = (inputTokens / 1_000_000) * costs.input;
   const outputCost = (outputTokens / 1_000_000) * costs.output;
   return inputCost + outputCost;
