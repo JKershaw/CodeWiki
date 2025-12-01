@@ -235,6 +235,7 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'anthropic/claude-3-sonnet': { input: 3, output: 15 },
   'anthropic/claude-3-haiku': { input: 0.25, output: 1.25 },
   'anthropic/claude-sonnet-4.5': { input: 3, output: 15 },
+  'anthropic/claude-opus-4.5': { input: 5, output: 25 },
   'anthropic/claude-haiku-4.5': { input: 1, output: 5 },
   'anthropic/claude-3.5-haiku': { input: 0.8, output: 4 },
   // Google models
