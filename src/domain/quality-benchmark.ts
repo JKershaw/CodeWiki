@@ -55,19 +55,19 @@ export const DIMENSION_NAMES: Record<QualityDimension, string> = {
  */
 export const DIMENSION_DESCRIPTIONS: Record<QualityDimension, string> = {
   contextual_richness:
-    'Does the wiki explain the "why" behind the code? Are architectural choices explained with trade-offs? Is historical context documented?',
+    'Does the wiki explain the "why" behind the code? Are architectural choices explained with trade-offs? Are rejected alternatives mentioned? Is historical context documented?',
   coherence_consistency:
     'Does the wiki tell a unified story? Same concepts use same terms? Related entries link appropriately? No contradictions?',
   completeness_coverage:
-    'Are important things documented? Core systems covered? Edge cases captured? Depth appropriate to complexity?',
+    'Are important things documented? Does it explicitly state scope and boundaries (what it does AND does not do)? Are assumptions and preconditions clear? Are failure modes, errors, and edge cases documented?',
   actionability:
-    'Can someone actually use this documentation? Concrete examples? How-to guidance? Troubleshooting info?',
+    'Can someone actually use this documentation? Concrete examples with clear inputs, outputs, and expected behavior? How-to guidance? Troubleshooting info for common errors?',
   structural_quality:
-    'Is the wiki well-organized? Logical hierarchy? Appropriate granularity? Easy to navigate?',
+    'Is the wiki well-organized? Does it follow layered depth (summary/purpose first, then progressive detail)? Logical hierarchy? Appropriate granularity? Easy to navigate?',
   confidence_calibration:
     'Are confidence scores meaningful? Good distribution? Uncertainty acknowledged appropriately?',
   machine_readability:
-    'Can AI agents parse this effectively? Consistent formatting? Explicit relationships? Clear code-to-wiki mapping?',
+    'Can AI agents parse this effectively? Consistent formatting? Explicit relationship markers (deprecation notes, prerequisites, "see also" references)? Clear code-to-wiki mapping?',
   information_density:
     'Signal vs noise ratio. Concise? Relevant? No boilerplate? Provides insight beyond reading code?',
 };

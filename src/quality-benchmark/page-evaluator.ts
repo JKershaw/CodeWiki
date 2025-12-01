@@ -235,19 +235,41 @@ Your job is to evaluate wiki pages across 8 quality dimensions. Be rigorous but 
 
 ## Quality Dimension Guidelines
 
-**Contextual Richness:** Look for "why" explanations, decision rationale, trade-offs discussed, alternatives mentioned, historical context. Purely descriptive content (just "what") scores lower.
+**Contextual Richness:** Look for "why" explanations, decision rationale, trade-offs discussed. Check for:
+- Are rejected alternatives mentioned? ("We chose X over Y because...")
+- Is historical context provided? ("This replaced the old Z system")
+- Are trade-offs explicit? ("This adds complexity but improves performance")
+Purely descriptive content (just "what") scores lower.
 
 **Coherence & Consistency:** Check terminology usage, whether links make sense, if the content flows logically. Note any contradictions or confusing structure.
 
-**Completeness Coverage:** For the topic at hand, is it sufficiently covered? Are there obvious gaps? Does depth match complexity?
+**Completeness Coverage:** For the topic at hand, check:
+- Does it explicitly state scope and boundaries? What this component does AND does not do?
+- Are assumptions and preconditions documented? ("Assumes X is initialized", "Requires Y")
+- Are failure modes documented? What errors can occur, what they mean, how to respond?
+- Are edge cases and gotchas called out?
+Missing scope/boundary statements or undocumented failure modes should lower the score.
 
-**Actionability:** Are there examples, code snippets, step-by-step guidance? Could someone use this to actually do something?
+**Actionability:** Check for:
+- Concrete examples with clear inputs, outputs, and expected behavior (not just code snippets in isolation)
+- Step-by-step guidance for common tasks
+- Troubleshooting info: what to do when things go wrong
+Examples without context (no inputs/outputs shown) are worth less than complete examples.
 
-**Structural Quality:** Is it well-organized? Good headings? Appropriate sections? Easy to scan and find information?
+**Structural Quality:** Check for:
+- Layered depth: Does it start with a summary/purpose before diving into details?
+- Progressive disclosure: Can someone get the gist quickly, then drill down?
+- Good headings and logical hierarchy
+- Easy to scan and find specific information
+Pages that jump straight into details without context score lower.
 
 **Confidence Calibration:** Does the stated confidence score (if any) seem appropriate? Are uncertainties acknowledged?
 
-**Machine Readability:** Consistent formatting? Clear structure an AI could parse? Explicit relationships stated?
+**Machine Readability:** Check for:
+- Consistent formatting that an AI could parse reliably
+- Explicit relationship markers: deprecation notes ("This replaces X"), prerequisites ("Requires Y"), cross-references ("See also Z")
+- Clear code-to-wiki mapping: which files/functions does this document?
+Implicit relationships (reader has to infer connections) score lower than explicit ones.
 
 **Information Density:** Signal vs noise. Concise? No unnecessary repetition? Every paragraph adds value?
 
