@@ -5,6 +5,7 @@
  * for improving the wiki generation process.
  */
 
+import { access } from 'fs/promises';
 import type { Repositories } from '../repositories/index.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { GitService } from '../services/git/git-service.js';
@@ -93,13 +94,16 @@ export class SelfImprovementAgent {
     });
 
     try {
-      // Get repo path for source code access (if git service available)
+      // Get repo path for source code access (if git service available and path exists)
       let repoPath: string | undefined;
       if (this.git) {
         try {
-          repoPath = this.git.getRepoPath(repoId);
+          const candidatePath = this.git.getRepoPath(repoId);
+          // Verify the path actually exists before using it
+          await access(candidatePath);
+          repoPath = candidatePath;
         } catch {
-          // Repo path not available - codebase tools will be disabled
+          // Repo path not available or doesn't exist - codebase tools will be disabled
         }
       }
 
