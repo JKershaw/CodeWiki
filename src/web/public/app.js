@@ -541,28 +541,106 @@ document.getElementById('wiki-selector').addEventListener('change', async (e) =>
   }
 });
 
+// Track expanded tree nodes (by path)
+const expandedTreeNodes = new Set();
+
 async function loadWikiPages(repoId, wikiId) {
   const sidebar = document.getElementById('wiki-categories');
   sidebar.innerHTML = '<p class="loading">Loading...</p>';
 
   try {
-    const url = wikiId ? `/repos/${repoId}/wiki?wikiId=${wikiId}` : `/repos/${repoId}/wiki`;
-    const { grouped } = await api(url);
+    const url = wikiId ? `/repos/${repoId}/wiki-tree?wikiId=${wikiId}` : `/repos/${repoId}/wiki-tree`;
+    const tree = await api(url);
 
-    sidebar.innerHTML = Object.entries(grouped).map(([category, pages]) => `
-      <div class="wiki-category">
-        <div class="wiki-category-title">${escapeHtml(category)}</div>
-        ${pages.map(page => `
-          <a class="wiki-page-link" data-path="${escapeHtml(page.path)}">${escapeHtml(page.title)}</a>
-        `).join('')}
-      </div>
-    `).join('');
+    if (tree.length === 0) {
+      sidebar.innerHTML = '<p class="placeholder">No pages yet</p>';
+      return;
+    }
 
-    sidebar.querySelectorAll('.wiki-page-link').forEach(link => {
-      link.addEventListener('click', () => loadWikiPage(repoId, link.dataset.path, wikiId));
+    sidebar.innerHTML = `<div class="wiki-tree">${tree.map(node => renderTreeNode(node)).join('')}</div>`;
+
+    // Add event listeners for tree interactions
+    sidebar.querySelectorAll('.tree-node-header').forEach(header => {
+      header.addEventListener('click', (e) => {
+        const path = header.dataset.path;
+        const hasPage = header.dataset.hasPage === 'true';
+        const hasChildren = header.dataset.hasChildren === 'true';
+
+        // If clicking the toggle area or node has no page, toggle expand/collapse
+        if (e.target.closest('.tree-toggle') || !hasPage) {
+          if (hasChildren) {
+            toggleTreeNode(path);
+          }
+        } else {
+          // Load the page
+          loadWikiPage(repoId, path, wikiId);
+        }
+      });
     });
   } catch (error) {
     sidebar.innerHTML = `<p class="placeholder">Error: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderTreeNode(node) {
+  const hasChildren = node.children && node.children.length > 0;
+  const hasPage = !!node.page;
+  const isExpanded = expandedTreeNodes.has(node.path);
+  const displayName = hasPage ? node.page.title : node.name;
+
+  return `
+    <div class="tree-node" data-path="${escapeHtml(node.path)}">
+      <div class="tree-node-header"
+           data-path="${escapeHtml(node.path)}"
+           data-has-page="${hasPage}"
+           data-has-children="${hasChildren}">
+        <span class="tree-toggle ${hasChildren ? (isExpanded ? 'expanded' : '') : 'hidden'}">&#9654;</span>
+        <span class="tree-node-name ${hasPage ? 'has-page' : 'no-page'}">${escapeHtml(displayName)}</span>
+      </div>
+      ${hasChildren ? `
+        <div class="tree-children ${isExpanded ? 'expanded' : ''}" data-path="${escapeHtml(node.path)}">
+          ${node.children.map(child => renderTreeNode(child)).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function toggleTreeNode(path) {
+  const childrenContainer = document.querySelector(`.tree-children[data-path="${CSS.escape(path)}"]`);
+  const toggle = document.querySelector(`.tree-node-header[data-path="${CSS.escape(path)}"] .tree-toggle`);
+
+  if (!childrenContainer) return;
+
+  if (expandedTreeNodes.has(path)) {
+    expandedTreeNodes.delete(path);
+    childrenContainer.classList.remove('expanded');
+    toggle?.classList.remove('expanded');
+  } else {
+    expandedTreeNodes.add(path);
+    childrenContainer.classList.add('expanded');
+    toggle?.classList.add('expanded');
+  }
+}
+
+function expandParentNodes(path) {
+  // Expand all ancestor nodes so the target path is visible
+  const segments = path.split('/');
+  let currentPath = '';
+
+  for (let i = 0; i < segments.length - 1; i++) {
+    currentPath = currentPath ? `${currentPath}/${segments[i]}` : segments[i];
+
+    if (!expandedTreeNodes.has(currentPath)) {
+      const childrenContainer = document.querySelector(`.tree-children[data-path="${CSS.escape(currentPath)}"]`);
+      const toggle = document.querySelector(`.tree-node-header[data-path="${CSS.escape(currentPath)}"] .tree-toggle`);
+
+      if (childrenContainer) {
+        expandedTreeNodes.add(currentPath);
+        childrenContainer.classList.add('expanded');
+        toggle?.classList.add('expanded');
+      }
+    }
   }
 }
 
@@ -570,10 +648,13 @@ async function loadWikiPage(repoId, path, wikiId) {
   const content = document.getElementById('wiki-content');
   content.innerHTML = '<p class="loading">Loading...</p>';
 
-  // Update active state
-  document.querySelectorAll('.wiki-page-link').forEach(link => {
-    link.classList.toggle('active', link.dataset.path === path);
+  // Update active state on tree headers
+  document.querySelectorAll('.tree-node-header').forEach(header => {
+    header.classList.toggle('active', header.dataset.path === path);
   });
+
+  // Expand parent nodes to show the active page
+  expandParentNodes(path);
 
   try {
     const url = wikiId ? `/repos/${repoId}/wiki/${path}?wikiId=${wikiId}` : `/repos/${repoId}/wiki/${path}`;

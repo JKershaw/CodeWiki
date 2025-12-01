@@ -438,6 +438,93 @@ nav {
 	font-weight: 600;
 }
 
+/* Wiki Tree Navigation */
+.wiki-tree {
+	display: flex;
+	flex-direction: column;
+}
+
+.tree-node {
+	display: flex;
+	flex-direction: column;
+}
+
+.tree-node-header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background 0.15s ease;
+	border-left: 3px solid transparent;
+	margin-left: -3px;
+}
+
+.tree-node-header:hover {
+	background: var(--bg-card);
+}
+
+.tree-node-header.active {
+	background: var(--bg-selected);
+	border-left-color: var(--accent-growth);
+}
+
+.tree-node-header.active .tree-node-name {
+	color: var(--accent-growth);
+}
+
+.tree-toggle {
+	width: 16px;
+	height: 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-tertiary);
+	font-size: 0.7rem;
+	flex-shrink: 0;
+	transition: transform 0.15s ease;
+}
+
+.tree-toggle.expanded {
+	transform: rotate(90deg);
+}
+
+.tree-toggle.hidden {
+	visibility: hidden;
+}
+
+.tree-node-name {
+	flex: 1;
+	font-size: 0.9rem;
+	color: var(--text-primary);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tree-node-name.has-page {
+	color: var(--text-primary);
+}
+
+.tree-node-name.no-page {
+	color: var(--text-secondary);
+	font-style: italic;
+}
+
+.tree-children {
+	display: none;
+	flex-direction: column;
+	padding-left: 16px;
+	border-left: 1px solid var(--border);
+	margin-left: 7px;
+}
+
+.tree-children.expanded {
+	display: flex;
+}
+
+/* Legacy flat category styles (kept for backwards compatibility) */
 .wiki-category {
 	margin-bottom: 20px;
 }

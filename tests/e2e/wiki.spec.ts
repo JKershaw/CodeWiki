@@ -40,7 +40,7 @@ test.describe('Wiki Browser', () => {
     await expect(page.locator('#wiki-content')).toBeVisible();
   });
 
-  test('wiki sidebar shows categories', async ({ page, request }) => {
+  test('wiki sidebar shows tree structure', async ({ page, request }) => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
@@ -53,20 +53,20 @@ test.describe('Wiki Browser', () => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
-    // Wait for sidebar to load (either categories or loading state to clear)
+    // Wait for sidebar to load
     await page.waitForLoadState('networkidle', { timeout: 15000 });
 
-    // Sidebar should have content (categories or wiki-page-link)
-    const hasCategories = await page.locator('.wiki-category').count() > 0;
-    const hasPageLinks = await page.locator('.wiki-page-link').count() > 0;
+    // Sidebar should have tree structure
+    const hasTree = await page.locator('.wiki-tree').count() > 0;
+    const hasTreeNodes = await page.locator('.tree-node').count() > 0;
 
-    // At minimum, should have either categories or page links
-    expect(hasCategories || hasPageLinks).toBeTruthy();
+    // Should have tree with nodes
+    expect(hasTree || hasTreeNodes).toBeTruthy();
 
-    // If categories exist, they should be visible
-    if (hasCategories) {
-      await expect(page.locator('.wiki-category').first()).toBeVisible();
-      await expect(page.locator('.wiki-category-title').first()).toBeVisible();
+    // Tree nodes should be visible
+    if (hasTreeNodes) {
+      await expect(page.locator('.tree-node').first()).toBeVisible();
+      await expect(page.locator('.tree-node-header').first()).toBeVisible();
     }
   });
 
@@ -83,11 +83,11 @@ test.describe('Wiki Browser', () => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
-    // Wait for pages to load
-    await page.waitForSelector('.wiki-page-link', { timeout: 10000 });
+    // Wait for tree to load
+    await page.waitForSelector('.tree-node-header[data-has-page="true"]', { timeout: 10000 });
 
-    // Click first page
-    await page.locator('.wiki-page-link').first().click();
+    // Click first page node (one that has a page)
+    await page.locator('.tree-node-header[data-has-page="true"]').first().click();
 
     // Content should update - use .first() to avoid strict mode violation with multiple matches
     await expect(page.locator('#wiki-content h1').first()).toBeVisible({ timeout: 10000 });
@@ -106,8 +106,8 @@ test.describe('Wiki Browser', () => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
-    await page.waitForSelector('.wiki-page-link', { timeout: 10000 });
-    await page.locator('.wiki-page-link').first().click();
+    await page.waitForSelector('.tree-node-header[data-has-page="true"]', { timeout: 10000 });
+    await page.locator('.tree-node-header[data-has-page="true"]').first().click();
 
     // Wait for content to load
     await page.waitForSelector('.wiki-meta', { timeout: 10000 });
@@ -115,6 +115,47 @@ test.describe('Wiki Browser', () => {
     // Confidence should be shown
     await expect(page.locator('.wiki-meta')).toContainText('Confidence');
     await expect(page.locator('.confidence-bar')).toBeVisible();
+  });
+
+  test('can expand and collapse tree nodes', async ({ page, request }) => {
+    const response = await request.get('/api/repos');
+    const repos = await response.json();
+    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
+
+    if (!repoWithWiki) {
+      test.skip();
+      return;
+    }
+
+    const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
+    await wikiBtn.click();
+
+    // Wait for tree to load
+    await page.waitForSelector('.tree-node-header', { timeout: 10000 });
+
+    // Find a node with children (has visible toggle)
+    const nodeWithChildren = page.locator('.tree-node-header[data-has-children="true"]').first();
+    const hasExpandableNode = await nodeWithChildren.count() > 0;
+
+    if (!hasExpandableNode) {
+      // No nested structure to test, skip
+      test.skip();
+      return;
+    }
+
+    // Get the path of this node
+    const nodePath = await nodeWithChildren.getAttribute('data-path');
+
+    // Initially collapsed - children should not be visible
+    const childrenContainer = page.locator(`.tree-children[data-path="${nodePath}"]`);
+
+    // Click to expand
+    await nodeWithChildren.locator('.tree-toggle').click();
+    await expect(childrenContainer).toHaveClass(/expanded/);
+
+    // Click again to collapse
+    await nodeWithChildren.locator('.tree-toggle').click();
+    await expect(childrenContainer).not.toHaveClass(/expanded/);
   });
 
   test('can navigate back to repos from wiki', async ({ page, request }) => {
@@ -137,5 +178,32 @@ test.describe('Wiki Browser', () => {
 
     // Should be back on repos view
     await expect(page.locator('#repos-view')).toHaveClass(/active/);
+  });
+
+  test('selected page is highlighted in tree', async ({ page, request }) => {
+    const response = await request.get('/api/repos');
+    const repos = await response.json();
+    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
+
+    if (!repoWithWiki) {
+      test.skip();
+      return;
+    }
+
+    const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
+    await wikiBtn.click();
+
+    // Wait for tree to load
+    await page.waitForSelector('.tree-node-header[data-has-page="true"]', { timeout: 10000 });
+
+    // Click a page
+    const firstPage = page.locator('.tree-node-header[data-has-page="true"]').first();
+    await firstPage.click();
+
+    // Wait for content to load
+    await page.waitForSelector('.wiki-meta', { timeout: 10000 });
+
+    // The clicked node should have active class
+    await expect(firstPage).toHaveClass(/active/);
   });
 });
