@@ -10,6 +10,44 @@ import {
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+/** Maximum number of retry attempts for transient failures */
+const MAX_RETRIES = 3;
+
+/** Initial backoff delay in milliseconds (doubles each retry) */
+const INITIAL_BACKOFF_MS = 1000;
+
+/**
+ * Check if an HTTP status code is retryable.
+ */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+/**
+ * Check if an error is a retryable network error.
+ */
+function isNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('fetch failed') ||
+    message.includes('econnreset') ||
+    message.includes('etimedout') ||
+    message.includes('enotfound') ||
+    message.includes('eai_again') ||
+    message.includes('certificate') ||
+    message.includes('tls') ||
+    message.includes('ssl')
+  );
+}
+
+/**
+ * Sleep for a specified number of milliseconds.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * OpenAI-compatible message format.
  */
@@ -103,22 +141,54 @@ export class OpenRouterLLMService extends BaseLLMService {
 
   private async callAPI(body: Record<string, unknown>): Promise<ChatResponse> {
     const fetchFn = await this.getFetch();
+    let lastError: Error | null = null;
 
-    const response = await fetchFn(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetchFn(OPENROUTER_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenRouter API error (${response.status}): ${error}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          lastError = new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+
+          // Retry on transient HTTP errors
+          if (isRetryableStatus(response.status) && attempt < MAX_RETRIES) {
+            const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+            console.warn(`[LLM] Retry ${attempt}/${MAX_RETRIES} after ${response.status} error, waiting ${backoffMs}ms`);
+            await sleep(backoffMs);
+            continue;
+          }
+
+          console.error(`[LLM] Request failed after ${attempt} attempt(s): ${lastError.message}`);
+          throw lastError;
+        }
+
+        return response.json() as Promise<ChatResponse>;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Retry on network errors
+        if (isNetworkError(error) && attempt < MAX_RETRIES) {
+          const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+          console.warn(`[LLM] Retry ${attempt}/${MAX_RETRIES} after network error, waiting ${backoffMs}ms: ${lastError.message}`);
+          await sleep(backoffMs);
+          continue;
+        }
+
+        console.error(`[LLM] Request failed after ${attempt} attempt(s): ${lastError.message}`);
+        throw lastError;
+      }
     }
 
-    return response.json() as Promise<ChatResponse>;
+    // Should not reach here, but throw last error if we do
+    throw lastError ?? new Error('Unknown error in callAPI');
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResult> {
