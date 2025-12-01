@@ -6,6 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
+import type { GitService } from '../../services/git/git-service.js';
 import { SelfImprovementAgent } from '../../analysis/self-improvement-agent.js';
 
 interface RepoParams {
@@ -21,7 +22,8 @@ interface RunParams extends RepoParams {
  */
 export function createSelfImprovementRoutes(
   repos: Repositories,
-  llm: LLMService
+  llm: LLMService,
+  git: GitService
 ): Router {
   const router = Router({ mergeParams: true });
 
@@ -156,7 +158,7 @@ export function createSelfImprovementRoutes(
       await repos.selfImprovements.save(run);
 
       // Run analysis in background (don't await)
-      runAnalysisInBackground(repos, llm, runId, repoId, wiki.id, validBenchmarks.map(b => b.id));
+      runAnalysisInBackground(repos, llm, git, runId, repoId, wiki.id, validBenchmarks.map(b => b.id));
 
       // Return immediately
       return res.json({
@@ -179,13 +181,14 @@ export function createSelfImprovementRoutes(
 async function runAnalysisInBackground(
   repos: Repositories,
   llm: LLMService,
+  git: GitService,
   runId: string,
   repoId: string,
   wikiId: string,
   benchmarkRunIds: string[]
 ): Promise<void> {
   try {
-    const agent = new SelfImprovementAgent(repos, llm);
+    const agent = new SelfImprovementAgent(repos, llm, git);
     const result = await agent.analyze(repoId, wikiId, benchmarkRunIds);
 
     // Update the run with results

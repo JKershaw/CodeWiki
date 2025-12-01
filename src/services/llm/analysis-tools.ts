@@ -2,12 +2,13 @@
  * Analysis tools for the Self-Improvement Agent.
  *
  * These tools allow the agent to explore benchmark history, iteration data,
- * wiki pages, and agent prompts to produce improvement recommendations.
+ * wiki pages, agent prompts, and source code to produce improvement recommendations.
  */
 
-import { readFile } from 'fs/promises';
-import { join, dirname } from 'path';
+import { readFile, readdir, stat } from 'fs/promises';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import fg from 'fast-glob';
 import type { Repositories } from '../../repositories/index.js';
 import type { BenchmarkRun, BenchmarkResult } from '../../domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../../domain/quality-benchmark.js';
@@ -18,6 +19,8 @@ import type {
   QuestionTrend,
   AgentActivitySummary,
 } from '../../domain/self-improvement.js';
+import type { EditRequest } from '../../domain/edit-request.js';
+import { loadIgnorePatterns } from '../cwignore.js';
 
 // ============================================================================
 // Tool Context
@@ -33,6 +36,8 @@ export interface AnalysisToolContext {
   repoId: string;
   /** Wiki ID being analyzed */
   wikiId: string;
+  /** Path to the source code repository (optional - if available enables codebase tools) */
+  repoPath?: string;
   /** Benchmark runs included in analysis */
   benchmarkRuns: BenchmarkRun[];
   /** Quality benchmark runs included in analysis */
@@ -741,6 +746,363 @@ export const getAgentPromptTool: AnalysisToolDefinition = {
 };
 
 // ============================================================================
+// Tool: Read Source File
+// ============================================================================
+
+const DEFAULT_MAX_FILE_SIZE = 100_000; // 100KB
+
+/**
+ * Validate that a path is within the repository root.
+ */
+function validateSourcePath(requestedPath: string, repoRoot: string): string {
+  const resolved = resolve(repoRoot, requestedPath);
+  const repoResolved = resolve(repoRoot);
+
+  if (!resolved.startsWith(repoResolved)) {
+    throw new Error(`Path "${requestedPath}" is outside repository`);
+  }
+  return resolved;
+}
+
+/**
+ * Tool to read a source file from the repository.
+ */
+export const readSourceFileTool: AnalysisToolDefinition = {
+  name: 'read_source_file',
+  description:
+    'Read the contents of a source file from the repository. Use this to understand what the source code ' +
+    'actually contains, to identify what information wiki-building agents should be extracting.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description: 'Relative path from repository root (e.g., "README.md", "src/index.ts")',
+      },
+    },
+    required: ['path'],
+  },
+  execute: async (input, context) => {
+    if (!context.repoPath) {
+      return 'Source code access is not available for this repository.';
+    }
+
+    const path = input['path'] as string;
+    try {
+      const fullPath = validateSourcePath(path, context.repoPath);
+      const stats = await stat(fullPath);
+
+      if (stats.size > DEFAULT_MAX_FILE_SIZE) {
+        return `Error: File "${path}" is too large (${stats.size} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
+      }
+
+      const content = await readFile(fullPath, 'utf-8');
+      return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
+    } catch (error) {
+      if (error instanceof Error) {
+        return `Error reading "${path}": ${error.message}`;
+      }
+      return `Error reading "${path}"`;
+    }
+  },
+};
+
+// ============================================================================
+// Tool: Search Source Files
+// ============================================================================
+
+/**
+ * Tool to search for source files matching a glob pattern.
+ */
+export const searchSourceFilesTool: AnalysisToolDefinition = {
+  name: 'search_source_files',
+  description:
+    'Find source files matching a glob pattern. Use this to discover what files exist in the repository ' +
+    'and understand the project structure that wiki-building agents are working with.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      pattern: {
+        type: 'string',
+        description: 'Glob pattern (e.g., "**/*.md", "src/**/*.ts")',
+      },
+    },
+    required: ['pattern'],
+  },
+  execute: async (input, context) => {
+    if (!context.repoPath) {
+      return 'Source code access is not available for this repository.';
+    }
+
+    const pattern = input['pattern'] as string;
+    try {
+      const ignorePatterns = await loadIgnorePatterns(context.repoPath);
+      const files = await fg(pattern, {
+        cwd: context.repoPath,
+        onlyFiles: true,
+        ignore: ignorePatterns,
+      });
+
+      if (files.length === 0) {
+        return `No files found matching "${pattern}"`;
+      }
+
+      // Limit results
+      const maxResults = 50;
+      const truncated = files.length > maxResults;
+      const displayFiles = files.slice(0, maxResults);
+
+      let result = `## Files matching: ${pattern}\n\nFound ${files.length} files:\n\n`;
+      result += displayFiles.join('\n');
+      if (truncated) {
+        result += `\n\n... and ${files.length - maxResults} more files`;
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof Error) {
+        return `Error searching for "${pattern}": ${error.message}`;
+      }
+      return `Error searching for "${pattern}"`;
+    }
+  },
+};
+
+// ============================================================================
+// Tool: List Source Directory
+// ============================================================================
+
+/**
+ * Tool to list contents of a source directory.
+ */
+export const listSourceDirectoryTool: AnalysisToolDefinition = {
+  name: 'list_source_directory',
+  description:
+    'List contents of a source directory to understand project structure. Use this to explore ' +
+    'what code exists that wiki-building agents should be documenting.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description: 'Directory path relative to repo root (e.g., "src", ".")',
+      },
+    },
+    required: ['path'],
+  },
+  execute: async (input, context) => {
+    if (!context.repoPath) {
+      return 'Source code access is not available for this repository.';
+    }
+
+    const path = input['path'] as string;
+    try {
+      const fullPath = validateSourcePath(path, context.repoPath);
+      const entries = await readdir(fullPath, { withFileTypes: true });
+      const ignorePatterns = await loadIgnorePatterns(context.repoPath);
+
+      // Filter out ignored entries
+      const filteredEntries = entries.filter(entry => {
+        const entryPath = path === '.' ? entry.name : join(path, entry.name);
+        // Simple ignore check
+        return !ignorePatterns.some(p => entryPath.includes(p.replace('/**', '').replace('*', '')));
+      });
+
+      const dirs = filteredEntries.filter(e => e.isDirectory()).map(e => e.name + '/');
+      const files = filteredEntries.filter(e => !e.isDirectory()).map(e => e.name);
+
+      let result = `## Directory: ${path}\n\n`;
+
+      if (dirs.length > 0) {
+        result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
+      }
+      if (files.length > 0) {
+        result += '**Files:**\n' + files.sort().join('\n');
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof Error) {
+        return `Error listing "${path}": ${error.message}`;
+      }
+      return `Error listing "${path}"`;
+    }
+  },
+};
+
+// ============================================================================
+// Tool: Get Page Provenance
+// ============================================================================
+
+/**
+ * Tool to get the edit history and agent provenance for a wiki page.
+ */
+export const getPageProvenanceTool: AnalysisToolDefinition = {
+  name: 'get_page_provenance',
+  description:
+    'Get the edit history for a wiki page, showing which agents created or modified it and what they contributed. ' +
+    'Use this to trace which agents are responsible for content gaps or issues on a specific page.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      page_path: {
+        type: 'string',
+        description: 'The path of the wiki page to get provenance for',
+      },
+    },
+    required: ['page_path'],
+  },
+  execute: async (input, context) => {
+    const pagePath = (input['page_path'] as string).toLowerCase();
+    const { repos, wikiId, wikiPages } = context;
+
+    // Find the page
+    const page = wikiPages.find(p => p.path.toLowerCase() === pagePath);
+    if (!page) {
+      return `Page "${pagePath}" not found in wiki.`;
+    }
+
+    // Get all edit requests for this page
+    const editRequests = await repos.editRequests.findByPagePath(wikiId, pagePath);
+
+    if (editRequests.length === 0) {
+      return `## Page Provenance: ${pagePath}\n\nNo edit history found. This page may have been created through bootstrap or direct update.`;
+    }
+
+    // Sort by creation time
+    editRequests.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    // Group by agent type
+    const byAgent: Record<string, EditRequest[]> = {};
+    for (const req of editRequests) {
+      const agent = req.sourceAgentType;
+      if (!byAgent[agent]) byAgent[agent] = [];
+      byAgent[agent]!.push(req);
+    }
+
+    // Build report
+    const sections: string[] = [];
+    sections.push(`## Page Provenance: ${page.title}`);
+    sections.push(`Path: ${page.path}`);
+    sections.push(`Current confidence: ${(page.confidence * 100).toFixed(0)}%`);
+    sections.push(`Total edits: ${editRequests.length}`);
+    sections.push('');
+
+    // Summary by agent
+    sections.push('### Contributions by Agent');
+    sections.push('| Agent | Edits | Applied | Merged | Skipped |');
+    sections.push('|-------|-------|---------|--------|---------|');
+
+    for (const [agent, edits] of Object.entries(byAgent).sort((a, b) => b[1].length - a[1].length)) {
+      const applied = edits.filter(e => e.status === 'applied').length;
+      const merged = edits.filter(e => e.status === 'merged-to-history').length;
+      const skipped = edits.filter(e => e.status === 'skipped').length;
+      sections.push(`| ${agent} | ${edits.length} | ${applied} | ${merged} | ${skipped} |`);
+    }
+    sections.push('');
+
+    // Recent edit details
+    sections.push('### Recent Edits (last 10)');
+    const recentEdits = editRequests.slice(-10);
+
+    for (const edit of recentEdits) {
+      const date = edit.createdAt.toISOString().split('T')[0];
+      sections.push(`#### ${edit.sourceAgentType} - ${date}`);
+      sections.push(`- **Status**: ${edit.status}`);
+      sections.push(`- **Type**: ${edit.proposedUpdateType}`);
+      sections.push(`- **Confidence delta**: ${edit.confidenceDelta > 0 ? '+' : ''}${edit.confidenceDelta}`);
+      if (edit.processingNotes) {
+        sections.push(`- **Notes**: ${edit.processingNotes}`);
+      }
+
+      // Show a snippet of what was proposed
+      const contentPreview = edit.proposedContent.slice(0, 200);
+      if (contentPreview.length < edit.proposedContent.length) {
+        sections.push(`- **Preview**: ${contentPreview}...`);
+      }
+      sections.push('');
+    }
+
+    return sections.join('\n');
+  },
+};
+
+// ============================================================================
+// Tool: Get Agent Contributions
+// ============================================================================
+
+/**
+ * Tool to get a summary of what pages an agent type has created/modified.
+ */
+export const getAgentContributionsTool: AnalysisToolDefinition = {
+  name: 'get_agent_contributions',
+  description:
+    'Get a summary of all wiki pages that a specific agent type has created or modified. ' +
+    'Use this to understand the scope of an agent\'s impact on the wiki.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      agent_type: {
+        type: 'string',
+        description: 'The agent type (e.g., "code-change", "security", "pattern")',
+      },
+    },
+    required: ['agent_type'],
+  },
+  execute: async (input, context) => {
+    const agentType = input['agent_type'] as string;
+    const { repos, wikiId } = context;
+
+    // Get all applied edit requests (we need to query by status)
+    const appliedEdits = await repos.editRequests.findByStatus(wikiId, 'applied');
+    const mergedEdits = await repos.editRequests.findByStatus(wikiId, 'merged-to-history');
+
+    const allEdits = [...appliedEdits, ...mergedEdits];
+    const agentEdits = allEdits.filter(e => e.sourceAgentType === agentType);
+
+    if (agentEdits.length === 0) {
+      return `No contributions found for agent type "${agentType}". This agent may not have run yet, or all its edits were skipped.`;
+    }
+
+    // Group by page path
+    const byPage: Record<string, { edits: EditRequest[]; created: boolean }> = {};
+    for (const edit of agentEdits) {
+      const path = edit.targetPagePath;
+      if (!byPage[path]) {
+        byPage[path] = { edits: [], created: false };
+      }
+      byPage[path]!.edits.push(edit);
+      if (edit.proposedUpdateType === 'create') {
+        byPage[path]!.created = true;
+      }
+    }
+
+    const sections: string[] = [];
+    sections.push(`## Agent Contributions: ${agentType}`);
+    sections.push(`Total successful edits: ${agentEdits.length}`);
+    sections.push(`Pages affected: ${Object.keys(byPage).length}`);
+    sections.push('');
+
+    // Sort by edit count
+    const sortedPages = Object.entries(byPage).sort((a, b) => b[1].edits.length - a[1].edits.length);
+
+    sections.push('### Pages Modified');
+    sections.push('| Page | Edits | Created By This Agent |');
+    sections.push('|------|-------|----------------------|');
+
+    for (const [path, data] of sortedPages.slice(0, 30)) {
+      sections.push(`| ${path} | ${data.edits.length} | ${data.created ? '✓' : ''} |`);
+    }
+
+    if (sortedPages.length > 30) {
+      sections.push(`\n... and ${sortedPages.length - 30} more pages`);
+    }
+
+    return sections.join('\n');
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -756,4 +1118,11 @@ export const analysisTools: AnalysisToolDefinition[] = [
   getPageContentTool,
   listWikiPagesTool,
   getAgentPromptTool,
+  // Codebase exploration tools
+  readSourceFileTool,
+  searchSourceFilesTool,
+  listSourceDirectoryTool,
+  // Provenance tools
+  getPageProvenanceTool,
+  getAgentContributionsTool,
 ];

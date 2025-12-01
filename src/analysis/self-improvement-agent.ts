@@ -7,6 +7,7 @@
 
 import type { Repositories } from '../repositories/index.js';
 import type { LLMService } from '../services/llm/llm-service.js';
+import type { GitService } from '../services/git/git-service.js';
 import type { BenchmarkRun } from '../domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../domain/quality-benchmark.js';
 import type { WikiPage } from '../domain/wiki-page.js';
@@ -38,7 +39,8 @@ const DEFAULT_MAX_TOKENS = 16000;
 export class SelfImprovementAgent {
   constructor(
     private readonly repos: Repositories,
-    private readonly llm: LLMService
+    private readonly llm: LLMService,
+    private readonly git?: GitService
   ) {}
 
   /**
@@ -91,6 +93,16 @@ export class SelfImprovementAgent {
     });
 
     try {
+      // Get repo path for source code access (if git service available)
+      let repoPath: string | undefined;
+      if (this.git) {
+        try {
+          repoPath = this.git.getRepoPath(repoId);
+        } catch {
+          // Repo path not available - codebase tools will be disabled
+        }
+      }
+
       // Build the analysis context
       const toolContext: AnalysisToolContext = {
         repos: this.repos,
@@ -99,6 +111,7 @@ export class SelfImprovementAgent {
         benchmarkRuns,
         qualityBenchmarkRuns,
         wikiPages,
+        ...(repoPath && { repoPath }),
       };
 
       // Build warm-start context
@@ -243,7 +256,8 @@ export class SelfImprovementAgent {
  */
 export function createSelfImprovementAgent(
   repos: Repositories,
-  llm: LLMService
+  llm: LLMService,
+  git?: GitService
 ): SelfImprovementAgent {
-  return new SelfImprovementAgent(repos, llm);
+  return new SelfImprovementAgent(repos, llm, git);
 }

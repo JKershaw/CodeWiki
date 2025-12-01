@@ -47,6 +47,19 @@ You have access to tools to explore the benchmark data:
 - **list_wiki_pages**: See wiki structure and page list
 - **get_agent_prompt**: Read an agent's system prompt to understand its instructions
 
+You also have access to the **source code** (if available):
+- **read_source_file**: Read a source file to see what information exists that wiki-building agents should be extracting
+- **search_source_files**: Find source files matching a pattern to understand project structure
+- **list_source_directory**: List directory contents to explore the codebase
+
+Use source code tools to answer: "What information exists in the code that ISN'T making it into the wiki?"
+
+You can also trace **agent provenance** to understand which agents are responsible for content:
+- **get_page_provenance**: See which agents created/modified a specific wiki page and what they contributed
+- **get_agent_contributions**: See all pages a specific agent type has modified
+
+Use provenance tools to answer: "Which agent is responsible for this content gap, and why didn't it extract the needed information?"
+
 ## Analysis Strategy
 
 **Take your time.** You have up to 30 tool rounds available - use them. Thorough investigation leads to better recommendations. Don't rush to conclusions.
@@ -60,6 +73,8 @@ You have access to tools to explore the benchmark data:
 5. **Review quality dimensions**: Use get_quality_trends to identify weak areas
 6. **Examine content**: Read wiki pages to understand what's actually being generated
 7. **Check agent prompts**: Read MULTIPLE agent prompts to understand how the system works. This is critical for process recommendations.
+8. **Compare to source**: When wiki content is missing information, read the source code to see what exists there that agents should be extracting
+9. **Trace provenance**: Use get_page_provenance to see which agents modified problematic pages - this reveals which agent to fix
 
 **Go deep, not wide.** It's better to thoroughly investigate 3-4 patterns than to superficially mention 10. For each pattern you identify, trace it to a root cause in the process.
 
