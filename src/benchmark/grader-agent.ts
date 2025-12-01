@@ -116,7 +116,7 @@ Start by reading the relevant code files, then provide your grade.`;
       messages: [{ role: 'user', content: prompt }],
       tools: toolDefs,
       executeTools,
-      maxTokens: 2000,
+      maxTokens: 4000, // Increased from 2000 - tool call arguments were being truncated with some models
       temperature: 0.2,
       maxToolRounds: 5,
     });
