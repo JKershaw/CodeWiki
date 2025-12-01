@@ -49,6 +49,49 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Safely parse JSON tool arguments, returning empty object on failure.
+ * Exported for testing.
+ */
+export function safeParseToolArguments(args: unknown): Record<string, unknown> {
+  if (args === undefined || args === null) {
+    return {};
+  }
+  if (typeof args !== 'string') {
+    console.warn('[LLM] Tool arguments is not a string:', typeof args);
+    return {};
+  }
+  if (args.trim() === '') {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(args);
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as Record<string, unknown>;
+    }
+    console.warn('[LLM] Parsed tool arguments is not an object:', typeof parsed);
+    return {};
+  } catch (error) {
+    console.error('[LLM] Failed to parse tool arguments:', args, error);
+    return {};
+  }
+}
+
+/**
+ * Check if a tool call has the expected structure.
+ * Exported for testing.
+ */
+export function isValidToolCall(tc: unknown): tc is { id: string; function: { name: string; arguments: string } } {
+  if (typeof tc !== 'object' || tc === null) return false;
+  const obj = tc as Record<string, unknown>;
+  if (typeof obj['id'] !== 'string') return false;
+  if (typeof obj['function'] !== 'object' || obj['function'] === null) return false;
+  const fn = obj['function'] as Record<string, unknown>;
+  if (typeof fn['name'] !== 'string') return false;
+  // arguments can be undefined/null for some models, we'll handle that in safeParseToolArguments
+  return true;
+}
+
+/**
  * OpenAI-compatible message format.
  */
 interface ChatMessage {
@@ -231,10 +274,9 @@ export class OpenRouterLLMService extends BaseLLMService {
       this.trackUsage(result);
       return result;
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`OpenRouter API error: ${error.message}`);
-      }
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[LLM] Completion failed:', errorMessage);
+      throw new Error(`OpenRouter API error: ${errorMessage}`);
     }
   }
 
@@ -294,11 +336,26 @@ export class OpenRouterLLMService extends BaseLLMService {
           break;
         }
 
-        // Execute all tool calls
-        const toolCalls = toolCallsInResponse.map(tc => ({
+        // Validate and filter tool calls, logging any malformed ones
+        const validToolCalls = toolCallsInResponse.filter(tc => {
+          if (!isValidToolCall(tc)) {
+            console.warn('[LLM] Skipping malformed tool call:', JSON.stringify(tc));
+            return false;
+          }
+          return true;
+        });
+
+        if (validToolCalls.length === 0) {
+          console.warn('[LLM] All tool calls were malformed, ending tool loop');
+          finalContent = textContent;
+          break;
+        }
+
+        // Execute all valid tool calls with safe argument parsing
+        const toolCalls = validToolCalls.map(tc => ({
           id: tc.id,
           name: tc.function.name,
-          input: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+          input: safeParseToolArguments(tc.function.arguments),
         }));
 
         const toolResults = await options.executeTools(toolCalls);
@@ -312,11 +369,11 @@ export class OpenRouterLLMService extends BaseLLMService {
           });
         }
 
-        // Add assistant message with tool calls
+        // Add assistant message with tool calls (use validToolCalls to exclude malformed ones)
         messages.push({
           role: 'assistant',
           content: textContent || null,
-          tool_calls: toolCallsInResponse,
+          tool_calls: validToolCalls,
         });
 
         // Add tool results
@@ -363,10 +420,9 @@ export class OpenRouterLLMService extends BaseLLMService {
       this.trackUsage(result);
       return result;
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`OpenRouter API error: ${error.message}`);
-      }
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[LLM] Tool completion failed:', errorMessage);
+      throw new Error(`OpenRouter API error: ${errorMessage}`);
     }
   }
 }
