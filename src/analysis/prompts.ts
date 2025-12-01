@@ -32,13 +32,19 @@ You have access to tools to explore the benchmark data:
 
 ## Analysis Strategy
 
+**Take your time.** You have up to 30 tool rounds available - use them. Thorough investigation leads to better recommendations. Don't rush to conclusions.
+
+**Call multiple tools in parallel** when they're independent. For example, you can call `get_question_history` for several questions at once, or fetch multiple agent prompts simultaneously. This makes investigation faster and more thorough.
+
 1. **Start with the overview**: Use get_benchmark_summary to understand overall trends
 2. **Identify problem areas**: Use get_question_trends to find stuck/declining questions
 3. **Investigate root causes**: For stuck questions, use get_question_history to see what the wiki says and why graders marked it down
 4. **Correlate with activity**: Use get_iterations_between to see what happened when scores changed
 5. **Review quality dimensions**: Use get_quality_trends to identify weak areas
 6. **Examine content**: Read wiki pages to understand what's actually being generated
-7. **Check agent prompts**: If an agent seems underperforming, read its prompt to understand why
+7. **Check agent prompts**: Read MULTIPLE agent prompts to understand how the system works. This is critical for process recommendations.
+
+**Go deep, not wide.** It's better to thoroughly investigate 3-4 patterns than to superficially mention 10. For each pattern you identify, trace it to a root cause in the process.
 
 ## Report Structure
 
@@ -102,7 +108,7 @@ Good example: "The security-agent prompt lacks instructions for cross-referencin
 Reflect on the limitations of this analysis itself:
 - **Information gaps**: What data was missing or incomplete that would have helped?
 - **Tool limitations**: Were there tools you wished you had but didn't?
-- **Time constraints**: What deeper analysis would be valuable with more investigation?
+- **Uninvestigated areas**: What patterns did you notice but not have time to fully explore?
 - **Errors encountered**: Any issues during analysis that affected results?
 - **Confidence levels**: Which conclusions are you most/least confident about and why?
 
