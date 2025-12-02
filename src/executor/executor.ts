@@ -2,32 +2,11 @@ import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../repositories/index.js';
 import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
-import type { Agent, AgentContext } from '../agents/base-agent.js';
+import type { AgentContext } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
-import { CodeChangeAgent } from '../agents/analysis/code-change-agent.js';
-import { NarrativeAgent } from '../agents/analysis/narrative-agent.js';
-import { SecurityAgent } from '../agents/analysis/security-agent.js';
-import { TechnicalDebtAgent } from '../agents/analysis/technical-debt-agent.js';
-import { PatternAgent } from '../agents/analysis/pattern-agent.js';
-import { DependencyAgent } from '../agents/analysis/dependency-agent.js';
-import { CodebaseExplorerAgent } from '../agents/analysis/codebase-explorer-agent.js';
-import { LinkAgent } from '../agents/meta/link-agent.js';
-import { StructureAgent } from '../agents/meta/structure-agent.js';
-import { QualityAgent } from '../agents/meta/quality-agent.js';
-import { ConsistencyAgent } from '../agents/meta/consistency-agent.js';
-import { WikiEditorAgent } from '../agents/meta/wiki-editor-agent.js';
-import { ConsolidationAgent } from '../agents/consolidation/consolidation-agent.js';
-import { OverviewAgent } from '../agents/synthesis/overview-agent.js';
-import { WriterAgent } from '../agents/synthesis/writer-agent.js';
-import { ProjectOverviewAgent } from '../agents/synthesis/project-overview-agent.js';
-import { GettingStartedAgent } from '../agents/synthesis/getting-started-agent.js';
-import { TestingGuideAgent } from '../agents/synthesis/testing-guide-agent.js';
-import { ExtensionGuideAgent } from '../agents/synthesis/extension-guide-agent.js';
-import { BootstrapAgent } from '../agents/synthesis/bootstrap-agent.js';
-import { WikiIndexAgent } from '../agents/synthesis/wiki-index-agent.js';
-import { TableOfContentsAgent } from '../agents/synthesis/toc-agent.js';
+import { getAgent } from '../agents/registry.js';
 
 // Import CQRS commands
 import {
@@ -124,7 +103,6 @@ const QUEUE_HIGH_WATER_MARK = 50;
  * All state changes flow through CQRS commands for clean separation.
  */
 export class Executor {
-  private agents: Map<string, Agent> = new Map();
   private running = false;
   private shouldStop = false;
   private refillInProgress = false;
@@ -136,46 +114,7 @@ export class Executor {
     private readonly llm: LLMService,
     private readonly orchestrator: Orchestrator
   ) {
-    // Register built-in analysis agents
-    this.registerAgent(new CodeChangeAgent());
-    this.registerAgent(new NarrativeAgent());
-    this.registerAgent(new SecurityAgent());
-    this.registerAgent(new TechnicalDebtAgent());
-    this.registerAgent(new PatternAgent());
-    this.registerAgent(new DependencyAgent());
-
-    // Register exploration agents
-    this.registerAgent(new CodebaseExplorerAgent());
-
-    // Register meta agents
-    this.registerAgent(new WikiEditorAgent());
-    this.registerAgent(new LinkAgent());
-    this.registerAgent(new StructureAgent());
-    this.registerAgent(new QualityAgent());
-    this.registerAgent(new ConsistencyAgent());
-
-    // Register consolidation agent (self-healing wiki maintenance)
-    this.registerAgent(new ConsolidationAgent());
-
-    // Register synthesis agents
-    this.registerAgent(new OverviewAgent());
-    this.registerAgent(new WriterAgent());
-    this.registerAgent(new ProjectOverviewAgent());
-    this.registerAgent(new GettingStartedAgent());
-    this.registerAgent(new TestingGuideAgent());
-    this.registerAgent(new ExtensionGuideAgent());
-    this.registerAgent(new BootstrapAgent());
-
-    // Register navigation agents
-    this.registerAgent(new WikiIndexAgent());
-    this.registerAgent(new TableOfContentsAgent());
-  }
-
-  /**
-   * Register an agent for execution.
-   */
-  registerAgent(agent: Agent): void {
-    this.agents.set(agent.type, agent);
+    // Agents are managed by the central registry (src/agents/registry.ts)
   }
 
   /**
@@ -521,7 +460,7 @@ export class Executor {
     repoId: string,
     wikiId: string
   ): Promise<WorkItemResult> {
-    const agent = this.agents.get(workItem.agentType);
+    const agent = getAgent(workItem.agentType);
     if (!agent) {
       const errorMsg = `Unknown agent type: ${workItem.agentType}`;
       console.error(errorMsg);
