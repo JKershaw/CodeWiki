@@ -70,18 +70,44 @@ Use orchestrator tools to answer: "Was work prioritized effectively? Should the 
 
 **Take your time.** You have up to 30 tool rounds available - use them. Thorough investigation leads to better recommendations. Don't rush to conclusions.
 
-**Call multiple tools in parallel** when they're independent. For example, you can call get_question_history for several questions at once, or fetch multiple agent prompts simultaneously. This makes investigation faster and more thorough.
+### CRITICAL: Use Parallel Tool Calls
 
-1. **Start with the overview**: Use get_benchmark_summary to understand overall trends
-2. **Identify problem areas**: Use get_question_trends to find stuck/declining questions
-3. **Investigate root causes**: For stuck questions, use get_question_history to see what the wiki says and why graders marked it down
-4. **Correlate with activity**: Use get_iterations_between to see what happened when scores changed
-5. **Review quality dimensions**: Use get_quality_trends to identify weak areas, then get_quality_dimension_detail to see which specific pages are dragging down each dimension
-6. **Examine content**: Read wiki pages to understand what's actually being generated
-7. **Check agent prompts**: Read MULTIPLE agent prompts to understand how the system works. This is critical for process recommendations.
-8. **Compare to source**: When wiki content is missing information, read the source code to see what exists there that agents should be extracting
-9. **Trace provenance**: Use get_page_provenance to see which agents modified problematic pages - this reveals which agent to fix
-10. **Review orchestration**: Use get_orchestrator_decisions to see how work was prioritized - this reveals if agents ran in the right order
+**You MUST call multiple tools in the same response when they are independent.** Each "round" can include many tool calls executed simultaneously. If you only call one tool per round, you will run out of rounds before completing your investigation.
+
+**Examples of parallel tool calls you should make:**
+- Call \`get_question_history\` for 3-5 stuck questions simultaneously in one response
+- Call \`get_agent_prompt\` for multiple agents (code-change-agent, security-agent, architecture-agent) at once
+- Call \`get_page_content\` for several wiki pages in the same response
+- Call \`read_source_file\` for multiple source files together
+- Call \`get_page_provenance\` for several pages simultaneously
+
+**BAD (wastes rounds):**
+Round 1: get_question_history("q1")
+Round 2: get_question_history("q2")
+Round 3: get_question_history("q3")
+
+**GOOD (efficient):**
+Round 1: get_question_history("q1") + get_question_history("q2") + get_question_history("q3")
+
+### Investigation Phases
+
+**Phase 1 - Overview (1-2 rounds):**
+- Call get_benchmark_summary AND get_question_trends AND get_quality_trends together
+
+**Phase 2 - Deep Investigation (10-15 rounds):**
+- For stuck questions: call get_question_history for ALL of them in one round
+- Read multiple agent prompts in parallel to understand the system
+- Fetch multiple wiki pages simultaneously when investigating content gaps
+- When checking source code, read several related files together
+
+**Phase 3 - Provenance & Root Cause (5-10 rounds):**
+- Call get_page_provenance for multiple problematic pages at once
+- Call get_iterations_between for different time periods in parallel
+- Cross-reference agent contributions and orchestrator decisions
+
+**Phase 4 - Synthesis:**
+- You should have gathered substantial evidence by now
+- Write your comprehensive report
 
 **Go deep, not wide.** It's better to thoroughly investigate 3-4 patterns than to superficially mention 10. For each pattern you identify, trace it to a root cause in the process.
 
