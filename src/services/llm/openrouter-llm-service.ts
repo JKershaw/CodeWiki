@@ -266,7 +266,7 @@ export class OpenRouterLLMService extends BaseLLMService {
         content,
         inputTokens,
         outputTokens,
-        costUsd: calculateCost(this.model, inputTokens, outputTokens),
+        costUsd: await calculateCost(this.model, inputTokens, outputTokens),
         model: this.model,
         truncated: response.choices[0]?.finish_reason === 'length',
       };
@@ -415,7 +415,7 @@ export class OpenRouterLLMService extends BaseLLMService {
         content: finalContent,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
-        costUsd: calculateCost(this.model, totalInputTokens, totalOutputTokens),
+        costUsd: await calculateCost(this.model, totalInputTokens, totalOutputTokens),
         model: this.model,
         truncated: false,
         toolCalls: allToolCalls,
