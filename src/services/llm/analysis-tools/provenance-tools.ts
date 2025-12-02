@@ -447,10 +447,12 @@ export const getWorkItemOutcomesTool: AnalysisToolDefinition = {
     const { repos, wikiId, repoId } = context;
 
     // Get completed work items
-    const options = agentType
-      ? { status: 'completed' as const, agentType: agentType as Parameters<typeof repos.workQueue.findByRepo>[1]['agentType'] }
-      : { status: 'completed' as const };
-    const workItems = await repos.workQueue.findByRepo(repoId, options);
+    const workItems = await repos.workQueue.findByRepo(
+      repoId,
+      agentType
+        ? { status: 'completed' as const, agentType: agentType as 'code-change' }
+        : { status: 'completed' as const }
+    );
 
     if (workItems.length === 0) {
       return 'No completed work items found.';

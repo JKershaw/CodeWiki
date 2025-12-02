@@ -373,8 +373,8 @@ export class Orchestrator {
       repoId,
       wikiId,
       existingWorkKeys,
-      git: this.git,
-      contextGatherer: this.contextGatherer,
+      ...(this.git && { git: this.git }),
+      ...(this.contextGatherer && { contextGatherer: this.contextGatherer }),
     };
 
     // Execute all strategies
