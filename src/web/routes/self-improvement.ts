@@ -13,9 +13,13 @@ import { SelfImprovementAgent } from '../../analysis/self-improvement-agent.js';
 import {
   createGetRepositoryQuery,
   handleGetRepository,
+  createGetActiveWikiQuery,
+  handleGetActiveWiki,
+} from '../../queries/index.js';
+import {
   createGetBenchmarkRunQuery,
   handleGetBenchmarkRun,
-} from '../../queries/index.js';
+} from '../../queries/benchmark.js';
 import {
   createGetSelfImprovementRunQuery,
   handleGetSelfImprovementRun,
@@ -30,7 +34,6 @@ import {
   handleFailSelfImprovement,
   createFailSelfImprovementCommand,
 } from '../../commands/self-improvement.js';
-import { handleGetActiveWiki, createGetActiveWikiQuery } from '../../queries/wiki.js';
 
 interface RepoParams {
   id: string;
