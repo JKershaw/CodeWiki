@@ -31,6 +31,8 @@ export interface EditRequest {
   sourceAgentType: AgentType;
   /** Agent run that produced this edit */
   sourceAgentRunId: string;
+  /** Work item that triggered this edit (for provenance tracking) */
+  workItemId: string | null;
 
   // Target
   /** Path of the wiki page to edit */
@@ -84,6 +86,7 @@ export function createEditRequest(params: {
   sourceCommitTimestamp: Date;
   sourceAgentType: AgentType;
   sourceAgentRunId: string;
+  workItemId?: string;
   targetPagePath: string;
   targetPageTitle?: string;
   proposedUpdateType: 'create' | 'update' | 'merge' | 'delete';
@@ -99,6 +102,7 @@ export function createEditRequest(params: {
     sourceCommitTimestamp: params.sourceCommitTimestamp,
     sourceAgentType: params.sourceAgentType,
     sourceAgentRunId: params.sourceAgentRunId,
+    workItemId: params.workItemId ?? null,
     targetPagePath: params.targetPagePath,
     proposedUpdateType: params.proposedUpdateType,
     proposedContent: params.proposedContent,
@@ -133,6 +137,7 @@ export function wikiPageUpdateToEditRequest(params: {
   sourceCommitTimestamp: Date;
   sourceAgentType: AgentType;
   sourceAgentRunId: string;
+  workItemId?: string;
   update: {
     type: 'create' | 'update' | 'merge' | 'delete';
     path: string;
@@ -157,6 +162,9 @@ export function wikiPageUpdateToEditRequest(params: {
     confidenceDelta: params.update.confidenceDelta,
   };
 
+  if (params.workItemId !== undefined) {
+    createParams.workItemId = params.workItemId;
+  }
   if (params.update.title !== undefined) {
     createParams.targetPageTitle = params.update.title;
   }

@@ -54,6 +54,7 @@ export class FileWikiPageRepository implements WikiPageRepository {
     content: string;
     confidence?: number;
     sourceCommitId?: string;
+    sourceAgentRunId?: string;
   }): Promise<void> {
     const page = await this.store.get(id);
     if (page) {
@@ -64,6 +65,13 @@ export class FileWikiPageRepository implements WikiPageRepository {
       }
       if (updates.sourceCommitId && !page.sourceCommits.includes(updates.sourceCommitId)) {
         page.sourceCommits.push(updates.sourceCommitId);
+      }
+      // Initialize sourceAgentRunIds if it doesn't exist (for backwards compatibility)
+      if (!page.sourceAgentRunIds) {
+        page.sourceAgentRunIds = [];
+      }
+      if (updates.sourceAgentRunId && !page.sourceAgentRunIds.includes(updates.sourceAgentRunId)) {
+        page.sourceAgentRunIds.push(updates.sourceAgentRunId);
       }
       await this.store.set(page);
     }

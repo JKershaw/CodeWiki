@@ -344,6 +344,7 @@ export class Orchestrator {
 				priority: this.getPriority(item.agentType),
 				...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
 				...(item.targetPath ? { targetPath: item.targetPath } : {}),
+				orchestratorRunId: runId, // Link to the orchestrator decision for provenance
 			});
 
 			workItems.push(workItem);

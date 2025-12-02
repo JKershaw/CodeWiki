@@ -56,6 +56,7 @@ export interface WikiPageRepository {
     content: string;
     confidence?: number;
     sourceCommitId?: string;
+    sourceAgentRunId?: string;
   }): Promise<void>;
 
   /**

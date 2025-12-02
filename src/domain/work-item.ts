@@ -26,6 +26,8 @@ export interface WorkItem {
   completedAt: Date | null;
   /** Reference to the resulting agent run */
   agentRunId: string | null;
+  /** Reference to the orchestrator run that created this work item (for provenance tracking) */
+  orchestratorRunId: string | null;
 }
 
 export type WorkItemStatus =
@@ -66,6 +68,7 @@ export function createWorkItem(params: {
   priority: number;
   targetCommitId?: string;
   targetPath?: string;
+  orchestratorRunId?: string;
 }): WorkItem {
   return {
     id: params.id,
@@ -79,5 +82,6 @@ export function createWorkItem(params: {
     claimedAt: null,
     completedAt: null,
     agentRunId: null,
+    orchestratorRunId: params.orchestratorRunId ?? null,
   };
 }
