@@ -84,25 +84,51 @@ Investigation revealed several items flagged by `ts-unused-exports` are **actual
 
 ---
 
+## ✅ COMPLETED: CLI Refactoring
+
+### CLI Command Extraction
+
+| File | Before | After | Status |
+|------|--------|-------|--------|
+| `src/cli.ts` | 568 lines | 67 lines | ✅ Commands extracted |
+
+**Created `src/cli/commands/` directory with:**
+- `help.ts` - Help text and usage display
+- `process.ts` - Repository processing command
+- `status.ts` - Show processing status
+- `list.ts` - List connected repositories
+- `query.ts` - Ask about a codebase
+- `ask.ts` - Quick query for current directory
+- `spec.ts` - Generate implementation spec
+- `index.ts` - Re-exports all commands
+
+**Created `src/cli/utils.ts`:**
+- Shared `createLLM()` function for CLI commands
+
+---
+
+## ✅ COMPLETED: CQRS Architectural Consistency
+
+The self-improvement module now properly uses CQRS handlers:
+
+**Web routes (`src/web/routes/self-improvement.ts`) now use:**
+- `handleGetRepository`, `handleGetBenchmarkRun` for entity queries
+- `handleGetSelfImprovementRun`, `handleGetSelfImprovementHistory` for self-improvement queries
+- `handleStartSelfImprovement`, `handleCompleteSelfImprovement`, `handleFailSelfImprovement` for commands
+
+All routes now go through the CQRS layer instead of direct repository calls.
+
+---
+
 ## HIGH Priority (Remaining)
 
-### 1. Large File Decomposition (Remaining Items)
+### 1. Large File Review
 
 | File | Lines | Issue | Recommendation |
 |------|-------|-------|----------------|
 | `src/agents/analysis/technical-debt-agent.ts` | 609 | Large but cohesive | Consider if parsing can be extracted |
-| `src/cli.ts` | 568 | All commands inline | Extract commands to separate modules |
 
-### 2. CQRS Architectural Inconsistency
-
-The self-improvement module has CQRS commands/queries defined but bypassed:
-- Web routes call repository methods directly instead of command handlers
-- `StartSelfImprovementCommand`, `CompleteSelfImprovementCommand`, `FailSelfImprovementCommand` handlers exist but are never called
-- `GetSelfImprovementRunQuery`, `GetSelfImprovementHistoryQuery` handlers exist but are never called
-
-**Options:**
-1. Wire commands/queries through a dispatcher (consistent architecture)
-2. Remove the unused handlers (simpler, but loses CQRS benefits)
+Note: This file was reviewed and deemed cohesive - the parsing logic is tightly coupled with the domain knowledge of technical debt patterns.
 
 ---
 
@@ -216,10 +242,10 @@ These represent planned features, not debt.
 | ~~2~~ | ~~Fix `as any` casts (4 instances)~~ | ~~Low~~ | ~~Better type safety~~ | ~~Low~~ | ✅ Done |
 | ~~3~~ | ~~Split `analysis-tools.ts` into modules~~ | ~~Medium~~ | ~~Better maintainability~~ | ~~Low~~ | ✅ Done |
 | ~~4~~ | ~~Split `orchestrator.ts` into strategies~~ | ~~Medium~~ | ~~Better testability~~ | ~~Medium~~ | ✅ Done |
-| 5 | Create agent base class with common flow | Medium | Reduces duplication in 25 files | Medium | Pending |
-| 6 | Simplify CQRS (evaluate if needed internally) | High | 5K+ lines potentially simplified | High | Pending |
-| 7 | Extract CLI commands to separate modules | Low | Better organization | Low | Pending |
-| 8 | Resolve self-improvement CQRS inconsistency | Low | Architectural consistency | Low | Pending |
+| ~~5~~ | ~~Extract CLI commands to separate modules~~ | ~~Low~~ | ~~Better organization~~ | ~~Low~~ | ✅ Done |
+| ~~6~~ | ~~Resolve self-improvement CQRS inconsistency~~ | ~~Low~~ | ~~Architectural consistency~~ | ~~Low~~ | ✅ Done |
+| 7 | Create agent base class with common flow | Medium | Reduces duplication in 25 files | Medium | Pending |
+| 8 | Simplify CQRS (evaluate if needed internally) | High | 5K+ lines potentially simplified | High | Pending |
 
 ---
 
