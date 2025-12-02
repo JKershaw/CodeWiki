@@ -29,9 +29,13 @@ function showView(viewName) {
 }
 
 navBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     if (!btn.disabled) {
       showView(btn.dataset.view);
+      // Reload data when switching to benchmark view
+      if (btn.dataset.view === 'benchmark' && currentRepo) {
+        await loadBenchmarkHistory(currentRepo.id);
+      }
     }
   });
 });
