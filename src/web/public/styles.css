@@ -404,6 +404,20 @@ nav {
 	transition: width 0.3s ease;
 }
 
+.progress-fill.indeterminate {
+	width: 30%;
+	animation: indeterminate 1.5s infinite ease-in-out;
+}
+
+@keyframes indeterminate {
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(400%);
+	}
+}
+
 .progress-text {
 	font-size: 0.85rem;
 	color: var(--text-secondary);
