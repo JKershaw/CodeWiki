@@ -45,11 +45,11 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
         return;
       }
 
-      // Check if there's already a running benchmark
-      const running = await repos.benchmarks.findRunning(repoId);
+      // Check if there's already a running benchmark for this wiki
+      const running = await repos.benchmarks.findRunningByWiki(wiki.id);
       if (running) {
         res.status(409).json({
-          error: 'A benchmark is already running',
+          error: 'A benchmark is already running for this wiki',
           runId: running.id,
         });
         return;
@@ -78,7 +78,7 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
       // The benchmark creates a run record immediately
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const startedRun = await repos.benchmarks.findRunning(repoId);
+      const startedRun = await repos.benchmarks.findRunningByWiki(wiki.id);
 
       // Continue processing in background
       benchmarkPromise.catch(error => {
@@ -106,6 +106,7 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
 
   /**
    * Get benchmark history for a repository.
+   * Returns only benchmarks for the currently active wiki.
    */
   router.get('/api/repos/:id/benchmarks', async (req: Request, res: Response) => {
     try {
@@ -118,10 +119,17 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
         return;
       }
 
+      // Get active wiki to filter benchmarks
+      const wiki = await repos.wikis.findActive(repoId);
+      if (!wiki) {
+        res.status(400).json({ error: 'No active wiki for this repository' });
+        return;
+      }
+
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
       const result = await handleGetBenchmarkHistory(
-        createGetBenchmarkHistoryQuery(repoId, limit),
+        createGetBenchmarkHistoryQuery(repoId, { wikiId: wiki.id, limit }),
         repos
       );
 

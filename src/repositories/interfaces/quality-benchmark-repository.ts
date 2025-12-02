@@ -24,14 +24,33 @@ export interface QualityBenchmarkRepository {
   }): Promise<QualityBenchmarkRun[]>;
 
   /**
+   * Find all quality benchmark runs for a specific wiki.
+   */
+  findByWiki(wikiId: string, options?: {
+    limit?: number;
+    offset?: number;
+    status?: QualityBenchmarkRunStatus;
+  }): Promise<QualityBenchmarkRun[]>;
+
+  /**
    * Find the most recent quality benchmark runs for a repository.
    */
   findLatest(repoId: string, limit?: number): Promise<QualityBenchmarkRun[]>;
 
   /**
+   * Find the most recent quality benchmark runs for a specific wiki.
+   */
+  findLatestByWiki(wikiId: string, limit?: number): Promise<QualityBenchmarkRun[]>;
+
+  /**
    * Find a running quality benchmark for a repository (if any).
    */
   findRunning(repoId: string): Promise<QualityBenchmarkRun | null>;
+
+  /**
+   * Find a running quality benchmark for a specific wiki (if any).
+   */
+  findRunningByWiki(wikiId: string): Promise<QualityBenchmarkRun | null>;
 
   /**
    * Save a quality benchmark run (create or update).
@@ -47,6 +66,11 @@ export interface QualityBenchmarkRepository {
    * Delete all quality benchmark runs for a repository.
    */
   deleteByRepo(repoId: string): Promise<void>;
+
+  /**
+   * Delete all quality benchmark runs for a specific wiki.
+   */
+  deleteByWiki(wikiId: string): Promise<void>;
 
   /**
    * Mark a quality benchmark run as completed with results.

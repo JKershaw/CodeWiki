@@ -43,9 +43,41 @@ export class FileQualityBenchmarkRepository implements QualityBenchmarkRepositor
     return this.findByRepo(repoId, { limit });
   }
 
+  async findByWiki(wikiId: string, options?: {
+    limit?: number;
+    offset?: number;
+    status?: QualityBenchmarkRunStatus;
+  }): Promise<QualityBenchmarkRun[]> {
+    let results = await this.store.find(r => {
+      if (r.wikiId !== wikiId) return false;
+      if (options?.status && r.status !== options.status) return false;
+      return true;
+    });
+
+    // Hydrate dates and sort by start time, newest first
+    results = results.map(r => this.hydrateDates(r));
+    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
+
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? results.length;
+    return results.slice(offset, offset + limit);
+  }
+
+  async findLatestByWiki(wikiId: string, limit = 10): Promise<QualityBenchmarkRun[]> {
+    return this.findByWiki(wikiId, { limit });
+  }
+
   async findRunning(repoId: string): Promise<QualityBenchmarkRun | null> {
     const results = await this.store.find(r =>
       r.repoId === repoId && r.status === 'running'
+    );
+    if (results.length === 0) return null;
+    return this.hydrateDates(results[0]!);
+  }
+
+  async findRunningByWiki(wikiId: string): Promise<QualityBenchmarkRun | null> {
+    const results = await this.store.find(r =>
+      r.wikiId === wikiId && r.status === 'running'
     );
     if (results.length === 0) return null;
     return this.hydrateDates(results[0]!);
@@ -61,6 +93,10 @@ export class FileQualityBenchmarkRepository implements QualityBenchmarkRepositor
 
   async deleteByRepo(repoId: string): Promise<void> {
     await this.store.deleteMany(r => r.repoId === repoId);
+  }
+
+  async deleteByWiki(wikiId: string): Promise<void> {
+    await this.store.deleteMany(r => r.wikiId === wikiId);
   }
 
   async complete(

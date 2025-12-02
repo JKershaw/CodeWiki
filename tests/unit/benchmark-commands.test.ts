@@ -15,10 +15,17 @@ import {
   handleFailBenchmark,
 } from '../../src/commands/benchmark.js';
 import {
+  createGetBenchmarkHistoryQuery,
+  handleGetBenchmarkHistory,
+  createCompareBenchmarksQuery,
+  handleCompareBenchmarks,
+} from '../../src/queries/benchmark.js';
+import {
   type BenchmarkRun,
   type BenchmarkResult,
   type BenchmarkQuestion,
   createBenchmarkRun,
+  createEmptySummary,
 } from '../../src/domain/benchmark.js';
 import type { Repositories } from '../../src/repositories/index.js';
 
@@ -31,9 +38,20 @@ function createMockRepos(): Repositories {
     findByRepo: async (repoId) => {
       return Array.from(benchmarks.values()).filter(b => b.repoId === repoId);
     },
+    findByWiki: async (wikiId) => {
+      return Array.from(benchmarks.values())
+        .filter(b => b.wikiId === wikiId)
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    },
     findLatest: async (repoId, limit = 10) => {
       return Array.from(benchmarks.values())
         .filter(b => b.repoId === repoId)
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+        .slice(0, limit);
+    },
+    findLatestByWiki: async (wikiId, limit = 10) => {
+      return Array.from(benchmarks.values())
+        .filter(b => b.wikiId === wikiId)
         .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
         .slice(0, limit);
     },
@@ -45,11 +63,24 @@ function createMockRepos(): Repositories {
       }
       return null;
     },
+    findRunningByWiki: async (wikiId) => {
+      for (const benchmark of benchmarks.values()) {
+        if (benchmark.wikiId === wikiId && benchmark.status === 'running') {
+          return benchmark;
+        }
+      }
+      return null;
+    },
     save: async (run) => { benchmarks.set(run.id, run); },
     delete: async (id) => { benchmarks.delete(id); },
     deleteByRepo: async (repoId) => {
       for (const [id, benchmark] of benchmarks) {
         if (benchmark.repoId === repoId) benchmarks.delete(id);
+      }
+    },
+    deleteByWiki: async (wikiId) => {
+      for (const [id, benchmark] of benchmarks) {
+        if (benchmark.wikiId === wikiId) benchmarks.delete(id);
       }
     },
     complete: async (id, results, summary, totalCostUsd) => {
@@ -226,6 +257,104 @@ describe('Benchmark Commands', () => {
       const failed = await repos.benchmarks.findById(runId);
       assert.strictEqual(failed?.status, 'failed');
       assert.strictEqual(failed?.error, 'Something went wrong');
+    });
+  });
+});
+
+describe('Benchmark Queries - Wiki Isolation', () => {
+  /**
+   * Helper to create a completed benchmark run.
+   */
+  function createCompletedBenchmark(overrides: {
+    id?: string;
+    repoId?: string;
+    wikiId?: string;
+    iterationCount?: number;
+  } = {}): BenchmarkRun {
+    const run = createBenchmarkRun({
+      id: overrides.id ?? uuid(),
+      repoId: overrides.repoId ?? 'repo-1',
+      wikiId: overrides.wikiId ?? 'wiki-1',
+      iterationCount: overrides.iterationCount ?? 10,
+      pageCount: 5,
+    });
+    // Mark as completed
+    (run as any).status = 'completed';
+    (run as any).completedAt = new Date();
+    (run as any).summary = createEmptySummary();
+    return run;
+  }
+
+  describe('GetBenchmarkHistory', () => {
+    it('returns only benchmarks for specified wiki when wikiId provided', async () => {
+      const repos = createMockRepos();
+
+      // Create benchmarks for different wikis in same repo
+      const wiki1Bench = createCompletedBenchmark({ wikiId: 'wiki-1', repoId: 'repo-1' });
+      const wiki2Bench = createCompletedBenchmark({ wikiId: 'wiki-2', repoId: 'repo-1' });
+      await repos.benchmarks.save(wiki1Bench);
+      await repos.benchmarks.save(wiki2Bench);
+
+      // Query with wikiId
+      const query = createGetBenchmarkHistoryQuery('repo-1', { wikiId: 'wiki-1' });
+      const result = await handleGetBenchmarkHistory(query, repos);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.length, 1);
+      assert.strictEqual(result.data?.[0]?.id, wiki1Bench.id);
+    });
+
+    it('returns all repo benchmarks when wikiId not provided (backward compatibility)', async () => {
+      const repos = createMockRepos();
+
+      // Create benchmarks for different wikis in same repo
+      const wiki1Bench = createCompletedBenchmark({ wikiId: 'wiki-1', repoId: 'repo-1' });
+      const wiki2Bench = createCompletedBenchmark({ wikiId: 'wiki-2', repoId: 'repo-1' });
+      await repos.benchmarks.save(wiki1Bench);
+      await repos.benchmarks.save(wiki2Bench);
+
+      // Query without wikiId (uses number overload)
+      const query = createGetBenchmarkHistoryQuery('repo-1', 10);
+      const result = await handleGetBenchmarkHistory(query, repos);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.length, 2);
+    });
+  });
+
+  describe('CompareBenchmarks', () => {
+    it('rejects comparison of benchmarks from different wikis', async () => {
+      const repos = createMockRepos();
+
+      // Create completed benchmarks for different wikis
+      const wiki1Bench = createCompletedBenchmark({ wikiId: 'wiki-1', repoId: 'repo-1' });
+      const wiki2Bench = createCompletedBenchmark({ wikiId: 'wiki-2', repoId: 'repo-1' });
+      await repos.benchmarks.save(wiki1Bench);
+      await repos.benchmarks.save(wiki2Bench);
+
+      // Try to compare cross-wiki
+      const query = createCompareBenchmarksQuery([wiki1Bench.id, wiki2Bench.id]);
+      const result = await handleCompareBenchmarks(query, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('different wikis'));
+    });
+
+    it('allows comparison of benchmarks from the same wiki', async () => {
+      const repos = createMockRepos();
+
+      // Create completed benchmarks for same wiki
+      const bench1 = createCompletedBenchmark({ wikiId: 'wiki-1', repoId: 'repo-1', iterationCount: 10 });
+      const bench2 = createCompletedBenchmark({ wikiId: 'wiki-1', repoId: 'repo-1', iterationCount: 20 });
+      await repos.benchmarks.save(bench1);
+      await repos.benchmarks.save(bench2);
+
+      // Compare same-wiki benchmarks
+      const query = createCompareBenchmarksQuery([bench1.id, bench2.id]);
+      const result = await handleCompareBenchmarks(query, repos);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.runs.length, 2);
     });
   });
 });
