@@ -85,18 +85,16 @@ Analysis of CodeWiki codebase (~10,800 lines TypeScript) to identify technical d
 
 **Recommendation:** Delete unused code or mark as `@internal`. Reduces bundle size and maintenance burden.
 
-### 3. Type Safety Escapes
+### ~~3. Type Safety Escapes~~ ✅ FIXED
 
-Found `as any` casts that bypass TypeScript:
+~~Found `as any` casts that bypass TypeScript~~ - **All removed**
 
-| File | Line | Issue |
-|------|------|-------|
-| `src/services/llm/openrouter-llm-service.ts` | 152 | fetch options cast |
-| `src/queries/benchmark.ts` | 86, 89 | dynamic property assignment |
-| `src/queries/quality-benchmark.ts` | 86, 89 | same pattern |
-| `src/services/llm/analysis-tools.ts` | 1521 | agent type cast |
-
-**Recommendation:** Add proper generic types or fix the underlying type mismatch.
+| File | Issue | Status |
+|------|-------|--------|
+| `openrouter-llm-service.ts` | fetch options cast | ✅ Uses `UndiciRequestInit` type |
+| `benchmark.ts` | dynamic property assignment | ✅ Object spread pattern |
+| `quality-benchmark.ts` | same pattern | ✅ Object spread pattern |
+| `analysis-tools.ts` | agent type cast | ✅ Removed during refactoring |
 
 ---
 
@@ -197,7 +195,7 @@ These represent planned features, not debt.
 
 ### 8. Minor Issues
 
-- **eslint-disable** found in `openrouter-llm-service.ts:151` (single instance, justified)
+- ~~**eslint-disable** found in `openrouter-llm-service.ts:151`~~ - ✅ Removed (proper type used)
 - **Model cache** exports unused: `fetchModelsFromAPI`, `getModelCost`, `clearModelCache`, `isCachePopulated`
 - **cwignore** utilities unused: `DEFAULT_IGNORE_PATTERNS`, `parseIgnorePatterns`, `clearIgnoreCache`
 
@@ -208,7 +206,7 @@ These represent planned features, not debt.
 | Priority | Action | Effort | Impact | Risk | Status |
 |----------|--------|--------|--------|------|--------|
 | 1 | Remove unused consolidation/self-improvement code | Low | Clarifies scope, reduces maintenance | Low | Pending |
-| 2 | Fix `as any` casts (4 instances) | Low | Better type safety | Low | Pending |
+| ~~2~~ | ~~Fix `as any` casts (4 instances)~~ | ~~Low~~ | ~~Better type safety~~ | ~~Low~~ | ✅ Done |
 | ~~3~~ | ~~Split `analysis-tools.ts` into modules~~ | ~~Medium~~ | ~~Better maintainability~~ | ~~Low~~ | ✅ Done |
 | 4 | Create agent base class with common flow | Medium | Reduces duplication in 25 files | Medium | Pending |
 | 5 | Simplify CQRS (evaluate if needed internally) | High | 5K+ lines potentially simplified | High | Pending |
@@ -221,7 +219,7 @@ These represent planned features, not debt.
 
 1. **Delete unused analysis-tools exports** - All 17 tools appear unused
 2. **Delete unused consolidation handlers** - 6 handler classes unused
-3. **Fix the 4 `as any` type casts** - Improve type safety
+3. ~~**Fix the 4 `as any` type casts**~~ - ✅ Done
 4. **Remove unused public API from `index.ts`** - `createApp`, `createRepositories`, `AppConfig`
 5. **Clean up unused cwignore utilities** - Keep only `loadIgnorePatterns`
 

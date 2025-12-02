@@ -78,17 +78,12 @@ export function createGetQualityBenchmarkHistoryQuery(
   }
 
   if (limitOrOptions) {
-    const result: GetQualityBenchmarkHistoryQuery = {
+    return {
       type: 'GetQualityBenchmarkHistory',
       repoId,
+      ...(limitOrOptions.wikiId !== undefined && { wikiId: limitOrOptions.wikiId }),
+      ...(limitOrOptions.limit !== undefined && { limit: limitOrOptions.limit }),
     };
-    if (limitOrOptions.wikiId !== undefined) {
-      (result as any).wikiId = limitOrOptions.wikiId;
-    }
-    if (limitOrOptions.limit !== undefined) {
-      (result as any).limit = limitOrOptions.limit;
-    }
-    return result;
   }
 
   return {
