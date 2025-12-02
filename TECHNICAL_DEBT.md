@@ -1,6 +1,7 @@
 # Technical Debt Review
 
 *Generated: 2025-12-02*
+*Updated: 2025-12-02 - Large Files refactoring completed*
 
 ## Overview
 
@@ -8,17 +9,53 @@ Analysis of CodeWiki codebase (~10,800 lines TypeScript) to identify technical d
 
 ---
 
-## HIGH Priority
+## ✅ COMPLETED: Large File Decomposition
 
-### 1. Large File Decomposition
+### Refactoring Summary
 
-The largest files are core to the system and would benefit from splitting:
+| File | Before | After | Reduction | Status |
+|------|--------|-------|-----------|--------|
+| `analysis-tools.ts` | 1,613 | 16 lines (re-export) | 99% | ✅ Split into 6 modules |
+| `orchestrator.ts` | 1,214 | 519 | 57% | ✅ Strategies extracted |
+| `executor.ts` | 783 | 722 | 8% | ✅ Uses registry |
+
+**All 633 tests pass after refactoring.**
+
+### Changes Made:
+
+1. **analysis-tools.ts** → Split into `src/services/llm/analysis-tools/`:
+   - `types.ts` - Common interfaces (AnalysisToolContext, AnalysisToolDefinition)
+   - `benchmark-tools.ts` - Accuracy benchmark analysis (4 tools)
+   - `quality-tools.ts` - Quality benchmark analysis (2 tools)
+   - `wiki-page-tools.ts` - Wiki content and agent prompt tools (3 tools)
+   - `source-tools.ts` - Source code exploration tools (3 tools)
+   - `provenance-tools.ts` - Traceability tools (5 tools)
+   - `index.ts` - Re-exports for backwards compatibility
+
+2. **orchestrator.ts** → Extracted `strategies.ts` (768 lines):
+   - 8 isolated strategy functions for deterministic work generation
+   - `bootstrapStrategy`, `pendingEditsStrategy`, `codebaseExplorationStrategy`
+   - `commitAnalysisStrategy`, `conflictResolutionStrategy`, `lowConfidenceStrategy`
+   - `metaAgentsStrategy`, `synthesisStrategy`
+   - Priority constants centralized and exported
+
+3. **executor.ts** → Uses centralized agent registry:
+   - Removed 21 individual agent imports
+   - Removed manual agent registration (40 lines)
+   - Uses `getAgent()` from `src/agents/registry.ts`
+
+4. **registry.ts** → Enhanced with exports:
+   - Added `ANALYSIS_AGENTS` and `META_AGENTS` constants
+   - Re-exports `AgentType` type for convenience
+
+---
+
+## HIGH Priority (Remaining)
+
+### 1. Large File Decomposition (Remaining Items)
 
 | File | Lines | Issue | Recommendation |
 |------|-------|-------|----------------|
-| `src/services/llm/analysis-tools.ts` | 1,613 | 17 tool definitions in one file | Split into tool-category modules |
-| `src/agents/orchestrator/orchestrator.ts` | 1,214 | Mixed concerns (LLM, deterministic, strategies) | Extract strategy classes |
-| `src/executor/executor.ts` | 783 | Multiple responsibilities | Separate work batching from execution |
 | `src/agents/analysis/technical-debt-agent.ts` | 609 | Large but cohesive | Consider if parsing can be extracted |
 | `src/cli.ts` | 568 | All commands inline | Extract commands to separate modules |
 
@@ -168,15 +205,15 @@ These represent planned features, not debt.
 
 ## Prioritized Action Plan
 
-| Priority | Action | Effort | Impact | Risk |
-|----------|--------|--------|--------|------|
-| 1 | Remove unused consolidation/self-improvement code | Low | Clarifies scope, reduces maintenance | Low |
-| 2 | Fix `as any` casts (4 instances) | Low | Better type safety | Low |
-| 3 | Split `analysis-tools.ts` into modules | Medium | Better maintainability | Low |
-| 4 | Create agent base class with common flow | Medium | Reduces duplication in 25 files | Medium |
-| 5 | Simplify CQRS (evaluate if needed internally) | High | 5K+ lines potentially simplified | High |
-| 6 | Split `orchestrator.ts` into strategies | Medium | Better testability | Medium |
-| 7 | Extract CLI commands to separate modules | Low | Better organization | Low |
+| Priority | Action | Effort | Impact | Risk | Status |
+|----------|--------|--------|--------|------|--------|
+| 1 | Remove unused consolidation/self-improvement code | Low | Clarifies scope, reduces maintenance | Low | Pending |
+| 2 | Fix `as any` casts (4 instances) | Low | Better type safety | Low | Pending |
+| ~~3~~ | ~~Split `analysis-tools.ts` into modules~~ | ~~Medium~~ | ~~Better maintainability~~ | ~~Low~~ | ✅ Done |
+| 4 | Create agent base class with common flow | Medium | Reduces duplication in 25 files | Medium | Pending |
+| 5 | Simplify CQRS (evaluate if needed internally) | High | 5K+ lines potentially simplified | High | Pending |
+| ~~6~~ | ~~Split `orchestrator.ts` into strategies~~ | ~~Medium~~ | ~~Better testability~~ | ~~Medium~~ | ✅ Done |
+| 7 | Extract CLI commands to separate modules | Low | Better organization | Low | Pending |
 
 ---
 
