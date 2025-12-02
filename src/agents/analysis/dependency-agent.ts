@@ -13,6 +13,10 @@ import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 export class DependencyAgent implements Agent {
   readonly type: AgentType = 'dependency';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
     // Get commit via CQRS query
     const query = createGetCommitQuery(commitId);

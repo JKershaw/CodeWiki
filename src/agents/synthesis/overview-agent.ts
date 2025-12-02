@@ -16,6 +16,10 @@ export class OverviewAgent implements Agent {
   // Minimum pages needed before creating an overview
   private readonly MIN_PAGES_FOR_OVERVIEW = 3;
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('OverviewAgent does not run on commits. Use runOnCategory instead.');
   }

@@ -21,6 +21,10 @@ import {
 export class CodebaseExplorerAgent implements Agent {
   readonly type: AgentType = 'codebase-explorer';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   /**
    * This agent doesn't run on commits - throw an error if called.
    */

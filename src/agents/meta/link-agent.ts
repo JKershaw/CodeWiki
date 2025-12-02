@@ -15,6 +15,10 @@ import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/ind
 export class LinkAgent implements Agent {
   readonly type: AgentType = 'link';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('LinkAgent does not run on commits. Use runOnWiki instead.');
   }

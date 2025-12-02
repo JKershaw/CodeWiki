@@ -21,6 +21,10 @@ export class ProjectOverviewAgent implements Agent {
   private readonly MIN_PAGES_FOR_OVERVIEW = 10;
   private readonly OVERVIEW_PATH = 'architecture/overview';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT_WITH_TOOLS;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('ProjectOverviewAgent does not run on commits. Use runOnWiki instead.');
   }

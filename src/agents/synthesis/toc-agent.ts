@@ -28,6 +28,10 @@ export class TableOfContentsAgent implements Agent {
   private readonly MIN_HEADINGS_FOR_TOC = 3;
   private readonly MIN_CONFIDENCE_FOR_TOC = 0.5;
 
+  getSystemPrompt(): null {
+    return null; // This agent uses pure computation, no LLM
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('TableOfContentsAgent does not run on commits. Use runOnWiki instead.');
   }

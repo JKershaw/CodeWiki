@@ -18,6 +18,10 @@ import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/ind
 export class WriterAgent implements Agent {
   readonly type: AgentType = 'writer';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('WriterAgent does not run on commits. Use runOnWiki instead.');
   }

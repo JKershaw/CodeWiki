@@ -21,6 +21,10 @@ export class WikiEditorAgent implements Agent {
   private readonly MAX_EDITS_PER_RUN = 10;
   private readonly HISTORY_SECTION_HEADER = '## Historical Context';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('WikiEditorAgent does not run on commits. Use runOnWiki instead.');
   }

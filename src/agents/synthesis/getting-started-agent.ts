@@ -21,6 +21,10 @@ export class GettingStartedAgent implements Agent {
   private readonly MIN_PAGES_FOR_GUIDE = 10;
   private readonly GUIDE_PATH = 'guides/getting-started';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('GettingStartedAgent does not run on commits. Use runOnWiki instead.');
   }

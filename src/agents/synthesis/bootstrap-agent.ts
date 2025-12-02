@@ -22,6 +22,10 @@ import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/ind
 export class BootstrapAgent implements Agent {
   readonly type: AgentType = 'bootstrap';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('BootstrapAgent does not run on commits. Use runOnWiki instead.');
   }

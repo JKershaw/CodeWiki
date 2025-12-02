@@ -22,6 +22,10 @@ export class QualityAgent implements Agent {
   private readonly LOW_CONFIDENCE_THRESHOLD = 0.5;
   private readonly MAX_PAGES_PER_RUN = 10;
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('QualityAgent does not run on commits. Use runOnWiki instead.');
   }

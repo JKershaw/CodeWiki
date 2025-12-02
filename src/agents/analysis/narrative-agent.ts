@@ -14,6 +14,10 @@ import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 export class NarrativeAgent implements Agent {
   readonly type: AgentType = 'narrative';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
     // Get the commit via CQRS query
     const commitQuery = createGetCommitQuery(commitId);

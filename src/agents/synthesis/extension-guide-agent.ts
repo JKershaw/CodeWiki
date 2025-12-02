@@ -22,6 +22,10 @@ export class ExtensionGuideAgent implements Agent {
   private readonly MIN_PAGES_FOR_GUIDE = 15;
   private readonly GUIDE_PATH = 'guides/extension-patterns';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('ExtensionGuideAgent does not run on commits. Use runOnWiki instead.');
   }

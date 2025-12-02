@@ -19,6 +19,7 @@ import {
   getPageProvenanceTool,
   getAgentContributionsTool,
   getOrchestratorDecisionsTool,
+  getAgentPromptTool,
   type AnalysisToolContext,
 } from '../../src/services/llm/analysis-tools.js';
 import type { OrchestratorRun } from '../../src/domain/orchestrator-run.js';
@@ -1053,6 +1054,50 @@ describe('Analysis Tools', () => {
       // Reason should be truncated to 80 chars + ...
       assert.ok(result.includes('...'));
       assert.ok(!result.includes(longReason)); // Full reason should not appear
+    });
+  });
+
+  describe('getAgentPromptTool', () => {
+    it('should return prompt for agents with LLM', async () => {
+      const context = createMockContext();
+      const result = await getAgentPromptTool.execute({ agent_type: 'code-change' }, context);
+
+      assert.ok(result.includes('System Prompt for: code-change'));
+      assert.ok(result.includes('technical writer'), 'Should contain prompt content');
+    });
+
+    it('should return message for agents without LLM prompt', async () => {
+      const context = createMockContext();
+      const result = await getAgentPromptTool.execute({ agent_type: 'toc' }, context);
+
+      assert.ok(result.includes('does not use an LLM'), 'Should indicate no prompt');
+    });
+
+    it('should return error message for unknown agent type', async () => {
+      const context = createMockContext();
+      const result = await getAgentPromptTool.execute({ agent_type: 'unknown-agent' }, context);
+
+      assert.ok(result.includes('Unknown agent type'), 'Should mention unknown type');
+      assert.ok(result.includes('Available types'), 'Should list available types');
+    });
+
+    it('should return orchestrator prompt', async () => {
+      const context = createMockContext();
+      const result = await getAgentPromptTool.execute({ agent_type: 'orchestrator' }, context);
+
+      assert.ok(result.includes('System Prompt for: orchestrator'));
+      // The orchestrator prompt should contain work generation instructions
+      assert.ok(result.length > 500, 'Should have substantial prompt content');
+    });
+
+    it('should list all available agent types on error', async () => {
+      const context = createMockContext();
+      const result = await getAgentPromptTool.execute({ agent_type: 'invalid' }, context);
+
+      // Should list key agent types
+      assert.ok(result.includes('code-change'));
+      assert.ok(result.includes('security'));
+      assert.ok(result.includes('orchestrator'));
     });
   });
 });
