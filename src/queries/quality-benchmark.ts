@@ -55,26 +55,46 @@ export async function handleGetQualityBenchmarkRun(
 // ============================================================================
 
 /**
- * Query to get quality benchmark history for a repository.
+ * Query to get quality benchmark history for a repository or wiki.
+ * When wikiId is provided, only returns benchmarks for that wiki.
  */
 export interface GetQualityBenchmarkHistoryQuery extends Query {
   readonly type: 'GetQualityBenchmarkHistory';
   readonly repoId: string;
+  readonly wikiId?: string;
   readonly limit?: number;
 }
 
 export function createGetQualityBenchmarkHistoryQuery(
   repoId: string,
-  limit?: number
+  limitOrOptions?: number | { wikiId?: string; limit?: number }
 ): GetQualityBenchmarkHistoryQuery {
-  const query: GetQualityBenchmarkHistoryQuery = {
+  if (typeof limitOrOptions === 'number') {
+    return {
+      type: 'GetQualityBenchmarkHistory',
+      repoId,
+      limit: limitOrOptions,
+    };
+  }
+
+  if (limitOrOptions) {
+    const result: GetQualityBenchmarkHistoryQuery = {
+      type: 'GetQualityBenchmarkHistory',
+      repoId,
+    };
+    if (limitOrOptions.wikiId !== undefined) {
+      (result as any).wikiId = limitOrOptions.wikiId;
+    }
+    if (limitOrOptions.limit !== undefined) {
+      (result as any).limit = limitOrOptions.limit;
+    }
+    return result;
+  }
+
+  return {
     type: 'GetQualityBenchmarkHistory',
     repoId,
   };
-  if (limit !== undefined) {
-    return { ...query, limit };
-  }
-  return query;
 }
 
 /**
@@ -94,13 +114,19 @@ export interface QualityBenchmarkHistoryEntry {
 
 /**
  * Handler for GetQualityBenchmarkHistory query.
+ * When wikiId is provided, returns only benchmarks for that wiki.
  */
 export async function handleGetQualityBenchmarkHistory(
   query: GetQualityBenchmarkHistoryQuery,
   repos: Repositories
 ): Promise<QueryResult<QualityBenchmarkHistoryEntry[]>> {
   try {
-    const runs = await repos.qualityBenchmarks.findLatest(query.repoId, query.limit ?? 20);
+    const limit = query.limit ?? 20;
+
+    // Use wiki-specific query if wikiId is provided
+    const runs = query.wikiId
+      ? await repos.qualityBenchmarks.findLatestByWiki(query.wikiId, limit)
+      : await repos.qualityBenchmarks.findLatest(query.repoId, limit);
 
     const history: QualityBenchmarkHistoryEntry[] = runs.map(run => ({
       id: run.id,
@@ -191,6 +217,12 @@ export async function handleCompareQualityBenchmarks(
         return queryError(`Quality benchmark run is not completed: ${id}`);
       }
       runs.push(run);
+    }
+
+    // Validate all runs belong to the same wiki
+    const wikiIds = new Set(runs.map(r => r.wikiId));
+    if (wikiIds.size > 1) {
+      return queryError('Cannot compare quality benchmarks from different wikis');
     }
 
     // Sort by iteration count (oldest first)

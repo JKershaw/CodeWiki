@@ -19,14 +19,33 @@ export interface BenchmarkRepository {
   }): Promise<BenchmarkRun[]>;
 
   /**
+   * Find all benchmark runs for a specific wiki.
+   */
+  findByWiki(wikiId: string, options?: {
+    limit?: number;
+    offset?: number;
+    status?: BenchmarkRunStatus;
+  }): Promise<BenchmarkRun[]>;
+
+  /**
    * Find the most recent benchmark runs for a repository.
    */
   findLatest(repoId: string, limit?: number): Promise<BenchmarkRun[]>;
 
   /**
+   * Find the most recent benchmark runs for a specific wiki.
+   */
+  findLatestByWiki(wikiId: string, limit?: number): Promise<BenchmarkRun[]>;
+
+  /**
    * Find a running benchmark for a repository (if any).
    */
   findRunning(repoId: string): Promise<BenchmarkRun | null>;
+
+  /**
+   * Find a running benchmark for a specific wiki (if any).
+   */
+  findRunningByWiki(wikiId: string): Promise<BenchmarkRun | null>;
 
   /**
    * Save a benchmark run (create or update).
@@ -42,6 +61,11 @@ export interface BenchmarkRepository {
    * Delete all benchmark runs for a repository.
    */
   deleteByRepo(repoId: string): Promise<void>;
+
+  /**
+   * Delete all benchmark runs for a specific wiki.
+   */
+  deleteByWiki(wikiId: string): Promise<void>;
 
   /**
    * Mark a benchmark run as completed with results.

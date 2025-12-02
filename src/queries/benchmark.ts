@@ -51,26 +51,46 @@ export async function handleGetBenchmarkRun(
 // ============================================================================
 
 /**
- * Query to get benchmark history for a repository.
+ * Query to get benchmark history for a repository or wiki.
+ * When wikiId is provided, only returns benchmarks for that wiki.
  */
 export interface GetBenchmarkHistoryQuery extends Query {
   readonly type: 'GetBenchmarkHistory';
   readonly repoId: string;
+  readonly wikiId?: string;
   readonly limit?: number;
 }
 
 export function createGetBenchmarkHistoryQuery(
   repoId: string,
-  limit?: number
+  limitOrOptions?: number | { wikiId?: string; limit?: number }
 ): GetBenchmarkHistoryQuery {
-  const query: GetBenchmarkHistoryQuery = {
+  if (typeof limitOrOptions === 'number') {
+    return {
+      type: 'GetBenchmarkHistory',
+      repoId,
+      limit: limitOrOptions,
+    };
+  }
+
+  if (limitOrOptions) {
+    const result: GetBenchmarkHistoryQuery = {
+      type: 'GetBenchmarkHistory',
+      repoId,
+    };
+    if (limitOrOptions.wikiId !== undefined) {
+      (result as any).wikiId = limitOrOptions.wikiId;
+    }
+    if (limitOrOptions.limit !== undefined) {
+      (result as any).limit = limitOrOptions.limit;
+    }
+    return result;
+  }
+
+  return {
     type: 'GetBenchmarkHistory',
     repoId,
   };
-  if (limit !== undefined) {
-    return { ...query, limit };
-  }
-  return query;
 }
 
 /**
@@ -92,13 +112,19 @@ export interface BenchmarkHistoryEntry {
 
 /**
  * Handler for GetBenchmarkHistory query.
+ * When wikiId is provided, returns only benchmarks for that wiki.
  */
 export async function handleGetBenchmarkHistory(
   query: GetBenchmarkHistoryQuery,
   repos: Repositories
 ): Promise<QueryResult<BenchmarkHistoryEntry[]>> {
   try {
-    const runs = await repos.benchmarks.findLatest(query.repoId, query.limit ?? 20);
+    const limit = query.limit ?? 20;
+
+    // Use wiki-specific query if wikiId is provided
+    const runs = query.wikiId
+      ? await repos.benchmarks.findLatestByWiki(query.wikiId, limit)
+      : await repos.benchmarks.findLatest(query.repoId, limit);
 
     const history: BenchmarkHistoryEntry[] = runs.map(run => ({
       id: run.id,
@@ -191,6 +217,12 @@ export async function handleCompareBenchmarks(
         return queryError(`Benchmark run is not completed: ${id}`);
       }
       runs.push(run);
+    }
+
+    // Validate all runs belong to the same wiki
+    const wikiIds = new Set(runs.map(r => r.wikiId));
+    if (wikiIds.size > 1) {
+      return queryError('Cannot compare benchmarks from different wikis');
     }
 
     // Sort by iteration count (oldest first)
