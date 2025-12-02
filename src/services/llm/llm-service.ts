@@ -259,13 +259,15 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
 
 /**
  * Calculate cost for a completion.
+ * Fetches pricing from OpenRouter API on first call, falls back to MODEL_COSTS.
  */
-export function calculateCost(
+export async function calculateCost(
   model: string,
   inputTokens: number,
   outputTokens: number
-): number {
-  const costs = MODEL_COSTS[model] ?? MODEL_COSTS['openai/gpt-4']!;
+): Promise<number> {
+  const { getModelCost } = await import('./model-cache.js');
+  const costs = await getModelCost(model);
   const inputCost = (inputTokens / 1_000_000) * costs.input;
   const outputCost = (outputTokens / 1_000_000) * costs.output;
   return inputCost + outputCost;

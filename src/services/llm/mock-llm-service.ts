@@ -67,7 +67,7 @@ export class MockLLMService extends BaseLLMService {
       content,
       inputTokens,
       outputTokens,
-      costUsd: calculateCost('mock', inputTokens, outputTokens),
+      costUsd: await calculateCost('mock', inputTokens, outputTokens),
       model: 'mock',
       truncated: false,
     };
