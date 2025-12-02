@@ -13,6 +13,10 @@ import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 export class SecurityAgent implements Agent {
   readonly type: AgentType = 'security';
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
     // Get the commit via CQRS query
     const commitQuery = createGetCommitQuery(commitId);

@@ -26,6 +26,10 @@ export class WikiIndexAgent implements Agent {
   private readonly MIN_PAGES_FOR_INDEX = 10;
   private readonly INDEX_PATH = 'navigation/wiki-index';
 
+  getSystemPrompt(): null {
+    return null; // This agent uses pure computation, no LLM
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('WikiIndexAgent does not run on commits. Use runOnWiki instead.');
   }

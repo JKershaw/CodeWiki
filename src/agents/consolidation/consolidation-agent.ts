@@ -37,6 +37,10 @@ export class ConsolidationAgent implements Agent {
     this.handlerRegistry = handlerRegistry ?? createDefaultHandlerRegistry();
   }
 
+  getSystemPrompt(): null {
+    return null; // This agent delegates to handlers, no central LLM prompt
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('ConsolidationAgent does not run on commits. Use runOnWiki instead.');
   }

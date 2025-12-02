@@ -40,6 +40,13 @@ export interface Agent {
   readonly type: AgentType;
 
   /**
+   * Get the system prompt used by this agent, if any.
+   * Returns null for agents that don't use an LLM (pure computation).
+   * This enables introspection of agent prompts for self-improvement analysis.
+   */
+  getSystemPrompt(): string | null;
+
+  /**
    * Run the agent on a specific commit.
    */
   runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult>;

@@ -25,6 +25,7 @@ import {
   createListOrchestratorRunsQuery,
   handleListOrchestratorRuns,
 } from '../../queries/orchestrator-run.js';
+import { getAgentPrompt, getAvailableAgentTypes } from '../../agents/registry.js';
 
 // ============================================================================
 // Tool Context
@@ -817,6 +818,7 @@ export const listWikiPagesTool: AnalysisToolDefinition = {
 
 /**
  * Tool to read an agent's system prompt.
+ * Uses the agent registry to access prompts via the Agent.getSystemPrompt() interface.
  */
 export const getAgentPromptTool: AnalysisToolDefinition = {
   name: 'get_agent_prompt',
@@ -835,77 +837,27 @@ export const getAgentPromptTool: AnalysisToolDefinition = {
   },
   execute: async (input, _context) => {
     const agentType = input['agent_type'] as string;
+    const availableTypes = getAvailableAgentTypes();
 
-    // Map agent types to their file locations
-    const agentFiles: Record<string, string> = {
-      'code-change': 'analysis/code-change-agent.ts',
-      'narrative': 'analysis/narrative-agent.ts',
-      'security': 'analysis/security-agent.ts',
-      'technical-debt': 'analysis/technical-debt-agent.ts',
-      'pattern': 'analysis/pattern-agent.ts',
-      'dependency': 'analysis/dependency-agent.ts',
-      'bootstrap': 'bootstrap/bootstrap-agent.ts',
-      'wiki-editor': 'editor/wiki-editor-agent.ts',
-      'link': 'meta/link-agent.ts',
-      'structure': 'meta/structure-agent.ts',
-      'quality': 'meta/quality-agent.ts',
-      'consistency': 'meta/consistency-agent.ts',
-      'consolidation': 'consolidation/consolidation-agent.ts',
-      'project-overview': 'synthesis/project-overview-agent.ts',
-      'getting-started': 'synthesis/getting-started-agent.ts',
-      'testing-guide': 'synthesis/testing-guide-agent.ts',
-      'extension-guide': 'synthesis/extension-guide-agent.ts',
-      'overview': 'synthesis/overview-agent.ts',
-      'writer': 'synthesis/writer-agent.ts',
-      'wiki-index': 'synthesis/wiki-index-agent.ts',
-      'toc': 'synthesis/toc-agent.ts',
-      'orchestrator': 'orchestrator/prompts.ts',
-    };
-
-    const filePath = agentFiles[agentType];
-    if (!filePath) {
-      return `Unknown agent type "${agentType}". Available types: ${Object.keys(agentFiles).join(', ')}`;
+    // Check if agent type exists
+    if (!availableTypes.includes(agentType)) {
+      return `Unknown agent type "${agentType}". Available types: ${availableTypes.join(', ')}`;
     }
 
-    try {
-      // Get the directory of this file to navigate to agents
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const fullPath = join(__dirname, '..', '..', 'agents', filePath);
+    // Get the prompt from the registry
+    const prompt = getAgentPrompt(agentType);
 
-      const content = await readFile(fullPath, 'utf-8');
-
-      // Extract SYSTEM_PROMPT from the file
-      const promptMatch = content.match(/(?:const|let)\s+(?:SYSTEM_PROMPT|systemPrompt)\s*=\s*`([\s\S]*?)`;/);
-
-      if (promptMatch) {
-        return [
-          `## System Prompt for: ${agentType}`,
-          `File: src/agents/${filePath}`,
-          '',
-          '---',
-          '',
-          promptMatch[1]!.trim(),
-        ].join('\n');
-      }
-
-      // Try to find a different pattern
-      const altMatch = content.match(/system:\s*`([\s\S]*?)`,/);
-      if (altMatch) {
-        return [
-          `## System Prompt for: ${agentType}`,
-          `File: src/agents/${filePath}`,
-          '',
-          '---',
-          '',
-          altMatch[1]!.trim(),
-        ].join('\n');
-      }
-
-      return `Could not extract system prompt from ${agentType} agent. The prompt may be defined differently.`;
-    } catch (error) {
-      return `Error reading agent file: ${error}`;
+    if (prompt === null) {
+      return `The "${agentType}" agent does not use an LLM (pure computation). No system prompt available.`;
     }
+
+    return [
+      `## System Prompt for: ${agentType}`,
+      '',
+      '---',
+      '',
+      prompt.trim(),
+    ].join('\n');
   },
 };
 

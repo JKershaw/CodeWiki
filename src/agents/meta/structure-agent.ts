@@ -24,6 +24,10 @@ export class StructureAgent implements Agent {
   private readonly MIN_TITLE_LENGTH = 10;
   private readonly MAX_TITLE_LENGTH = 80;
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('StructureAgent does not run on commits. Use runOnWiki instead.');
   }

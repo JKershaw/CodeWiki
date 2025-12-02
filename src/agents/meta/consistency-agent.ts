@@ -32,6 +32,10 @@ export class ConsistencyAgent implements Agent {
   private readonly SIMILARITY_THRESHOLD = 0.6;
   private readonly MAX_PAGES_TO_COMPARE = 20;
 
+  getSystemPrompt(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
     throw new Error('ConsistencyAgent does not run on commits. Use runOnWiki instead.');
   }
