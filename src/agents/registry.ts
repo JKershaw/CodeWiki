@@ -6,6 +6,7 @@
  */
 
 import type { Agent } from './base-agent.js';
+import type { AgentType } from '../domain/agent-run.js';
 
 // Analysis agents
 import { CodeChangeAgent } from './analysis/code-change-agent.js';
@@ -128,3 +129,32 @@ export function getAvailableAgentTypes(): string[] {
   types.push('orchestrator'); // Include orchestrator as a special case
   return types.sort();
 }
+
+/**
+ * Analysis agents that process commits.
+ * Order matters - code-change runs first to establish base wiki content,
+ * then specialized agents add their perspectives.
+ */
+export const ANALYSIS_AGENTS: AgentType[] = [
+  'code-change',      // General code analysis - runs first
+  'narrative',        // Detects ADRs, planning docs, READMEs
+  'security',         // Security audit
+  'technical-debt',   // Technical debt indicators, TODOs, code smells
+  'pattern',          // Design patterns and conventions
+  'dependency',       // Dependency changes
+];
+
+/**
+ * Meta agents that process the wiki (not commits).
+ * These run after analysis agents have created content.
+ */
+export const META_AGENTS: AgentType[] = [
+  'wiki-editor',      // Process edit requests (runs first to apply pending edits)
+  'link',             // Cross-reference management
+  'structure',        // Wiki organization analysis
+  'quality',          // Content quality review
+  'consistency',      // Cross-page consistency check
+];
+
+// Re-export AgentType from domain for convenience
+export type { AgentType } from '../domain/agent-run.js';
