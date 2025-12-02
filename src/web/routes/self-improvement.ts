@@ -9,6 +9,29 @@ import type { LLMService } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
 import { SelfImprovementAgent } from '../../analysis/self-improvement-agent.js';
 
+// CQRS imports
+import {
+  createGetRepositoryQuery,
+  handleGetRepository,
+  createGetBenchmarkRunQuery,
+  handleGetBenchmarkRun,
+} from '../../queries/index.js';
+import {
+  createGetSelfImprovementRunQuery,
+  handleGetSelfImprovementRun,
+  createGetSelfImprovementHistoryQuery,
+  handleGetSelfImprovementHistory,
+} from '../../queries/self-improvement.js';
+import {
+  createStartSelfImprovementCommand,
+  handleStartSelfImprovement,
+  handleCompleteSelfImprovement,
+  createCompleteSelfImprovementCommand,
+  handleFailSelfImprovement,
+  createFailSelfImprovementCommand,
+} from '../../commands/self-improvement.js';
+import { handleGetActiveWiki, createGetActiveWikiQuery } from '../../queries/wiki.js';
+
 interface RepoParams {
   id: string;
 }
@@ -36,24 +59,26 @@ export function createSelfImprovementRoutes(
       const repoId = req.params.id;
       const limit = parseInt(req.query['limit'] as string) || 10;
 
-      const repo = await repos.repos.findById(repoId);
-      if (!repo) {
+      // Verify repo exists via CQRS query
+      const repoQuery = createGetRepositoryQuery(repoId);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         return res.status(404).json({ error: 'Repository not found' });
       }
 
-      const runs = await repos.selfImprovements.findLatest(repoId, limit);
+      // Get history via CQRS query
+      const historyQuery = createGetSelfImprovementHistoryQuery(repoId, limit);
+      const historyResult = await handleGetSelfImprovementHistory(historyQuery, repos);
+
+      if (!historyResult.success) {
+        return res.status(500).json({ error: historyResult.error });
+      }
 
       return res.json({
-        analyses: runs.map(run => ({
-          id: run.id,
-          status: run.status,
-          startedAt: run.startedAt,
-          completedAt: run.completedAt,
-          iterationRange: run.iterationRange,
-          benchmarkRunCount: run.benchmarkRunIds.length,
-          costUsd: run.costUsd,
-          hasReport: run.report.length > 0,
-        })),
+        analyses: historyResult.data?.map(entry => ({
+          ...entry,
+          hasReport: true, // History entries are from completed/failed runs
+        })) ?? [],
       });
     } catch (error) {
       console.error('Error listing self-improvements:', error);
@@ -69,12 +94,15 @@ export function createSelfImprovementRoutes(
     try {
       const runId = req.params.runId;
 
-      const run = await repos.selfImprovements.findById(runId);
-      if (!run) {
+      // Get run via CQRS query
+      const runQuery = createGetSelfImprovementRunQuery(runId);
+      const runResult = await handleGetSelfImprovementRun(runQuery, repos);
+
+      if (!runResult.success || !runResult.data) {
         return res.status(404).json({ error: 'Analysis run not found' });
       }
 
-      return res.json({ run });
+      return res.json({ run: runResult.data });
     } catch (error) {
       console.error('Error getting self-improvement run:', error);
       return res.status(500).json({ error: 'Failed to get analysis run' });
@@ -97,34 +125,32 @@ export function createSelfImprovementRoutes(
         });
       }
 
-      const repo = await repos.repos.findById(repoId);
-      if (!repo) {
+      // Verify repo exists via CQRS query
+      const repoQuery = createGetRepositoryQuery(repoId);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
         return res.status(404).json({ error: 'Repository not found' });
       }
+      const repo = repoResult.data;
 
       // Register the local repo path so git service can find it
       git.registerLocalRepo(repo.id, repo.fullName);
 
-      const wiki = await repos.wikis.findActive(repoId);
-      if (!wiki) {
+      // Get active wiki via CQRS query
+      const wikiQuery = createGetActiveWikiQuery(repoId);
+      const wikiResult = await handleGetActiveWiki(wikiQuery, repos);
+      if (!wikiResult.success || !wikiResult.data) {
         return res.status(400).json({ error: 'No active wiki found' });
       }
+      const wiki = wikiResult.data;
 
-      // Check if there's already a running analysis
-      const running = await repos.selfImprovements.findRunning(repoId);
-      if (running) {
-        return res.status(409).json({
-          error: 'An analysis is already running',
-          runId: running.id,
-        });
-      }
-
-      // Validate benchmark runs exist and are completed
+      // Validate benchmark runs exist and are completed via CQRS queries
       const validBenchmarks = [];
       for (const id of benchmarkRunIds) {
-        const benchmark = await repos.benchmarks.findById(id);
-        if (benchmark && benchmark.status === 'completed') {
-          validBenchmarks.push(benchmark);
+        const benchmarkQuery = createGetBenchmarkRunQuery(id);
+        const benchmarkResult = await handleGetBenchmarkRun(benchmarkQuery, repos);
+        if (benchmarkResult.success && benchmarkResult.data && benchmarkResult.data.status === 'completed') {
+          validBenchmarks.push(benchmarkResult.data);
         }
       }
 
@@ -143,23 +169,25 @@ export function createSelfImprovementRoutes(
 
       const runId = uuid();
 
-      // Create the run record
-      const run = {
+      // Start the run via CQRS command
+      const startCommand = createStartSelfImprovementCommand({
         id: runId,
         repoId,
         wikiId: wiki.id,
-        status: 'running' as const,
-        startedAt: new Date(),
-        completedAt: null,
         benchmarkRunIds: validBenchmarks.map(b => b.id),
         iterationRange,
-        report: '',
-        analysisTrace: null,
-        costUsd: 0,
-        error: null,
-      };
+      });
+      const startResult = await handleStartSelfImprovement(startCommand, repos);
 
-      await repos.selfImprovements.save(run);
+      if (!startResult.success) {
+        // Check if it's a conflict (already running)
+        if (startResult.error?.includes('already running')) {
+          return res.status(409).json({
+            error: 'An analysis is already running',
+          });
+        }
+        return res.status(500).json({ error: startResult.error });
+      }
 
       // Run analysis in background (don't await)
       runAnalysisInBackground(repos, llm, git, runId, repoId, wiki.id, validBenchmarks.map(b => b.id));
@@ -195,17 +223,24 @@ async function runAnalysisInBackground(
     const agent = new SelfImprovementAgent(repos, llm, git);
     const result = await agent.analyze(repoId, wikiId, benchmarkRunIds);
 
-    // Update the run with results
+    // Update the run with results via CQRS commands
     if (result.status === 'completed') {
-      await repos.selfImprovements.complete(runId, result.report, result.costUsd, result.analysisTrace ?? undefined);
+      const completeCommand = createCompleteSelfImprovementCommand({
+        runId,
+        report: result.report,
+        costUsd: result.costUsd,
+      });
+      await handleCompleteSelfImprovement(completeCommand, repos);
     } else {
-      await repos.selfImprovements.fail(runId, result.error ?? 'Unknown error');
+      const failCommand = createFailSelfImprovementCommand(runId, result.error ?? 'Unknown error');
+      await handleFailSelfImprovement(failCommand, repos);
     }
   } catch (error) {
     console.error('Self-improvement analysis failed:', error);
-    await repos.selfImprovements.fail(
+    const failCommand = createFailSelfImprovementCommand(
       runId,
       error instanceof Error ? error.message : String(error)
     );
+    await handleFailSelfImprovement(failCommand, repos);
   }
 }

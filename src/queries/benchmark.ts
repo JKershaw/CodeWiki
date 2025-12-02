@@ -74,17 +74,12 @@ export function createGetBenchmarkHistoryQuery(
   }
 
   if (limitOrOptions) {
-    const result: GetBenchmarkHistoryQuery = {
+    return {
       type: 'GetBenchmarkHistory',
       repoId,
+      ...(limitOrOptions.wikiId !== undefined && { wikiId: limitOrOptions.wikiId }),
+      ...(limitOrOptions.limit !== undefined && { limit: limitOrOptions.limit }),
     };
-    if (limitOrOptions.wikiId !== undefined) {
-      (result as any).wikiId = limitOrOptions.wikiId;
-    }
-    if (limitOrOptions.limit !== undefined) {
-      (result as any).limit = limitOrOptions.limit;
-    }
-    return result;
   }
 
   return {

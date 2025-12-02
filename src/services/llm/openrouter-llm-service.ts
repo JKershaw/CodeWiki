@@ -7,6 +7,7 @@ import {
   RateLimitConfig,
   calculateCost,
 } from './llm-service.js';
+import type { RequestInit as UndiciRequestInit } from 'undici';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -148,8 +149,8 @@ async function getProxyFetch(): Promise<typeof fetch> {
   const dispatcher = new ProxyAgent(proxyUrl);
 
   return (async (input: string | URL, init?: RequestInit) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const options: any = { ...init, dispatcher };
+    // Cast to undici's RequestInit which includes the dispatcher property
+    const options = { ...init, dispatcher } as UndiciRequestInit;
     const response = await undiciFetch(input as string, options);
     return response as unknown as Response;
   }) as typeof fetch;
