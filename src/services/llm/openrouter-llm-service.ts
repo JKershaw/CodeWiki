@@ -134,14 +134,6 @@ interface ChatResponse {
 }
 
 /**
- * Check if a model is an Anthropic Claude model.
- * Exported for testing.
- */
-export function isAnthropicModel(model: string): boolean {
-  return model.startsWith('anthropic/') || model.includes('claude');
-}
-
-/**
  * Get a fetch function that works with proxies if configured.
  */
 async function getProxyFetch(): Promise<typeof fetch> {
@@ -194,18 +186,6 @@ export class OpenRouterLLMService extends BaseLLMService {
     const fetchFn = await this.getFetch();
     let lastError: Error | null = null;
 
-    // For Anthropic models, add provider routing to ensure proper request transformation
-    // This fixes issues with BYOK where tool schemas may not be properly converted
-    const requestBody = { ...body };
-    const model = body['model'] as string;
-    if (isAnthropicModel(model)) {
-      requestBody['provider'] = {
-        order: ['Anthropic'],
-        // Allow fallback if needed, but prefer direct Anthropic routing
-        allow_fallbacks: true,
-      };
-    }
-
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await fetchFn(OPENROUTER_API_URL, {
@@ -214,26 +194,12 @@ export class OpenRouterLLMService extends BaseLLMService {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify(body),
         });
 
         if (!response.ok) {
           const errorText = await response.text();
           lastError = new Error(`OpenRouter API error (${response.status}): ${errorText}`);
-
-          // Parse error for more details on 500 errors (often provider-side issues)
-          if (response.status === 500) {
-            try {
-              const errorJson = JSON.parse(errorText);
-              const metadata = errorJson?.error?.metadata;
-              if (metadata?.raw) {
-                console.error(`[LLM] Provider error details: ${metadata.raw}`);
-                console.error(`[LLM] Provider: ${metadata.provider_name || 'unknown'}`);
-              }
-            } catch {
-              // Error text wasn't JSON, that's fine
-            }
-          }
 
           // Retry on transient HTTP errors
           if (isRetryableStatus(response.status) && attempt < MAX_RETRIES) {
