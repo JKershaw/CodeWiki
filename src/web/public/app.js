@@ -2232,6 +2232,7 @@ function pollSelfImprovementStatus(runId) {
         statusEl.classList.add('hidden');
         reportEl.classList.remove('hidden');
         reportContent.innerHTML = markdownToHtml(run.report);
+        renderAnalysisTrace(run.analysisTrace);
         runBtn.disabled = false;
       } else if (run.status === 'failed') {
         clearInterval(selfImprovementPollingInterval);
@@ -2277,6 +2278,109 @@ function clearBenchmarkSelection() {
  */
 function closeReport() {
   document.getElementById('self-improvement-report').classList.add('hidden');
+  // Also hide the trace section when closing
+  const traceSection = document.getElementById('analysis-trace-section');
+  const traceContent = document.getElementById('analysis-trace-content');
+  const toggleBtn = document.getElementById('toggle-trace-btn');
+  traceSection.classList.add('hidden');
+  traceContent.classList.add('hidden');
+  toggleBtn.classList.remove('expanded');
+}
+
+/**
+ * Render the analysis trace if available.
+ */
+function renderAnalysisTrace(analysisTrace) {
+  const traceSection = document.getElementById('analysis-trace-section');
+  const traceContent = document.getElementById('analysis-trace-content');
+  const traceSummary = document.getElementById('trace-summary');
+  const toggleBtn = document.getElementById('toggle-trace-btn');
+  const toggleText = toggleBtn.querySelector('.toggle-text');
+
+  if (!analysisTrace || !analysisTrace.toolCalls || analysisTrace.toolCalls.length === 0) {
+    traceSection.classList.add('hidden');
+    return;
+  }
+
+  // Show the trace section
+  traceSection.classList.remove('hidden');
+  traceContent.classList.add('hidden');
+  toggleBtn.classList.remove('expanded');
+  toggleText.textContent = 'Show Analysis Trace';
+
+  // Update summary
+  const callCount = analysisTrace.toolCalls.length;
+  const roundCount = analysisTrace.toolRounds;
+  traceSummary.textContent = `${callCount} tool calls in ${roundCount} rounds`;
+
+  // Render tool calls
+  traceContent.innerHTML = analysisTrace.toolCalls.map((call, index) => {
+    const inputStr = typeof call.input === 'object'
+      ? JSON.stringify(call.input, null, 2)
+      : String(call.input);
+    const resultStr = call.result || '(no result)';
+    // Truncate long results for display
+    const truncatedResult = resultStr.length > 2000
+      ? resultStr.substring(0, 2000) + '\n... (truncated)'
+      : resultStr;
+
+    return `
+      <div class="trace-tool-call">
+        <div class="trace-tool-header" data-index="${index}">
+          <span class="tool-index">#${index + 1}</span>
+          <span class="tool-name">${escapeHtml(call.name)}</span>
+          <span class="tool-expand-icon">▶</span>
+        </div>
+        <div class="trace-tool-details hidden" data-index="${index}">
+          <div class="detail-section">
+            <div class="detail-label">Input</div>
+            <div class="detail-content">${escapeHtml(inputStr)}</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Result</div>
+            <div class="detail-content">${escapeHtml(truncatedResult)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add click handlers for individual tool calls
+  traceContent.querySelectorAll('.trace-tool-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const index = header.dataset.index;
+      const details = traceContent.querySelector(`.trace-tool-details[data-index="${index}"]`);
+      const isExpanded = !details.classList.contains('hidden');
+
+      if (isExpanded) {
+        details.classList.add('hidden');
+        header.classList.remove('expanded');
+      } else {
+        details.classList.remove('hidden');
+        header.classList.add('expanded');
+      }
+    });
+  });
+}
+
+/**
+ * Toggle the analysis trace visibility.
+ */
+function toggleAnalysisTrace() {
+  const traceContent = document.getElementById('analysis-trace-content');
+  const toggleBtn = document.getElementById('toggle-trace-btn');
+  const toggleText = toggleBtn.querySelector('.toggle-text');
+  const isExpanded = !traceContent.classList.contains('hidden');
+
+  if (isExpanded) {
+    traceContent.classList.add('hidden');
+    toggleBtn.classList.remove('expanded');
+    toggleText.textContent = 'Show Analysis Trace';
+  } else {
+    traceContent.classList.remove('hidden');
+    toggleBtn.classList.add('expanded');
+    toggleText.textContent = 'Hide Analysis Trace';
+  }
 }
 
 // Add event listeners for self-improvement buttons
@@ -2284,6 +2388,7 @@ document.getElementById('run-self-improvement-btn').addEventListener('click', ru
 document.getElementById('select-all-benchmarks-btn').addEventListener('click', selectAllBenchmarks);
 document.getElementById('clear-benchmark-selection-btn').addEventListener('click', clearBenchmarkSelection);
 document.getElementById('close-report-btn').addEventListener('click', closeReport);
+document.getElementById('toggle-trace-btn').addEventListener('click', toggleAnalysisTrace);
 
 // Initialize
 loadRepos();

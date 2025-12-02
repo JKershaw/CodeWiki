@@ -1943,3 +1943,133 @@ footer .model-info {
 .report-content strong {
 	color: var(--text-primary);
 }
+
+/* ============================================================================
+   Analysis Trace Section
+   ============================================================================ */
+
+.analysis-trace-section {
+	border-top: 1px solid var(--border);
+}
+
+.trace-toggle-btn {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: var(--space-sm);
+	padding: var(--space-sm) var(--space-md);
+	background: var(--bg-elevated);
+	border: none;
+	cursor: pointer;
+	color: var(--text-secondary);
+	font-size: 0.85rem;
+	text-align: left;
+	transition: background-color 0.15s ease;
+}
+
+.trace-toggle-btn:hover {
+	background: var(--bg-card);
+	color: var(--text-primary);
+}
+
+.trace-toggle-btn .toggle-icon {
+	font-size: 0.7rem;
+	transition: transform 0.2s ease;
+}
+
+.trace-toggle-btn.expanded .toggle-icon {
+	transform: rotate(90deg);
+}
+
+.trace-toggle-btn .trace-summary {
+	margin-left: auto;
+	color: var(--text-muted);
+	font-size: 0.8rem;
+}
+
+.analysis-trace-content {
+	max-height: 500px;
+	overflow-y: auto;
+	background: var(--bg-base);
+}
+
+.trace-tool-call {
+	border-bottom: 1px solid var(--border);
+}
+
+.trace-tool-call:last-child {
+	border-bottom: none;
+}
+
+.trace-tool-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-sm);
+	padding: var(--space-xs) var(--space-md);
+	background: var(--bg-card);
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.trace-tool-header:hover {
+	background: var(--bg-elevated);
+}
+
+.trace-tool-header .tool-index {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	min-width: 2rem;
+}
+
+.trace-tool-header .tool-name {
+	color: var(--primary);
+	font-weight: 500;
+	font-size: 0.85rem;
+	font-family: monospace;
+}
+
+.trace-tool-header .tool-expand-icon {
+	margin-left: auto;
+	color: var(--text-muted);
+	font-size: 0.7rem;
+	transition: transform 0.2s ease;
+}
+
+.trace-tool-header.expanded .tool-expand-icon {
+	transform: rotate(90deg);
+}
+
+.trace-tool-details {
+	padding: var(--space-sm) var(--space-md);
+	background: var(--bg-base);
+	font-size: 0.8rem;
+}
+
+.trace-tool-details .detail-section {
+	margin-bottom: var(--space-sm);
+}
+
+.trace-tool-details .detail-section:last-child {
+	margin-bottom: 0;
+}
+
+.trace-tool-details .detail-label {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin-bottom: 4px;
+}
+
+.trace-tool-details .detail-content {
+	background: var(--code-bg);
+	padding: var(--space-xs) var(--space-sm);
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 0.8rem;
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 200px;
+	overflow-y: auto;
+	color: var(--text-secondary);
+}
