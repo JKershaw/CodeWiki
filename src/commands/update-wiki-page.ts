@@ -49,6 +49,9 @@ export async function handleUpdateWikiPage(
       if (update.sourceCommitId) {
         createParams.sourceCommitId = update.sourceCommitId;
       }
+      if (update.agentRunId) {
+        createParams.sourceAgentRunId = update.agentRunId;
+      }
       const page = createWikiPage(createParams);
 
       await repos.wikiPages.save(page);
@@ -60,12 +63,15 @@ export async function handleUpdateWikiPage(
         return failure(`Page not found at path: ${update.path}`);
       }
 
-      const updateParams: { content: string; confidence?: number; sourceCommitId?: string } = {
+      const updateParams: { content: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
         content: update.content,
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
       };
       if (update.sourceCommitId) {
         updateParams.sourceCommitId = update.sourceCommitId;
+      }
+      if (update.agentRunId) {
+        updateParams.sourceAgentRunId = update.agentRunId;
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
 
@@ -86,6 +92,9 @@ export async function handleUpdateWikiPage(
         if (update.sourceCommitId) {
           createParams.sourceCommitId = update.sourceCommitId;
         }
+        if (update.agentRunId) {
+          createParams.sourceAgentRunId = update.agentRunId;
+        }
         const page = createWikiPage(createParams);
 
         await repos.wikiPages.save(page);
@@ -94,12 +103,15 @@ export async function handleUpdateWikiPage(
 
       // Merge content (append new content to existing)
       const mergedContent = mergeContent(existing.content, update.content);
-      const mergeUpdateParams: { content: string; confidence?: number; sourceCommitId?: string } = {
+      const mergeUpdateParams: { content: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
         content: mergedContent,
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
       };
       if (update.sourceCommitId) {
         mergeUpdateParams.sourceCommitId = update.sourceCommitId;
+      }
+      if (update.agentRunId) {
+        mergeUpdateParams.sourceAgentRunId = update.agentRunId;
       }
       await repos.wikiPages.updateContent(existing.id, mergeUpdateParams);
 

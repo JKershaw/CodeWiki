@@ -642,6 +642,7 @@ export class Executor {
             sourceCommitTimestamp: commitData!.committedAt,
             sourceAgentType: agent.type as AgentType,
             sourceAgentRunId: agentRunId,
+            workItemId: workItem.id, // Link to originating work item for provenance
             targetPagePath: update.path,
             proposedUpdateType: update.type,
             proposedContent: update.content,

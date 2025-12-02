@@ -15,6 +15,8 @@ export interface WikiPage {
   confidence: number;
   /** Commits that contributed to this page's content */
   sourceCommits: string[];
+  /** Agent runs that contributed to this page's content (for provenance tracking) */
+  sourceAgentRunIds: string[];
   /** Links to other wiki pages */
   links: string[];
   /** Pages that link to this page */
@@ -53,6 +55,7 @@ export function createWikiPage(params: {
   title: string;
   content: string;
   sourceCommitId?: string;
+  sourceAgentRunId?: string;
 }): WikiPage {
   return {
     id: params.id,
@@ -62,6 +65,7 @@ export function createWikiPage(params: {
     content: params.content,
     confidence: 0.5, // Start at medium confidence
     sourceCommits: params.sourceCommitId ? [params.sourceCommitId] : [],
+    sourceAgentRunIds: params.sourceAgentRunId ? [params.sourceAgentRunId] : [],
     links: [],
     backlinks: [],
     createdAt: new Date(),

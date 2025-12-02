@@ -172,7 +172,7 @@ function createMockPage(path: string, title: string, content: string, confidence
     backlinks: [],
     createdAt: new Date(),
     updatedAt: new Date(),
-    sourceCommitIds: [],
+    sourceCommits: [],
     sourceAgentRunIds: [],
   };
 }
@@ -252,6 +252,8 @@ describe('Analysis Tools', () => {
       // Provenance tools
       assert.ok(toolNames.includes('get_page_provenance'));
       assert.ok(toolNames.includes('get_agent_contributions'));
+      assert.ok(toolNames.includes('get_provenance_trace'));
+      assert.ok(toolNames.includes('get_work_item_outcomes'));
       // Orchestrator tools
       assert.ok(toolNames.includes('get_orchestrator_decisions'));
     });

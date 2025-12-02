@@ -201,6 +201,43 @@ describe('EditRequest', () => {
         assert.strictEqual(editRequest.sourceAgentType, agentType);
       }
     });
+
+    it('includes workItemId when provided for provenance tracking', () => {
+      const editRequest = createEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        sourceCommitSha: 'abc123',
+        sourceCommitTimestamp: new Date(),
+        sourceAgentType: 'code-change',
+        sourceAgentRunId: 'run-1',
+        workItemId: 'work-item-123',
+        targetPagePath: 'docs/api',
+        proposedUpdateType: 'create',
+        proposedContent: 'Content',
+        confidenceDelta: 0.1,
+      });
+
+      assert.strictEqual(editRequest.workItemId, 'work-item-123');
+    });
+
+    it('sets workItemId to null when not provided', () => {
+      const editRequest = createEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        sourceCommitSha: 'abc123',
+        sourceCommitTimestamp: new Date(),
+        sourceAgentType: 'code-change',
+        sourceAgentRunId: 'run-1',
+        targetPagePath: 'docs/api',
+        proposedUpdateType: 'create',
+        proposedContent: 'Content',
+        confidenceDelta: 0.1,
+      });
+
+      assert.strictEqual(editRequest.workItemId, null);
+    });
   });
 
   describe('wikiPageUpdateToEditRequest', () => {
@@ -274,6 +311,27 @@ describe('EditRequest', () => {
 
       assert.strictEqual(editRequest.proposedUpdateType, 'delete');
       assert.strictEqual(editRequest.redirectTo, 'docs/new-page');
+    });
+
+    it('includes workItemId when provided for provenance tracking', () => {
+      const editRequest = wikiPageUpdateToEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        sourceCommitSha: 'abc123',
+        sourceCommitTimestamp: new Date(),
+        sourceAgentType: 'code-change',
+        sourceAgentRunId: 'run-1',
+        workItemId: 'work-item-456',
+        update: {
+          type: 'update',
+          path: 'docs/api',
+          content: '# API',
+          confidenceDelta: 0.1,
+        },
+      });
+
+      assert.strictEqual(editRequest.workItemId, 'work-item-456');
     });
   });
 });

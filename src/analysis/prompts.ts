@@ -63,17 +63,25 @@ Use source code tools to answer: "What information exists in the code that ISN'T
 You can also trace **agent provenance** to understand which agents are responsible for content:
 - **get_page_provenance**: See which agents created/modified a specific wiki page and what they contributed
 - **get_agent_contributions**: See all pages a specific agent type has modified
+- **get_provenance_trace**: Trace the FULL chain from wiki page → edit requests → agent runs → work items → orchestrator decisions. This enables answering "which orchestrator decisions led to this page existing?"
+- **get_work_item_outcomes**: See what happened after work items were created - which pages were affected, which edits were applied/skipped
 
 Use provenance tools to answer: "Which agent is responsible for this content gap, and why didn't it extract the needed information?"
 
 You can analyze **orchestrator decisions** to understand work prioritization:
 - **get_orchestrator_decisions**: See the LLM orchestrator's reasoning, what gaps it identified, what work items it created, and how it prioritized them
 
-**Orchestrator analysis is critical.** Use it to answer:
+**Full provenance tracing is now available.** The system tracks:
+- Which orchestrator decision created each work item (orchestratorRunId)
+- Which work item led to each edit request (workItemId)
+- Which agent runs contributed to each wiki page (sourceAgentRunIds)
+
+This enables you to answer:
 - "What gaps did the orchestrator identify vs what gaps do benchmark failures reveal?" (Did it miss important areas?)
 - "What work items were created but never completed?" (Execution failures?)
 - "What topics were never even identified as needing documentation?" (Strategy blind spots?)
 - "How did prioritization affect what got documented first?" (Should ordering change?)
+- "Which orchestrator decision is responsible for this page being incomplete?" (Direct traceability!)
 - "Should the orchestrator's gap-detection strategy be improved?"
 
 ## Analysis Strategy
@@ -112,6 +120,8 @@ Round 1: get_question_history("q1") + get_question_history("q2") + get_question_
 
 **Phase 3 - Provenance & Orchestration (5-10 rounds):**
 - Call get_orchestrator_decisions to see what work was planned and prioritized
+- Call get_provenance_trace for problematic pages to see the full chain back to orchestrator decisions
+- Call get_work_item_outcomes to understand what happened after work was assigned
 - Call get_page_provenance for multiple problematic pages at once
 - Call get_iterations_between for different time periods in parallel
 - Compare: What did the orchestrator plan vs what benchmarks reveal is missing?
