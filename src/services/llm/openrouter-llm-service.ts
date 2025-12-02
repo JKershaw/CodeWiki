@@ -135,8 +135,9 @@ interface ChatResponse {
 
 /**
  * Check if a model is an Anthropic Claude model.
+ * Exported for testing.
  */
-function isAnthropicModel(model: string): boolean {
+export function isAnthropicModel(model: string): boolean {
   return model.startsWith('anthropic/') || model.includes('claude');
 }
 

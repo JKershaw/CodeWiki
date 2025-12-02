@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import {
   safeParseToolArguments,
   isValidToolCall,
+  isAnthropicModel,
 } from '../../src/services/llm/openrouter-llm-service.js';
 
 describe('OpenRouter Tool Parsing', () => {
@@ -206,6 +207,29 @@ describe('OpenRouter Tool Parsing', () => {
         extra: 'ignored',
       };
       assert.strictEqual(isValidToolCall(tc), true);
+    });
+  });
+
+  describe('isAnthropicModel', () => {
+    it('returns true for anthropic/ prefixed models', () => {
+      assert.strictEqual(isAnthropicModel('anthropic/claude-opus-4.5'), true);
+      assert.strictEqual(isAnthropicModel('anthropic/claude-sonnet-4'), true);
+      assert.strictEqual(isAnthropicModel('anthropic/claude-3.5-sonnet'), true);
+    });
+
+    it('returns true for models containing "claude"', () => {
+      assert.strictEqual(isAnthropicModel('some-provider/claude-model'), true);
+      assert.strictEqual(isAnthropicModel('claude-instant'), true);
+    });
+
+    it('returns false for non-Anthropic models', () => {
+      assert.strictEqual(isAnthropicModel('openai/gpt-4'), false);
+      assert.strictEqual(isAnthropicModel('google/gemini-pro'), false);
+      assert.strictEqual(isAnthropicModel('meta-llama/llama-3'), false);
+    });
+
+    it('returns false for empty string', () => {
+      assert.strictEqual(isAnthropicModel(''), false);
     });
   });
 });
