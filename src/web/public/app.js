@@ -143,13 +143,43 @@ async function loadRepos() {
 }
 
 async function addRepo(path) {
+  const container = document.getElementById('repos-list');
+
+  // Create and insert loading card at the beginning
+  const loadingCard = document.createElement('div');
+  loadingCard.className = 'card repo-loading-card';
+  loadingCard.innerHTML = `
+    <div class="card-header">
+      <h3 class="card-title">${escapeHtml(path)}</h3>
+      <span class="card-status pending">adding</span>
+    </div>
+    <div class="processing-progress">
+      <div class="progress-bar">
+        <div class="progress-fill indeterminate"></div>
+      </div>
+      <div class="progress-text">Loading commits from git history...</div>
+    </div>
+  `;
+
+  // Insert at the beginning of the list
+  const firstCard = container.querySelector('.card');
+  if (firstCard) {
+    container.insertBefore(loadingCard, firstCard);
+  } else {
+    // If no cards exist, replace the placeholder
+    container.innerHTML = '';
+    container.appendChild(loadingCard);
+  }
+
   try {
     await api('/repos', {
       method: 'POST',
       body: JSON.stringify({ path }),
     });
+    loadingCard.remove();
     loadRepos();
   } catch (error) {
+    loadingCard.remove();
     alert('Error adding repository: ' + error.message);
   }
 }

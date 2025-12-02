@@ -31,6 +31,7 @@ import {
   createListCommitsQuery,
   handleListCommits,
 } from '../../queries/index.js';
+import { createConcurrencyLimiter } from '../../utils/concurrency-limiter.js';
 
 /**
  * Create repository management routes.
@@ -153,6 +154,7 @@ export function createReposRoutes(deps: Dependencies): Router {
           return;
         }
         repo = registerResult.data!;
+        // repoId is already declared above and equals repo.id
 
         // Load commits using simpleGit
         const { simpleGit } = await import('simple-git');
@@ -160,48 +162,54 @@ export function createReposRoutes(deps: Dependencies): Router {
         const log = await gitRepo.log(['--all']);
 
         const { createCommit } = await import('../../domain/commit.js');
-        const commits = [];
 
-        for (const entry of log.all) {
-          let diffSummary = {
-            filesAdded: 0,
-            filesModified: 0,
-            filesDeleted: 0,
-            linesAdded: 0,
-            linesDeleted: 0,
-            affectedFiles: [] as string[],
-          };
+        // Process commits in parallel with concurrency limit to avoid overwhelming git
+        const limit = createConcurrencyLimiter(10);
 
-          try {
-            const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
-            const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
+        const commits = await Promise.all(
+          log.all.map((entry) =>
+            limit(async () => {
+              let diffSummary = {
+                filesAdded: 0,
+                filesModified: 0,
+                filesDeleted: 0,
+                linesAdded: 0,
+                linesDeleted: 0,
+                affectedFiles: [] as string[],
+              };
 
-            for (const line of lines) {
-              const [status, ...pathParts] = line.split('\t');
-              const filePath = pathParts.join('\t');
-              if (filePath) diffSummary.affectedFiles.push(filePath);
+              try {
+                const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
+                const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
 
-              switch (status?.[0]) {
-                case 'A': diffSummary.filesAdded++; break;
-                case 'D': diffSummary.filesDeleted++; break;
-                default: diffSummary.filesModified++; break;
+                for (const line of lines) {
+                  const [status, ...pathParts] = line.split('\t');
+                  const filePath = pathParts.join('\t');
+                  if (filePath) diffSummary.affectedFiles.push(filePath);
+
+                  switch (status?.[0]) {
+                    case 'A': diffSummary.filesAdded++; break;
+                    case 'D': diffSummary.filesDeleted++; break;
+                    default: diffSummary.filesModified++; break;
+                  }
+                }
+              } catch {
+                // Initial commit or error
               }
-            }
-          } catch {
-            // Initial commit or error
-          }
 
-          commits.push(createCommit({
-            id: uuid(),
-            repoId: repo.id,
-            sha: entry.hash,
-            message: entry.message,
-            authorName: entry.author_name,
-            authorEmail: entry.author_email,
-            committedAt: new Date(entry.date),
-            diffSummary,
-          }));
-        }
+              return createCommit({
+                id: uuid(),
+                repoId,
+                sha: entry.hash,
+                message: entry.message,
+                authorName: entry.author_name,
+                authorEmail: entry.author_email,
+                committedAt: new Date(entry.date),
+                diffSummary,
+              });
+            })
+          )
+        );
 
         // Use LoadRepositoryCommits command
         await handleLoadRepositoryCommits(
