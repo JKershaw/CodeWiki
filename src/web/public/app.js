@@ -137,6 +137,13 @@ async function loadRepos() {
     container.querySelectorAll('.benchmark-btn').forEach(btn => {
       btn.addEventListener('click', () => openBenchmark(btn.dataset.id));
     });
+
+    // Auto-resume polling for any repos that are currently processing
+    repos.forEach(repo => {
+      if (repo.status === 'processing') {
+        startProcessingPolling(repo.id);
+      }
+    });
   } catch (error) {
     container.innerHTML = `<p class="placeholder">Error loading repositories: ${escapeHtml(error.message)}</p>`;
   }
@@ -184,13 +191,18 @@ async function addRepo(path) {
   }
 }
 
-async function processRepo(id) {
-  const btn = document.querySelector(`.process-btn[data-id="${id}"]`);
-  const iterationInput = document.querySelector(`.iteration-input[data-id="${id}"]`);
-  const iterations = parseInt(iterationInput.value, 10) || 5;
-  const card = btn.closest('.card');
-  const originalText = btn.textContent;
-  btn.textContent = 'Starting...';
+/**
+ * Start polling for processing status updates.
+ * Used both when starting a new run and when resuming after page reload.
+ */
+function startProcessingPolling(id) {
+  const card = document.querySelector(`.card[data-repo-id="${id}"]`);
+  if (!card) return;
+
+  const btn = card.querySelector('.process-btn');
+  const iterationInput = card.querySelector('.iteration-input');
+
+  btn.textContent = 'Processing...';
   btn.disabled = true;
   iterationInput.disabled = true;
 
@@ -210,82 +222,90 @@ async function processRepo(id) {
     progressDiv.after(jobListDiv);
   }
 
+  // Poll for updates with detailed progress
+  const pollStatus = async () => {
+    try {
+      // Fetch both processing status and work queue in parallel
+      const [processingData, workQueueData] = await Promise.all([
+        api(`/repos/${id}/processing`),
+        api(`/repos/${id}/work-queue`),
+      ]);
+
+      const { processing } = processingData;
+      const { workQueue } = workQueueData;
+
+      if (processing && (processing.status === 'running' || processing.status === 'stopping')) {
+        // Update progress display
+        const percent = processing.totalIterations > 0
+          ? Math.round((processing.completedIterations / processing.totalIterations) * 100)
+          : 0;
+
+        let progressText = `Iteration ${processing.completedIterations}/${processing.totalIterations}`;
+        if (processing.currentIteration && processing.currentIteration.agentType) {
+          progressText += ` - ${formatAgentType(processing.currentIteration.agentType)}`;
+        }
+
+        const isStopping = processing.status === 'stopping';
+        const stopButtonHtml = isStopping
+          ? `<button class="btn danger small" disabled>Stopping...</button>`
+          : `<button class="btn danger small stop-btn" data-id="${id}">Stop</button>`;
+
+        progressDiv.innerHTML = `
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: ${percent}%"></div>
+          </div>
+          <div class="progress-text-row">
+            <span class="progress-text">${progressText}</span>
+            ${stopButtonHtml}
+          </div>
+        `;
+
+        // Add stop button event listener
+        const stopBtn = progressDiv.querySelector('.stop-btn');
+        if (stopBtn) {
+          stopBtn.addEventListener('click', () => stopProcessing(id, stopBtn));
+        }
+
+        // Update job list display
+        jobListDiv.innerHTML = renderJobList(workQueue);
+
+        btn.textContent = isStopping ? 'Stopping...' : `Processing... ${percent}%`;
+        setTimeout(pollStatus, 1500);
+      } else {
+        // Processing complete
+        progressDiv.remove();
+        jobListDiv.remove();
+        loadRepos();
+      }
+    } catch (error) {
+      console.error('Error polling status:', error);
+      setTimeout(pollStatus, 2000);
+    }
+  };
+  setTimeout(pollStatus, 500);
+}
+
+async function processRepo(id) {
+  const btn = document.querySelector(`.process-btn[data-id="${id}"]`);
+  const iterationInput = document.querySelector(`.iteration-input[data-id="${id}"]`);
+  const iterations = parseInt(iterationInput.value, 10) || 5;
+  const originalText = btn.textContent;
+  btn.textContent = 'Starting...';
+  btn.disabled = true;
+  iterationInput.disabled = true;
+
   try {
     await api(`/repos/${id}/process`, {
       method: 'POST',
       body: JSON.stringify({ iterations }),
     });
 
-    btn.textContent = 'Processing...';
-
-    // Poll for updates with detailed progress
-    const pollStatus = async () => {
-      try {
-        // Fetch both processing status and work queue in parallel
-        const [processingData, workQueueData] = await Promise.all([
-          api(`/repos/${id}/processing`),
-          api(`/repos/${id}/work-queue`),
-        ]);
-
-        const { processing } = processingData;
-        const { workQueue } = workQueueData;
-
-        if (processing && (processing.status === 'running' || processing.status === 'stopping')) {
-          // Update progress display
-          const percent = processing.totalIterations > 0
-            ? Math.round((processing.completedIterations / processing.totalIterations) * 100)
-            : 0;
-
-          let progressText = `Iteration ${processing.completedIterations}/${processing.totalIterations}`;
-          if (processing.currentIteration && processing.currentIteration.agentType) {
-            progressText += ` - ${formatAgentType(processing.currentIteration.agentType)}`;
-          }
-
-          const isStopping = processing.status === 'stopping';
-          const stopButtonHtml = isStopping
-            ? `<button class="btn danger small" disabled>Stopping...</button>`
-            : `<button class="btn danger small stop-btn" data-id="${id}">Stop</button>`;
-
-          progressDiv.innerHTML = `
-            <div class="progress-bar">
-              <div class="progress-fill" style="width: ${percent}%"></div>
-            </div>
-            <div class="progress-text-row">
-              <span class="progress-text">${progressText}</span>
-              ${stopButtonHtml}
-            </div>
-          `;
-
-          // Add stop button event listener
-          const stopBtn = progressDiv.querySelector('.stop-btn');
-          if (stopBtn) {
-            stopBtn.addEventListener('click', () => stopProcessing(id, stopBtn));
-          }
-
-          // Update job list display
-          jobListDiv.innerHTML = renderJobList(workQueue);
-
-          btn.textContent = isStopping ? 'Stopping...' : `Processing... ${percent}%`;
-          setTimeout(pollStatus, 1500);
-        } else {
-          // Processing complete
-          progressDiv.remove();
-          jobListDiv.remove();
-          loadRepos();
-        }
-      } catch (error) {
-        console.error('Error polling status:', error);
-        setTimeout(pollStatus, 2000);
-      }
-    };
-    setTimeout(pollStatus, 1000);
+    startProcessingPolling(id);
   } catch (error) {
     alert('Error starting processing: ' + error.message);
     btn.textContent = originalText;
     btn.disabled = false;
     iterationInput.disabled = false;
-    if (progressDiv) progressDiv.remove();
-    if (jobListDiv) jobListDiv.remove();
   }
 }
 
