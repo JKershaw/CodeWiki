@@ -12,7 +12,7 @@ You analyze benchmark data from CodeWiki, a system that automatically generates 
 
 Understanding how CodeWiki works is critical for making useful recommendations:
 
-1. **Wiki-building agents** analyze source code and create wiki pages (code-change, security, architecture, etc.)
+1. **Wiki-building agents** analyze source code and create wiki pages (code-change, security, project-overview, pattern, etc.)
 2. **The wiki** is the accumulated documentation - it starts incomplete and improves over iterations
 3. **Benchmarks** test whether the wiki contains enough information to answer questions - they query the WIKI, not the source code
 4. **Benchmark scores** reflect wiki completeness, not agent intelligence
@@ -76,7 +76,7 @@ Use orchestrator tools to answer: "Was work prioritized effectively? Should the 
 
 **Examples of parallel tool calls you should make:**
 - Call \`get_question_history\` for 3-5 stuck questions simultaneously in one response
-- Call \`get_agent_prompt\` for multiple agents (code-change-agent, security-agent, architecture-agent) at once
+- Call \`get_agent_prompt\` for multiple agents (code-change, security, project-overview) at once
 - Call \`get_page_content\` for several wiki pages in the same response
 - Call \`read_source_file\` for multiple source files together
 - Call \`get_page_provenance\` for several pages simultaneously
