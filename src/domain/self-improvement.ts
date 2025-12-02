@@ -11,6 +11,29 @@
 // ============================================================================
 
 /**
+ * A single tool call made during the analysis.
+ */
+export interface AnalysisToolCall {
+  /** Name of the tool that was called */
+  name: string;
+  /** Input parameters passed to the tool */
+  input: Record<string, unknown>;
+  /** Result returned by the tool */
+  result: string;
+}
+
+/**
+ * Trace of all tool calls made during the analysis.
+ * This allows users to see the "working" that generated the report.
+ */
+export interface AnalysisTrace {
+  /** All tool calls made in order */
+  toolCalls: AnalysisToolCall[];
+  /** Number of tool rounds used */
+  toolRounds: number;
+}
+
+/**
  * A self-improvement analysis run.
  * Analyzes benchmark trends and produces improvement recommendations.
  */
@@ -32,6 +55,8 @@ export interface SelfImprovementRun {
   iterationRange: [number, number];
   /** The generated markdown report */
   report: string;
+  /** Trace of tool calls made during analysis (for debugging/transparency) */
+  analysisTrace: AnalysisTrace | null;
   /** Total LLM cost for the analysis */
   costUsd: number;
   /** Error message if failed */
@@ -64,6 +89,7 @@ export function createSelfImprovementRun(params: {
     benchmarkRunIds: params.benchmarkRunIds,
     iterationRange: params.iterationRange,
     report: '',
+    analysisTrace: null,
     costUsd: 0,
     error: null,
   };
@@ -75,13 +101,15 @@ export function createSelfImprovementRun(params: {
 export function completeSelfImprovementRun(
   run: SelfImprovementRun,
   report: string,
-  costUsd: number
+  costUsd: number,
+  analysisTrace?: AnalysisTrace
 ): SelfImprovementRun {
   return {
     ...run,
     status: 'completed',
     completedAt: new Date(),
     report,
+    analysisTrace: analysisTrace ?? null,
     costUsd,
   };
 }

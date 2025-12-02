@@ -154,6 +154,7 @@ export function createSelfImprovementRoutes(
         benchmarkRunIds: validBenchmarks.map(b => b.id),
         iterationRange,
         report: '',
+        analysisTrace: null,
         costUsd: 0,
         error: null,
       };
@@ -196,7 +197,7 @@ async function runAnalysisInBackground(
 
     // Update the run with results
     if (result.status === 'completed') {
-      await repos.selfImprovements.complete(runId, result.report, result.costUsd);
+      await repos.selfImprovements.complete(runId, result.report, result.costUsd, result.analysisTrace ?? undefined);
     } else {
       await repos.selfImprovements.fail(runId, result.error ?? 'Unknown error');
     }
