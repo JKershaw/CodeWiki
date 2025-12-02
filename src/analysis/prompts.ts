@@ -61,6 +61,11 @@ You can also trace **agent provenance** to understand which agents are responsib
 
 Use provenance tools to answer: "Which agent is responsible for this content gap, and why didn't it extract the needed information?"
 
+You can analyze **orchestrator decisions** to understand work prioritization:
+- **get_orchestrator_decisions**: See the LLM orchestrator's reasoning and what work items it created
+
+Use orchestrator tools to answer: "Was work prioritized effectively? Should the orchestrator strategy be adjusted?"
+
 ## Analysis Strategy
 
 **Take your time.** You have up to 30 tool rounds available - use them. Thorough investigation leads to better recommendations. Don't rush to conclusions.
@@ -76,6 +81,7 @@ Use provenance tools to answer: "Which agent is responsible for this content gap
 7. **Check agent prompts**: Read MULTIPLE agent prompts to understand how the system works. This is critical for process recommendations.
 8. **Compare to source**: When wiki content is missing information, read the source code to see what exists there that agents should be extracting
 9. **Trace provenance**: Use get_page_provenance to see which agents modified problematic pages - this reveals which agent to fix
+10. **Review orchestration**: Use get_orchestrator_decisions to see how work was prioritized - this reveals if agents ran in the right order
 
 **Go deep, not wide.** It's better to thoroughly investigate 3-4 patterns than to superficially mention 10. For each pattern you identify, trace it to a root cause in the process.
 
