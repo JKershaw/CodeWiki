@@ -23,6 +23,7 @@ import {
   completeSelfImprovementRun,
   failSelfImprovementRun,
   type SelfImprovementRun,
+  type AnalysisTrace,
 } from '../domain/self-improvement.js';
 import { v4 as uuid } from 'uuid';
 
@@ -148,8 +149,14 @@ export class SelfImprovementAgent {
         temperature: 0.3,
       });
 
-      // Complete the run with the report
-      return completeSelfImprovementRun(run, completion.content, completion.costUsd);
+      // Build the analysis trace from the completion
+      const analysisTrace: AnalysisTrace = {
+        toolCalls: completion.toolCalls,
+        toolRounds: completion.toolRounds,
+      };
+
+      // Complete the run with the report and trace
+      return completeSelfImprovementRun(run, completion.content, completion.costUsd, analysisTrace);
     } catch (error) {
       return failSelfImprovementRun(
         run,

@@ -2,7 +2,7 @@
  * Repository interface for Self-Improvement Analysis runs.
  */
 
-import type { SelfImprovementRun } from '../../domain/self-improvement.js';
+import type { SelfImprovementRun, AnalysisTrace } from '../../domain/self-improvement.js';
 
 /**
  * Repository for managing self-improvement analysis runs.
@@ -46,7 +46,7 @@ export interface SelfImprovementRepository {
   /**
    * Mark a run as completed with report.
    */
-  complete(id: string, report: string, costUsd: number): Promise<void>;
+  complete(id: string, report: string, costUsd: number, analysisTrace?: AnalysisTrace): Promise<void>;
 
   /**
    * Mark a run as failed with error.

@@ -5,7 +5,7 @@
 import { readFile, writeFile, mkdir, readdir, unlink, rm } from 'fs/promises';
 import { join } from 'path';
 import type { SelfImprovementRepository } from '../interfaces/self-improvement-repository.js';
-import type { SelfImprovementRun } from '../../domain/self-improvement.js';
+import type { SelfImprovementRun, AnalysisTrace } from '../../domain/self-improvement.js';
 
 /**
  * File-based self-improvement repository.
@@ -129,13 +129,14 @@ export class FileSelfImprovementRepository implements SelfImprovementRepository 
     await rm(repoDir, { recursive: true, force: true }).catch(() => {});
   }
 
-  async complete(id: string, report: string, costUsd: number): Promise<void> {
+  async complete(id: string, report: string, costUsd: number, analysisTrace?: AnalysisTrace): Promise<void> {
     const run = await this.findById(id);
     if (!run) return;
 
     run.status = 'completed';
     run.completedAt = new Date();
     run.report = report;
+    run.analysisTrace = analysisTrace ?? null;
     run.costUsd = costUsd;
 
     await this.save(run);
