@@ -21,6 +21,10 @@ import type {
 } from '../../domain/self-improvement.js';
 import type { EditRequest } from '../../domain/edit-request.js';
 import { loadIgnorePatterns } from '../cwignore.js';
+import {
+  createListOrchestratorRunsQuery,
+  handleListOrchestratorRuns,
+} from '../../queries/orchestrator-run.js';
 
 // ============================================================================
 // Tool Context
@@ -1279,6 +1283,116 @@ export const getAgentContributionsTool: AnalysisToolDefinition = {
 };
 
 // ============================================================================
+// Tool: Get Orchestrator Decisions
+// ============================================================================
+
+/**
+ * Tool to get orchestrator decision history.
+ */
+export const getOrchestratorDecisionsTool: AnalysisToolDefinition = {
+  name: 'get_orchestrator_decisions',
+  description:
+    'Get orchestrator decision history showing the LLM reasoning used to prioritize work and the work items created. ' +
+    'Use this to understand how the orchestrator decided what agents to run and in what order. ' +
+    'Helps identify if orchestration strategy is effective or needs adjustment.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      limit: {
+        type: 'number',
+        description: 'Maximum number of decisions to return (default: 20)',
+      },
+    },
+    required: [],
+  },
+  execute: async (input, context) => {
+    const limit = (input.limit as number) || 20;
+
+    const query = createListOrchestratorRunsQuery(context.repoId, {
+      limit,
+      usedLLM: true,
+    });
+    const result = await handleListOrchestratorRuns(query, context.repos);
+
+    if (!result.success || !result.data) {
+      return result.error || 'Failed to get orchestrator decisions';
+    }
+
+    if (result.data.length === 0) {
+      return 'No orchestrator decisions found. The orchestrator may not have run yet, or all runs used deterministic fallback.';
+    }
+
+    const sections: string[] = [];
+    sections.push(`## Orchestrator Decisions (${result.data.length} LLM-powered runs)`);
+    sections.push('');
+
+    // Summary stats
+    const totalCost = result.data.reduce((sum, r) => sum + r.costUsd, 0);
+    const totalWorkItems = result.data.reduce((sum, r) => sum + r.workItemsCreated, 0);
+    const avgDuration = result.data.reduce((sum, r) => sum + r.durationMs, 0) / result.data.length;
+
+    sections.push('### Summary');
+    sections.push(`- Total cost: $${totalCost.toFixed(4)}`);
+    sections.push(`- Total work items created: ${totalWorkItems}`);
+    sections.push(`- Average decision time: ${avgDuration.toFixed(0)}ms`);
+    sections.push('');
+
+    // Aggregate work item types across all decisions
+    const workItemCounts: Record<string, number> = {};
+    for (const run of result.data) {
+      for (const item of run.workItems) {
+        workItemCounts[item.agentType] = (workItemCounts[item.agentType] || 0) + 1;
+      }
+    }
+
+    if (Object.keys(workItemCounts).length > 0) {
+      sections.push('### Work Items by Agent Type (across all decisions)');
+      const sortedAgents = Object.entries(workItemCounts).sort((a, b) => b[1] - a[1]);
+      for (const [agent, count] of sortedAgents) {
+        sections.push(`- ${agent}: ${count}`);
+      }
+      sections.push('');
+    }
+
+    // Show individual decisions (most recent first)
+    sections.push('### Decision History');
+    sections.push('');
+
+    for (const run of result.data) {
+      const date = run.timestamp.toISOString().replace('T', ' ').split('.')[0];
+      sections.push(`#### ${date}`);
+      sections.push(`**Reasoning:** ${run.reasoning}`);
+      sections.push('');
+      sections.push(`**Context:** ${run.contextSnapshot.wikiPages} pages, ${run.contextSnapshot.pendingEditRequests} pending edits, ${run.contextSnapshot.pagesNeedingRewrite} pages need rewrite`);
+      sections.push(`**Result:** ${run.workItemsCreated} of ${run.workItemsRequested} items created (after dedup)`);
+      sections.push(`**Cost:** $${run.costUsd.toFixed(4)} | **Duration:** ${run.durationMs}ms`);
+      sections.push('');
+
+      if (run.workItems.length > 0) {
+        sections.push('**Work items requested:**');
+        for (const item of run.workItems.slice(0, 10)) {
+          const target = item.targetCommitId
+            ? `commit:${item.targetCommitId.slice(0, 8)}`
+            : item.targetPath
+            ? `path:${item.targetPath}`
+            : 'wiki-wide';
+          sections.push(`- ${item.agentType} (${target}): ${item.reason.slice(0, 80)}${item.reason.length > 80 ? '...' : ''}`);
+        }
+        if (run.workItems.length > 10) {
+          sections.push(`  ... and ${run.workItems.length - 10} more items`);
+        }
+        sections.push('');
+      }
+
+      sections.push('---');
+      sections.push('');
+    }
+
+    return sections.join('\n');
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -1302,4 +1416,6 @@ export const analysisTools: AnalysisToolDefinition[] = [
   // Provenance tools
   getPageProvenanceTool,
   getAgentContributionsTool,
+  // Orchestrator analysis tools
+  getOrchestratorDecisionsTool,
 ];
