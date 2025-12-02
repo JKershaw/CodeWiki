@@ -154,7 +154,7 @@ function reviver(key: string, value: unknown): unknown {
   // Handle plain ISO date strings for common date field names
   if (
     typeof value === 'string' &&
-    (key === 'createdAt' || key === 'updatedAt' || key === 'processedAt' || key === 'startedAt' || key === 'completedAt' || key === 'detectedAt' || key === 'addressedAt') &&
+    (key === 'createdAt' || key === 'updatedAt' || key === 'processedAt' || key === 'startedAt' || key === 'completedAt' || key === 'detectedAt' || key === 'addressedAt' || key === 'timestamp') &&
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)
   ) {
     return new Date(value);
