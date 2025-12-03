@@ -11,10 +11,7 @@ test.describe('Wiki Browser', () => {
     const repos = await response.json();
 
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     await page.goto('/');
     await page.waitForSelector('.card', { timeout: 10000 });
@@ -24,11 +21,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     // Find the card with wiki pages and click Browse Wiki
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
@@ -44,11 +37,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -74,40 +63,63 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
     // Wait for tree to load
-    await page.waitForSelector('.tree-node-header[data-has-page="true"]', { timeout: 10000 });
+    await page.waitForSelector('.tree-node-header', { timeout: 10000 });
 
-    // Click first page node (one that has a page)
-    await page.locator('.tree-node-header[data-has-page="true"]').first().click();
+    // Find a visible page node - try root level 'overview' first, or any visible page
+    // Nested pages may be inside collapsed parent nodes, so we need to find a visible one
+    let pageNode = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"]');
+    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
+      // Try to find any visible page node at root level (not inside collapsed children)
+      pageNode = page.locator('.wiki-tree > .tree-node > .tree-node-header[data-has-page="true"]').first();
+    }
+    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
+      // Fallback: expand first parent node that has children
+      const parentNode = page.locator('.tree-node-header[data-has-children="true"]').first();
+      if (await parentNode.isVisible()) {
+        await parentNode.locator('.tree-toggle').click();
+        await page.waitForTimeout(300);
+      }
+      pageNode = page.locator('.tree-node-header[data-has-page="true"]:visible').first();
+    }
 
-    // Content should update - use .first() to avoid strict mode violation with multiple matches
-    await expect(page.locator('#wiki-content h1').first()).toBeVisible({ timeout: 10000 });
+    await pageNode.click();
+
+    // Content should update - check for wiki-body with content or wiki-meta (which appears after load)
+    // Note: We check for .wiki-body or .wiki-meta because the markdown library may not be loaded in test env
+    await expect(page.locator('#wiki-content .wiki-body, #wiki-content .wiki-meta').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('wiki page shows confidence score', async ({ page, request }) => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
-    await page.waitForSelector('.tree-node-header[data-has-page="true"]', { timeout: 10000 });
-    await page.locator('.tree-node-header[data-has-page="true"]').first().click();
+    // Wait for tree to load
+    await page.waitForSelector('.tree-node-header', { timeout: 10000 });
+
+    // Find a visible page node - try root level 'overview' first
+    let pageNode = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"]');
+    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
+      // Expand first parent node to reveal nested pages
+      const parentNode = page.locator('.tree-node-header[data-has-children="true"]').first();
+      if (await parentNode.isVisible()) {
+        await parentNode.locator('.tree-toggle').click();
+        await page.waitForTimeout(300);
+      }
+      pageNode = page.locator('.tree-node-header[data-has-page="true"]:visible').first();
+    }
+
+    await pageNode.click();
 
     // Wait for content to load
     await page.waitForSelector('.wiki-meta', { timeout: 10000 });
@@ -121,11 +133,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -136,12 +144,7 @@ test.describe('Wiki Browser', () => {
     // Find a node with children (has visible toggle)
     const nodeWithChildren = page.locator('.tree-node-header[data-has-children="true"]').first();
     const hasExpandableNode = await nodeWithChildren.count() > 0;
-
-    if (!hasExpandableNode) {
-      // No nested structure to test, skip
-      test.skip();
-      return;
-    }
+    expect(hasExpandableNode, 'Test requires wiki tree with nested structure (expandable nodes)').toBeTruthy();
 
     // Get the path of this node
     const nodePath = await nodeWithChildren.getAttribute('data-path');
@@ -162,11 +165,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -184,26 +183,32 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
     // Wait for tree to load
-    await page.waitForSelector('.tree-node-header[data-has-page="true"]', { timeout: 10000 });
+    await page.waitForSelector('.tree-node-header', { timeout: 10000 });
 
-    // Click a page
-    const firstPage = page.locator('.tree-node-header[data-has-page="true"]').first();
-    await firstPage.click();
+    // Find a visible page node - try root level 'overview' first
+    let pageNode = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"]');
+    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
+      // Expand first parent node to reveal nested pages
+      const parentNode = page.locator('.tree-node-header[data-has-children="true"]').first();
+      if (await parentNode.isVisible()) {
+        await parentNode.locator('.tree-toggle').click();
+        await page.waitForTimeout(300);
+      }
+      pageNode = page.locator('.tree-node-header[data-has-page="true"]:visible').first();
+    }
+
+    await pageNode.click();
 
     // Wait for content to load
     await page.waitForSelector('.wiki-meta', { timeout: 10000 });
 
     // The clicked node should have active class
-    await expect(firstPage).toHaveClass(/active/);
+    await expect(pageNode).toHaveClass(/active/);
   });
 });

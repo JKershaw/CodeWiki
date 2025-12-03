@@ -11,10 +11,7 @@ test.describe('Wiki Query', () => {
     const repos = await response.json();
 
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     await page.goto('/');
     await page.waitForSelector('.card', { timeout: 10000 });
@@ -24,11 +21,7 @@ test.describe('Wiki Query', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     // Find the card with wiki pages and click Query
     const queryBtn = page.locator('.query-btn:not([disabled])').first();
@@ -44,11 +37,7 @@ test.describe('Wiki Query', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const queryBtn = page.locator('.query-btn:not([disabled])').first();
     await queryBtn.click();
@@ -62,11 +51,7 @@ test.describe('Wiki Query', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const queryBtn = page.locator('.query-btn:not([disabled])').first();
     await queryBtn.click();
@@ -91,11 +76,7 @@ test.describe('Wiki Query', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const queryBtn = page.locator('.query-btn:not([disabled])').first();
     await queryBtn.click();
@@ -114,11 +95,7 @@ test.describe('Wiki Query', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const queryBtn = page.locator('.query-btn:not([disabled])').first();
     await queryBtn.click();
@@ -138,11 +115,7 @@ test.describe('Wiki Query', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const queryBtn = page.locator('.query-btn:not([disabled])').first();
     await queryBtn.click();

@@ -14,26 +14,33 @@ test.describe('Repository Management', () => {
     // Wait for folder browser to load
     await expect(page.locator('#folder-list')).toBeVisible({ timeout: 10000 });
 
+    // Wait for the folder list to finish loading (should show folders or "No subdirectories")
+    await page.waitForLoadState('networkidle', { timeout: 10000 });
+
+    // The global setup creates a test git repo under $HOME (e2e-test-repo)
     // Find and click on a git repository folder (has git-badge)
     const gitFolder = page.locator('.folder-item:has(.git-badge)').first();
-    if (await gitFolder.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await gitFolder.click();
+    const gitFolderVisible = await gitFolder.isVisible({ timeout: 5000 }).catch(() => false);
 
-      // Submit should now be enabled
-      await expect(page.locator('#submit-repo-btn')).not.toBeDisabled();
-      await page.click('#submit-repo-btn');
+    expect(gitFolderVisible, 'Test requires a git repository to be visible in the folder browser. Global setup should have created one under $HOME.').toBeTruthy();
 
-      // Wait for repository to appear
-      await expect(page.locator('.card')).toBeVisible({ timeout: 10000 });
+    await gitFolder.click();
 
-      // Verify repository card shows
-      const card = page.locator('.card').first();
-      await expect(card).toBeVisible();
-      await expect(card.locator('.card-status')).toBeVisible();
-    } else {
-      // No git repos found in folder browser, skip test
-      test.skip();
-    }
+    // Submit should now be enabled
+    await expect(page.locator('#submit-repo-btn')).not.toBeDisabled();
+    await page.click('#submit-repo-btn');
+
+    // Wait for repository to appear in the list (use .first() to avoid strict mode with multiple cards)
+    await expect(page.locator('.card').first()).toBeVisible({ timeout: 10000 });
+
+    // The newly added repo should appear - verify we have at least 2 cards now
+    // (one from global setup, one we just added)
+    await expect(page.locator('.card')).toHaveCount(2, { timeout: 10000 });
+
+    // Verify the new card shows with expected elements
+    const newCard = page.locator('.card').last();
+    await expect(newCard).toBeVisible();
+    await expect(newCard.locator('.card-status')).toBeVisible();
   });
 
   test('can view repository details', async ({ page }) => {
@@ -57,12 +64,10 @@ test.describe('Repository Management', () => {
     // Wait for repos to load - should have at least one from global setup
     await page.waitForSelector('.card, .placeholder', { timeout: 10000 });
 
-    // If no repos exist, skip this test (global setup should have created one)
+    // If no repos exist, fail this test (global setup should have created one)
     const existingCard = page.locator('.card').first();
-    if (!(await existingCard.isVisible({ timeout: 3000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
+    const cardVisible = await existingCard.isVisible({ timeout: 3000 }).catch(() => false);
+    expect(cardVisible, 'Test requires at least one repository card to be visible').toBeTruthy();
 
     // Click process button
     const processBtn = page.locator('.process-btn').first();
