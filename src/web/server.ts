@@ -6,6 +6,8 @@
 
 import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
+import cookieParser from 'cookie-parser';
+import { randomBytes } from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRepositories, type RepositoryConnection } from '../repositories/index.js';
@@ -14,12 +16,17 @@ import { createMockLLMForCodeAnalysis } from '../services/llm/mock-llm-service.j
 import { createOpenRouterLLM } from '../services/llm/openrouter-llm-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import { createApiRoutes } from './routes/index.js';
+import { createAuthRoutes } from './routes/auth.js';
+import { passwordProtection } from './middleware/password-protection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env['PORT'] || 3000;
+
+// Session secret for signing cookies
+const SESSION_SECRET = process.env['SESSION_SECRET'] || randomBytes(32).toString('hex');
 
 // Repository connection (initialized in startServer)
 let repoConnection: RepositoryConnection | null = null;
@@ -42,6 +49,16 @@ export async function startServer(port = PORT) {
 
   // Middleware
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser(SESSION_SECRET));
+
+  // Authentication routes (must be before password protection)
+  app.use(createAuthRoutes());
+
+  // Password protection middleware
+  app.use(passwordProtection);
+
+  // Static files (after password protection)
   app.use(express.static(join(__dirname, 'public')));
 
   // API Routes
