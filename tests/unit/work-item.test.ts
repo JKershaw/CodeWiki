@@ -5,7 +5,16 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createWorkItem, Priority, type WorkItem } from '../../src/domain/work-item.js';
+import {
+  createWorkItem,
+  Priority,
+  getTargetCommitId,
+  getTargetPath,
+  createCommitTarget,
+  createPathTarget,
+  createWikiTarget,
+  type WorkItem,
+} from '../../src/domain/work-item.js';
 
 describe('WorkItem', () => {
   describe('createWorkItem', () => {
@@ -35,7 +44,7 @@ describe('WorkItem', () => {
       assert.strictEqual(workItem.status, 'pending');
     });
 
-    it('sets optional fields to null when not provided', () => {
+    it('sets wiki target when no target specified', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
@@ -43,15 +52,16 @@ describe('WorkItem', () => {
         priority: Priority.BACKGROUND,
       });
 
-      assert.strictEqual(workItem.targetCommitId, null);
-      assert.strictEqual(workItem.targetPath, null);
+      assert.strictEqual(workItem.target.type, 'wiki');
+      assert.strictEqual(getTargetCommitId(workItem), null);
+      assert.strictEqual(getTargetPath(workItem), null);
       assert.strictEqual(workItem.claimedAt, null);
       assert.strictEqual(workItem.completedAt, null);
       assert.strictEqual(workItem.agentRunId, null);
       assert.strictEqual(workItem.orchestratorRunId, null);
     });
 
-    it('includes targetCommitId when provided', () => {
+    it('creates commit target from targetCommitId (legacy)', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
@@ -60,10 +70,11 @@ describe('WorkItem', () => {
         targetCommitId: 'abc123def',
       });
 
-      assert.strictEqual(workItem.targetCommitId, 'abc123def');
+      assert.strictEqual(workItem.target.type, 'commit');
+      assert.strictEqual(getTargetCommitId(workItem), 'abc123def');
     });
 
-    it('includes targetPath when provided', () => {
+    it('creates path target from targetPath (legacy)', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
@@ -72,7 +83,37 @@ describe('WorkItem', () => {
         targetPath: 'src/services/llm',
       });
 
-      assert.strictEqual(workItem.targetPath, 'src/services/llm');
+      assert.strictEqual(workItem.target.type, 'path');
+      assert.strictEqual(getTargetPath(workItem), 'src/services/llm');
+    });
+
+    it('accepts explicit WorkTarget', () => {
+      const target = createCommitTarget('explicit-sha');
+      const workItem = createWorkItem({
+        id: 'work-1',
+        repoId: 'repo-1',
+        agentType: 'code-change',
+        priority: Priority.RECENT_COMMIT,
+        target,
+      });
+
+      assert.strictEqual(workItem.target.type, 'commit');
+      assert.strictEqual(getTargetCommitId(workItem), 'explicit-sha');
+    });
+
+    it('explicit target takes precedence over legacy fields', () => {
+      const target = createPathTarget('explicit/path');
+      const workItem = createWorkItem({
+        id: 'work-1',
+        repoId: 'repo-1',
+        agentType: 'code-change',
+        priority: Priority.RECENT_COMMIT,
+        target,
+        targetCommitId: 'should-be-ignored',
+      });
+
+      assert.strictEqual(workItem.target.type, 'path');
+      assert.strictEqual(getTargetPath(workItem), 'explicit/path');
     });
 
     it('includes orchestratorRunId when provided for provenance tracking', () => {
@@ -137,6 +178,70 @@ describe('WorkItem', () => {
 
         assert.strictEqual(workItem.priority, priority);
       }
+    });
+  });
+
+  describe('helper functions', () => {
+    it('getTargetCommitId returns commitId for commit targets', () => {
+      const workItem = createWorkItem({
+        id: 'work-1',
+        repoId: 'repo-1',
+        agentType: 'code-change',
+        priority: Priority.RECENT_COMMIT,
+        target: createCommitTarget('sha123'),
+      });
+      assert.strictEqual(getTargetCommitId(workItem), 'sha123');
+    });
+
+    it('getTargetCommitId returns null for non-commit targets', () => {
+      const pathItem = createWorkItem({
+        id: 'work-1',
+        repoId: 'repo-1',
+        agentType: 'codebase-explorer',
+        priority: Priority.EXPLORATION,
+        target: createPathTarget('src/foo'),
+      });
+      assert.strictEqual(getTargetCommitId(pathItem), null);
+
+      const wikiItem = createWorkItem({
+        id: 'work-2',
+        repoId: 'repo-1',
+        agentType: 'link',
+        priority: Priority.META,
+        target: createWikiTarget(),
+      });
+      assert.strictEqual(getTargetCommitId(wikiItem), null);
+    });
+
+    it('getTargetPath returns path for path targets', () => {
+      const workItem = createWorkItem({
+        id: 'work-1',
+        repoId: 'repo-1',
+        agentType: 'codebase-explorer',
+        priority: Priority.EXPLORATION,
+        target: createPathTarget('src/services'),
+      });
+      assert.strictEqual(getTargetPath(workItem), 'src/services');
+    });
+
+    it('getTargetPath returns null for non-path targets', () => {
+      const commitItem = createWorkItem({
+        id: 'work-1',
+        repoId: 'repo-1',
+        agentType: 'code-change',
+        priority: Priority.RECENT_COMMIT,
+        target: createCommitTarget('sha123'),
+      });
+      assert.strictEqual(getTargetPath(commitItem), null);
+
+      const wikiItem = createWorkItem({
+        id: 'work-2',
+        repoId: 'repo-1',
+        agentType: 'link',
+        priority: Priority.META,
+        target: createWikiTarget(),
+      });
+      assert.strictEqual(getTargetPath(wikiItem), null);
     });
   });
 });

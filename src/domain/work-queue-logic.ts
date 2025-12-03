@@ -7,6 +7,7 @@
  */
 
 import type { WorkItem } from './work-item.js';
+import { getTargetCommitId } from './work-item.js';
 import type { AgentType } from './agent-run.js';
 
 /**
@@ -96,14 +97,16 @@ export function selectItemsForBatch(
       }
     }
 
+    const targetCommitId = getTargetCommitId(item);
+
     // Rule 3: For commit-targeted non-code-change analysis agents,
     // verify code-change has already processed this commit
     if (
-      item.targetCommitId &&
+      targetCommitId &&
       item.agentType !== 'code-change' &&
       ANALYSIS_AGENTS.includes(item.agentType as AgentType)
     ) {
-      if (!processedCommits.has(item.targetCommitId)) {
+      if (!processedCommits.has(targetCommitId)) {
         skippedReasons.set(item.id, 'waiting_for_code_change');
         continue;
       }
@@ -111,12 +114,12 @@ export function selectItemsForBatch(
 
     // Rule 4: Don't claim the same commit twice in one batch
     // (prevents race conditions on same commit)
-    if (item.targetCommitId) {
-      if (claimedCommitsInBatch.has(item.targetCommitId)) {
+    if (targetCommitId) {
+      if (claimedCommitsInBatch.has(targetCommitId)) {
         skippedReasons.set(item.id, 'commit_already_claimed_in_batch');
         continue;
       }
-      claimedCommitsInBatch.add(item.targetCommitId);
+      claimedCommitsInBatch.add(targetCommitId);
     }
 
     // This item passes all checks

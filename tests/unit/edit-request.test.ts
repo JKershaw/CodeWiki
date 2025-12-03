@@ -8,12 +8,48 @@ import assert from 'node:assert';
 import {
   createEditRequest,
   wikiPageUpdateToEditRequest,
+  getSourceCommitSha,
+  getSourceCommitTimestamp,
+  createCommitEditSource,
+  createStoryEditSource,
+  createManualEditSource,
+  isCommitEditSource,
   type EditRequest,
 } from '../../src/domain/edit-request.js';
 
 describe('EditRequest', () => {
   describe('createEditRequest', () => {
-    it('creates an edit request with required fields', () => {
+    it('creates an edit request with explicit source', () => {
+      const timestamp = new Date('2024-01-15T10:00:00Z');
+      const source = createCommitEditSource('abc123', timestamp);
+      const editRequest = createEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        source,
+        sourceAgentType: 'code-change',
+        sourceAgentRunId: 'run-1',
+        targetPagePath: 'docs/api',
+        proposedUpdateType: 'update',
+        proposedContent: '# API Documentation',
+        confidenceDelta: 0.1,
+      });
+
+      assert.strictEqual(editRequest.id, 'edit-1');
+      assert.strictEqual(editRequest.repoId, 'repo-1');
+      assert.strictEqual(editRequest.wikiId, 'wiki-1');
+      assert.ok(isCommitEditSource(editRequest.source));
+      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
+      assert.strictEqual(getSourceCommitTimestamp(editRequest)?.getTime(), timestamp.getTime());
+      assert.strictEqual(editRequest.sourceAgentType, 'code-change');
+      assert.strictEqual(editRequest.sourceAgentRunId, 'run-1');
+      assert.strictEqual(editRequest.targetPagePath, 'docs/api');
+      assert.strictEqual(editRequest.proposedUpdateType, 'update');
+      assert.strictEqual(editRequest.proposedContent, '# API Documentation');
+      assert.strictEqual(editRequest.confidenceDelta, 0.1);
+    });
+
+    it('creates an edit request with legacy fields (backward compat)', () => {
       const timestamp = new Date('2024-01-15T10:00:00Z');
       const editRequest = createEditRequest({
         id: 'edit-1',
@@ -29,17 +65,48 @@ describe('EditRequest', () => {
         confidenceDelta: 0.1,
       });
 
-      assert.strictEqual(editRequest.id, 'edit-1');
-      assert.strictEqual(editRequest.repoId, 'repo-1');
-      assert.strictEqual(editRequest.wikiId, 'wiki-1');
-      assert.strictEqual(editRequest.sourceCommitSha, 'abc123');
-      assert.strictEqual(editRequest.sourceCommitTimestamp.getTime(), timestamp.getTime());
-      assert.strictEqual(editRequest.sourceAgentType, 'code-change');
-      assert.strictEqual(editRequest.sourceAgentRunId, 'run-1');
-      assert.strictEqual(editRequest.targetPagePath, 'docs/api');
-      assert.strictEqual(editRequest.proposedUpdateType, 'update');
-      assert.strictEqual(editRequest.proposedContent, '# API Documentation');
-      assert.strictEqual(editRequest.confidenceDelta, 0.1);
+      assert.ok(isCommitEditSource(editRequest.source));
+      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
+      assert.strictEqual(getSourceCommitTimestamp(editRequest)?.getTime(), timestamp.getTime());
+    });
+
+    it('creates an edit request with story source', () => {
+      const source = createStoryEditSource('story-1', 'write');
+      const editRequest = createEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        source,
+        sourceAgentType: 'code-change',
+        sourceAgentRunId: 'run-1',
+        targetPagePath: 'docs/api',
+        proposedUpdateType: 'update',
+        proposedContent: '# API Documentation',
+        confidenceDelta: 0.1,
+      });
+
+      assert.strictEqual(editRequest.source.type, 'story');
+      assert.strictEqual(getSourceCommitSha(editRequest), null);
+      assert.strictEqual(getSourceCommitTimestamp(editRequest), null);
+    });
+
+    it('creates an edit request with manual source', () => {
+      const source = createManualEditSource('user-1', 'Fix typo');
+      const editRequest = createEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        source,
+        sourceAgentType: 'wiki-editor',
+        sourceAgentRunId: 'run-1',
+        targetPagePath: 'docs/api',
+        proposedUpdateType: 'update',
+        proposedContent: '# API Documentation',
+        confidenceDelta: 0.1,
+      });
+
+      assert.strictEqual(editRequest.source.type, 'manual');
+      assert.strictEqual(getSourceCommitSha(editRequest), null);
     });
 
     it('sets default status to pending', () => {
@@ -47,8 +114,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         targetPagePath: 'docs/api',
@@ -65,8 +131,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         targetPagePath: 'docs/api',
@@ -86,8 +151,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         targetPagePath: 'docs/api',
@@ -107,8 +171,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         targetPagePath: 'docs/api',
@@ -126,8 +189,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         targetPagePath: 'docs/api',
@@ -144,8 +206,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         targetPagePath: 'docs/old-api',
@@ -166,8 +227,7 @@ describe('EditRequest', () => {
           id: `edit-${updateType}`,
           repoId: 'repo-1',
           wikiId: 'wiki-1',
-          sourceCommitSha: 'abc123',
-          sourceCommitTimestamp: new Date(),
+          source: createCommitEditSource('abc123', new Date()),
           sourceAgentType: 'code-change',
           sourceAgentRunId: 'run-1',
           targetPagePath: 'docs/api',
@@ -188,8 +248,7 @@ describe('EditRequest', () => {
           id: `edit-${agentType}`,
           repoId: 'repo-1',
           wikiId: 'wiki-1',
-          sourceCommitSha: 'abc123',
-          sourceCommitTimestamp: new Date(),
+          source: createCommitEditSource('abc123', new Date()),
           sourceAgentType: agentType,
           sourceAgentRunId: 'run-1',
           targetPagePath: 'docs/api',
@@ -207,8 +266,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         workItemId: 'work-item-123',
@@ -226,8 +284,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         targetPagePath: 'docs/api',
@@ -241,14 +298,14 @@ describe('EditRequest', () => {
   });
 
   describe('wikiPageUpdateToEditRequest', () => {
-    it('converts a WikiPageUpdate to an EditRequest', () => {
+    it('converts a WikiPageUpdate to an EditRequest with explicit source', () => {
       const timestamp = new Date('2024-01-15T10:00:00Z');
+      const source = createCommitEditSource('abc123', timestamp);
       const editRequest = wikiPageUpdateToEditRequest({
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: timestamp,
+        source,
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         update: {
@@ -267,6 +324,32 @@ describe('EditRequest', () => {
       assert.strictEqual(editRequest.proposedContent, '# API Documentation');
       assert.strictEqual(editRequest.confidenceDelta, 0.1);
       assert.strictEqual(editRequest.status, 'pending');
+      assert.ok(isCommitEditSource(editRequest.source));
+      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
+    });
+
+    it('converts with legacy fields (backward compat)', () => {
+      const timestamp = new Date('2024-01-15T10:00:00Z');
+      const editRequest = wikiPageUpdateToEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        sourceCommitSha: 'abc123',
+        sourceCommitTimestamp: timestamp,
+        sourceAgentType: 'code-change',
+        sourceAgentRunId: 'run-1',
+        update: {
+          type: 'update',
+          path: 'docs/api',
+          title: 'API Docs',
+          content: '# API Documentation',
+          confidenceDelta: 0.1,
+        },
+      });
+
+      assert.ok(isCommitEditSource(editRequest.source));
+      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
+      assert.strictEqual(getSourceCommitTimestamp(editRequest)?.getTime(), timestamp.getTime());
     });
 
     it('handles updates without optional fields', () => {
@@ -274,8 +357,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         update: {
@@ -296,8 +378,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         update: {
@@ -318,8 +399,7 @@ describe('EditRequest', () => {
         id: 'edit-1',
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: 'run-1',
         workItemId: 'work-item-456',
@@ -332,6 +412,27 @@ describe('EditRequest', () => {
       });
 
       assert.strictEqual(editRequest.workItemId, 'work-item-456');
+    });
+
+    it('supports story source for wiki page updates', () => {
+      const source = createStoryEditSource('story-42', 'write');
+      const editRequest = wikiPageUpdateToEditRequest({
+        id: 'edit-1',
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        source,
+        sourceAgentType: 'code-change',
+        sourceAgentRunId: 'run-1',
+        update: {
+          type: 'create',
+          path: 'docs/new-feature',
+          content: '# New Feature',
+          confidenceDelta: 0.8,
+        },
+      });
+
+      assert.strictEqual(editRequest.source.type, 'story');
+      assert.strictEqual(getSourceCommitSha(editRequest), null);
     });
   });
 });

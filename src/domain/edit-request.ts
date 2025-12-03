@@ -1,4 +1,28 @@
 import type { AgentType } from './agent-run.js';
+import {
+  type EditSource,
+  type CommitEditSource,
+  createCommitEditSource,
+  legacyToEditSource,
+  editSourceToLegacy,
+  getEditSourceTimestamp,
+  isCommitEditSource,
+} from './edit-source.js';
+
+// Re-export EditSource types for convenience
+export {
+  type EditSource,
+  type CommitEditSource,
+  type StoryEditSource,
+  type ManualEditSource,
+  createCommitEditSource,
+  createStoryEditSource,
+  createManualEditSource,
+  isCommitEditSource,
+  isStoryEditSource,
+  isManualEditSource,
+  getEditSourceTimestamp,
+} from './edit-source.js';
 
 /**
  * Status of an edit request in the queue.
@@ -22,11 +46,9 @@ export interface EditRequest {
   /** Reference to the wiki */
   wikiId: string;
 
-  // Source information
-  /** SHA of the commit that produced this edit */
-  sourceCommitSha: string;
-  /** When the source commit was made (for ordering) */
-  sourceCommitTimestamp: Date;
+  // Source information (polymorphic)
+  /** Source of this edit (commit, story, or manual) */
+  source: EditSource;
   /** Agent that proposed this edit */
   sourceAgentType: AgentType;
   /** Agent run that produced this edit */
@@ -76,14 +98,32 @@ export interface EditDecision {
 }
 
 /**
+ * Helper to get sourceCommitSha from EditRequest (for backward compatibility).
+ */
+export function getSourceCommitSha(editRequest: EditRequest): string | null {
+  return isCommitEditSource(editRequest.source) ? editRequest.source.commitSha : null;
+}
+
+/**
+ * Helper to get sourceCommitTimestamp from EditRequest (for backward compatibility).
+ */
+export function getSourceCommitTimestamp(editRequest: EditRequest): Date | null {
+  return isCommitEditSource(editRequest.source) ? editRequest.source.commitTimestamp : null;
+}
+
+/**
  * Create a new edit request.
  */
 export function createEditRequest(params: {
   id: string;
   repoId: string;
   wikiId: string;
-  sourceCommitSha: string;
-  sourceCommitTimestamp: Date;
+  /** Source of the edit. Takes precedence over sourceCommitSha/sourceCommitTimestamp. */
+  source?: EditSource;
+  /** @deprecated Use source instead. Kept for backward compatibility. */
+  sourceCommitSha?: string;
+  /** @deprecated Use source instead. Kept for backward compatibility. */
+  sourceCommitTimestamp?: Date;
   sourceAgentType: AgentType;
   sourceAgentRunId: string;
   workItemId?: string;
@@ -94,12 +134,18 @@ export function createEditRequest(params: {
   confidenceDelta: number;
   redirectTo?: string;
 }): EditRequest {
+  // Resolve source: prefer explicit source, fall back to legacy fields
+  const source = params.source ?? (
+    params.sourceCommitSha && params.sourceCommitTimestamp
+      ? legacyToEditSource(params.sourceCommitSha, params.sourceCommitTimestamp)
+      : createCommitEditSource('unknown', new Date()) // Fallback for malformed calls
+  );
+
   const editRequest: EditRequest = {
     id: params.id,
     repoId: params.repoId,
     wikiId: params.wikiId,
-    sourceCommitSha: params.sourceCommitSha,
-    sourceCommitTimestamp: params.sourceCommitTimestamp,
+    source,
     sourceAgentType: params.sourceAgentType,
     sourceAgentRunId: params.sourceAgentRunId,
     workItemId: params.workItemId ?? null,
@@ -133,8 +179,12 @@ export function wikiPageUpdateToEditRequest(params: {
   id: string;
   repoId: string;
   wikiId: string;
-  sourceCommitSha: string;
-  sourceCommitTimestamp: Date;
+  /** Source of the edit. Takes precedence over sourceCommitSha/sourceCommitTimestamp. */
+  source?: EditSource;
+  /** @deprecated Use source instead. Kept for backward compatibility. */
+  sourceCommitSha?: string;
+  /** @deprecated Use source instead. Kept for backward compatibility. */
+  sourceCommitTimestamp?: Date;
   sourceAgentType: AgentType;
   sourceAgentRunId: string;
   workItemId?: string;
@@ -152,8 +202,6 @@ export function wikiPageUpdateToEditRequest(params: {
     id: params.id,
     repoId: params.repoId,
     wikiId: params.wikiId,
-    sourceCommitSha: params.sourceCommitSha,
-    sourceCommitTimestamp: params.sourceCommitTimestamp,
     sourceAgentType: params.sourceAgentType,
     sourceAgentRunId: params.sourceAgentRunId,
     targetPagePath: params.update.path,
@@ -161,6 +209,14 @@ export function wikiPageUpdateToEditRequest(params: {
     proposedContent: params.update.content,
     confidenceDelta: params.update.confidenceDelta,
   };
+
+  // Handle source: prefer explicit source, fall back to legacy fields
+  if (params.source !== undefined) {
+    createParams.source = params.source;
+  } else if (params.sourceCommitSha !== undefined && params.sourceCommitTimestamp !== undefined) {
+    createParams.sourceCommitSha = params.sourceCommitSha;
+    createParams.sourceCommitTimestamp = params.sourceCommitTimestamp;
+  }
 
   if (params.workItemId !== undefined) {
     createParams.workItemId = params.workItemId;

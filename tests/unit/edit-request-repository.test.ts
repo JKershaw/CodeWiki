@@ -7,7 +7,13 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
 import { FileEditRequestRepository } from '../../src/repositories/file-based/file-edit-request-repository.js';
-import { createEditRequest, type EditRequest } from '../../src/domain/edit-request.js';
+import {
+  createEditRequest,
+  createCommitEditSource,
+  getSourceCommitSha,
+  getSourceCommitTimestamp,
+  type EditRequest,
+} from '../../src/domain/edit-request.js';
 import { mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -34,12 +40,13 @@ describe('EditRequestRepository', () => {
     proposedContent: string;
     status: 'pending' | 'applied' | 'merged-to-history' | 'skipped' | 'conflict';
   }> = {}): EditRequest {
+    const sha = overrides.sourceCommitSha ?? 'abc123';
+    const timestamp = overrides.sourceCommitTimestamp ?? new Date();
     const editRequest = createEditRequest({
       id: overrides.id ?? uuid(),
       repoId: overrides.repoId ?? 'repo-1',
       wikiId: overrides.wikiId ?? 'wiki-1',
-      sourceCommitSha: overrides.sourceCommitSha ?? 'abc123',
-      sourceCommitTimestamp: overrides.sourceCommitTimestamp ?? new Date(),
+      source: createCommitEditSource(sha, timestamp),
       sourceAgentType: 'code-change',
       sourceAgentRunId: 'run-1',
       targetPagePath: overrides.targetPagePath ?? 'docs/api',
@@ -83,8 +90,9 @@ describe('EditRequestRepository', () => {
       const retrieved = await repo.findById(editRequest.id);
 
       assert.ok(retrieved);
-      assert.ok(retrieved.sourceCommitTimestamp instanceof Date);
-      assert.strictEqual(retrieved.sourceCommitTimestamp.getTime(), timestamp.getTime());
+      const retrievedTimestamp = getSourceCommitTimestamp(retrieved);
+      assert.ok(retrievedTimestamp instanceof Date);
+      assert.strictEqual(retrievedTimestamp.getTime(), timestamp.getTime());
     });
   });
 
@@ -104,23 +112,21 @@ describe('EditRequestRepository', () => {
     });
 
     it('orders results by commit timestamp (oldest first)', async () => {
-      const older = createTestEditRequest({
-        sourceCommitTimestamp: new Date('2024-01-01T10:00:00Z'),
-      });
-      const newer = createTestEditRequest({
-        sourceCommitTimestamp: new Date('2024-01-15T10:00:00Z'),
-      });
-      const middle = createTestEditRequest({
-        sourceCommitTimestamp: new Date('2024-01-10T10:00:00Z'),
-      });
+      const olderTs = new Date('2024-01-01T10:00:00Z');
+      const newerTs = new Date('2024-01-15T10:00:00Z');
+      const middleTs = new Date('2024-01-10T10:00:00Z');
+
+      const older = createTestEditRequest({ sourceCommitTimestamp: olderTs });
+      const newer = createTestEditRequest({ sourceCommitTimestamp: newerTs });
+      const middle = createTestEditRequest({ sourceCommitTimestamp: middleTs });
 
       await repo.saveMany([newer, older, middle]);
 
       const results = await repo.findPending('wiki-1');
       assert.strictEqual(results.length, 3);
-      assert.strictEqual(results[0]!.sourceCommitTimestamp.getTime(), older.sourceCommitTimestamp.getTime());
-      assert.strictEqual(results[1]!.sourceCommitTimestamp.getTime(), middle.sourceCommitTimestamp.getTime());
-      assert.strictEqual(results[2]!.sourceCommitTimestamp.getTime(), newer.sourceCommitTimestamp.getTime());
+      assert.strictEqual(getSourceCommitTimestamp(results[0]!)!.getTime(), olderTs.getTime());
+      assert.strictEqual(getSourceCommitTimestamp(results[1]!)!.getTime(), middleTs.getTime());
+      assert.strictEqual(getSourceCommitTimestamp(results[2]!)!.getTime(), newerTs.getTime());
     });
 
     it('returns empty array when no pending requests', async () => {
@@ -155,7 +161,7 @@ describe('EditRequestRepository', () => {
 
       const results = await repo.findByCommit('repo-1', 'abc123');
       assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0]!.sourceCommitSha, 'abc123');
+      assert.strictEqual(getSourceCommitSha(results[0]!), 'abc123');
     });
   });
 
@@ -314,8 +320,7 @@ describe('EditRequestRepository', () => {
         id: uuid(),
         repoId: 'repo-1',
         wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource('abc123', new Date()),
         sourceAgentType: 'narrative',
         sourceAgentRunId: 'run-2',
         targetPagePath: 'docs/guide',
@@ -337,18 +342,17 @@ describe('EditRequestRepository', () => {
 
   describe('getOldestPendingTimestamp', () => {
     it('returns timestamp of oldest pending request', async () => {
-      const oldest = createTestEditRequest({
-        sourceCommitTimestamp: new Date('2024-01-01T10:00:00Z'),
-      });
-      const newer = createTestEditRequest({
-        sourceCommitTimestamp: new Date('2024-01-15T10:00:00Z'),
-      });
+      const oldestTs = new Date('2024-01-01T10:00:00Z');
+      const newerTs = new Date('2024-01-15T10:00:00Z');
+
+      const oldest = createTestEditRequest({ sourceCommitTimestamp: oldestTs });
+      const newer = createTestEditRequest({ sourceCommitTimestamp: newerTs });
 
       await repo.saveMany([newer, oldest]);
 
       const timestamp = await repo.getOldestPendingTimestamp('wiki-1');
       assert.ok(timestamp);
-      assert.strictEqual(timestamp.getTime(), oldest.sourceCommitTimestamp.getTime());
+      assert.strictEqual(timestamp.getTime(), oldestTs.getTime());
     });
 
     it('returns null when no pending requests', async () => {

@@ -1,5 +1,5 @@
-import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
-import { createAgentResult, createFinding } from '../base-agent.js';
+import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
@@ -21,6 +21,17 @@ export class PatternAgent implements Agent {
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
+  }
+
+  canHandle(target: WorkTarget): boolean {
+    return isCommitTarget(target);
+  }
+
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isCommitTarget(target)) {
+      throw new Error(`PatternAgent cannot handle target type: ${target.type}`);
+    }
+    return this.runOnCommit(target.commitId, context);
   }
 
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {

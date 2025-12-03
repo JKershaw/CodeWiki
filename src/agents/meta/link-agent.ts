@@ -1,5 +1,5 @@
-import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
-import { createAgentResult, createFinding } from '../base-agent.js';
+import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
@@ -19,11 +19,26 @@ export class LinkAgent implements Agent {
     return SYSTEM_PROMPT;
   }
 
+  canHandle(target: WorkTarget): boolean {
+    return isWikiTarget(target);
+  }
+
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isWikiTarget(target)) {
+      throw new Error(`LinkAgent cannot handle target type: ${target.type}`);
+    }
+    return this.runOnWikiImpl(context);
+  }
+
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('LinkAgent does not run on commits. Use runOnWiki instead.');
+    throw new Error('LinkAgent does not run on commits. Use run() with WikiTarget instead.');
   }
 
   async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
+    return this.runOnWikiImpl(context);
+  }
+
+  private async runOnWikiImpl(context: AgentContext): Promise<AgentRunResult> {
     // Get wiki pages via CQRS query
     const pagesQuery = createListWikiPagesQuery(context.wikiId);
     const pagesResult = await handleListWikiPages(pagesQuery, context.repos);

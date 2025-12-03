@@ -3,6 +3,12 @@ import type { WikiPageUpdate } from '../domain/wiki-page.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { Repositories } from '../repositories/index.js';
 import type { GitService } from '../services/git/git-service.js';
+import type { WorkTarget, CommitTarget, PathTarget, WikiTarget } from '../domain/work-target.js';
+import { isCommitTarget, isPathTarget, isWikiTarget } from '../domain/work-target.js';
+
+// Re-export WorkTarget types for agent convenience
+export type { WorkTarget, CommitTarget, PathTarget, WikiTarget };
+export { isCommitTarget, isPathTarget, isWikiTarget };
 
 /**
  * Context provided to agents when they run.
@@ -34,6 +40,12 @@ export interface AgentRunResult {
 
 /**
  * Base interface for all agents.
+ *
+ * Agents implement a polymorphic interface using WorkTarget:
+ * - canHandle(target) - returns true if agent can process this target type
+ * - run(target, context) - unified entry point for all target types
+ *
+ * Legacy methods (runOnCommit, runOnWiki, runOnPath) are deprecated.
  */
 export interface Agent {
   /** The type of this agent */
@@ -47,21 +59,35 @@ export interface Agent {
   getSystemPrompt(): string | null;
 
   /**
-   * Run the agent on a specific commit.
+   * Check if this agent can handle the given work target.
+   * @param target - The work target (commit, path, or wiki)
+   * @returns true if the agent can process this target type
    */
-  runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult>;
+  canHandle(target: WorkTarget): boolean;
 
   /**
+   * Run the agent on the given work target.
+   * @param target - The work target (commit, path, or wiki)
+   * @param context - Agent execution context
+   * @throws Error if the agent cannot handle the target type
+   */
+  run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult>;
+
+  /**
+   * @deprecated Use run() with CommitTarget instead
+   * Run the agent on a specific commit.
+   */
+  runOnCommit?(commitId: string, context: AgentContext): Promise<AgentRunResult>;
+
+  /**
+   * @deprecated Use run() with WikiTarget instead
    * Run the agent on the wiki (for meta/synthesis agents).
-   * Not all agents support this.
    */
   runOnWiki?(context: AgentContext): Promise<AgentRunResult>;
 
   /**
+   * @deprecated Use run() with PathTarget instead
    * Run the agent on a specific path (directory or file) for exploration.
-   * Used by exploration agents to document undocumented parts of the codebase.
-   * @param targetPath - The path to explore (e.g., "src/services/llm" or "src/utils/helpers.ts")
-   * @param context - Agent execution context
    */
   runOnPath?(targetPath: string, context: AgentContext): Promise<AgentRunResult>;
 }

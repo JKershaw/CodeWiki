@@ -1,12 +1,12 @@
 import type { EditRequestRepository } from '../interfaces/edit-request-repository.js';
 import type { EditRequest, EditRequestStatus } from '../../domain/edit-request.js';
-import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
+import {
+  getSourceCommitSha,
+  getEditSourceTimestamp,
+  isCommitEditSource,
+} from '../../domain/edit-request.js';
+import { normalizeDate, normalizeDateOrNull } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
-
-const hydrateDates = createDateNormalizer<EditRequest>({
-  required: ['sourceCommitTimestamp', 'createdAt'],
-  optional: ['processedAt'],
-});
 
 export class FileEditRequestRepository implements EditRequestRepository {
   private store: FileStore<EditRequest>;
@@ -17,7 +17,7 @@ export class FileEditRequestRepository implements EditRequestRepository {
 
   async findById(id: string): Promise<EditRequest | null> {
     const result = await this.store.get(id);
-    return result ? hydrateDates(result) : null;
+    return result ? this.hydrateDates(result) : null;
   }
 
   async findPending(wikiId: string): Promise<EditRequest[]> {
@@ -25,13 +25,13 @@ export class FileEditRequestRepository implements EditRequestRepository {
       (er) => er.wikiId === wikiId && er.status === 'pending'
     );
 
-    results = results.map(hydrateDates);
+    results = results.map((er) => this.hydrateDates(er));
 
-    // Sort by commit timestamp (oldest first) to process in chronological order
+    // Sort by source timestamp (oldest first) to process in chronological order
     results.sort(
       (a, b) =>
-        getTime(a.sourceCommitTimestamp) -
-        getTime(b.sourceCommitTimestamp)
+        getEditSourceTimestamp(a.source).getTime() -
+        getEditSourceTimestamp(b.source).getTime()
     );
 
     return results;
@@ -41,21 +41,23 @@ export class FileEditRequestRepository implements EditRequestRepository {
     const results = await this.store.find(
       (er) => er.wikiId === wikiId && er.targetPagePath === pagePath
     );
-    return results.map(hydrateDates);
+    return results.map((er) => this.hydrateDates(er));
   }
 
   async findByCommit(repoId: string, commitSha: string): Promise<EditRequest[]> {
+    // Use getSourceCommitSha helper to extract SHA from EditSource abstraction
+    // No need to hydrate dates for SHA comparison (string doesn't need hydration)
     const results = await this.store.find(
-      (er) => er.repoId === repoId && er.sourceCommitSha === commitSha
+      (er) => er.repoId === repoId && getSourceCommitSha(er) === commitSha
     );
-    return results.map(hydrateDates);
+    return results.map((er) => this.hydrateDates(er));
   }
 
   async findByAgentRun(agentRunId: string): Promise<EditRequest[]> {
     const results = await this.store.find(
       (er) => er.sourceAgentRunId === agentRunId
     );
-    return results.map(hydrateDates);
+    return results.map((er) => this.hydrateDates(er));
   }
 
   async findByStatus(
@@ -66,13 +68,13 @@ export class FileEditRequestRepository implements EditRequestRepository {
       (er) => er.wikiId === wikiId && er.status === status
     );
 
-    results = results.map(hydrateDates);
+    results = results.map((er) => this.hydrateDates(er));
 
-    // Sort by commit timestamp
+    // Sort by source timestamp
     results.sort(
       (a, b) =>
-        getTime(a.sourceCommitTimestamp) -
-        getTime(b.sourceCommitTimestamp)
+        getEditSourceTimestamp(a.source).getTime() -
+        getEditSourceTimestamp(b.source).getTime()
     );
 
     return results;
@@ -135,7 +137,34 @@ export class FileEditRequestRepository implements EditRequestRepository {
       return null;
     }
     // Already sorted by timestamp, so first is oldest
-    return pending[0]!.sourceCommitTimestamp;
+    return getEditSourceTimestamp(pending[0]!.source);
   }
 
+  /** Ensure all date fields are proper Date objects */
+  private hydrateDates(editRequest: EditRequest): EditRequest {
+    // Hydrate the source's date fields based on its type
+    const hydratedSource = this.hydrateSourceDates(editRequest.source);
+
+    return {
+      ...editRequest,
+      source: hydratedSource,
+      createdAt: normalizeDate(editRequest.createdAt),
+      processedAt: normalizeDateOrNull(editRequest.processedAt),
+    };
+  }
+
+  /** Hydrate date fields in the source object */
+  private hydrateSourceDates(source: EditRequest['source']): EditRequest['source'] {
+    if (isCommitEditSource(source)) {
+      return {
+        ...source,
+        commitTimestamp: normalizeDate(source.commitTimestamp),
+      };
+    }
+    // For story and manual sources, hydrate the timestamp field
+    return {
+      ...source,
+      timestamp: normalizeDate((source as { timestamp: unknown }).timestamp),
+    };
+  }
 }

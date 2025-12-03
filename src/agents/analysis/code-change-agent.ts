@@ -1,5 +1,5 @@
-import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
-import { createAgentResult, createFinding } from '../base-agent.js';
+import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
@@ -18,7 +18,22 @@ export class CodeChangeAgent implements Agent {
     return SYSTEM_PROMPT;
   }
 
+  canHandle(target: WorkTarget): boolean {
+    return isCommitTarget(target);
+  }
+
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isCommitTarget(target)) {
+      throw new Error(`CodeChangeAgent cannot handle target type: ${target.type}`);
+    }
+    return this.runOnCommitImpl(target.commitId, context);
+  }
+
   async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
+    return this.runOnCommitImpl(commitId, context);
+  }
+
+  private async runOnCommitImpl(commitId: string, context: AgentContext): Promise<AgentRunResult> {
     // Get the commit via CQRS query
     const commitQuery = createGetCommitQuery(commitId);
     const commitResult = await handleGetCommit(commitQuery, context.repos);

@@ -1,5 +1,5 @@
-import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
-import { createAgentResult, createFinding } from '../base-agent.js';
+import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { codebaseTools } from '../../services/llm/codebase-tools.js';
@@ -24,6 +24,17 @@ export class ExtensionGuideAgent implements Agent {
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
+  }
+
+  canHandle(target: WorkTarget): boolean {
+    return isWikiTarget(target);
+  }
+
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isWikiTarget(target)) {
+      throw new Error(`ExtensionGuideAgent cannot handle target type: ${target.type}`);
+    }
+    return this.runOnWiki(context);
   }
 
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {

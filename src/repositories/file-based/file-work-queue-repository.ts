@@ -1,17 +1,32 @@
 import type { WorkQueueRepository } from '../interfaces/work-queue-repository.js';
 import type { WorkItem, WorkItemStatus } from '../../domain/work-item.js';
-import type { AgentType } from '../../domain/agent-run.js';
-import { createDateNormalizer } from '../../domain/date-utils.js';
+import { getTargetCommitId, getWorkTargetKey, legacyToWorkTarget } from '../../domain/work-item.js';
+import { normalizeDate, normalizeDateOrNull } from '../../domain/date-utils.js';
 import { selectItemsForBatch } from '../../domain/work-queue-logic.js';
 import { FileStore } from './file-store.js';
 
+// Import agent type definitions from central registry
+import { type AgentType } from '../../agents/registry.js';
+
 /**
- * Normalize work item dates from JSON storage.
+ * Normalize work item from JSON storage.
+ * Handles date conversion and legacy targetCommitId/targetPath migration.
  */
-const normalizeWorkItemDates = createDateNormalizer<WorkItem>({
-  required: ['createdAt'],
-  optional: ['claimedAt', 'completedAt'],
-});
+function normalizeWorkItem(item: WorkItem & { targetCommitId?: string | null; targetPath?: string | null }): WorkItem {
+  // Handle legacy items that have targetCommitId/targetPath instead of target
+  const target = item.target ?? legacyToWorkTarget(
+    item.targetCommitId ?? null,
+    item.targetPath ?? null
+  );
+
+  return {
+    ...item,
+    target,
+    createdAt: normalizeDate(item.createdAt),
+    claimedAt: normalizeDateOrNull(item.claimedAt),
+    completedAt: normalizeDateOrNull(item.completedAt),
+  };
+}
 
 export class FileWorkQueueRepository implements WorkQueueRepository {
   private store: FileStore<WorkItem>;
@@ -22,13 +37,13 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
 
   async findById(id: string): Promise<WorkItem | null> {
     const item = await this.store.get(id);
-    return item ? normalizeWorkItemDates(item) : null;
+    return item ? normalizeWorkItem(item) : null;
   }
 
   async findPending(repoId: string, limit: number): Promise<WorkItem[]> {
     const pending = (await this.store.find(w =>
       w.repoId === repoId && w.status === 'pending'
-    )).map(normalizeWorkItemDates);
+    )).map(normalizeWorkItem);
     // Sort by priority (highest first), then by creation time (oldest first)
     pending.sort((a, b) => {
       if (b.priority !== a.priority) return b.priority - a.priority;
@@ -47,7 +62,7 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
       if (options?.agentType && w.agentType !== options.agentType) return false;
       return true;
     });
-    return items.map(normalizeWorkItemDates);
+    return items.map(normalizeWorkItem);
   }
 
   async countPending(repoId: string): Promise<number> {
@@ -139,25 +154,26 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
   }
 
   async exists(repoId: string, agentType: AgentType, targetCommitId: string): Promise<boolean> {
-    const found = await this.store.findOne(w =>
+    const items = (await this.store.find(w =>
       w.repoId === repoId &&
       w.agentType === agentType &&
-      w.targetCommitId === targetCommitId &&
       (w.status === 'pending' || w.status === 'claimed')
-    );
-    return found !== null;
+    )).map(normalizeWorkItem);
+
+    return items.some(item => getTargetCommitId(item) === targetCommitId);
   }
 
   async getPendingKeys(repoId: string): Promise<Set<string>> {
-    const items = await this.store.find(w =>
+    const items = (await this.store.find(w =>
       w.repoId === repoId &&
       (w.status === 'pending' || w.status === 'claimed')
-    );
+    )).map(normalizeWorkItem);
 
     const keys = new Set<string>();
     for (const item of items) {
-      // Key format: "agentType:targetCommitId" or "agentType:null"
-      const key = `${item.agentType}:${item.targetCommitId ?? 'null'}`;
+      // Key format: "agentType:commit:sha" or "agentType:path:dir" or "agentType:wiki"
+      const targetKey = getWorkTargetKey(item.target);
+      const key = `${item.agentType}:${targetKey}`;
       keys.add(key);
     }
     return keys;

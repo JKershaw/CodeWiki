@@ -2,8 +2,9 @@ import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../repositories/index.js';
 import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
-import type { AgentContext } from '../agents/base-agent.js';
+import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
+import { getTargetCommitId, getTargetPath } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -70,20 +71,9 @@ import {
 
 // Import EditRequest for routing analysis agent output
 import { createEditRequest } from '../domain/edit-request.js';
-import type { AgentType } from '../domain/agent-run.js';
 
-/**
- * Analysis agents whose output should be routed through the EditRequest queue.
- * This enables intelligent handling of out-of-order commit processing.
- */
-const ANALYSIS_AGENT_TYPES: AgentType[] = [
-  'code-change',
-  'narrative',
-  'security',
-  'technical-debt',
-  'pattern',
-  'dependency',
-];
+// Import agent type definitions from central registry
+import { ANALYSIS_AGENTS, type AgentType } from '../agents/registry.js';
 
 /**
  * Queue water marks for proactive refill.
@@ -472,17 +462,21 @@ export class Executor {
       return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
     }
 
+    // Extract target info using helpers
+    const targetCommitId = getTargetCommitId(workItem);
+    const targetPath = getTargetPath(workItem);
+
     // Translate SHA to internal commit ID if we have a target commit
     // The orchestrator returns Git SHAs, but agents expect internal UUIDs
     // Also store the full commit for EditRequest creation
     let internalCommitId: string | undefined;
     let commitData: { sha: string; committedAt: Date } | undefined;
-    if (workItem.targetCommitId) {
+    if (targetCommitId) {
       // Use CQRS query to find commit by SHA
-      const commitQuery = createGetCommitByShaQuery(repoId, workItem.targetCommitId);
+      const commitQuery = createGetCommitByShaQuery(repoId, targetCommitId);
       const commitResult = await handleGetCommitBySha(commitQuery, this.repos);
       if (!commitResult.success || !commitResult.data) {
-        const errorMsg = `Commit not found for SHA: ${workItem.targetCommitId}`;
+        const errorMsg = `Commit not found for SHA: ${targetCommitId}`;
         console.error(errorMsg);
         // Fail work item via CQRS command
         await handleFailWorkItem(
@@ -509,7 +503,7 @@ export class Executor {
         wikiId,
         agentType: workItem.agentType,
         targetCommitId: internalCommitId,
-        targetPath: workItem.targetPath ?? undefined,
+        targetPath: targetPath ?? undefined,
       }),
       this.repos
     );
@@ -534,20 +528,21 @@ export class Executor {
     const startTime = Date.now();
 
     try {
-      let result;
+      // Build the work target for the agent
+      // Note: Commit targets use internal IDs (UUIDs), not Git SHAs
+      const agentTarget: WorkTarget = internalCommitId
+        ? { type: 'commit', commitId: internalCommitId }
+        : targetPath
+          ? { type: 'path', path: targetPath }
+          : { type: 'wiki' };
 
-      if (internalCommitId) {
-        // Commit-based agents (analysis agents)
-        result = await agent.runOnCommit(internalCommitId, context);
-      } else if (workItem.targetPath && agent.runOnPath) {
-        // Path-based agents (exploration agents like codebase-explorer)
-        result = await agent.runOnPath(workItem.targetPath, context);
-      } else if (agent.runOnWiki) {
-        // Wiki-based agents (meta/synthesis agents)
-        result = await agent.runOnWiki(context);
-      } else {
-        throw new Error(`Agent ${agent.type} cannot run without a commit target or path`);
+      // Verify agent can handle this target type
+      if (!agent.canHandle(agentTarget)) {
+        throw new Error(`Agent ${agent.type} cannot handle target type: ${agentTarget.type}`);
       }
+
+      // Run the agent using the unified polymorphic interface
+      const result = await agent.run(agentTarget, context);
 
       const durationMs = Date.now() - startTime;
 
@@ -564,7 +559,7 @@ export class Executor {
       let pagesUpdated = 0;
       let editRequestsQueued = 0;
 
-      const isAnalysisAgent = ANALYSIS_AGENT_TYPES.includes(agent.type as AgentType);
+      const isAnalysisAgent = ANALYSIS_AGENTS.includes(agent.type as AgentType);
       const shouldQueueEdits = isAnalysisAgent && commitData;
 
       for (const update of result.updates) {
@@ -676,7 +671,7 @@ export class Executor {
       console.error(`✗ AGENT FAILURE: ${agent.type}`);
       console.error(`${'='.repeat(60)}`);
       console.error(`Work Item ID: ${workItem.id}`);
-      console.error(`Target Commit: ${workItem.targetCommitId ?? 'N/A (wiki-level agent)'}`);
+      console.error(`Target Commit: ${targetCommitId ?? 'N/A (wiki-level agent)'}`);
       console.error(`Duration: ${durationMs}ms`);
       console.error(`Error: ${errorMessage}`);
       if (errorStack) {
