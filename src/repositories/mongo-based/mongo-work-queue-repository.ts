@@ -1,41 +1,10 @@
 import type { Collection, Db, Document, Filter } from 'mongodb';
 import type { WorkQueueRepository } from '../interfaces/work-queue-repository.js';
 import type { WorkItem, WorkItemStatus } from '../../domain/work-item.js';
-import { getTargetCommitId, getWorkTargetKey, legacyToWorkTarget } from '../../domain/work-item.js';
+import { getTargetCommitId, getWorkTargetKey } from '../../domain/work-item.js';
 import { selectItemsForBatch } from '../../domain/work-queue-logic.js';
 import { toEntity, toEntities, toDocument, byId, byIds, replaceOp } from './mongo-utils.js';
 import type { AgentType } from '../../agents/registry.js';
-
-/**
- * Normalize a WorkItem to handle legacy data that has targetCommitId/targetPath
- * instead of the newer target field.
- */
-function normalizeWorkItem(item: WorkItem & { targetCommitId?: string | null; targetPath?: string | null }): WorkItem {
-  const target = item.target ?? legacyToWorkTarget(
-    item.targetCommitId ?? null,
-    item.targetPath ?? null
-  );
-
-  return {
-    ...item,
-    target,
-  };
-}
-
-/**
- * Convert a document to a normalized WorkItem.
- */
-function toWorkItem(doc: Document | null): WorkItem | null {
-  const item = toEntity<WorkItem>(doc);
-  return item ? normalizeWorkItem(item) : null;
-}
-
-/**
- * Convert multiple documents to normalized WorkItems.
- */
-function toWorkItems(docs: Document[]): WorkItem[] {
-  return toEntities<WorkItem>(docs).map(normalizeWorkItem);
-}
 
 export class MongoWorkQueueRepository implements WorkQueueRepository {
   private collection: Collection<Document>;
@@ -46,7 +15,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
 
   async findById(id: string): Promise<WorkItem | null> {
     const doc = await this.collection.findOne(byId(id));
-    return toWorkItem(doc);
+    return toEntity<WorkItem>(doc);
   }
 
   async findPending(repoId: string, limit: number): Promise<WorkItem[]> {
@@ -56,7 +25,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
       .limit(limit)
       .toArray();
 
-    return toWorkItems(docs);
+    return toEntities<WorkItem>(docs);
   }
 
   async findByRepo(
@@ -73,7 +42,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
     }
 
     const docs = await this.collection.find(filter).toArray();
-    return toWorkItems(docs);
+    return toEntities<WorkItem>(docs);
   }
 
   async countPending(repoId: string): Promise<number> {
@@ -131,7 +100,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
       { sort: { priority: -1, createdAt: 1 }, returnDocument: 'after' }
     );
 
-    return result ? toWorkItem(result) : null;
+    return result ? toEntity<WorkItem>(result) : null;
   }
 
   async claimBatch(
@@ -202,7 +171,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
       })
       .toArray();
 
-    const items = toWorkItems(docs);
+    const items = toEntities<WorkItem>(docs);
 
     // Check if any item targets this commit
     for (const item of items) {
@@ -222,7 +191,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
       })
       .toArray();
 
-    const items = toWorkItems(docs);
+    const items = toEntities<WorkItem>(docs);
 
     const keys = new Set<string>();
     for (const item of items) {
