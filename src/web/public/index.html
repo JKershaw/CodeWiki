@@ -220,6 +220,24 @@
                 </button>
                 <div id="analysis-trace-content" class="analysis-trace-content hidden"></div>
               </div>
+
+              <!-- Chat Section for Follow-up Questions -->
+              <div id="chat-section" class="chat-section">
+                <div class="chat-header">
+                  <h4>💬 Ask Follow-up Questions</h4>
+                  <span id="chat-status" class="chat-status"></span>
+                  <span id="chat-cost" class="chat-cost"></span>
+                </div>
+                <div id="chat-messages" class="chat-messages">
+                  <div class="chat-welcome">
+                    <p>Ask questions about this analysis. The AI has access to the report and can investigate further using the same tools.</p>
+                  </div>
+                </div>
+                <div class="chat-input-area">
+                  <textarea id="chat-input" placeholder="Ask about the analysis..." rows="2" disabled></textarea>
+                  <button id="send-chat-btn" class="btn primary" disabled>Send</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
