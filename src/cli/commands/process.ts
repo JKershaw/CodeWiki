@@ -55,62 +55,12 @@ export async function processCommand(args: string[]): Promise<void> {
     await repos.repos.save(repo);
     console.log(`✓ Created repository record: ${repo.id}\n`);
 
-    // Load commits from the repository
+    // Load commits from the repository using GitService
     console.log('📥 Loading commits...');
 
-    // For local repos, we'll use simple-git directly on the path
-    const { simpleGit } = await import('simple-git');
-    const gitRepo = simpleGit(absolutePath);
-
-    // Get commit log
-    const log = await gitRepo.log(['--all']);
-    console.log(`   Found ${log.all.length} commits\n`);
-
-    // Save commits
-    const { createCommit } = await import('../../domain/commit.js');
-    const commits = [];
-
-    for (const entry of log.all) {
-      // Get diff summary for each commit
-      const diffSummary = {
-        filesAdded: 0,
-        filesModified: 0,
-        filesDeleted: 0,
-        linesAdded: 0,
-        linesDeleted: 0,
-        affectedFiles: [] as string[],
-      };
-
-      try {
-        const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
-        const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
-
-        for (const line of lines) {
-          const [status, ...pathParts] = line.split('\t');
-          const filePath = pathParts.join('\t');
-          if (filePath) diffSummary.affectedFiles.push(filePath);
-
-          switch (status?.[0]) {
-            case 'A': diffSummary.filesAdded++; break;
-            case 'D': diffSummary.filesDeleted++; break;
-            default: diffSummary.filesModified++; break;
-          }
-        }
-      } catch {
-        // Initial commit or error
-      }
-
-      commits.push(createCommit({
-        id: uuid(),
-        repoId: repo.id,
-        sha: entry.hash,
-        message: entry.message,
-        authorName: entry.author_name,
-        authorEmail: entry.author_email,
-        committedAt: new Date(entry.date),
-        diffSummary,
-      }));
-    }
+    git.registerLocalRepo(repo.id, absolutePath);
+    const commits = await git.loadCommits(repo.id);
+    console.log(`   Found ${commits.length} commits\n`);
 
     await repos.commits.saveMany(commits);
     console.log(`✓ Saved ${commits.length} commits\n`);

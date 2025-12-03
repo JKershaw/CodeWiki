@@ -78,7 +78,6 @@ import {
   createListCommitsQuery,
   handleListCommits,
 } from '../../queries/index.js';
-import { createConcurrencyLimiter } from '../../utils/concurrency-limiter.js';
 
 /**
  * Create repository management routes.
@@ -253,58 +252,9 @@ export function createReposRoutes(deps: Dependencies): Router {
 
         const repo = registerResult.data!;
 
-        // Load commits from cloned repo
-        const { simpleGit } = await import('simple-git');
-        const gitRepo = simpleGit(absolutePath);
-        const log = await gitRepo.log(['--all']);
-
-        const { createCommit } = await import('../../domain/commit.js');
-        const limit = createConcurrencyLimiter(10);
-
-        const commits = await Promise.all(
-          log.all.map((entry) =>
-            limit(async () => {
-              const diffSummary = {
-                filesAdded: 0,
-                filesModified: 0,
-                filesDeleted: 0,
-                linesAdded: 0,
-                linesDeleted: 0,
-                affectedFiles: [] as string[],
-              };
-
-              try {
-                const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
-                const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
-
-                for (const line of lines) {
-                  const [status, ...pathParts] = line.split('\t');
-                  const filePath = pathParts.join('\t');
-                  if (filePath) diffSummary.affectedFiles.push(filePath);
-
-                  switch (status?.[0]) {
-                    case 'A': diffSummary.filesAdded++; break;
-                    case 'D': diffSummary.filesDeleted++; break;
-                    default: diffSummary.filesModified++; break;
-                  }
-                }
-              } catch {
-                // Initial commit or error
-              }
-
-              return createCommit({
-                id: uuid(),
-                repoId: repo.id,
-                sha: entry.hash,
-                message: entry.message,
-                authorName: entry.author_name,
-                authorEmail: entry.author_email,
-                committedAt: new Date(entry.date),
-                diffSummary,
-              });
-            })
-          )
-        );
+        // Load commits using GitService
+        git.registerLocalRepo(repo.id, absolutePath);
+        const commits = await git.loadCommits(repo.id);
 
         await handleLoadRepositoryCommits(
           createLoadRepositoryCommitsCommand(repo.id, commits),
@@ -342,60 +292,9 @@ export function createReposRoutes(deps: Dependencies): Router {
           }
           repo = registerResult.data!;
 
-          // Load commits using simpleGit
-          const { simpleGit } = await import('simple-git');
-          const gitRepo = simpleGit(absolutePath);
-          const log = await gitRepo.log(['--all']);
-
-          const { createCommit } = await import('../../domain/commit.js');
-
-          // Process commits in parallel with concurrency limit to avoid overwhelming git
-          const limit = createConcurrencyLimiter(10);
-
-          const commits = await Promise.all(
-            log.all.map((entry) =>
-              limit(async () => {
-                const diffSummary = {
-                  filesAdded: 0,
-                  filesModified: 0,
-                  filesDeleted: 0,
-                  linesAdded: 0,
-                  linesDeleted: 0,
-                  affectedFiles: [] as string[],
-                };
-
-                try {
-                  const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
-                  const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
-
-                  for (const line of lines) {
-                    const [status, ...pathParts] = line.split('\t');
-                    const filePath = pathParts.join('\t');
-                    if (filePath) diffSummary.affectedFiles.push(filePath);
-
-                    switch (status?.[0]) {
-                      case 'A': diffSummary.filesAdded++; break;
-                      case 'D': diffSummary.filesDeleted++; break;
-                      default: diffSummary.filesModified++; break;
-                    }
-                  }
-                } catch {
-                  // Initial commit or error
-                }
-
-                return createCommit({
-                  id: uuid(),
-                  repoId: repo!.id,
-                  sha: entry.hash,
-                  message: entry.message,
-                  authorName: entry.author_name,
-                  authorEmail: entry.author_email,
-                  committedAt: new Date(entry.date),
-                  diffSummary,
-                });
-              })
-            )
-          );
+          // Load commits using GitService
+          git.registerLocalRepo(repo.id, absolutePath);
+          const commits = await git.loadCommits(repo.id);
 
           // Use LoadRepositoryCommits command
           await handleLoadRepositoryCommits(

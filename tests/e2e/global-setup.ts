@@ -20,7 +20,8 @@ import { v4 as uuid } from 'uuid';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
-import simpleGit from 'simple-git';
+import * as git from 'isomorphic-git';
+import * as fs from 'fs';
 
 /**
  * Test wiki pages with nested structure.
@@ -224,26 +225,29 @@ async function createTestGitRepo(): Promise<void> {
     // Create the directory
     await mkdir(testRepoPath, { recursive: true });
 
-    // Initialize git repo
-    const git = simpleGit(testRepoPath);
-
     // Check if already initialized
-    const isRepo = await git.checkIsRepo().catch(() => false);
-    if (isRepo) {
+    try {
+      await git.findRoot({ fs, filepath: testRepoPath });
       console.log('[E2E Setup] Test git repo already exists at:', testRepoPath);
       return;
+    } catch {
+      // Not a git repo yet, continue to initialize
     }
 
-    await git.init();
-    await git.addConfig('user.email', 'test@example.com');
-    await git.addConfig('user.name', 'Test User');
-    await git.addConfig('commit.gpgsign', 'false');
+    await git.init({ fs, dir: testRepoPath });
+    await git.setConfig({ fs, dir: testRepoPath, path: 'user.email', value: 'test@example.com' });
+    await git.setConfig({ fs, dir: testRepoPath, path: 'user.name', value: 'Test User' });
 
     // Create a README file
     await writeFile(join(testRepoPath, 'README.md'), '# E2E Test Repository\n\nThis is a test repository for E2E tests.\n');
 
-    await git.add('.');
-    await git.commit('Initial commit');
+    await git.add({ fs, dir: testRepoPath, filepath: 'README.md' });
+    await git.commit({
+      fs,
+      dir: testRepoPath,
+      message: 'Initial commit',
+      author: { name: 'Test User', email: 'test@example.com' },
+    });
 
     console.log('[E2E Setup] Created test git repo at:', testRepoPath);
   } catch (error) {
