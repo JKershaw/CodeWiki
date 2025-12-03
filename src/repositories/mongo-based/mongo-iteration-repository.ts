@@ -19,7 +19,7 @@ export class MongoIterationRepository implements IterationRepository {
   async findByProcessingRun(processingRunId: string): Promise<Iteration[]> {
     const docs = await this.collection
       .find({ processingRunId })
-      .sort({ startedAt: 1 })
+      .sort({ iterationNumber: 1 })
       .toArray();
     return toEntities<Iteration>(docs);
   }
@@ -104,7 +104,7 @@ export class MongoIterationRepository implements IterationRepository {
       {
         $set: {
           status: 'skipped',
-          skipReason: reason,
+          error: reason,
           completedAt: new Date(),
         },
       }
