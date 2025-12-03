@@ -127,7 +127,23 @@ export default async function globalSetup(): Promise<void> {
   const repos = connection.repositories;
 
   try {
-    // Step 1: Ensure we have at least one repository
+    // Step 0: Clean up any existing repos from previous test runs
+    // This ensures test isolation when using persistent storage (MongoDB)
+    const existingRepos = await repos.repos.findAll();
+    if (existingRepos.length > 0) {
+      console.log(`[E2E Setup] Cleaning up ${existingRepos.length} existing repos from previous runs...`);
+      for (const repo of existingRepos) {
+        // Delete associated data
+        await repos.wikis.deleteByRepo(repo.id);
+        await repos.commits.deleteByRepo(repo.id);
+        await repos.agentRuns.deleteByRepo(repo.id);
+        await repos.workQueue.deleteByRepo(repo.id);
+        await repos.processingRuns.deleteByRepo(repo.id);
+        await repos.repos.delete(repo.id);
+      }
+    }
+
+    // Step 1: Create a fresh repository
     let repoList = await repos.repos.findAll();
     let repo = repoList[0];
 
