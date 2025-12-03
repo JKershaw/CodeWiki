@@ -114,6 +114,22 @@ export class FileSystemGitService implements GitService {
       singleBranch: false,
     });
 
+    // Explicitly checkout to ensure working directory files are created
+    // isomorphic-git clone with singleBranch: false may not checkout files
+    try {
+      await git.checkout({ fs, dir: repoPath, ref: 'HEAD' });
+    } catch {
+      // If HEAD checkout fails, try common default branches
+      for (const branch of ['main', 'master']) {
+        try {
+          await git.checkout({ fs, dir: repoPath, ref: branch });
+          break;
+        } catch {
+          // Continue to next branch
+        }
+      }
+    }
+
     return repoPath;
   }
 

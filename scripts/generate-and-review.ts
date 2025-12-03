@@ -12,10 +12,8 @@ import { createOrchestrator } from '../dist/agents/orchestrator/orchestrator.js'
 import { createExecutor } from '../dist/executor/executor.js';
 import { createOpenRouterLLM } from '../dist/services/llm/openrouter-llm-service.js';
 import { createRepo } from '../dist/domain/repo.js';
-import { createCommit } from '../dist/domain/commit.js';
 import { createGitService } from '../dist/services/git/git-service.js';
 import { v4 as uuid } from 'uuid';
-import { simpleGit } from 'simple-git';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -62,52 +60,9 @@ async function main() {
 
   console.log(`Registered repo: ${repoId}\n`);
 
-  // Sync commits (limit to recent commits for faster testing)
+  // Sync commits using GitService (limit to recent commits for faster testing)
   console.log('Syncing commits...');
-  const gitRepo = simpleGit(REPO_PATH);
-  const log = await gitRepo.log(['--all', '-n', '10']);
-
-  const commits = [];
-  for (const entry of log.all) {
-    let diffSummary = {
-      filesAdded: 0,
-      filesModified: 0,
-      filesDeleted: 0,
-      linesAdded: 0,
-      linesDeleted: 0,
-      affectedFiles: [] as string[],
-    };
-
-    try {
-      const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
-      const lines = diffFiles.trim().split('\n').filter(l => l.length > 0);
-
-      for (const line of lines) {
-        const [status, ...pathParts] = line.split('\t');
-        const filePath = pathParts.join('\t');
-        if (filePath) diffSummary.affectedFiles.push(filePath);
-
-        switch (status?.[0]) {
-          case 'A': diffSummary.filesAdded++; break;
-          case 'D': diffSummary.filesDeleted++; break;
-          default: diffSummary.filesModified++; break;
-        }
-      }
-    } catch {
-      // Initial commit or error
-    }
-
-    commits.push(createCommit({
-      id: uuid(),
-      repoId: repo.id,
-      sha: entry.hash,
-      message: entry.message,
-      authorName: entry.author_name,
-      authorEmail: entry.author_email,
-      committedAt: new Date(entry.date),
-      diffSummary,
-    }));
-  }
+  const commits = await git.loadCommits(repoId, { limit: 10 });
 
   await repos.commits.saveMany(commits);
   console.log(`Synced ${commits.length} commits\n`);
