@@ -2,9 +2,9 @@ import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../repositories/index.js';
 import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
-import type { AgentContext } from '../agents/base-agent.js';
+import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { getTargetCommitId, getTargetPath, isCommitTarget, isPathTarget } from '../domain/work-item.js';
+import { getTargetCommitId, getTargetPath } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -528,20 +528,21 @@ export class Executor {
     const startTime = Date.now();
 
     try {
-      let result;
+      // Build the work target for the agent
+      // Note: Commit targets use internal IDs (UUIDs), not Git SHAs
+      const agentTarget: WorkTarget = internalCommitId
+        ? { type: 'commit', commitId: internalCommitId }
+        : targetPath
+          ? { type: 'path', path: targetPath }
+          : { type: 'wiki' };
 
-      if (internalCommitId) {
-        // Commit-based agents (analysis agents)
-        result = await agent.runOnCommit(internalCommitId, context);
-      } else if (targetPath && agent.runOnPath) {
-        // Path-based agents (exploration agents like codebase-explorer)
-        result = await agent.runOnPath(targetPath, context);
-      } else if (agent.runOnWiki) {
-        // Wiki-based agents (meta/synthesis agents)
-        result = await agent.runOnWiki(context);
-      } else {
-        throw new Error(`Agent ${agent.type} cannot run without a commit target or path`);
+      // Verify agent can handle this target type
+      if (!agent.canHandle(agentTarget)) {
+        throw new Error(`Agent ${agent.type} cannot handle target type: ${agentTarget.type}`);
       }
+
+      // Run the agent using the unified polymorphic interface
+      const result = await agent.run(agentTarget, context);
 
       const durationMs = Date.now() - startTime;
 

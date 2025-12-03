@@ -1,5 +1,5 @@
-import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
-import { createAgentResult, createFinding } from '../base-agent.js';
+import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isPathTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
@@ -25,17 +25,32 @@ export class CodebaseExplorerAgent implements Agent {
     return SYSTEM_PROMPT;
   }
 
-  /**
-   * This agent doesn't run on commits - throw an error if called.
-   */
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('CodebaseExplorerAgent does not run on commits. Use runOnPath instead.');
+  canHandle(target: WorkTarget): boolean {
+    return isPathTarget(target);
+  }
+
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isPathTarget(target)) {
+      throw new Error(`CodebaseExplorerAgent cannot handle target type: ${target.type}`);
+    }
+    return this.runOnPathImpl(target.path, context);
   }
 
   /**
-   * Run the agent on a specific path (directory or file).
+   * @deprecated Use run() with PathTarget instead
+   */
+  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
+    throw new Error('CodebaseExplorerAgent does not run on commits. Use run() with PathTarget instead.');
+  }
+
+  /**
+   * @deprecated Use run() with PathTarget instead
    */
   async runOnPath(targetPath: string, context: AgentContext): Promise<AgentRunResult> {
+    return this.runOnPathImpl(targetPath, context);
+  }
+
+  private async runOnPathImpl(targetPath: string, context: AgentContext): Promise<AgentRunResult> {
     // Get the full repo path
     const repoPath = context.git.getRepoPath(context.repoId);
 

@@ -1,5 +1,5 @@
-import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
-import { createAgentResult, createFinding } from '../base-agent.js';
+import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
@@ -28,6 +28,17 @@ export class WikiIndexAgent implements Agent {
 
   getSystemPrompt(): null {
     return null; // This agent uses pure computation, no LLM
+  }
+
+  canHandle(target: WorkTarget): boolean {
+    return isWikiTarget(target);
+  }
+
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isWikiTarget(target)) {
+      throw new Error(`WikiIndexAgent cannot handle target type: ${target.type}`);
+    }
+    return this.runOnWiki(context);
   }
 
   async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {

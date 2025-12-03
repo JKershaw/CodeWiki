@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid';
-import type { Agent, AgentContext, AgentRunResult } from '../base-agent.js';
-import { createAgentResult, createFinding } from '../base-agent.js';
+import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { FindingType } from '../../domain/finding.js';
@@ -26,6 +26,17 @@ import {
  */
 export class ConsistencyAgent implements Agent {
   readonly type: AgentType = 'consistency';
+
+  canHandle(target: WorkTarget): boolean {
+    return isWikiTarget(target);
+  }
+
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isWikiTarget(target)) {
+      throw new Error(`ConsistencyAgent cannot handle target type: ${target.type}`);
+    }
+    return this.runOnWiki(context);
+  }
 
   // Thresholds
   private readonly MIN_PAGES_FOR_ANALYSIS = 5;
