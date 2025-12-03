@@ -5,7 +5,7 @@
  * regressions, and areas needing improvement.
  */
 
-import type { AnalysisToolDefinition, AnalysisToolContext } from './types.js';
+import type { AnalysisToolDefinition } from './types.js';
 import type { BenchmarkResult } from '../../../domain/benchmark.js';
 import type { Iteration } from '../../../domain/iteration.js';
 

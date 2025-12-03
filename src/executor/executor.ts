@@ -33,12 +33,8 @@ import {
   handleCompleteIteration,
   createFailIterationCommand,
   handleFailIteration,
-  createSkipIterationCommand,
-  handleSkipIteration,
 } from '../commands/iteration.js';
 import {
-  createClaimWorkItemCommand,
-  handleClaimWorkItem,
   createClaimWorkItemBatchCommand,
   handleClaimWorkItemBatch,
   createSaveWorkItemsCommand,

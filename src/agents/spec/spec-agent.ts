@@ -147,7 +147,7 @@ export class SpecAgent {
   private scoreRelevance(
     page: WikiPage,
     keywords: string[],
-    task: string
+    _task: string
   ): number {
     const lowerContent = page.content.toLowerCase();
     const lowerTitle = page.title.toLowerCase();
@@ -198,7 +198,7 @@ export class SpecAgent {
 
     sections.push('## Relevant Wiki Content\n');
 
-    for (const { page, relevance } of pages.slice(0, 5)) {
+    for (const { page } of pages.slice(0, 5)) {
       // Truncate very long content
       let content = page.content;
       if (content.length > 3000) {

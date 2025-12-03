@@ -134,7 +134,7 @@ export const searchWikiTool: WikiToolDefinition = {
     }
 
     // Format results
-    const formatted = results.map(({ page, score, matchedKeyword }) => {
+    const formatted = results.map(({ page, score: _score, matchedKeyword }) => {
       const snippet = extractSnippet(page.content, matchedKeyword);
       return [
         `**${page.title}** (${page.path})`,

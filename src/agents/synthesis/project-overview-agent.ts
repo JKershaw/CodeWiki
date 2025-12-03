@@ -2,7 +2,7 @@ import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-ag
 import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
-import { codebaseTools, type ToolContext, type ToolDefinition } from '../../services/llm/index.js';
+import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
@@ -191,17 +191,6 @@ export class ProjectOverviewAgent implements Agent {
   }
 
   private buildPrompt(context: ProjectContext): string {
-    // Build summary of top pages
-    const pagesSummary = context.topPages.map(p => {
-      const firstPara = p.content.split('\n\n').slice(0, 2).join('\n\n');
-      return `### ${p.title}
-Path: ${p.path}
-Confidence: ${(p.confidence * 100).toFixed(0)}%
-
-${firstPara.slice(0, 400)}${firstPara.length > 400 ? '...' : ''}
-`;
-    }).join('\n---\n');
-
     const categorySummary = context.categories
       .filter(c => c.name !== 'commits')
       .map(c => `- ${c.name}: ${c.count} pages`)

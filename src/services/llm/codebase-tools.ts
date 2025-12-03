@@ -3,10 +3,10 @@
  */
 
 import { readFile, readdir, stat } from 'fs/promises';
-import { join, resolve, relative } from 'path';
+import { join, resolve } from 'path';
 import fg from 'fast-glob';
 import { minimatch } from 'minimatch';
-import type { ToolDefinition, ToolContext } from './tools.js';
+import type { ToolDefinition } from './tools.js';
 import { loadIgnorePatterns } from '../cwignore.js';
 
 const DEFAULT_MAX_FILE_SIZE = 100_000; // 100KB

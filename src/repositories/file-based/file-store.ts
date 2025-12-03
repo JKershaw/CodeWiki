@@ -1,5 +1,5 @@
-import { readFile, writeFile, mkdir, readdir, unlink, access } from 'fs/promises';
-import { join, dirname } from 'path';
+import { readFile, writeFile, mkdir, access } from 'fs/promises';
+import { join } from 'path';
 
 /**
  * Simple file-based JSON store.
