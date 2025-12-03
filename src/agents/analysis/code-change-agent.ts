@@ -2,8 +2,8 @@ import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-ag
 import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
-import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
+import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Code Change Agent - Standard analysis of what changed in a commit.
@@ -42,39 +42,25 @@ export class CodeChangeAgent implements Agent {
     }
     const commit = commitResult.data;
 
-    // Get the diff for this commit
-    const diff = await context.git.getCommitDiff(context.repoId, commit.sha);
+    // Get the diff for this commit (uses repoService if available, falls back to git)
+    const diff = await getCommitDiff(context, commit.sha);
 
     // Build the prompt for the LLM
     const prompt = this.buildPrompt(commit, diff);
 
-    // Set up tool context for codebase exploration
-    const repoPath = context.git.getRepoPath(context.repoId);
-    const toolContext: ToolContext = { repoPath, maxFileSize: 50000 };
-
-    // Create tool executor
-    const executeTools = async (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => {
-      const results = await Promise.all(calls.map(async (call) => {
-        const tool = codebaseTools.find(t => t.name === call.name);
-        if (!tool) {
-          return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
-        }
-        const result = await tool.execute(call.input, toolContext);
-        return { id: call.id, result };
-      }));
-      return results;
-    };
+    // Set up codebase exploration tools (works with both local and GitHub repos)
+    const toolExecutor = createCodebaseToolExecutor(context);
 
     // Get LLM analysis with tool use for deeper understanding
     const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      tools: codebaseTools.map(t => ({
+      tools: toolExecutor?.tools.map(t => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
-      })),
-      executeTools,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
       maxToolRounds: 5,
       maxTokens: 3000,
       temperature: 0.3,

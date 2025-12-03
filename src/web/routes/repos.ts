@@ -442,7 +442,7 @@ export function createReposRoutes(deps: Dependencies): Router {
 
       // Create orchestrator and executor (uses LLM-powered orchestration)
       const orchestrator = createOrchestrator(repos, llm, { useLLM: true });
-      const executor = createExecutor(repos, git, llm, orchestrator);
+      const executor = createExecutor(repos, git, llm, orchestrator, deps.repoServiceFactory);
 
       // Run in background (don't await)
       executor.runIterations(repo.id, iterations).then(async (result) => {

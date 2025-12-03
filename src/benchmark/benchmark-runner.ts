@@ -82,8 +82,13 @@ export class BenchmarkRunner {
       // Get current page count from wiki
       const pageCount = await this.getPageCount(wikiId);
 
-      // Get repository path from git service
-      const repoPath = this.git.getRepoPath(repoId);
+      // Get repository path from git service (may not be available for GitHub repos)
+      let repoPath: string;
+      try {
+        repoPath = this.git.getRepoPath(repoId);
+      } catch {
+        throw new Error('Benchmarking requires a local repository clone. GitHub API-only repos are not yet supported for benchmarks.');
+      }
 
       // Start benchmark run
       const startResult = await handleStartBenchmark(

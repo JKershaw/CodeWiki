@@ -92,8 +92,8 @@ export function createRepo(params: CreateRepoParams): Repo {
   return {
     id: params.id,
     fullName: params.fullName,
-    owner,
-    repoName,
+    ...(owner && { owner }),
+    ...(repoName && { repoName }),
     isGitHubRepo,
     cloneUrl: params.cloneUrl,
     defaultBranch: params.defaultBranch,

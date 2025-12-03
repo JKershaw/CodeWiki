@@ -67,9 +67,9 @@ export async function handleRegisterRepository(
       fullName: command.fullName,
       cloneUrl: command.cloneUrl,
       defaultBranch: command.defaultBranch,
-      owner: command.owner,
-      repoName: command.repoName,
-      isGitHubRepo: command.isGitHubRepo,
+      ...(command.owner && { owner: command.owner }),
+      ...(command.repoName && { repoName: command.repoName }),
+      ...(command.isGitHubRepo !== undefined && { isGitHubRepo: command.isGitHubRepo }),
     });
 
     await repos.repos.save(repo);

@@ -3,6 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
+import { getCommitDiff } from '../agent-helpers.js';
 
 /**
  * Pattern Agent - Recognizes recurring patterns across commits.
@@ -43,7 +44,7 @@ export class PatternAgent implements Agent {
     }
     const commit = commitResult.data;
 
-    const diff = await context.git.getCommitDiff(context.repoId, commit.sha);
+    const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
     const completion = await context.llm.complete({

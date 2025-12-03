@@ -3,6 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
+import { getCommitDiff } from '../agent-helpers.js';
 
 /**
  * Dependency Agent - Tracks external dependency changes and their implications.
@@ -53,7 +54,7 @@ export class DependencyAgent implements Agent {
       };
     }
 
-    const diff = await context.git.getCommitDiff(context.repoId, commit.sha);
+    const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
     const completion = await context.llm.complete({

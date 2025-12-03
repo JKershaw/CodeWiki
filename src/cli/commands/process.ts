@@ -15,6 +15,7 @@ import {
   handleGetRepositoryByFullName,
 } from '../../queries/index.js';
 import { createLLM } from '../utils.js';
+import { createRepositoryServiceFactory } from '../../services/repository/repository-service.js';
 
 export async function processCommand(args: string[]): Promise<void> {
   const repoPath = args[0];
@@ -44,12 +45,13 @@ export async function processCommand(args: string[]): Promise<void> {
   let repo = repoResult.data ?? null;
 
   if (!repo) {
-    // Create new repo record
+    // Create new repo record (local filesystem repo, not GitHub)
     repo = createRepo({
       id: uuid(),
       fullName: absolutePath,
       cloneUrl: absolutePath,
       defaultBranch: 'main',
+      isGitHubRepo: false,
     });
     repo.status = 'processing';
     await repos.repos.save(repo);
@@ -71,9 +73,14 @@ export async function processCommand(args: string[]): Promise<void> {
   // Register the local repo path so git service can find it
   git.registerLocalRepo(repo.id, absolutePath);
 
+  // Create repository service factory for unified file access
+  const repoServiceFactory = createRepositoryServiceFactory({
+    gitService: git,
+  });
+
   // Create orchestrator and executor (always uses LLM-powered orchestration)
   const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, git);
-  const executor = createExecutor(repos, git, llm, orchestrator);
+  const executor = createExecutor(repos, git, llm, orchestrator, repoServiceFactory);
 
   // Get or create the active wiki for this repo
   const wiki = await getOrCreateActiveWiki(repo.id, repos);

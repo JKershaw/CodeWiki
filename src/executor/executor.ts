@@ -8,6 +8,7 @@ import { getTargetCommitId, getTargetPath } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
+import type { RepositoryServiceFactory } from '../services/repository/repository-service.js';
 
 // Import CQRS commands
 import {
@@ -98,7 +99,8 @@ export class Executor {
     private readonly repos: Repositories,
     private readonly git: GitService,
     private readonly llm: LLMService,
-    private readonly orchestrator: Orchestrator
+    private readonly orchestrator: Orchestrator,
+    private readonly repoServiceFactory?: RepositoryServiceFactory
   ) {
     // Agents are managed by the central registry (src/agents/registry.ts)
   }
@@ -513,12 +515,23 @@ export class Executor {
       return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: createRunResult.error || 'Failed to create agent run' };
     }
 
+    // Look up the repo entity for the agent context
+    const repo = await this.repos.repos.findById(repoId);
+
+    // Create repository service if factory is available
+    const repoService = repo && this.repoServiceFactory
+      ? this.repoServiceFactory.getService(repo)
+      : undefined;
+
+    // Build agent context, only including optional properties if they have values
     const context: AgentContext = {
       repoId,
       wikiId,
       repos: this.repos,
       git: this.git,
       llm: this.llm,
+      ...(repoService && { repoService }),
+      ...(repo && { repo }),
     };
 
     const startTime = Date.now();
@@ -707,7 +720,8 @@ export function createExecutor(
   repos: Repositories,
   git: GitService,
   llm: LLMService,
-  orchestrator: Orchestrator
+  orchestrator: Orchestrator,
+  repoServiceFactory?: RepositoryServiceFactory
 ): Executor {
-  return new Executor(repos, git, llm, orchestrator);
+  return new Executor(repos, git, llm, orchestrator, repoServiceFactory);
 }

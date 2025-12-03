@@ -121,9 +121,9 @@ function createGitHubRepositoryService(
   return {
     async loadCommits(repo: Repo, options?: CommitListOptions): Promise<Commit[]> {
       return githubService.listCommits(owner, repoName, repoId, {
-        limit: options?.limit,
-        since: options?.since,
-        sha: options?.branch,
+        ...(options?.limit !== undefined && { limit: options.limit }),
+        ...(options?.since && { since: options.since }),
+        ...(options?.branch && { sha: options.branch }),
       });
     },
 
@@ -182,9 +182,9 @@ function createLocalRepositoryService(
   return {
     async loadCommits(_repo: Repo, options?: CommitListOptions): Promise<Commit[]> {
       return gitService.loadCommits(repoId, {
-        limit: options?.limit,
-        since: options?.since,
-        branch: options?.branch,
+        ...(options?.limit !== undefined && { limit: options.limit }),
+        ...(options?.since && { since: options.since }),
+        ...(options?.branch && { branch: options.branch }),
       });
     },
 

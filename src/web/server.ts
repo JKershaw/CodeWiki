@@ -116,12 +116,18 @@ export async function startServer(port = PORT) {
 
   // Create repository service factory
   const repoServiceFactory = createRepositoryServiceFactory({
-    githubRepoService,
+    ...(githubRepoService && { githubRepoService }),
     gitService: git,
   });
 
   // API Routes (include jwtService and GitHub services if available)
-  const apiDeps = { repos, git, createLLM, githubRepoService, repoServiceFactory };
+  const apiDeps = {
+    repos,
+    git,
+    createLLM,
+    repoServiceFactory,
+    ...(githubRepoService && { githubRepoService }),
+  };
   if (jwtService) {
     app.use(createApiRoutes({ ...apiDeps, jwtService }));
   } else {

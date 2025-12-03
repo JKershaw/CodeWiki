@@ -389,7 +389,7 @@ export function createGitHubRepoService(config: GitHubApiConfig = {}): GitHubRep
         mode: item.mode,
         type: item.type,
         sha: item.sha,
-        size: item.size,
+        ...(item.size !== undefined && { size: item.size }),
       }));
     },
 
