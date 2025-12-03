@@ -1,6 +1,12 @@
 import type { WikiRepository } from '../interfaces/wiki-repository.js';
 import type { Wiki, WikiStatus } from '../../domain/wiki.js';
+import { createDateNormalizer } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<Wiki>({
+  required: ['createdAt', 'updatedAt'],
+  optional: [],
+});
 
 export class FileWikiRepository implements WikiRepository {
   private store: FileStore<Wiki>;
@@ -10,23 +16,28 @@ export class FileWikiRepository implements WikiRepository {
   }
 
   async findById(id: string): Promise<Wiki | null> {
-    return this.store.get(id);
+    const result = await this.store.get(id);
+    return result ? hydrateDates(result) : null;
   }
 
   async findBySlug(repoId: string, slug: string): Promise<Wiki | null> {
-    return this.store.findOne(wiki => wiki.repoId === repoId && wiki.slug === slug);
+    const result = await this.store.findOne(wiki => wiki.repoId === repoId && wiki.slug === slug);
+    return result ? hydrateDates(result) : null;
   }
 
   async findByRepo(repoId: string): Promise<Wiki[]> {
-    return this.store.find(wiki => wiki.repoId === repoId);
+    const results = await this.store.find(wiki => wiki.repoId === repoId);
+    return results.map(hydrateDates);
   }
 
   async findActive(repoId: string): Promise<Wiki | null> {
-    return this.store.findOne(wiki => wiki.repoId === repoId && wiki.isActive);
+    const result = await this.store.findOne(wiki => wiki.repoId === repoId && wiki.isActive);
+    return result ? hydrateDates(result) : null;
   }
 
   async findByStatus(repoId: string, status: WikiStatus): Promise<Wiki[]> {
-    return this.store.find(wiki => wiki.repoId === repoId && wiki.status === status);
+    const results = await this.store.find(wiki => wiki.repoId === repoId && wiki.status === status);
+    return results.map(hydrateDates);
   }
 
   async save(wiki: Wiki): Promise<void> {

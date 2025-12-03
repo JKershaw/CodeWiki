@@ -1,6 +1,12 @@
 import type { LearningRepository } from '../interfaces/learning-repository.js';
 import type { Learning, LearningType } from '../../domain/learning.js';
+import { createDateNormalizer } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<Learning>({
+  required: ['createdAt'],
+  optional: ['incorporatedAt'],
+});
 
 export class FileLearningRepository implements LearningRepository {
   private store: FileStore<Learning>;
@@ -10,27 +16,31 @@ export class FileLearningRepository implements LearningRepository {
   }
 
   async findById(id: string): Promise<Learning | null> {
-    return this.store.get(id);
+    const result = await this.store.get(id);
+    return result ? hydrateDates(result) : null;
   }
 
   async findByRepo(repoId: string, options?: {
     type?: LearningType;
     incorporated?: boolean;
   }): Promise<Learning[]> {
-    return this.store.find(l => {
+    const results = await this.store.find(l => {
       if (l.repoId !== repoId) return false;
       if (options?.type && l.type !== options.type) return false;
       if (options?.incorporated !== undefined && l.incorporated !== options.incorporated) return false;
       return true;
     });
+    return results.map(hydrateDates);
   }
 
   async findUnincorporated(repoId: string): Promise<Learning[]> {
-    return this.store.find(l => l.repoId === repoId && !l.incorporated);
+    const results = await this.store.find(l => l.repoId === repoId && !l.incorporated);
+    return results.map(hydrateDates);
   }
 
   async findHighImportance(repoId: string): Promise<Learning[]> {
-    return this.store.find(l => l.repoId === repoId && l.importance === 'high');
+    const results = await this.store.find(l => l.repoId === repoId && l.importance === 'high');
+    return results.map(hydrateDates);
   }
 
   async save(learning: Learning): Promise<void> {
