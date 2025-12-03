@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import { mkdtemp } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createFileRepositories, type Repositories } from '../../src/repositories/index.js';
+import { createRepositories, type Repositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import { SelfImprovementChatService } from '../../src/services/self-improvement-chat-service.js';
 import { createSelfImprovementRun, completeSelfImprovementRun } from '../../src/domain/self-improvement.js';
 import { createChatSession } from '../../src/domain/chat-session.js';
@@ -48,11 +48,13 @@ function createMockLLM(responseContent: string, toolCalls: Array<{ name: string;
 
 describe('SelfImprovementChatService', () => {
   let repos: Repositories;
+  let repoConnection: RepositoryConnection;
   let tempDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'chat-service-test-'));
-    repos = createFileRepositories(tempDir);
+    repoConnection = await createRepositories({ fileBasePath: tempDir });
+    repos = repoConnection.repositories;
 
     // Create a completed self-improvement run
     const run = createSelfImprovementRun({

@@ -7,7 +7,7 @@ import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import simpleGit from 'simple-git';
-import { createFileRepositories } from '../../src/repositories/file-based/index.js';
+import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import { FileSystemGitService } from '../../src/services/git/git-service.js';
 import { MockLLMService } from './mock-llm.js';
 import { clearIgnoreCache } from '../../src/services/cwignore.js';
@@ -36,6 +36,12 @@ export interface TestContext {
 
 /**
  * Create an isolated test context with real services except LLM.
+ *
+ * Uses the repository factory which auto-detects storage backend:
+ * - If MONGODB_URI is set, uses MongoDB
+ * - Otherwise, uses file-based storage
+ *
+ * This allows the same tests to run against both backends in CI.
  */
 export async function createTestContext(): Promise<TestContext> {
   const baseDir = await mkdtemp(join(tmpdir(), 'codewiki-test-'));
@@ -45,7 +51,9 @@ export async function createTestContext(): Promise<TestContext> {
   await mkdir(dataDir, { recursive: true });
   await mkdir(reposDir, { recursive: true });
 
-  const repos = createFileRepositories(dataDir);
+  // Use the async factory - auto-detects MongoDB vs file-based
+  const connection = await createRepositories({ fileBasePath: dataDir });
+  const repos = connection.repositories;
   const git = new FileSystemGitService(reposDir);
   const llm = new MockLLMService();
 
@@ -62,6 +70,7 @@ export async function createTestContext(): Promise<TestContext> {
     },
     async cleanup(): Promise<void> {
       clearIgnoreCache();
+      await connection.close();
       await rm(baseDir, { recursive: true, force: true });
     },
   };
