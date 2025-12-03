@@ -17,7 +17,10 @@ import { createOpenRouterLLM } from '../services/llm/openrouter-llm-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import { createApiRoutes } from './routes/index.js';
 import { createAuthRoutes } from './routes/auth.js';
+import { createGitHubAuthRouter } from './routes/github-auth.js';
 import { passwordProtection } from './middleware/password-protection.js';
+import { createJwtService } from '../services/auth/jwt-service.js';
+import { createGitHubAuthService } from '../services/github/github-auth-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,8 +28,20 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env['PORT'] || 3000;
 
-// Session secret for signing cookies
+// Session secret for signing cookies and JWTs
 const SESSION_SECRET = process.env['SESSION_SECRET'] || randomBytes(32).toString('hex');
+
+// GitHub App configuration
+const GITHUB_CLIENT_ID = process.env['GITHUB_APP_CLIENT_ID'];
+const GITHUB_CLIENT_SECRET = process.env['GITHUB_APP_CLIENT_SECRET'];
+const GITHUB_APP_NAME = process.env['GITHUB_APP_NAME'];
+
+/**
+ * Check if GitHub OAuth is configured.
+ */
+function isGitHubAuthEnabled(): boolean {
+  return Boolean(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET && GITHUB_APP_NAME);
+}
 
 // Repository connection (initialized in startServer)
 let repoConnection: RepositoryConnection | null = null;
@@ -52,8 +67,29 @@ export async function startServer(port = PORT) {
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser(SESSION_SECRET));
 
-  // Authentication routes (must be before password protection)
+  // Password-based authentication routes (must be before password protection)
   app.use(createAuthRoutes());
+
+  // GitHub OAuth authentication routes (if configured)
+  if (isGitHubAuthEnabled()) {
+    const baseUrl = process.env['BASE_URL'] || `http://localhost:${port}`;
+    const jwtService = createJwtService(SESSION_SECRET);
+    const githubAuth = createGitHubAuthService({
+      clientId: GITHUB_CLIENT_ID!,
+      clientSecret: GITHUB_CLIENT_SECRET!,
+      appName: GITHUB_APP_NAME!,
+      redirectUri: `${baseUrl}/auth/github/callback`,
+    });
+
+    app.use(createGitHubAuthRouter({
+      jwtService,
+      githubAuth,
+      userRepository: repos.users,
+      sessionSecret: SESSION_SECRET,
+    }));
+
+    console.log('GitHub OAuth authentication enabled');
+  }
 
   // Password protection middleware
   app.use(passwordProtection);

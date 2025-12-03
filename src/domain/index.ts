@@ -25,3 +25,4 @@ export * from './quality-benchmark.js';
 export * from './date-utils.js';
 export * from './work-queue-logic.js';
 export * from './finding-logic.js';
+export * from './user.js';
