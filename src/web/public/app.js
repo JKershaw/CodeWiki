@@ -153,22 +153,27 @@ async function loadRepos() {
   }
 }
 
-async function addRepo(path) {
+async function addRepo(pathOrUrl, isGitHubUrl = false) {
   const container = document.getElementById('repos-list');
+  const displayName = isGitHubUrl ? extractRepoName(pathOrUrl) || pathOrUrl : pathOrUrl;
+  const statusText = isGitHubUrl ? 'cloning' : 'adding';
+  const progressText = isGitHubUrl
+    ? 'Cloning repository from GitHub...'
+    : 'Loading commits from git history...';
 
   // Create and insert loading card at the beginning
   const loadingCard = document.createElement('div');
   loadingCard.className = 'card repo-loading-card';
   loadingCard.innerHTML = `
     <div class="card-header">
-      <h3 class="card-title">${escapeHtml(path)}</h3>
-      <span class="card-status pending">adding</span>
+      <h3 class="card-title">${escapeHtml(displayName)}</h3>
+      <span class="card-status pending">${statusText}</span>
     </div>
     <div class="processing-progress">
       <div class="progress-bar">
         <div class="progress-fill indeterminate"></div>
       </div>
-      <div class="progress-text">Loading commits from git history...</div>
+      <div class="progress-text">${progressText}</div>
     </div>
   `;
 
@@ -183,9 +188,10 @@ async function addRepo(path) {
   }
 
   try {
+    const body = isGitHubUrl ? { url: pathOrUrl } : { path: pathOrUrl };
     await api('/repos', {
       method: 'POST',
-      body: JSON.stringify({ path }),
+      body: JSON.stringify(body),
     });
     loadingCard.remove();
     loadRepos();
@@ -465,8 +471,86 @@ const browserUpBtn = document.getElementById('browser-up-btn');
 const browserPath = document.getElementById('browser-path');
 const folderList = document.getElementById('folder-list');
 
+// Source toggle elements
+const sourceLocalBtn = document.getElementById('source-local-btn');
+const sourceGithubBtn = document.getElementById('source-github-btn');
+const localSourcePanel = document.getElementById('local-source-panel');
+const githubSourcePanel = document.getElementById('github-source-panel');
+const githubUrlInput = document.getElementById('github-url');
+
 let selectedRepoPath = null;
 let currentBrowsePath = null;
+let currentRepoSource = 'local'; // 'local' or 'github'
+
+/**
+ * Validate a GitHub URL.
+ * Accepts formats like:
+ * - https://github.com/owner/repo
+ * - https://github.com/owner/repo.git
+ * - http://github.com/owner/repo
+ */
+function isValidGitHubUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'github.com') return false;
+    // Path should be /owner/repo or /owner/repo.git
+    const pathMatch = parsed.pathname.match(/^\/([^\/]+)\/([^\/]+?)(\.git)?$/);
+    return pathMatch !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract owner/repo from GitHub URL.
+ */
+function extractRepoName(url) {
+  try {
+    const parsed = new URL(url);
+    const pathMatch = parsed.pathname.match(/^\/([^\/]+)\/([^\/]+?)(\.git)?$/);
+    if (pathMatch) {
+      return `${pathMatch[1]}/${pathMatch[2]}`;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
+ * Switch between local folder and GitHub URL source modes.
+ */
+function setRepoSource(source) {
+  currentRepoSource = source;
+  selectedRepoPath = null;
+
+  if (source === 'local') {
+    sourceLocalBtn.classList.add('active');
+    sourceGithubBtn.classList.remove('active');
+    localSourcePanel.classList.remove('hidden');
+    githubSourcePanel.classList.add('hidden');
+    submitRepoBtn.textContent = 'Add Selected';
+    submitRepoBtn.disabled = true;
+    githubUrlInput.value = '';
+  } else {
+    sourceLocalBtn.classList.remove('active');
+    sourceGithubBtn.classList.add('active');
+    localSourcePanel.classList.add('hidden');
+    githubSourcePanel.classList.remove('hidden');
+    submitRepoBtn.textContent = 'Clone Repository';
+    updateGitHubSubmitButton();
+  }
+}
+
+/**
+ * Update submit button state based on GitHub URL validity.
+ */
+function updateGitHubSubmitButton() {
+  if (currentRepoSource === 'github') {
+    const url = githubUrlInput.value.trim();
+    submitRepoBtn.disabled = !isValidGitHubUrl(url);
+  }
+}
 
 async function browseFolders(path = null) {
   folderList.innerHTML = '<p class="loading" style="padding: 20px;">Loading...</p>';
@@ -523,20 +607,38 @@ async function browseFolders(path = null) {
 addRepoBtn.addEventListener('click', () => {
   addRepoForm.classList.remove('hidden');
   selectedRepoPath = null;
-  submitRepoBtn.disabled = true;
+  currentRepoSource = 'local';
+  setRepoSource('local');
   browseFolders();
 });
 
 cancelRepoBtn.addEventListener('click', () => {
   addRepoForm.classList.add('hidden');
   selectedRepoPath = null;
+  githubUrlInput.value = '';
 });
 
+// Source toggle event listeners
+sourceLocalBtn.addEventListener('click', () => setRepoSource('local'));
+sourceGithubBtn.addEventListener('click', () => setRepoSource('github'));
+
+// GitHub URL input validation
+githubUrlInput.addEventListener('input', updateGitHubSubmitButton);
+
 submitRepoBtn.addEventListener('click', () => {
-  if (selectedRepoPath) {
-    addRepo(selectedRepoPath);
-    addRepoForm.classList.add('hidden');
-    selectedRepoPath = null;
+  if (currentRepoSource === 'local') {
+    if (selectedRepoPath) {
+      addRepo(selectedRepoPath, false);
+      addRepoForm.classList.add('hidden');
+      selectedRepoPath = null;
+    }
+  } else if (currentRepoSource === 'github') {
+    const url = githubUrlInput.value.trim();
+    if (isValidGitHubUrl(url)) {
+      addRepo(url, true);
+      addRepoForm.classList.add('hidden');
+      githubUrlInput.value = '';
+    }
   }
 });
 

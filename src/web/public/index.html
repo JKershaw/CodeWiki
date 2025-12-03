@@ -30,13 +30,29 @@
         </div>
 
         <div id="add-repo-form" class="form-container hidden">
-          <div id="folder-browser">
-            <div class="browser-header">
-              <button id="browser-up-btn" class="btn secondary">↑ Up</button>
-              <span id="browser-path"></span>
-            </div>
-            <div id="folder-list"></div>
+          <div class="repo-source-toggle">
+            <button id="source-local-btn" class="toggle-btn active" data-source="local">Local Folder</button>
+            <button id="source-github-btn" class="toggle-btn" data-source="github">GitHub URL</button>
           </div>
+
+          <div id="local-source-panel">
+            <div id="folder-browser">
+              <div class="browser-header">
+                <button id="browser-up-btn" class="btn secondary">↑ Up</button>
+                <span id="browser-path"></span>
+              </div>
+              <div id="folder-list"></div>
+            </div>
+          </div>
+
+          <div id="github-source-panel" class="hidden">
+            <div class="github-url-input">
+              <label for="github-url">Public GitHub Repository URL</label>
+              <input type="url" id="github-url" placeholder="https://github.com/owner/repository" />
+              <p class="input-hint">Enter a public GitHub repository URL. The repository will be cloned locally.</p>
+            </div>
+          </div>
+
           <div class="browser-actions">
             <button id="submit-repo-btn" class="btn primary" disabled>Add Selected</button>
             <button id="cancel-repo-btn" class="btn secondary">Cancel</button>
