@@ -63,12 +63,6 @@ export interface GitService {
   deleteRepo(repoId: string): Promise<void>;
 }
 
-interface TreeEntry {
-  path: string;
-  oid: string;
-  type: 'blob' | 'tree';
-}
-
 /**
  * File-system based Git service implementation using isomorphic-git.
  * This implementation does not require the git CLI to be installed.
@@ -144,7 +138,7 @@ export class FileSystemGitService implements GitService {
     const repoPath = this.getRepoPath(repoId);
 
     // Get the ref to start from
-    let ref = options?.branch || 'HEAD';
+    const ref = options?.branch || 'HEAD';
 
     // Get commit log
     const logEntries = await git.log({
@@ -297,10 +291,7 @@ export class FileSystemGitService implements GitService {
   }
 
   private countLineDiffs(oldContent: string, newContent: string): { added: number; deleted: number } {
-    const oldLines = oldContent.split('\n');
-    const newLines = newContent.split('\n');
-
-    // Simple diff counting - count added and removed lines
+    // Count added and removed lines using diff library
     const patch = createPatch('file', oldContent, newContent);
     const lines = patch.split('\n');
 
