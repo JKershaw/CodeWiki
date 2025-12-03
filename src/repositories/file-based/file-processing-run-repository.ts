@@ -1,6 +1,12 @@
 import type { ProcessingRunRepository } from '../interfaces/processing-run-repository.js';
 import type { ProcessingRun, ProcessingRunStatus } from '../../domain/processing-run.js';
+import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<ProcessingRun>({
+  required: ['startedAt'],
+  optional: ['completedAt'],
+});
 
 export class FileProcessingRunRepository implements ProcessingRunRepository {
   private store: FileStore<ProcessingRun>;
@@ -11,7 +17,7 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
 
   async findById(id: string): Promise<ProcessingRun | null> {
     const result = await this.store.get(id);
-    return result ? this.hydrateDates(result) : null;
+    return result ? hydrateDates(result) : null;
   }
 
   async findByRepo(repoId: string, options?: {
@@ -26,8 +32,8 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
     });
 
     // Hydrate dates and sort by start time, newest first
-    results = results.map(r => this.hydrateDates(r));
-    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
+    results = results.map(hydrateDates);
+    results.sort((a, b) => getTime(b.startedAt) - getTime(a.startedAt));
 
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? results.length;
@@ -39,15 +45,15 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
       r.repoId === repoId && (r.status === 'running' || r.status === 'stopping')
     );
     if (results.length === 0) return null;
-    return this.hydrateDates(results[0]!);
+    return hydrateDates(results[0]!);
   }
 
   async findMostRecent(repoId: string): Promise<ProcessingRun | null> {
     let results = await this.store.find(r => r.repoId === repoId);
     if (results.length === 0) return null;
 
-    results = results.map(r => this.hydrateDates(r));
-    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
+    results = results.map(hydrateDates);
+    results.sort((a, b) => getTime(b.startedAt) - getTime(a.startedAt));
     return results[0]!;
   }
 
@@ -112,21 +118,5 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
       status: 'stopped',
       completedAt: new Date(),
     });
-  }
-
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
-  }
-
-  /** Ensure all date fields are proper Date objects */
-  private hydrateDates(run: ProcessingRun): ProcessingRun {
-    return {
-      ...run,
-      startedAt: run.startedAt instanceof Date ? run.startedAt : new Date(run.startedAt),
-      completedAt: run.completedAt instanceof Date ? run.completedAt :
-        (run.completedAt ? new Date(run.completedAt) : null),
-    };
   }
 }

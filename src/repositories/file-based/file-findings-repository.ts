@@ -1,7 +1,13 @@
 import type { FindingsRepository } from '../interfaces/findings-repository.js';
 import type { Finding, FindingType, FindingStatus, FindingGroup } from '../../domain/finding.js';
 import { FindingPriority } from '../../domain/finding.js';
+import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<Finding>({
+  required: ['detectedAt'],
+  optional: ['addressedAt'],
+});
 
 export class FileFindingsRepository implements FindingsRepository {
   private store: FileStore<Finding>;
@@ -12,7 +18,7 @@ export class FileFindingsRepository implements FindingsRepository {
 
   async findById(id: string): Promise<Finding | null> {
     const result = await this.store.get(id);
-    return result ? this.hydrateDates(result) : null;
+    return result ? hydrateDates(result) : null;
   }
 
   async findByWiki(wikiId: string, options?: {
@@ -27,13 +33,13 @@ export class FileFindingsRepository implements FindingsRepository {
       return true;
     });
 
-    results = results.map(f => this.hydrateDates(f));
+    results = results.map(hydrateDates);
 
     // Sort by priority (type-based) then by detection time
     results.sort((a, b) => {
       const priorityDiff = (FindingPriority[b.type] ?? 0) - (FindingPriority[a.type] ?? 0);
       if (priorityDiff !== 0) return priorityDiff;
-      return this.getTime(b.detectedAt) - this.getTime(a.detectedAt);
+      return getTime(b.detectedAt) - getTime(a.detectedAt);
     });
 
     if (options?.limit) {
@@ -52,12 +58,12 @@ export class FileFindingsRepository implements FindingsRepository {
       if (f.wikiId !== wikiId) return false;
       return f.affectedPaths.some(p => pathSet.has(p));
     });
-    return results.map(f => this.hydrateDates(f));
+    return results.map(hydrateDates);
   }
 
   async findByAgentRun(agentRunId: string): Promise<Finding[]> {
     let results = await this.store.find(f => f.sourceAgentRunId === agentRunId);
-    return results.map(f => this.hydrateDates(f));
+    return results.map(hydrateDates);
   }
 
   async groupOpenFindings(wikiId: string): Promise<FindingGroup[]> {
@@ -253,21 +259,5 @@ export class FileFindingsRepository implements FindingsRepository {
     });
 
     return existing !== null;
-  }
-
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
-  }
-
-  /** Ensure all date fields are proper Date objects */
-  private hydrateDates(finding: Finding): Finding {
-    return {
-      ...finding,
-      detectedAt: finding.detectedAt instanceof Date ? finding.detectedAt : new Date(finding.detectedAt),
-      addressedAt: finding.addressedAt instanceof Date ? finding.addressedAt :
-        (finding.addressedAt ? new Date(finding.addressedAt) : null),
-    };
   }
 }

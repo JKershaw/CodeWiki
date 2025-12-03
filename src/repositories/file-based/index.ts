@@ -6,6 +6,7 @@
  */
 
 export * from './file-store.js';
+export * from './file-repository-base.js';
 export * from './file-repo-repository.js';
 export * from './file-wiki-repository.js';
 export * from './file-commit-repository.js';

@@ -31,9 +31,12 @@ export async function processCommand(args: string[]): Promise<void> {
   console.log(`🔄 Iterations: ${iterations}\n`);
 
   // Initialize services
-  const repos = createRepositories({ type: 'file' });
+  const connection = await createRepositories();
+  const repos = connection.repositories;
   const git = createGitService();
   const llm = createLLM();
+
+  try {
 
   // Check if repo already exists (via CQRS query)
   const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
@@ -151,4 +154,8 @@ export async function processCommand(args: string[]): Promise<void> {
   console.log(`   Commits: ${afterSummary.processedCommits}/${afterSummary.totalCommits} processed (${afterSummary.coveragePercent.toFixed(1)}%)`);
   console.log(`   Wiki pages: ${afterSummary.wikiPages}`);
   console.log(`   Avg confidence: ${(afterSummary.avgConfidence * 100).toFixed(1)}%\n`);
+
+  } finally {
+    await connection.close();
+  }
 }

@@ -1,6 +1,12 @@
 import type { AgentRunRepository } from '../interfaces/agent-run-repository.js';
 import type { AgentRun, AgentType, AgentRunStatus, AgentResult } from '../../domain/agent-run.js';
+import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<AgentRun>({
+  required: ['startedAt'],
+  optional: ['completedAt'],
+});
 
 export class FileAgentRunRepository implements AgentRunRepository {
   private store: FileStore<AgentRun>;
@@ -11,7 +17,7 @@ export class FileAgentRunRepository implements AgentRunRepository {
 
   async findById(id: string): Promise<AgentRun | null> {
     const result = await this.store.get(id);
-    return result ? this.hydrateDates(result) : null;
+    return result ? hydrateDates(result) : null;
   }
 
   async findByRepo(repoId: string, options?: {
@@ -28,30 +34,14 @@ export class FileAgentRunRepository implements AgentRunRepository {
     });
 
     // Ensure dates are properly hydrated
-    results = results.map(r => this.hydrateDates(r));
+    results = results.map(hydrateDates);
 
     // Sort by start time, newest first
-    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
+    results.sort((a, b) => getTime(b.startedAt) - getTime(a.startedAt));
 
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? results.length;
     return results.slice(offset, offset + limit);
-  }
-
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
-  }
-
-  /** Ensure all date fields are proper Date objects */
-  private hydrateDates(run: AgentRun): AgentRun {
-    return {
-      ...run,
-      startedAt: run.startedAt instanceof Date ? run.startedAt : new Date(run.startedAt),
-      completedAt: run.completedAt instanceof Date ? run.completedAt :
-        (run.completedAt ? new Date(run.completedAt) : null),
-    };
   }
 
   async findByCommit(commitId: string): Promise<AgentRun[]> {
@@ -62,8 +52,8 @@ export class FileAgentRunRepository implements AgentRunRepository {
     let results = await this.store.find(r =>
       r.repoId === repoId && r.agentType === agentType
     );
-    results = results.map(r => this.hydrateDates(r));
-    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
+    results = results.map(hydrateDates);
+    results.sort((a, b) => getTime(b.startedAt) - getTime(a.startedAt));
     return results.slice(0, limit);
   }
 
@@ -84,7 +74,7 @@ export class FileAgentRunRepository implements AgentRunRepository {
   async calculateTotalCost(repoId: string, options?: { since?: Date; until?: Date }): Promise<number> {
     const all = await this.store.find(r => {
       if (r.repoId !== repoId) return false;
-      const startTime = this.getTime(r.startedAt);
+      const startTime = getTime(r.startedAt);
       if (options?.since && startTime < options.since.getTime()) return false;
       if (options?.until && startTime > options.until.getTime()) return false;
       return true;

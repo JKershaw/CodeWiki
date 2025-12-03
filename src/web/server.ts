@@ -8,7 +8,7 @@ import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { createRepositories } from '../repositories/index.js';
+import { createRepositories, type RepositoryConnection } from '../repositories/index.js';
 import { createGitService } from '../services/git/git-service.js';
 import { createMockLLMForCodeAnalysis } from '../services/llm/mock-llm-service.js';
 import { createOpenRouterLLM } from '../services/llm/openrouter-llm-service.js';
@@ -21,9 +21,8 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env['PORT'] || 3000;
 
-// Initialize services
-const repos = createRepositories({ type: 'file' });
-const git = createGitService();
+// Repository connection (initialized in startServer)
+let repoConnection: RepositoryConnection | null = null;
 
 function createLLM(): LLMService {
   const apiKey = process.env['OPENROUTER_API_KEY'];
@@ -34,23 +33,43 @@ function createLLM(): LLMService {
   return createMockLLMForCodeAnalysis();
 }
 
-// Middleware
-app.use(express.json());
-app.use(express.static(join(__dirname, 'public')));
-
-// API Routes
-app.use(createApiRoutes({ repos, git, createLLM }));
-
-// Serve index.html for all non-API routes (SPA support)
-app.get('*', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, 'public', 'index.html'));
-});
-
 // Start server
-export function startServer(port = PORT) {
-  return app.listen(port, () => {
+export async function startServer(port = PORT) {
+  // Initialize services
+  repoConnection = await createRepositories();
+  const repos = repoConnection.repositories;
+  const git = createGitService();
+
+  // Middleware
+  app.use(express.json());
+  app.use(express.static(join(__dirname, 'public')));
+
+  // API Routes
+  app.use(createApiRoutes({ repos, git, createLLM }));
+
+  // Serve index.html for all non-API routes (SPA support)
+  app.get('*', (_req: Request, res: Response) => {
+    res.sendFile(join(__dirname, 'public', 'index.html'));
+  });
+
+  const server = app.listen(port, () => {
     console.log(`CodeWiki web server running at http://localhost:${port}`);
   });
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.log('Shutting down...');
+    server.close();
+    if (repoConnection) {
+      await repoConnection.close();
+    }
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
+  return server;
 }
 
 // Export for testing
@@ -59,5 +78,8 @@ export { app };
 // Run if executed directly
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
-  startServer();
+  startServer().catch((error) => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
 }

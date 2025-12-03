@@ -1,6 +1,12 @@
 import type { EditRequestRepository } from '../interfaces/edit-request-repository.js';
 import type { EditRequest, EditRequestStatus } from '../../domain/edit-request.js';
+import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<EditRequest>({
+  required: ['sourceCommitTimestamp', 'createdAt'],
+  optional: ['processedAt'],
+});
 
 export class FileEditRequestRepository implements EditRequestRepository {
   private store: FileStore<EditRequest>;
@@ -11,7 +17,7 @@ export class FileEditRequestRepository implements EditRequestRepository {
 
   async findById(id: string): Promise<EditRequest | null> {
     const result = await this.store.get(id);
-    return result ? this.hydrateDates(result) : null;
+    return result ? hydrateDates(result) : null;
   }
 
   async findPending(wikiId: string): Promise<EditRequest[]> {
@@ -19,13 +25,13 @@ export class FileEditRequestRepository implements EditRequestRepository {
       (er) => er.wikiId === wikiId && er.status === 'pending'
     );
 
-    results = results.map((er) => this.hydrateDates(er));
+    results = results.map(hydrateDates);
 
     // Sort by commit timestamp (oldest first) to process in chronological order
     results.sort(
       (a, b) =>
-        this.getTime(a.sourceCommitTimestamp) -
-        this.getTime(b.sourceCommitTimestamp)
+        getTime(a.sourceCommitTimestamp) -
+        getTime(b.sourceCommitTimestamp)
     );
 
     return results;
@@ -35,21 +41,21 @@ export class FileEditRequestRepository implements EditRequestRepository {
     let results = await this.store.find(
       (er) => er.wikiId === wikiId && er.targetPagePath === pagePath
     );
-    return results.map((er) => this.hydrateDates(er));
+    return results.map(hydrateDates);
   }
 
   async findByCommit(repoId: string, commitSha: string): Promise<EditRequest[]> {
     let results = await this.store.find(
       (er) => er.repoId === repoId && er.sourceCommitSha === commitSha
     );
-    return results.map((er) => this.hydrateDates(er));
+    return results.map(hydrateDates);
   }
 
   async findByAgentRun(agentRunId: string): Promise<EditRequest[]> {
     let results = await this.store.find(
       (er) => er.sourceAgentRunId === agentRunId
     );
-    return results.map((er) => this.hydrateDates(er));
+    return results.map(hydrateDates);
   }
 
   async findByStatus(
@@ -60,13 +66,13 @@ export class FileEditRequestRepository implements EditRequestRepository {
       (er) => er.wikiId === wikiId && er.status === status
     );
 
-    results = results.map((er) => this.hydrateDates(er));
+    results = results.map(hydrateDates);
 
     // Sort by commit timestamp
     results.sort(
       (a, b) =>
-        this.getTime(a.sourceCommitTimestamp) -
-        this.getTime(b.sourceCommitTimestamp)
+        getTime(a.sourceCommitTimestamp) -
+        getTime(b.sourceCommitTimestamp)
     );
 
     return results;
@@ -132,30 +138,4 @@ export class FileEditRequestRepository implements EditRequestRepository {
     return pending[0]!.sourceCommitTimestamp;
   }
 
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
-  }
-
-  /** Ensure all date fields are proper Date objects */
-  private hydrateDates(editRequest: EditRequest): EditRequest {
-    return {
-      ...editRequest,
-      sourceCommitTimestamp:
-        editRequest.sourceCommitTimestamp instanceof Date
-          ? editRequest.sourceCommitTimestamp
-          : new Date(editRequest.sourceCommitTimestamp),
-      createdAt:
-        editRequest.createdAt instanceof Date
-          ? editRequest.createdAt
-          : new Date(editRequest.createdAt),
-      processedAt:
-        editRequest.processedAt instanceof Date
-          ? editRequest.processedAt
-          : editRequest.processedAt
-            ? new Date(editRequest.processedAt)
-            : null,
-    };
-  }
 }
