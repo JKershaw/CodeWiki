@@ -12,6 +12,7 @@ import { defineConfig } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
+  globalSetup: './tests/e2e/global-setup.ts',
   timeout: 60000,  // Increased timeout for stability
   retries: 2,  // Retry flaky tests twice for containerized env stability
   workers: 1,  // Run tests serially to avoid resource issues
