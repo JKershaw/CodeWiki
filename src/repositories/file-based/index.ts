@@ -22,6 +22,7 @@ export * from './file-benchmark-repository.js';
 export * from './file-edit-request-repository.js';
 export * from './file-quality-benchmark-repository.js';
 export * from './file-self-improvement-repository.js';
+export * from './file-chat-session-repository.js';
 
 import type { Repositories } from '../interfaces/index.js';
 import { FileRepoRepository } from './file-repo-repository.js';
@@ -40,6 +41,7 @@ import { FileBenchmarkRepository } from './file-benchmark-repository.js';
 import { FileEditRequestRepository } from './file-edit-request-repository.js';
 import { FileQualityBenchmarkRepository } from './file-quality-benchmark-repository.js';
 import { FileSelfImprovementRepository } from './file-self-improvement-repository.js';
+import { FileChatSessionRepository } from './file-chat-session-repository.js';
 
 /**
  * Create all file-based repositories.
@@ -65,5 +67,6 @@ export function createFileRepositories(baseDir = '.codewiki-data'): Repositories
     editRequests: new FileEditRequestRepository(baseDir),
     qualityBenchmarks: new FileQualityBenchmarkRepository(baseDir),
     selfImprovements: new FileSelfImprovementRepository(baseDir),
+    chatSessions: new FileChatSessionRepository(baseDir),
   };
 }

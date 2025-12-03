@@ -8,6 +8,8 @@ import type { Repositories } from '../../repositories/index.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
 import { SelfImprovementAgent } from '../../analysis/self-improvement-agent.js';
+import { SelfImprovementChatService } from '../../services/self-improvement-chat-service.js';
+import { createChatSession } from '../../domain/chat-session.js';
 
 // CQRS imports
 import {
@@ -41,6 +43,10 @@ interface RepoParams {
 
 interface RunParams extends RepoParams {
   runId: string;
+}
+
+interface ChatParams extends RunParams {
+  sessionId: string;
 }
 
 /**
@@ -204,6 +210,148 @@ export function createSelfImprovementRoutes(
     } catch (error) {
       console.error('Error starting self-improvement:', error);
       return res.status(500).json({ error: 'Failed to start analysis' });
+    }
+  });
+
+  // ============================================================================
+  // Chat Routes
+  // ============================================================================
+
+  const chatService = new SelfImprovementChatService(repos, llm);
+
+  /**
+   * POST /api/repos/:id/self-improvements/:runId/chat
+   * Start a new chat session for a completed analysis.
+   */
+  router.post('/:runId/chat', async (req: Request<RunParams>, res: Response) => {
+    try {
+      const runId = req.params.runId;
+
+      // Get run via CQRS query
+      const runQuery = createGetSelfImprovementRunQuery(runId);
+      const runResult = await handleGetSelfImprovementRun(runQuery, repos);
+
+      if (!runResult.success || !runResult.data) {
+        return res.status(404).json({ error: 'Self-improvement run not found' });
+      }
+
+      const run = runResult.data;
+
+      if (run.status !== 'completed') {
+        return res.status(400).json({ error: 'Can only chat about completed analyses' });
+      }
+
+      const sessionId = uuid();
+      const session = createChatSession({
+        id: sessionId,
+        repoId: run.repoId,
+        wikiId: run.wikiId,
+        selfImprovementRunId: runId,
+      });
+      await repos.chatSessions.save(session);
+
+      return res.status(201).json({ sessionId, status: 'active' });
+    } catch (error) {
+      console.error('Error creating chat session:', error);
+      return res.status(500).json({ error: 'Failed to create chat session' });
+    }
+  });
+
+  /**
+   * GET /api/repos/:id/self-improvements/:runId/chat
+   * List chat sessions for a run.
+   */
+  router.get('/:runId/chat', async (req: Request<RunParams>, res: Response) => {
+    try {
+      const runId = req.params.runId;
+      const sessions = await repos.chatSessions.findByRun(runId);
+
+      return res.json({
+        sessions: sessions.map(s => ({
+          id: s.id,
+          status: s.status,
+          messageCount: s.messages.length,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+          totalCostUsd: s.totalCostUsd,
+        })),
+      });
+    } catch (error) {
+      console.error('Error listing chat sessions:', error);
+      return res.status(500).json({ error: 'Failed to list chat sessions' });
+    }
+  });
+
+  /**
+   * GET /api/repos/:id/self-improvements/:runId/chat/:sessionId
+   * Get a specific chat session with messages.
+   */
+  router.get('/:runId/chat/:sessionId', async (req: Request<ChatParams>, res: Response) => {
+    try {
+      const sessionId = req.params.sessionId;
+      const session = await repos.chatSessions.findById(sessionId);
+
+      if (!session) {
+        return res.status(404).json({ error: 'Chat session not found' });
+      }
+
+      return res.json({ session });
+    } catch (error) {
+      console.error('Error getting chat session:', error);
+      return res.status(500).json({ error: 'Failed to get chat session' });
+    }
+  });
+
+  /**
+   * POST /api/repos/:id/self-improvements/:runId/chat/:sessionId/messages
+   * Send a message in a chat session.
+   */
+  router.post('/:runId/chat/:sessionId/messages', async (req: Request<ChatParams>, res: Response) => {
+    try {
+      const sessionId = req.params.sessionId;
+      const { message } = req.body;
+
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+
+      const result = await chatService.chat(sessionId, message);
+
+      if (!result.success) {
+        if (result.error?.includes('not found')) {
+          return res.status(404).json({ error: result.error });
+        }
+        if (result.error?.includes('closed')) {
+          return res.status(400).json({ error: result.error });
+        }
+        return res.status(500).json({ error: result.error });
+      }
+
+      return res.json({ message: result.data });
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+      return res.status(500).json({ error: 'Failed to send message' });
+    }
+  });
+
+  /**
+   * POST /api/repos/:id/self-improvements/:runId/chat/:sessionId/close
+   * Close a chat session.
+   */
+  router.post('/:runId/chat/:sessionId/close', async (req: Request<ChatParams>, res: Response) => {
+    try {
+      const sessionId = req.params.sessionId;
+      const session = await repos.chatSessions.findById(sessionId);
+
+      if (!session) {
+        return res.status(404).json({ error: 'Chat session not found' });
+      }
+
+      await repos.chatSessions.close(sessionId);
+      return res.json({ status: 'closed' });
+    } catch (error) {
+      console.error('Error closing chat session:', error);
+      return res.status(500).json({ error: 'Failed to close chat session' });
     }
   });
 
