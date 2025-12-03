@@ -8,7 +8,7 @@ import { v4 as uuid } from 'uuid';
 import { mkdtemp } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createFileRepositories, type Repositories } from '../../src/repositories/index.js';
+import { createRepositories, type Repositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import {
   createGetChatSessionQuery,
   handleGetChatSession,
@@ -19,11 +19,13 @@ import { createChatSession, createChatMessage } from '../../src/domain/chat-sess
 
 describe('Chat Session Queries', () => {
   let repos: Repositories;
+  let repoConnection: RepositoryConnection;
   let tempDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'chat-queries-test-'));
-    repos = createFileRepositories(tempDir);
+    repoConnection = await createRepositories({ fileBasePath: tempDir });
+    repos = repoConnection.repositories;
   });
 
   describe('GetChatSession', () => {

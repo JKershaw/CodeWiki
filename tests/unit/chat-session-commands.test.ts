@@ -8,7 +8,7 @@ import { v4 as uuid } from 'uuid';
 import { mkdtemp } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createFileRepositories, type Repositories } from '../../src/repositories/index.js';
+import { createRepositories, type Repositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import {
   createStartChatSessionCommand,
   handleStartChatSession,
@@ -21,11 +21,13 @@ import { createSelfImprovementRun } from '../../src/domain/self-improvement.js';
 
 describe('Chat Session Commands', () => {
   let repos: Repositories;
+  let repoConnection: RepositoryConnection;
   let tempDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'chat-commands-test-'));
-    repos = createFileRepositories(tempDir);
+    repoConnection = await createRepositories({ fileBasePath: tempDir });
+    repos = repoConnection.repositories;
 
     // Create a self-improvement run to link to
     const run = createSelfImprovementRun({
