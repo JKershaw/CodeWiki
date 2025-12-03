@@ -163,7 +163,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
     targetCommitId: string
   ): Promise<boolean> {
     // Find items that match agentType and are pending/claimed
-    const items = await this.collection
+    const docs = await this.collection
       .find({
         repoId,
         agentType,
@@ -171,10 +171,11 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
       })
       .toArray();
 
+    const items = toEntities<WorkItem>(docs);
+
     // Check if any item targets this commit
-    for (const doc of items) {
-      const item = toEntity<WorkItem>(doc);
-      if (item && getTargetCommitId(item) === targetCommitId) {
+    for (const item of items) {
+      if (getTargetCommitId(item) === targetCommitId) {
         return true;
       }
     }
@@ -183,21 +184,20 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
   }
 
   async getPendingKeys(repoId: string): Promise<Set<string>> {
-    const items = await this.collection
+    const docs = await this.collection
       .find({
         repoId,
         status: { $in: ['pending', 'claimed'] },
       })
       .toArray();
 
+    const items = toEntities<WorkItem>(docs);
+
     const keys = new Set<string>();
-    for (const doc of items) {
-      const item = toEntity<WorkItem>(doc);
-      if (item) {
-        const targetKey = getWorkTargetKey(item.target);
-        const key = `${item.agentType}:${targetKey}`;
-        keys.add(key);
-      }
+    for (const item of items) {
+      const targetKey = getWorkTargetKey(item.target);
+      const key = `${item.agentType}:${targetKey}`;
+      keys.add(key);
     }
 
     return keys;

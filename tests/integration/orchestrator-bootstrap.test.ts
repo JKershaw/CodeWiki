@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
+import { createWorkItem } from '../../src/domain/work-item.js';
 
 describe('Orchestrator Bootstrap Behavior', () => {
   let ctx: TestContext;
@@ -201,19 +202,12 @@ code-change,${sha},Analyze new commit`);
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
       // Pre-create a pending bootstrap work item
-      await ctx.repos.workQueue.save({
+      await ctx.repos.workQueue.save(createWorkItem({
         id: 'existing-bootstrap-work',
         repoId,
         agentType: 'bootstrap',
         priority: 100,
-        status: 'pending',
-        createdAt: new Date(),
-        claimedAt: null,
-        completedAt: null,
-        agentRunId: null,
-        targetCommitId: null,
-        targetPagePath: null,
-      });
+      }));
 
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
