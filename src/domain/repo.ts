@@ -5,7 +5,13 @@ export interface Repo {
   id: string;
   /** GitHub owner/name format, e.g., "anthropics/codewiki" */
   fullName: string;
-  /** URL for cloning */
+  /** GitHub owner (e.g., "anthropics") - only for GitHub repos */
+  owner?: string;
+  /** GitHub repo name (e.g., "codewiki") - only for GitHub repos */
+  repoName?: string;
+  /** Whether this is a GitHub repository (vs local filesystem) */
+  isGitHubRepo: boolean;
+  /** URL for cloning (for GitHub) or local path (for local repos) */
   cloneUrl: string;
   /** Default branch name */
   defaultBranch: string;
@@ -40,15 +46,55 @@ export interface ThrottleConfig {
   maxCostPerHour: number;
 }
 
-export function createRepo(params: {
+/**
+ * Parameters for creating a repository.
+ */
+export interface CreateRepoParams {
   id: string;
   fullName: string;
   cloneUrl: string;
   defaultBranch: string;
-}): Repo {
+  /** GitHub owner - required for GitHub repos */
+  owner?: string;
+  /** GitHub repo name - required for GitHub repos */
+  repoName?: string;
+  /** Whether this is a GitHub repo (default: auto-detected from cloneUrl) */
+  isGitHubRepo?: boolean;
+}
+
+/**
+ * Parse owner and repo name from a GitHub URL or fullName.
+ */
+export function parseGitHubFullName(fullName: string): { owner: string; repoName: string } | null {
+  const match = fullName.match(/^([^/]+)\/([^/]+)$/);
+  if (match) {
+    return { owner: match[1]!, repoName: match[2]! };
+  }
+  return null;
+}
+
+export function createRepo(params: CreateRepoParams): Repo {
+  // Auto-detect if this is a GitHub repo
+  const isGitHubRepo = params.isGitHubRepo ?? params.cloneUrl.includes('github.com');
+
+  // Parse owner/repoName from fullName if not provided
+  let owner = params.owner;
+  let repoName = params.repoName;
+
+  if (isGitHubRepo && !owner && !repoName) {
+    const parsed = parseGitHubFullName(params.fullName);
+    if (parsed) {
+      owner = parsed.owner;
+      repoName = parsed.repoName;
+    }
+  }
+
   return {
     id: params.id,
     fullName: params.fullName,
+    owner,
+    repoName,
+    isGitHubRepo,
     cloneUrl: params.cloneUrl,
     defaultBranch: params.defaultBranch,
     status: 'pending',

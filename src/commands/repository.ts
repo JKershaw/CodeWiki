@@ -24,6 +24,12 @@ export interface RegisterRepositoryCommand extends Command {
   readonly fullName: string;
   readonly cloneUrl: string;
   readonly defaultBranch: string;
+  /** GitHub owner (e.g., "anthropics") - required for GitHub repos */
+  readonly owner?: string;
+  /** GitHub repo name (e.g., "codewiki") - required for GitHub repos */
+  readonly repoName?: string;
+  /** Whether this is a GitHub repository (vs local filesystem) */
+  readonly isGitHubRepo?: boolean;
 }
 
 export function createRegisterRepositoryCommand(params: {
@@ -31,6 +37,9 @@ export function createRegisterRepositoryCommand(params: {
   fullName: string;
   cloneUrl: string;
   defaultBranch: string;
+  owner?: string;
+  repoName?: string;
+  isGitHubRepo?: boolean;
 }): RegisterRepositoryCommand {
   return {
     type: 'RegisterRepository',
@@ -58,6 +67,9 @@ export async function handleRegisterRepository(
       fullName: command.fullName,
       cloneUrl: command.cloneUrl,
       defaultBranch: command.defaultBranch,
+      owner: command.owner,
+      repoName: command.repoName,
+      isGitHubRepo: command.isGitHubRepo,
     });
 
     await repos.repos.save(repo);

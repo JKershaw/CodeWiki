@@ -19,6 +19,8 @@ import { createExecutor } from '../../executor/executor.js';
 import type { Dependencies } from './index.js';
 import type { GitAuthOptions } from '../../services/git/git-service.js';
 import { GITHUB_SESSION_COOKIE } from '../middleware/github-auth.js';
+import { createGitHubRepoService, type GitHubRepoService } from '../../services/github/github-repo-service.js';
+import { createGitHubApiCache, createCachedGitHubRepoService } from '../../services/github/github-api-cache.js';
 
 /**
  * Validate a GitHub URL.
@@ -122,6 +124,55 @@ async function getGitAuthFromRequest(
 }
 
 /**
+ * Get an authenticated GitHub repo service for the current request.
+ * Returns undefined if user is not authenticated.
+ */
+async function getAuthenticatedGitHubService(
+  req: Request,
+  deps: Dependencies
+): Promise<GitHubRepoService | undefined> {
+  const { repos, jwtService } = deps;
+
+  if (!jwtService) {
+    return undefined;
+  }
+
+  const signedCookies = req.signedCookies as Record<string, string>;
+  const token = signedCookies[GITHUB_SESSION_COOKIE];
+  if (!token) {
+    return undefined;
+  }
+
+  const session = jwtService.verifySessionToken(token);
+  if (!session) {
+    return undefined;
+  }
+
+  const user = await repos.users.findById(session.userId);
+  if (!user || !user.accessToken) {
+    return undefined;
+  }
+
+  // Create an authenticated service with user's token
+  const cache = createGitHubApiCache();
+  const baseService = createGitHubRepoService({ accessToken: user.accessToken });
+  return createCachedGitHubRepoService(baseService, cache);
+}
+
+/**
+ * Extract owner and repo name from a GitHub URL.
+ */
+function extractOwnerAndRepo(url: string): { owner: string; repo: string } | null {
+  const fullName = extractRepoNameFromUrl(url);
+  if (!fullName) return null;
+
+  const parts = fullName.split('/');
+  if (parts.length !== 2) return null;
+
+  return { owner: parts[0]!, repo: parts[1]! };
+}
+
+/**
  * Create repository management routes.
  */
 export function createReposRoutes(deps: Dependencies): Router {
@@ -210,40 +261,37 @@ export function createReposRoutes(deps: Dependencies): Router {
    * Add a new repository for processing.
    * Accepts either:
    * - { path: string } for local filesystem repositories
-   * - { url: string } for GitHub repositories (will be cloned)
+   * - { url: string } for GitHub repositories (accessed via GitHub API)
    */
   router.post('/api/repos', async (req: Request, res: Response) => {
     try {
       const { path: repoPath, url: repoUrl } = req.body;
 
       // Determine if this is a local path or GitHub URL
-      const isGitHubRepo = !!repoUrl;
+      const isGitHubRepoUrl = !!repoUrl;
 
       if (!repoPath && !repoUrl) {
         res.status(400).json({ error: 'Repository path or URL is required' });
         return;
       }
 
-      let absolutePath: string;
-      let fullName: string;
-      let cloneUrl: string;
-
-      if (isGitHubRepo) {
+      if (isGitHubRepoUrl) {
         // Validate GitHub URL
         if (!isValidGitHubUrl(repoUrl)) {
           res.status(400).json({ error: 'Invalid GitHub URL. Must be in format: https://github.com/owner/repo' });
           return;
         }
 
-        // Extract repo name from URL
-        const extractedName = extractRepoNameFromUrl(repoUrl);
-        if (!extractedName) {
+        // Extract owner/repo from URL
+        const ownerRepo = extractOwnerAndRepo(repoUrl);
+        if (!ownerRepo) {
           res.status(400).json({ error: 'Could not extract repository name from URL' });
           return;
         }
 
-        fullName = extractedName;
-        cloneUrl = normalizeGitHubUrl(repoUrl);
+        const { owner, repo: repoName } = ownerRepo;
+        const fullName = `${owner}/${repoName}`;
+        const cloneUrl = normalizeGitHubUrl(repoUrl);
 
         // Check if repo already exists by fullName
         const existingQuery = createGetRepositoryByFullNameQuery(fullName);
@@ -259,32 +307,39 @@ export function createReposRoutes(deps: Dependencies): Router {
           return;
         }
 
-        // Clone the repository
+        // Get GitHub service (authenticated if user is logged in, or public access)
+        const authGitHubService = await getAuthenticatedGitHubService(req, deps);
+        const githubService = authGitHubService ?? deps.githubRepoService ?? createGitHubRepoService();
+
+        // Verify the repository exists and get info via GitHub API
         const repoId = uuid();
+        let defaultBranch = 'main';
+
         try {
-          // Get authentication if user is logged in
-          const auth = await getGitAuthFromRequest(req, deps);
-          absolutePath = await git.clone(cloneUrl, repoId, auth);
-        } catch (cloneError) {
-          const errorMessage = cloneError instanceof Error ? cloneError.message : String(cloneError);
-          // Check for common clone errors
-          if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+          const repoInfo = await githubService.getRepository(owner, repoName);
+          defaultBranch = repoInfo.defaultBranch;
+        } catch (apiError) {
+          const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+          if (errorMessage.includes('404')) {
             res.status(404).json({ error: 'Repository not found. Make sure it exists and is public.' });
-          } else if (errorMessage.includes('Authentication') || errorMessage.includes('403')) {
+          } else if (errorMessage.includes('403') || errorMessage.includes('401')) {
             res.status(403).json({ error: 'Repository is private or requires authentication. Log in with GitHub to access private repositories.' });
           } else {
-            res.status(500).json({ error: `Failed to clone repository: ${errorMessage}` });
+            res.status(500).json({ error: `Failed to access repository: ${errorMessage}` });
           }
           return;
         }
 
-        // Register the repository
+        // Register the repository (no local clone needed)
         const registerResult = await handleRegisterRepository(
           createRegisterRepositoryCommand({
             id: repoId,
             fullName,
             cloneUrl,
-            defaultBranch: 'main',
+            defaultBranch,
+            owner,
+            repoName,
+            isGitHubRepo: true,
           }),
           repos
         );
@@ -294,23 +349,27 @@ export function createReposRoutes(deps: Dependencies): Router {
           return;
         }
 
-        const repo = registerResult.data!;
+        const registeredRepo = registerResult.data!;
 
-        // Load commits using GitService
-        git.registerLocalRepo(repo.id, absolutePath);
-        const commits = await git.loadCommits(repo.id);
+        // Load commits using GitHub API
+        try {
+          const commits = await githubService.listCommits(owner, repoName, registeredRepo.id, { limit: 100 });
 
-        await handleLoadRepositoryCommits(
-          createLoadRepositoryCommitsCommand(repo.id, commits),
-          repos
-        );
+          await handleLoadRepositoryCommits(
+            createLoadRepositoryCommitsCommand(registeredRepo.id, commits),
+            repos
+          );
+        } catch (commitError) {
+          console.warn(`Failed to load commits for ${fullName}:`, commitError);
+          // Continue even if commits fail - the repo is still registered
+        }
 
-        res.json({ id: repo.id, fullName: repo.fullName, status: repo.status });
+        res.json({ id: registeredRepo.id, fullName: registeredRepo.fullName, status: registeredRepo.status });
       } else {
         // Local repository path
-        absolutePath = resolve(repoPath);
-        fullName = absolutePath;
-        cloneUrl = absolutePath;
+        const absolutePath = resolve(repoPath);
+        const fullName = absolutePath;
+        const cloneUrl = absolutePath;
 
         // Check if repo already exists (via CQRS query)
         const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
@@ -326,6 +385,7 @@ export function createReposRoutes(deps: Dependencies): Router {
               fullName: absolutePath,
               cloneUrl: absolutePath,
               defaultBranch: 'main',
+              isGitHubRepo: false,
             }),
             repos
           );
@@ -336,7 +396,7 @@ export function createReposRoutes(deps: Dependencies): Router {
           }
           repo = registerResult.data!;
 
-          // Load commits using GitService
+          // Load commits using GitService (for local repos)
           git.registerLocalRepo(repo.id, absolutePath);
           const commits = await git.loadCommits(repo.id);
 
