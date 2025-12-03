@@ -28,9 +28,11 @@ export async function specCommand(args: string[]): Promise<void> {
   const absolutePath = process.cwd();
 
   // Initialize services
-  const repos = createRepositories({ type: 'file' });
+  const connection = await createRepositories();
+  const repos = connection.repositories;
   const llm = createLLM();
 
+  try {
   // Find the repository - try exact match first, then find most recent (via CQRS queries)
   const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
   const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
@@ -107,5 +109,8 @@ export async function specCommand(args: string[]): Promise<void> {
 
   if (result.costUsd) {
     console.log(`\nCost: $${result.costUsd.toFixed(4)}`);
+  }
+  } finally {
+    await connection.close();
   }
 }

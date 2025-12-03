@@ -1,6 +1,12 @@
 import type { WikiPageRepository } from '../interfaces/wiki-page-repository.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
+import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<WikiPage>({
+  required: ['createdAt', 'updatedAt'],
+  optional: [],
+});
 
 export class FileWikiPageRepository implements WikiPageRepository {
   private store: FileStore<WikiPage>;
@@ -10,32 +16,39 @@ export class FileWikiPageRepository implements WikiPageRepository {
   }
 
   async findById(id: string): Promise<WikiPage | null> {
-    return this.store.get(id);
+    const result = await this.store.get(id);
+    return result ? hydrateDates(result) : null;
   }
 
   async findByPath(wikiId: string, path: string): Promise<WikiPage | null> {
-    return this.store.findOne(p => p.wikiId === wikiId && p.path === path);
+    const result = await this.store.findOne(p => p.wikiId === wikiId && p.path === path);
+    return result ? hydrateDates(result) : null;
   }
 
   async findByWiki(wikiId: string): Promise<WikiPage[]> {
-    return this.store.find(p => p.wikiId === wikiId);
+    const results = await this.store.find(p => p.wikiId === wikiId);
+    return results.map(hydrateDates);
   }
 
   async findLowConfidence(wikiId: string, threshold: number): Promise<WikiPage[]> {
-    return this.store.find(p => p.wikiId === wikiId && p.confidence < threshold);
+    const results = await this.store.find(p => p.wikiId === wikiId && p.confidence < threshold);
+    return results.map(hydrateDates);
   }
 
   async findRecentlyUpdated(wikiId: string, since: Date): Promise<WikiPage[]> {
-    return this.store.find(p => p.wikiId === wikiId && p.updatedAt >= since);
+    const sinceTime = getTime(since);
+    const results = await this.store.find(p => p.wikiId === wikiId && getTime(p.updatedAt) >= sinceTime);
+    return results.map(hydrateDates);
   }
 
   async search(wikiId: string, query: string): Promise<WikiPage[]> {
     const lowerQuery = query.toLowerCase();
-    return this.store.find(p =>
+    const results = await this.store.find(p =>
       p.wikiId === wikiId &&
       (p.title.toLowerCase().includes(lowerQuery) ||
        p.content.toLowerCase().includes(lowerQuery))
     );
+    return results.map(hydrateDates);
   }
 
   async save(page: WikiPage): Promise<void> {

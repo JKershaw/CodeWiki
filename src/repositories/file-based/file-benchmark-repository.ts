@@ -1,6 +1,12 @@
 import type { BenchmarkRepository } from '../interfaces/benchmark-repository.js';
 import type { BenchmarkRun, BenchmarkRunStatus, BenchmarkResult, BenchmarkSummary } from '../../domain/benchmark.js';
+import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<BenchmarkRun>({
+  required: ['startedAt'],
+  optional: ['completedAt'],
+});
 
 export class FileBenchmarkRepository implements BenchmarkRepository {
   private store: FileStore<BenchmarkRun>;
@@ -11,7 +17,7 @@ export class FileBenchmarkRepository implements BenchmarkRepository {
 
   async findById(id: string): Promise<BenchmarkRun | null> {
     const result = await this.store.get(id);
-    return result ? this.hydrateDates(result) : null;
+    return result ? hydrateDates(result) : null;
   }
 
   async findByRepo(repoId: string, options?: {
@@ -26,8 +32,8 @@ export class FileBenchmarkRepository implements BenchmarkRepository {
     });
 
     // Hydrate dates and sort by start time, newest first
-    results = results.map(r => this.hydrateDates(r));
-    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
+    results = results.map(hydrateDates);
+    results.sort((a, b) => getTime(b.startedAt) - getTime(a.startedAt));
 
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? results.length;
@@ -50,8 +56,8 @@ export class FileBenchmarkRepository implements BenchmarkRepository {
     });
 
     // Hydrate dates and sort by start time, newest first
-    results = results.map(r => this.hydrateDates(r));
-    results.sort((a, b) => this.getTime(b.startedAt) - this.getTime(a.startedAt));
+    results = results.map(hydrateDates);
+    results.sort((a, b) => getTime(b.startedAt) - getTime(a.startedAt));
 
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? results.length;
@@ -67,7 +73,7 @@ export class FileBenchmarkRepository implements BenchmarkRepository {
       r.repoId === repoId && r.status === 'running'
     );
     if (results.length === 0) return null;
-    return this.hydrateDates(results[0]!);
+    return hydrateDates(results[0]!);
   }
 
   async findRunningByWiki(wikiId: string): Promise<BenchmarkRun | null> {
@@ -75,7 +81,7 @@ export class FileBenchmarkRepository implements BenchmarkRepository {
       r.wikiId === wikiId && r.status === 'running'
     );
     if (results.length === 0) return null;
-    return this.hydrateDates(results[0]!);
+    return hydrateDates(results[0]!);
   }
 
   async save(run: BenchmarkRun): Promise<void> {
@@ -115,21 +121,5 @@ export class FileBenchmarkRepository implements BenchmarkRepository {
       completedAt: new Date(),
       error,
     });
-  }
-
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
-  }
-
-  /** Ensure all date fields are proper Date objects */
-  private hydrateDates(run: BenchmarkRun): BenchmarkRun {
-    return {
-      ...run,
-      startedAt: run.startedAt instanceof Date ? run.startedAt : new Date(run.startedAt),
-      completedAt: run.completedAt instanceof Date ? run.completedAt :
-        (run.completedAt ? new Date(run.completedAt) : null),
-    };
   }
 }

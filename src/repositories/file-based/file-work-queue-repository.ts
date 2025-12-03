@@ -1,49 +1,17 @@
 import type { WorkQueueRepository } from '../interfaces/work-queue-repository.js';
 import type { WorkItem, WorkItemStatus } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
+import { createDateNormalizer } from '../../domain/date-utils.js';
+import { selectItemsForBatch } from '../../domain/work-queue-logic.js';
 import { FileStore } from './file-store.js';
-
-/**
- * Analysis agents that process commits.
- * code-change must run first on a commit before others.
- */
-const ANALYSIS_AGENTS: AgentType[] = [
-  'code-change',
-  'narrative',
-  'security',
-  'technical-debt',
-  'pattern',
-  'dependency',
-];
-
-/**
- * Meta agents that process the wiki.
- * These should only run when no analysis work is pending.
- */
-const META_AGENTS: AgentType[] = [
-  'link',
-  'structure',
-  'quality',
-  'consistency',
-];
 
 /**
  * Normalize work item dates from JSON storage.
  */
-function normalizeWorkItemDates(item: WorkItem): WorkItem {
-  return {
-    ...item,
-    createdAt: item.createdAt instanceof Date
-      ? item.createdAt
-      : new Date(item.createdAt as unknown as string),
-    claimedAt: item.claimedAt
-      ? (item.claimedAt instanceof Date ? item.claimedAt : new Date(item.claimedAt as unknown as string))
-      : null,
-    completedAt: item.completedAt
-      ? (item.completedAt instanceof Date ? item.completedAt : new Date(item.completedAt as unknown as string))
-      : null,
-  };
-}
+const normalizeWorkItemDates = createDateNormalizer<WorkItem>({
+  required: ['createdAt'],
+  optional: ['claimedAt', 'completedAt'],
+});
 
 export class FileWorkQueueRepository implements WorkQueueRepository {
   private store: FileStore<WorkItem>;
@@ -137,64 +105,22 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
     const pending = await this.findPending(repoId, maxItems * 3);
     if (pending.length === 0) return [];
 
-    // Rule 1: If bootstrap is pending, return only that
-    const bootstrapItem = pending.find(w => w.agentType === 'bootstrap');
-    if (bootstrapItem) {
-      bootstrapItem.status = 'claimed';
-      bootstrapItem.claimedAt = new Date();
-      await this.store.set(bootstrapItem);
-      return [bootstrapItem];
-    }
+    // Use shared business logic to select which items to claim
+    const { itemsToClaim } = selectItemsForBatch(pending, maxItems, processedCommits);
 
-    // Check if there's any analysis work pending (for meta agent gating)
-    const hasAnalysisPending = pending.some(w =>
-      ANALYSIS_AGENTS.includes(w.agentType as AgentType)
-    );
-
-    const batch: WorkItem[] = [];
-    const claimedCommitsInBatch = new Set<string>();
-
-    for (const item of pending) {
-      if (batch.length >= maxItems) break;
-
-      // Rule 2: Meta agents can only run when no analysis work is pending
-      if (META_AGENTS.includes(item.agentType as AgentType)) {
-        if (hasAnalysisPending) continue;
-      }
-
-      // Rule 3: For commit-targeted non-code-change analysis agents,
-      // verify code-change has already processed this commit
-      if (
-        item.targetCommitId &&
-        item.agentType !== 'code-change' &&
-        ANALYSIS_AGENTS.includes(item.agentType as AgentType)
-      ) {
-        if (!processedCommits.has(item.targetCommitId)) {
-          continue;
-        }
-      }
-
-      // Rule 4: Don't claim the same commit twice in one batch
-      // (prevents race conditions on same commit)
-      if (item.targetCommitId) {
-        if (claimedCommitsInBatch.has(item.targetCommitId)) {
-          continue;
-        }
-        claimedCommitsInBatch.add(item.targetCommitId);
-      }
-
-      // Claim this item
+    // Mark items as claimed
+    const claimedAt = new Date();
+    for (const item of itemsToClaim) {
       item.status = 'claimed';
-      item.claimedAt = new Date();
-      batch.push(item);
+      item.claimedAt = claimedAt;
     }
 
     // Persist all claimed items
-    if (batch.length > 0) {
-      await this.store.setMany(batch);
+    if (itemsToClaim.length > 0) {
+      await this.store.setMany(itemsToClaim);
     }
 
-    return batch;
+    return itemsToClaim;
   }
 
   async complete(id: string, agentRunId: string): Promise<void> {

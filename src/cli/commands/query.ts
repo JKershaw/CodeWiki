@@ -33,9 +33,11 @@ export async function queryCommand(args: string[]): Promise<void> {
   const absolutePath = resolve(repoPath);
 
   // Initialize services
-  const repos = createRepositories({ type: 'file' });
+  const connection = await createRepositories();
+  const repos = connection.repositories;
   const llm = createLLM();
 
+  try {
   // Find the repository via CQRS query
   const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
   const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
@@ -87,4 +89,7 @@ export async function queryCommand(args: string[]): Promise<void> {
   }
 
   console.log('');
+  } finally {
+    await connection.close();
+  }
 }

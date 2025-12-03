@@ -1,7 +1,13 @@
 import type { IterationRepository } from '../interfaces/iteration-repository.js';
 import type { Iteration } from '../../domain/iteration.js';
 import type { AgentType } from '../../domain/agent-run.js';
+import { createDateNormalizer } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<Iteration>({
+  required: ['startedAt'],
+  optional: ['completedAt'],
+});
 
 export class FileIterationRepository implements IterationRepository {
   private store: FileStore<Iteration>;
@@ -12,12 +18,12 @@ export class FileIterationRepository implements IterationRepository {
 
   async findById(id: string): Promise<Iteration | null> {
     const result = await this.store.get(id);
-    return result ? this.hydrateDates(result) : null;
+    return result ? hydrateDates(result) : null;
   }
 
   async findByProcessingRun(processingRunId: string): Promise<Iteration[]> {
     let results = await this.store.find(i => i.processingRunId === processingRunId);
-    results = results.map(i => this.hydrateDates(i));
+    results = results.map(hydrateDates);
     // Sort by iteration number
     results.sort((a, b) => a.iterationNumber - b.iterationNumber);
     return results;
@@ -28,14 +34,14 @@ export class FileIterationRepository implements IterationRepository {
       i.processingRunId === processingRunId && i.status === 'running'
     );
     if (results.length === 0) return null;
-    return this.hydrateDates(results[0]!);
+    return hydrateDates(results[0]!);
   }
 
   async findMostRecent(processingRunId: string): Promise<Iteration | null> {
     let results = await this.store.find(i => i.processingRunId === processingRunId);
     if (results.length === 0) return null;
 
-    results = results.map(i => this.hydrateDates(i));
+    results = results.map(hydrateDates);
     results.sort((a, b) => b.iterationNumber - a.iterationNumber);
     return results[0]!;
   }
@@ -92,21 +98,5 @@ export class FileIterationRepository implements IterationRepository {
       error: reason,
       completedAt: new Date(),
     });
-  }
-
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
-  }
-
-  /** Ensure all date fields are proper Date objects */
-  private hydrateDates(iteration: Iteration): Iteration {
-    return {
-      ...iteration,
-      startedAt: iteration.startedAt instanceof Date ? iteration.startedAt : new Date(iteration.startedAt),
-      completedAt: iteration.completedAt instanceof Date ? iteration.completedAt :
-        (iteration.completedAt ? new Date(iteration.completedAt) : null),
-    };
   }
 }

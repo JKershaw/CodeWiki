@@ -1,5 +1,6 @@
 import type { CommitRepository } from '../interfaces/commit-repository.js';
 import type { Commit, AgentProcessingRecord } from '../../domain/commit.js';
+import { normalizeDate } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
 
 /**
@@ -9,17 +10,11 @@ import { FileStore } from './file-store.js';
 function normalizeCommitDates(commit: Commit): Commit {
   return {
     ...commit,
-    committedAt: commit.committedAt instanceof Date
-      ? commit.committedAt
-      : new Date(commit.committedAt as unknown as string),
-    createdAt: commit.createdAt instanceof Date
-      ? commit.createdAt
-      : new Date(commit.createdAt as unknown as string),
+    committedAt: normalizeDate(commit.committedAt),
+    createdAt: normalizeDate(commit.createdAt),
     processedBy: commit.processedBy.map(p => ({
       ...p,
-      processedAt: p.processedAt instanceof Date
-        ? p.processedAt
-        : new Date(p.processedAt as unknown as string),
+      processedAt: normalizeDate(p.processedAt),
     })),
   };
 }
@@ -61,7 +56,7 @@ export class FileCommitRepository implements CommitRepository {
 
   async findByDateRange(repoId: string, start: Date, end: Date): Promise<Commit[]> {
     const commits = await this.store.find(c => {
-      const commitDate = c.committedAt instanceof Date ? c.committedAt : new Date(c.committedAt as unknown as string);
+      const commitDate = normalizeDate(c.committedAt);
       return c.repoId === repoId &&
         commitDate >= start &&
         commitDate <= end;
