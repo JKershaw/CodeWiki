@@ -225,7 +225,9 @@ export function createReposRoutes(deps: Dependencies): Router {
         } catch (cloneError) {
           const errorMessage = cloneError instanceof Error ? cloneError.message : String(cloneError);
           // Check for common clone errors
-          if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+          if (errorMessage.includes('ENOENT') || errorMessage.includes('spawn git')) {
+            res.status(500).json({ error: 'Git is not installed or not found in PATH. Please install git to clone repositories.' });
+          } else if (errorMessage.includes('not found') || errorMessage.includes('404')) {
             res.status(404).json({ error: 'Repository not found. Make sure it exists and is public.' });
           } else if (errorMessage.includes('Authentication') || errorMessage.includes('403')) {
             res.status(403).json({ error: 'Repository is private or requires authentication. Only public repositories are supported.' });
