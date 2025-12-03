@@ -9,11 +9,15 @@
  * The application auto-detects which to use based on environment configuration.
  */
 
+import { MongoClient } from 'mongodb';
+
 export * from './interfaces/index.js';
 export { createFileRepositories } from './file-based/index.js';
+export { createMongoRepositories, createMongoIndexes } from './mongo-based/index.js';
 
 import type { Repositories } from './interfaces/index.js';
 import { createFileRepositories } from './file-based/index.js';
+import { createMongoRepositories, createMongoIndexes } from './mongo-based/index.js';
 
 /**
  * Environment configuration for repository selection.
@@ -23,8 +27,12 @@ export interface RepositoryConfig {
   type?: 'mongodb' | 'file';
   /** MongoDB connection string (for mongodb type) */
   mongoUri?: string;
+  /** MongoDB database name (defaults to 'codewiki') */
+  mongoDbName?: string;
   /** Base directory for file storage (for file type) */
   fileBasePath?: string;
+  /** Whether to create indexes on startup (for mongodb, defaults to true) */
+  createIndexes?: boolean;
 }
 
 /**
@@ -51,12 +59,29 @@ export async function createRepositories(config?: RepositoryConfig): Promise<Rep
   const effectiveConfig = { ...detectConfig(), ...config };
 
   if (effectiveConfig.type === 'mongodb') {
-    // TODO: Implement MongoDB repositories
-    // When implemented, this will:
-    // 1. Create a MongoClient with effectiveConfig.mongoUri
-    // 2. await client.connect()
-    // 3. Return repositories with close() that calls client.close()
-    throw new Error('MongoDB repositories not yet implemented');
+    if (!effectiveConfig.mongoUri) {
+      throw new Error('MongoDB URI is required for mongodb storage type');
+    }
+
+    const client = new MongoClient(effectiveConfig.mongoUri);
+    await client.connect();
+
+    const dbName = effectiveConfig.mongoDbName ?? 'codewiki';
+    const db = client.db(dbName);
+
+    // Create indexes by default
+    if (effectiveConfig.createIndexes !== false) {
+      await createMongoIndexes(db);
+    }
+
+    const repositories = createMongoRepositories(db);
+
+    return {
+      repositories,
+      close: async () => {
+        await client.close();
+      },
+    };
   }
 
   const repositories = createFileRepositories(effectiveConfig.fileBasePath);
@@ -79,6 +104,7 @@ function detectConfig(): RepositoryConfig {
     return {
       type: 'mongodb',
       mongoUri,
+      mongoDbName: process.env['MONGODB_DB_NAME'] ?? 'codewiki',
     };
   }
 
