@@ -4,7 +4,7 @@
   "description": "Generate living wikis from Git repositories",
   "type": "module",
   "engines": {
-    "node": ">=20.4.0"
+    "node": "24.x"
   },
   "bin": {
     "codewiki": "./dist/cli.js"

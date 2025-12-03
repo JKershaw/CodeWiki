@@ -5,6 +5,7 @@ import {
   getEditSourceTimestamp,
   isCommitEditSource,
 } from '../../domain/edit-request.js';
+import { normalizeDate, normalizeDateOrNull } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
 
 export class FileEditRequestRepository implements EditRequestRepository {
@@ -145,16 +146,8 @@ export class FileEditRequestRepository implements EditRequestRepository {
     return {
       ...editRequest,
       source: hydratedSource,
-      createdAt:
-        editRequest.createdAt instanceof Date
-          ? editRequest.createdAt
-          : new Date(editRequest.createdAt as unknown as string),
-      processedAt:
-        editRequest.processedAt instanceof Date
-          ? editRequest.processedAt
-          : editRequest.processedAt
-            ? new Date(editRequest.processedAt as unknown as string)
-            : null,
+      createdAt: normalizeDate(editRequest.createdAt),
+      processedAt: normalizeDateOrNull(editRequest.processedAt),
     };
   }
 
@@ -163,19 +156,13 @@ export class FileEditRequestRepository implements EditRequestRepository {
     if (isCommitEditSource(source)) {
       return {
         ...source,
-        commitTimestamp:
-          source.commitTimestamp instanceof Date
-            ? source.commitTimestamp
-            : new Date(source.commitTimestamp as unknown as string),
+        commitTimestamp: normalizeDate(source.commitTimestamp),
       };
     }
     // For story and manual sources, hydrate the timestamp field
     return {
       ...source,
-      timestamp:
-        (source as any).timestamp instanceof Date
-          ? (source as any).timestamp
-          : new Date((source as any).timestamp as unknown as string),
+      timestamp: normalizeDate((source as { timestamp: unknown }).timestamp),
     };
   }
 }

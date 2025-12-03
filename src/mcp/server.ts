@@ -22,12 +22,12 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
-import { createRepositories } from '../repositories/index.js';
+import { createRepositories, type Repositories, type RepositoryConnection } from '../repositories/index.js';
 import { createOpenRouterLLM } from '../services/llm/openrouter-llm-service.js';
 import { createMockLLMForCodeAnalysis } from '../services/llm/mock-llm-service.js';
-import { createResearchAgent } from '../agents/research/research-agent.js';
-import { createSpecAgent } from '../agents/spec/spec-agent.js';
-import { createOrchestrator } from '../agents/orchestrator/orchestrator.js';
+import { createResearchAgent, type ResearchAgent } from '../agents/research/research-agent.js';
+import { createSpecAgent, type SpecAgent } from '../agents/spec/spec-agent.js';
+import { createOrchestrator, type Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import {
   createGetRepositoryByFullNameQuery,
@@ -38,8 +38,12 @@ import {
   handleGetWikiPage as executeGetWikiPageQuery,
 } from '../queries/index.js';
 
-// Initialize services
-const repos = createRepositories({ type: 'file' });
+// Services (initialized in main)
+let repoConnection: RepositoryConnection;
+let repos: Repositories;
+let research: ResearchAgent;
+let specAgent: SpecAgent;
+let orchestrator: Orchestrator;
 
 function createLLM() {
   const apiKey = process.env['OPENROUTER_API_KEY'];
@@ -49,11 +53,6 @@ function createLLM() {
   }
   return createMockLLMForCodeAnalysis();
 }
-
-const llm = createLLM();
-const research = createResearchAgent(repos, llm);
-const specAgent = createSpecAgent(repos, llm);
-const orchestrator = createOrchestrator(repos);
 
 // Create MCP server
 const server = new Server(
@@ -377,9 +376,30 @@ async function handleGenerateSpec(args: { repo_path: string; task: string }) {
 
 // Start the server
 async function main() {
+  // Initialize repositories
+  repoConnection = await createRepositories();
+  repos = repoConnection.repositories;
+
+  // Initialize agents
+  const llm = createLLM();
+  research = createResearchAgent(repos, llm);
+  specAgent = createSpecAgent(repos, llm);
+  orchestrator = createOrchestrator(repos);
+
+  // Connect MCP server
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('CodeWiki MCP server running on stdio');
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.error('Shutting down...');
+    await repoConnection.close();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 main().catch((error) => {

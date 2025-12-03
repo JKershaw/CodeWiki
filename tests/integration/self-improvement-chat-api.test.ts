@@ -10,7 +10,7 @@ import { v4 as uuid } from 'uuid';
 import { mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createFileRepositories, type Repositories } from '../../src/repositories/index.js';
+import { createRepositories, type Repositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import { createSelfImprovementRun, completeSelfImprovementRun } from '../../src/domain/self-improvement.js';
 import { createChatSession } from '../../src/domain/chat-session.js';
 import { SelfImprovementChatService } from '../../src/services/self-improvement-chat-service.js';
@@ -51,6 +51,7 @@ function createMockLLM(responseContent: string): LLMService {
 
 describe('Self-Improvement Chat API', () => {
   let repos: Repositories;
+  let repoConnection: RepositoryConnection;
   let tempDir: string;
   let app: express.Application;
   let server: Server;
@@ -58,7 +59,8 @@ describe('Self-Improvement Chat API', () => {
 
   before(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'chat-api-test-'));
-    repos = createFileRepositories(tempDir);
+    repoConnection = await createRepositories({ fileBasePath: tempDir });
+    repos = repoConnection.repositories;
 
     // Create Express app for testing
     app = express();
@@ -201,6 +203,7 @@ describe('Self-Improvement Chat API', () => {
 
   after(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await repoConnection.close();
     await rm(tempDir, { recursive: true, force: true });
   });
 

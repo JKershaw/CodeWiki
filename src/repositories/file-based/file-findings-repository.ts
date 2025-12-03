@@ -1,7 +1,14 @@
 import type { FindingsRepository } from '../interfaces/findings-repository.js';
 import type { Finding, FindingType, FindingStatus, FindingGroup } from '../../domain/finding.js';
 import { FindingPriority } from '../../domain/finding.js';
+import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
+import { groupFindings } from '../../domain/finding-logic.js';
 import { FileStore } from './file-store.js';
+
+const hydrateDates = createDateNormalizer<Finding>({
+  required: ['detectedAt'],
+  optional: ['addressedAt'],
+});
 
 export class FileFindingsRepository implements FindingsRepository {
   private store: FileStore<Finding>;
@@ -12,7 +19,7 @@ export class FileFindingsRepository implements FindingsRepository {
 
   async findById(id: string): Promise<Finding | null> {
     const result = await this.store.get(id);
-    return result ? this.hydrateDates(result) : null;
+    return result ? hydrateDates(result) : null;
   }
 
   async findByWiki(wikiId: string, options?: {
@@ -27,13 +34,13 @@ export class FileFindingsRepository implements FindingsRepository {
       return true;
     });
 
-    results = results.map(f => this.hydrateDates(f));
+    results = results.map(hydrateDates);
 
     // Sort by priority (type-based) then by detection time
     results.sort((a, b) => {
       const priorityDiff = (FindingPriority[b.type] ?? 0) - (FindingPriority[a.type] ?? 0);
       if (priorityDiff !== 0) return priorityDiff;
-      return this.getTime(b.detectedAt) - this.getTime(a.detectedAt);
+      return getTime(b.detectedAt) - getTime(a.detectedAt);
     });
 
     if (options?.limit) {
@@ -52,139 +59,17 @@ export class FileFindingsRepository implements FindingsRepository {
       if (f.wikiId !== wikiId) return false;
       return f.affectedPaths.some(p => pathSet.has(p));
     });
-    return results.map(f => this.hydrateDates(f));
+    return results.map(hydrateDates);
   }
 
   async findByAgentRun(agentRunId: string): Promise<Finding[]> {
     let results = await this.store.find(f => f.sourceAgentRunId === agentRunId);
-    return results.map(f => this.hydrateDates(f));
+    return results.map(hydrateDates);
   }
 
   async groupOpenFindings(wikiId: string): Promise<FindingGroup[]> {
     const openFindings = await this.findOpen(wikiId);
-
-    if (openFindings.length === 0) {
-      return [];
-    }
-
-    // Group by type
-    const byType = new Map<FindingType, Finding[]>();
-    for (const finding of openFindings) {
-      if (!byType.has(finding.type)) {
-        byType.set(finding.type, []);
-      }
-      byType.get(finding.type)!.push(finding);
-    }
-
-    // Create finding groups
-    const groups: FindingGroup[] = [];
-    for (const [type, findings] of byType) {
-      // For duplicate_title and similar_content, further group by affected paths
-      if (type === 'duplicate_title' || type === 'similar_content') {
-        // Group findings that share common affected paths
-        const pathGroups = this.groupBySharedPaths(findings);
-        for (const groupFindings of pathGroups) {
-          const allPaths = new Set<string>();
-          let highestSeverity: 'low' | 'medium' | 'high' = 'low';
-
-          for (const f of groupFindings) {
-            f.affectedPaths.forEach(p => allPaths.add(p));
-            if (f.severity === 'high') highestSeverity = 'high';
-            else if (f.severity === 'medium' && highestSeverity !== 'high') {
-              highestSeverity = 'medium';
-            }
-          }
-
-          groups.push({
-            type,
-            findings: groupFindings,
-            affectedPaths: Array.from(allPaths),
-            severity: highestSeverity,
-          });
-        }
-      } else {
-        // For other types, create one group per type
-        const allPaths = new Set<string>();
-        let highestSeverity: 'low' | 'medium' | 'high' = 'low';
-
-        for (const f of findings) {
-          f.affectedPaths.forEach(p => allPaths.add(p));
-          if (f.severity === 'high') highestSeverity = 'high';
-          else if (f.severity === 'medium' && highestSeverity !== 'high') {
-            highestSeverity = 'medium';
-          }
-        }
-
-        groups.push({
-          type,
-          findings,
-          affectedPaths: Array.from(allPaths),
-          severity: highestSeverity,
-        });
-      }
-    }
-
-    // Sort groups by priority
-    groups.sort((a, b) => {
-      const priorityDiff = (FindingPriority[b.type] ?? 0) - (FindingPriority[a.type] ?? 0);
-      if (priorityDiff !== 0) return priorityDiff;
-      // Secondary sort by severity
-      const severityOrder = { high: 3, medium: 2, low: 1 };
-      return severityOrder[b.severity] - severityOrder[a.severity];
-    });
-
-    return groups;
-  }
-
-  /**
-   * Group findings that share common affected paths.
-   */
-  private groupBySharedPaths(findings: Finding[]): Finding[][] {
-    if (findings.length <= 1) {
-      return [findings];
-    }
-
-    // Use Union-Find to group findings with overlapping paths
-    const parent = new Map<string, string>();
-    const findRoot = (path: string): string => {
-      if (!parent.has(path)) {
-        parent.set(path, path);
-      }
-      if (parent.get(path) !== path) {
-        parent.set(path, findRoot(parent.get(path)!));
-      }
-      return parent.get(path)!;
-    };
-
-    const union = (path1: string, path2: string): void => {
-      const root1 = findRoot(path1);
-      const root2 = findRoot(path2);
-      if (root1 !== root2) {
-        parent.set(root1, root2);
-      }
-    };
-
-    // Connect all paths within each finding
-    for (const finding of findings) {
-      if (finding.affectedPaths.length > 1) {
-        for (let i = 1; i < finding.affectedPaths.length; i++) {
-          union(finding.affectedPaths[0]!, finding.affectedPaths[i]!);
-        }
-      }
-    }
-
-    // Group findings by their root path
-    const groups = new Map<string, Finding[]>();
-    for (const finding of findings) {
-      if (finding.affectedPaths.length === 0) continue;
-      const root = findRoot(finding.affectedPaths[0]!);
-      if (!groups.has(root)) {
-        groups.set(root, []);
-      }
-      groups.get(root)!.push(finding);
-    }
-
-    return Array.from(groups.values());
+    return groupFindings(openFindings);
   }
 
   async countOpenByType(wikiId: string): Promise<Record<FindingType, number>> {
@@ -253,21 +138,5 @@ export class FileFindingsRepository implements FindingsRepository {
     });
 
     return existing !== null;
-  }
-
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
-  }
-
-  /** Ensure all date fields are proper Date objects */
-  private hydrateDates(finding: Finding): Finding {
-    return {
-      ...finding,
-      detectedAt: finding.detectedAt instanceof Date ? finding.detectedAt : new Date(finding.detectedAt),
-      addressedAt: finding.addressedAt instanceof Date ? finding.addressedAt :
-        (finding.addressedAt ? new Date(finding.addressedAt) : null),
-    };
   }
 }

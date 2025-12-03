@@ -19,28 +19,34 @@ export async function statusCommand(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const repos = createRepositories({ type: 'file' });
-  // Use CQRS query to find repository
-  const repoQuery = createGetRepositoryQuery(repoId);
-  const repoResult = await handleGetRepository(repoQuery, repos);
+  const connection = await createRepositories();
+  const repos = connection.repositories;
 
-  if (!repoResult.success || !repoResult.data) {
-    console.error(`Repository not found: ${repoId}`);
-    process.exit(1);
+  try {
+    // Use CQRS query to find repository
+    const repoQuery = createGetRepositoryQuery(repoId);
+    const repoResult = await handleGetRepository(repoQuery, repos);
+
+    if (!repoResult.success || !repoResult.data) {
+      console.error(`Repository not found: ${repoId}`);
+      process.exit(1);
+    }
+
+    const repo = repoResult.data;
+
+    const orchestrator = createOrchestrator(repos);
+    const wiki = await getOrCreateActiveWiki(repoId, repos);
+    const summary = await orchestrator.getWorkSummary(repoId, wiki.id);
+
+    console.log(`\n📊 Status for ${repo.fullName}`);
+    console.log(`   ID: ${repo.id}`);
+    console.log(`   Status: ${repo.status}`);
+    console.log(`   Commits: ${summary.processedCommits}/${summary.totalCommits} (${summary.coveragePercent.toFixed(1)}%)`);
+    console.log(`   Wiki pages: ${summary.wikiPages}`);
+    console.log(`   Avg confidence: ${(summary.avgConfidence * 100).toFixed(1)}%`);
+    console.log(`   Pending work: ${summary.pendingWork}`);
+    console.log(`   Open conflicts: ${summary.openConflicts}\n`);
+  } finally {
+    await connection.close();
   }
-
-  const repo = repoResult.data;
-
-  const orchestrator = createOrchestrator(repos);
-  const wiki = await getOrCreateActiveWiki(repoId, repos);
-  const summary = await orchestrator.getWorkSummary(repoId, wiki.id);
-
-  console.log(`\n📊 Status for ${repo.fullName}`);
-  console.log(`   ID: ${repo.id}`);
-  console.log(`   Status: ${repo.status}`);
-  console.log(`   Commits: ${summary.processedCommits}/${summary.totalCommits} (${summary.coveragePercent.toFixed(1)}%)`);
-  console.log(`   Wiki pages: ${summary.wikiPages}`);
-  console.log(`   Avg confidence: ${(summary.avgConfidence * 100).toFixed(1)}%`);
-  console.log(`   Pending work: ${summary.pendingWork}`);
-  console.log(`   Open conflicts: ${summary.openConflicts}\n`);
 }
