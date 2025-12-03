@@ -26,6 +26,7 @@ export * from './mongo-edit-request-repository.js';
 export * from './mongo-quality-benchmark-repository.js';
 export * from './mongo-self-improvement-repository.js';
 export * from './mongo-chat-session-repository.js';
+export * from './mongo-user-repository.js';
 
 import { MongoRepoRepository } from './mongo-repo-repository.js';
 import { MongoWikiRepository } from './mongo-wiki-repository.js';
@@ -44,6 +45,7 @@ import { MongoEditRequestRepository } from './mongo-edit-request-repository.js';
 import { MongoQualityBenchmarkRepository } from './mongo-quality-benchmark-repository.js';
 import { MongoSelfImprovementRepository } from './mongo-self-improvement-repository.js';
 import { MongoChatSessionRepository } from './mongo-chat-session-repository.js';
+import { MongoUserRepository } from './mongo-user-repository.js';
 
 /**
  * Create all MongoDB-based repositories.
@@ -69,6 +71,7 @@ export function createMongoRepositories(db: Db): Repositories {
     qualityBenchmarks: new MongoQualityBenchmarkRepository(db),
     selfImprovements: new MongoSelfImprovementRepository(db),
     chatSessions: new MongoChatSessionRepository(db),
+    users: new MongoUserRepository(db),
   };
 }
 
@@ -213,5 +216,12 @@ export async function createMongoIndexes(db: Db): Promise<void> {
     { key: { selfImprovementRunId: 1 } },
     { key: { repoId: 1, status: 1 } },
     { key: { repoId: 1, createdAt: -1 } },
+  ]);
+
+  // Users collection
+  await db.collection('users').createIndexes([
+    { key: { githubId: 1 }, unique: true },
+    { key: { login: 1 }, unique: true },
+    { key: { createdAt: -1 } },
   ]);
 }

@@ -23,6 +23,7 @@ export * from './edit-request-repository.js';
 export * from './quality-benchmark-repository.js';
 export * from './self-improvement-repository.js';
 export * from './chat-session-repository.js';
+export * from './user-repository.js';
 
 import type { RepoRepository } from './repo-repository.js';
 import type { WikiRepository } from './wiki-repository.js';
@@ -41,6 +42,7 @@ import type { EditRequestRepository } from './edit-request-repository.js';
 import type { QualityBenchmarkRepository } from './quality-benchmark-repository.js';
 import type { SelfImprovementRepository } from './self-improvement-repository.js';
 import type { ChatSessionRepository } from './chat-session-repository.js';
+import type { UserRepository } from './user-repository.js';
 
 /**
  * Collection of all repositories.
@@ -64,4 +66,5 @@ export interface Repositories {
   qualityBenchmarks: QualityBenchmarkRepository;
   selfImprovements: SelfImprovementRepository;
   chatSessions: ChatSessionRepository;
+  users: UserRepository;
 }

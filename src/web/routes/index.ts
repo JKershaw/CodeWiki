@@ -8,6 +8,7 @@ import { Router } from 'express';
 import type { Repositories } from '../../repositories/interfaces/index.js';
 import type { GitService } from '../../services/git/git-service.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
+import type { JwtService } from '../../services/auth/jwt-service.js';
 
 import { createReposRoutes } from './repos.js';
 import { createWikisRoutes } from './wikis.js';
@@ -27,6 +28,8 @@ export interface Dependencies {
   repos: Repositories;
   git: GitService;
   createLLM: () => LLMService;
+  /** Optional JWT service for authenticated git operations */
+  jwtService?: JwtService;
 }
 
 /**

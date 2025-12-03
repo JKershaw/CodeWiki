@@ -9,6 +9,17 @@ import type { Commit, DiffSummary } from '../../domain/commit.js';
 import { createCommit } from '../../domain/commit.js';
 
 /**
+ * Authentication options for git operations.
+ * Used for cloning and fetching from private repositories.
+ */
+export interface GitAuthOptions {
+  /** Username for authentication (typically 'x-access-token' for GitHub) */
+  username: string;
+  /** Password or access token */
+  password: string;
+}
+
+/**
  * Service for interacting with Git repositories.
  */
 export interface GitService {
@@ -20,8 +31,11 @@ export interface GitService {
 
   /**
    * Clone a repository to local storage.
+   * @param repoUrl - URL of the repository to clone
+   * @param repoId - Unique identifier for the repository
+   * @param auth - Optional authentication credentials for private repositories
    */
-  clone(repoUrl: string, repoId: string): Promise<string>;
+  clone(repoUrl: string, repoId: string, auth?: GitAuthOptions): Promise<string>;
 
   /**
    * Get the path to a cloned repository.
@@ -35,8 +49,10 @@ export interface GitService {
 
   /**
    * Fetch latest changes for a cloned repository.
+   * @param repoId - Unique identifier for the repository
+   * @param auth - Optional authentication credentials for private repositories
    */
-  fetch(repoId: string): Promise<void>;
+  fetch(repoId: string, auth?: GitAuthOptions): Promise<void>;
 
   /**
    * Load commits from a repository.
@@ -96,23 +112,34 @@ export class FileSystemGitService implements GitService {
     }
   }
 
-  async clone(repoUrl: string, repoId: string): Promise<string> {
+  async clone(repoUrl: string, repoId: string, auth?: GitAuthOptions): Promise<string> {
     const repoPath = this.getRepoPath(repoId);
 
     await mkdir(this.baseDir, { recursive: true });
 
     if (await this.isCloned(repoId)) {
-      await this.fetch(repoId);
+      await this.fetch(repoId, auth);
       return repoPath;
     }
 
-    await git.clone({
+    // Build clone options
+    const cloneOptions: Parameters<typeof git.clone>[0] = {
       fs,
       http,
       dir: repoPath,
       url: repoUrl,
       singleBranch: false,
-    });
+    };
+
+    // Add authentication if provided
+    if (auth) {
+      cloneOptions.onAuth = () => ({
+        username: auth.username,
+        password: auth.password,
+      });
+    }
+
+    await git.clone(cloneOptions);
 
     // Explicitly checkout to ensure working directory files are created
     // isomorphic-git clone with singleBranch: false may not checkout files
@@ -133,14 +160,25 @@ export class FileSystemGitService implements GitService {
     return repoPath;
   }
 
-  async fetch(repoId: string): Promise<void> {
+  async fetch(repoId: string, auth?: GitAuthOptions): Promise<void> {
     const repoPath = this.getRepoPath(repoId);
     try {
-      await git.fetch({
+      // Build fetch options
+      const fetchOptions: Parameters<typeof git.fetch>[0] = {
         fs,
         http,
         dir: repoPath,
-      });
+      };
+
+      // Add authentication if provided
+      if (auth) {
+        fetchOptions.onAuth = () => ({
+          username: auth.username,
+          password: auth.password,
+        });
+      }
+
+      await git.fetch(fetchOptions);
     } catch {
       // Ignore fetch errors for local repos without remotes
     }

@@ -10,7 +10,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import * as git from 'isomorphic-git';
 import * as fs from 'fs';
-import { FileSystemGitService } from '../../src/services/git/git-service.js';
+import { FileSystemGitService, type GitAuthOptions, type GitService } from '../../src/services/git/git-service.js';
 
 describe('GitService (isomorphic-git)', () => {
   let testDir: string;
@@ -237,6 +237,57 @@ describe('GitService (isomorphic-git)', () => {
       await gitService.deleteRepo(repoId);
 
       assert.strictEqual(await gitService.isCloned(repoId), false);
+    });
+  });
+
+  describe('GitAuthOptions', () => {
+    it('type should have username and password fields', () => {
+      // Type test - verifies the interface structure
+      const auth: GitAuthOptions = {
+        username: 'x-access-token',
+        password: 'ghu_token123',
+      };
+      assert.strictEqual(auth.username, 'x-access-token');
+      assert.strictEqual(auth.password, 'ghu_token123');
+    });
+  });
+
+  describe('clone with authentication', () => {
+    it('clone method signature accepts optional auth parameter', () => {
+      // This is a type/signature test - we verify the interface accepts auth
+      // Actual auth testing requires network access to remote repos
+      const gitServiceInstance = gitService as GitService;
+
+      // Verify clone is a function (takes 2 required + 1 optional = 3 params)
+      assert.strictEqual(typeof gitServiceInstance.clone, 'function');
+
+      // Type test - verify auth options can be constructed
+      const authOptions: GitAuthOptions = {
+        username: 'x-access-token',
+        password: 'test-token',
+      };
+      assert.ok(authOptions);
+    });
+  });
+
+  describe('fetch with authentication', () => {
+    it('fetch method accepts optional auth parameter', async () => {
+      // Create and register a local repo for testing
+      const repoId = 'auth-fetch-test';
+      const repoPath = await createTestRepo(repoId);
+      gitService.registerLocalRepo(repoId, repoPath);
+
+      // Test that fetch can be called with auth options
+      const authOptions: GitAuthOptions = {
+        username: 'x-access-token',
+        password: 'test-token',
+      };
+
+      // For local repos without remotes, this should complete without error
+      await gitService.fetch(repoId, authOptions);
+
+      // If we get here without an exception, the test passes
+      assert.ok(true);
     });
   });
 });

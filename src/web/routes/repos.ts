@@ -17,6 +17,8 @@ import {
 import { createOrchestrator } from '../../agents/orchestrator/orchestrator.js';
 import { createExecutor } from '../../executor/executor.js';
 import type { Dependencies } from './index.js';
+import type { GitAuthOptions } from '../../services/git/git-service.js';
+import { GITHUB_SESSION_COOKIE } from '../middleware/github-auth.js';
 
 /**
  * Validate a GitHub URL.
@@ -78,6 +80,46 @@ import {
   createListCommitsQuery,
   handleListCommits,
 } from '../../queries/index.js';
+
+/**
+ * Helper to extract GitHub auth options from request if user is authenticated.
+ */
+async function getGitAuthFromRequest(
+  req: Request,
+  deps: Dependencies
+): Promise<GitAuthOptions | undefined> {
+  const { repos, jwtService } = deps;
+
+  // No JWT service means no auth available
+  if (!jwtService) {
+    return undefined;
+  }
+
+  // Try to get session from signed cookie
+  const signedCookies = req.signedCookies as Record<string, string>;
+  const token = signedCookies[GITHUB_SESSION_COOKIE];
+  if (!token) {
+    return undefined;
+  }
+
+  // Verify the session token
+  const session = jwtService.verifySessionToken(token);
+  if (!session) {
+    return undefined;
+  }
+
+  // Look up user to get access token
+  const user = await repos.users.findById(session.userId);
+  if (!user || !user.accessToken) {
+    return undefined;
+  }
+
+  // Return auth options for GitHub (x-access-token is the standard username for token auth)
+  return {
+    username: 'x-access-token',
+    password: user.accessToken,
+  };
+}
 
 /**
  * Create repository management routes.
@@ -220,14 +262,16 @@ export function createReposRoutes(deps: Dependencies): Router {
         // Clone the repository
         const repoId = uuid();
         try {
-          absolutePath = await git.clone(cloneUrl, repoId);
+          // Get authentication if user is logged in
+          const auth = await getGitAuthFromRequest(req, deps);
+          absolutePath = await git.clone(cloneUrl, repoId, auth);
         } catch (cloneError) {
           const errorMessage = cloneError instanceof Error ? cloneError.message : String(cloneError);
           // Check for common clone errors
           if (errorMessage.includes('not found') || errorMessage.includes('404')) {
             res.status(404).json({ error: 'Repository not found. Make sure it exists and is public.' });
           } else if (errorMessage.includes('Authentication') || errorMessage.includes('403')) {
-            res.status(403).json({ error: 'Repository is private or requires authentication. Only public repositories are supported.' });
+            res.status(403).json({ error: 'Repository is private or requires authentication. Log in with GitHub to access private repositories.' });
           } else {
             res.status(500).json({ error: `Failed to clone repository: ${errorMessage}` });
           }
