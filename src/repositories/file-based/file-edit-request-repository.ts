@@ -1,5 +1,10 @@
 import type { EditRequestRepository } from '../interfaces/edit-request-repository.js';
 import type { EditRequest, EditRequestStatus } from '../../domain/edit-request.js';
+import {
+  getSourceCommitSha,
+  getEditSourceTimestamp,
+  isCommitEditSource,
+} from '../../domain/edit-request.js';
 import { FileStore } from './file-store.js';
 
 export class FileEditRequestRepository implements EditRequestRepository {
@@ -21,11 +26,11 @@ export class FileEditRequestRepository implements EditRequestRepository {
 
     results = results.map((er) => this.hydrateDates(er));
 
-    // Sort by commit timestamp (oldest first) to process in chronological order
+    // Sort by source timestamp (oldest first) to process in chronological order
     results.sort(
       (a, b) =>
-        this.getTime(a.sourceCommitTimestamp) -
-        this.getTime(b.sourceCommitTimestamp)
+        getEditSourceTimestamp(a.source).getTime() -
+        getEditSourceTimestamp(b.source).getTime()
     );
 
     return results;
@@ -40,7 +45,7 @@ export class FileEditRequestRepository implements EditRequestRepository {
 
   async findByCommit(repoId: string, commitSha: string): Promise<EditRequest[]> {
     let results = await this.store.find(
-      (er) => er.repoId === repoId && er.sourceCommitSha === commitSha
+      (er) => er.repoId === repoId && getSourceCommitSha(this.hydrateDates(er)) === commitSha
     );
     return results.map((er) => this.hydrateDates(er));
   }
@@ -62,11 +67,11 @@ export class FileEditRequestRepository implements EditRequestRepository {
 
     results = results.map((er) => this.hydrateDates(er));
 
-    // Sort by commit timestamp
+    // Sort by source timestamp
     results.sort(
       (a, b) =>
-        this.getTime(a.sourceCommitTimestamp) -
-        this.getTime(b.sourceCommitTimestamp)
+        getEditSourceTimestamp(a.source).getTime() -
+        getEditSourceTimestamp(b.source).getTime()
     );
 
     return results;
@@ -129,33 +134,48 @@ export class FileEditRequestRepository implements EditRequestRepository {
       return null;
     }
     // Already sorted by timestamp, so first is oldest
-    return pending[0]!.sourceCommitTimestamp;
-  }
-
-  /** Safely get time from a Date or ISO string */
-  private getTime(date: Date | string): number {
-    if (date instanceof Date) return date.getTime();
-    return new Date(date).getTime();
+    return getEditSourceTimestamp(pending[0]!.source);
   }
 
   /** Ensure all date fields are proper Date objects */
   private hydrateDates(editRequest: EditRequest): EditRequest {
+    // Hydrate the source's date fields based on its type
+    const hydratedSource = this.hydrateSourceDates(editRequest.source);
+
     return {
       ...editRequest,
-      sourceCommitTimestamp:
-        editRequest.sourceCommitTimestamp instanceof Date
-          ? editRequest.sourceCommitTimestamp
-          : new Date(editRequest.sourceCommitTimestamp),
+      source: hydratedSource,
       createdAt:
         editRequest.createdAt instanceof Date
           ? editRequest.createdAt
-          : new Date(editRequest.createdAt),
+          : new Date(editRequest.createdAt as unknown as string),
       processedAt:
         editRequest.processedAt instanceof Date
           ? editRequest.processedAt
           : editRequest.processedAt
-            ? new Date(editRequest.processedAt)
+            ? new Date(editRequest.processedAt as unknown as string)
             : null,
+    };
+  }
+
+  /** Hydrate date fields in the source object */
+  private hydrateSourceDates(source: EditRequest['source']): EditRequest['source'] {
+    if (isCommitEditSource(source)) {
+      return {
+        ...source,
+        commitTimestamp:
+          source.commitTimestamp instanceof Date
+            ? source.commitTimestamp
+            : new Date(source.commitTimestamp as unknown as string),
+      };
+    }
+    // For story and manual sources, hydrate the timestamp field
+    return {
+      ...source,
+      timestamp:
+        (source as any).timestamp instanceof Date
+          ? (source as any).timestamp
+          : new Date((source as any).timestamp as unknown as string),
     };
   }
 }

@@ -1,4 +1,31 @@
 import type { AgentType } from './agent-run.js';
+import {
+  type WorkTarget,
+  legacyToWorkTarget,
+  workTargetToLegacy,
+  createCommitTarget,
+  createPathTarget,
+  createWikiTarget,
+  getWorkTargetKey,
+  isCommitTarget,
+  isPathTarget,
+} from './work-target.js';
+
+// Re-export WorkTarget types for convenience
+export {
+  type WorkTarget,
+  type CommitTarget,
+  type PathTarget,
+  type WikiTarget,
+  createCommitTarget,
+  createPathTarget,
+  createWikiTarget,
+  getWorkTargetKey,
+  isCommitTarget,
+  isPathTarget,
+  isWikiTarget,
+  legacyToWorkTarget,
+} from './work-target.js';
 
 /**
  * Represents a pending work item in the queue.
@@ -10,10 +37,8 @@ export interface WorkItem {
   repoId: string;
   /** Agent type to execute */
   agentType: AgentType;
-  /** Target commit (for commit-focused work) */
-  targetCommitId: string | null;
-  /** Target path (directory or file for exploration agents, or wiki page path) */
-  targetPath: string | null;
+  /** The target of this work item (commit, path, or wiki) */
+  target: WorkTarget;
   /** Priority (higher = more urgent) */
   priority: number;
   /** Current status */
@@ -28,6 +53,20 @@ export interface WorkItem {
   agentRunId: string | null;
   /** Reference to the orchestrator run that created this work item (for provenance tracking) */
   orchestratorRunId: string | null;
+}
+
+/**
+ * Helper to get targetCommitId from WorkItem (for backward compatibility).
+ */
+export function getTargetCommitId(item: WorkItem): string | null {
+  return isCommitTarget(item.target) ? item.target.commitId : null;
+}
+
+/**
+ * Helper to get targetPath from WorkItem (for backward compatibility).
+ */
+export function getTargetPath(item: WorkItem): string | null {
+  return isPathTarget(item.target) ? item.target.path : null;
 }
 
 export type WorkItemStatus =
@@ -66,16 +105,25 @@ export function createWorkItem(params: {
   repoId: string;
   agentType: AgentType;
   priority: number;
+  /** Target for the work. Takes precedence over targetCommitId/targetPath if provided. */
+  target?: WorkTarget;
+  /** @deprecated Use target instead. Kept for backward compatibility. */
   targetCommitId?: string;
+  /** @deprecated Use target instead. Kept for backward compatibility. */
   targetPath?: string;
   orchestratorRunId?: string;
 }): WorkItem {
+  // Resolve target: prefer explicit target, fall back to legacy fields
+  const target = params.target ?? legacyToWorkTarget(
+    params.targetCommitId ?? null,
+    params.targetPath ?? null
+  );
+
   return {
     id: params.id,
     repoId: params.repoId,
     agentType: params.agentType,
-    targetCommitId: params.targetCommitId ?? null,
-    targetPath: params.targetPath ?? null,
+    target,
     priority: params.priority,
     status: 'pending',
     createdAt: new Date(),

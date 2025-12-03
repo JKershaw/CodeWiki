@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Repositories } from '../../repositories/index.js';
-import type { AgentType } from '../../domain/agent-run.js';
 import type { GitService } from '../../services/git/git-service.js';
+
+// Import agent type definitions from central registry
+import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 
 // Import CQRS queries
 import {
@@ -76,17 +78,6 @@ export interface OrchestratorContext {
   // Pending edit requests (from analysis agents, awaiting wiki-editor)
   pendingEditRequests: number;
 }
-
-/**
- * Analysis agents that process commits.
- */
-const ANALYSIS_AGENTS: AgentType[] = [
-  'code-change',
-  'narrative',
-  'security',
-  'pattern',
-  'dependency',
-];
 
 /**
  * Gathers context about the current wiki state for orchestrator decisions.

@@ -3,6 +3,7 @@ import { createAgentResult, createFinding } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { EditRequest, EditDecision } from '../../domain/edit-request.js';
+import { getSourceCommitSha, getSourceCommitTimestamp } from '../../domain/edit-request.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 
 /**
@@ -172,11 +173,17 @@ export class WikiEditorAgent implements Agent {
     }
 
     // Case 5: Edit is from a NEWER or SAME commit - apply normally
-    if (editRequest.sourceCommitTimestamp >= latestPageCommitTimestamp) {
+    const sourceTimestamp = getSourceCommitTimestamp(editRequest);
+    const sourceSha = getSourceCommitSha(editRequest);
+
+    // For non-commit sources, always apply (they're considered current)
+    if (!sourceTimestamp || sourceTimestamp >= latestPageCommitTimestamp) {
       return {
         decision: {
           action: 'apply',
-          reasoning: `Edit from commit ${editRequest.sourceCommitSha.slice(0, 7)} (${this.formatDate(editRequest.sourceCommitTimestamp)}) is current`,
+          reasoning: sourceSha
+            ? `Edit from commit ${sourceSha.slice(0, 7)} (${this.formatDate(sourceTimestamp!)}) is current`
+            : `Edit from ${editRequest.source.type} source is current`,
           content: editRequest.proposedContent,
         },
         cost: 0,
@@ -226,6 +233,8 @@ export class WikiEditorAgent implements Agent {
     latestPageCommitTimestamp: Date
   ): string {
     const hasHistorySection = currentPage.content.includes(this.HISTORY_SECTION_HEADER);
+    const sourceSha = getSourceCommitSha(editRequest) ?? 'unknown';
+    const sourceTimestamp = getSourceCommitTimestamp(editRequest);
 
     return `You are editing a wiki page. An analysis from an OLDER commit has arrived and needs to be processed.
 
@@ -241,8 +250,8 @@ ${currentPage.content.slice(0, 2000)}${currentPage.content.length > 2000 ? '\n..
 \`\`\`
 
 ## Proposed Edit (from older commit)
-**Commit SHA:** ${editRequest.sourceCommitSha.slice(0, 7)}
-**Commit Date:** ${this.formatDate(editRequest.sourceCommitTimestamp)}
+**Commit SHA:** ${sourceSha.slice(0, 7)}
+**Commit Date:** ${sourceTimestamp ? this.formatDate(sourceTimestamp) : 'unknown'}
 **Update Type:** ${editRequest.proposedUpdateType}
 **Agent:** ${editRequest.sourceAgentType}
 
@@ -292,8 +301,8 @@ CONTENT: [If HISTORY or MERGE, provide the content to add. For HISTORY, provide 
       // Build content with history section
       const historyEntry = contentMatch?.[1]?.trim() || editRequest.proposedContent.slice(0, 500);
       const formattedEntry = this.formatHistoryEntry(
-        editRequest.sourceCommitSha,
-        editRequest.sourceCommitTimestamp,
+        getSourceCommitSha(editRequest) ?? 'unknown',
+        getSourceCommitTimestamp(editRequest) ?? new Date(),
         historyEntry
       );
 
@@ -400,7 +409,7 @@ ${content}`;
       type: currentPage ? 'update' : 'create',
       path: editRequest.targetPagePath,
       content: decision.content || editRequest.proposedContent,
-      sourceCommitId: editRequest.sourceCommitSha,
+      sourceCommitId: getSourceCommitSha(editRequest) ?? undefined,
       agentRunId: '', // Will be set by executor
       confidenceDelta: editRequest.confidenceDelta,
     };

@@ -17,24 +17,14 @@ import type { OrchestratorContext } from './context-gatherer.js';
 import {
   createListWikiPagesQuery,
   handleListWikiPages,
-  createListLowConfidencePagesQuery,
-  handleListLowConfidencePages,
   createListWorkItemsQuery,
   handleListWorkItems,
-  createCountPendingWorkQuery,
-  handleCountPendingWork,
-  createGetPendingWorkKeysQuery,
-  handleGetPendingWorkKeys,
   createListAgentRunsQuery,
   handleListAgentRuns,
   createListUnprocessedCommitsQuery,
   handleListUnprocessedCommits,
-  createListCommitsQuery,
-  handleListCommits,
   createCountPendingEditRequestsQuery,
   handleCountPendingEditRequests,
-  createListOpenConflictsQuery,
-  handleListOpenConflicts,
   createListOpenFindingsQuery,
   handleListOpenFindings,
 } from '../../queries/index.js';
@@ -159,7 +149,7 @@ export const pendingEditsStrategy: Strategy = async (ctx, remainingSlots) => {
     return { workItems: [] };
   }
 
-  const wikiEditorKey = 'wiki-editor:null';
+  const wikiEditorKey = 'wiki-editor:wiki';
   if (ctx.existingWorkKeys.has(wikiEditorKey)) {
     return { workItems: [] };
   }
@@ -238,7 +228,7 @@ export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
     for (const commit of unprocessedCommits) {
       if (workItems.length >= remainingSlots) break;
 
-      const key = `${agentType}:${commit.sha}`;
+      const key = `${agentType}:commit:${commit.sha}`;
       if (ctx.existingWorkKeys.has(key)) continue;
 
       ctx.existingWorkKeys.add(key);
@@ -262,43 +252,7 @@ export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
 };
 
 /**
- * Strategy 4: Address open conflicts (placeholder - high priority).
- */
-export const conflictResolutionStrategy: Strategy = async (ctx, remainingSlots) => {
-  if (remainingSlots <= 0) return { workItems: [] };
-
-  const conflictsQuery = createListOpenConflictsQuery(ctx.wikiId);
-  const conflictsResult = await handleListOpenConflicts(conflictsQuery, ctx.repos);
-  const openConflicts = conflictsResult.data || [];
-
-  if (openConflicts.length === 0) {
-    return { workItems: [] };
-  }
-
-  // TODO: Add conflict resolution work items when we have a conflict resolution agent
-  return { workItems: [] };
-};
-
-/**
- * Strategy 5: Improve low-confidence pages (placeholder).
- */
-export const lowConfidenceStrategy: Strategy = async (ctx, remainingSlots) => {
-  if (remainingSlots <= 0) return { workItems: [] };
-
-  const lowConfQuery = createListLowConfidencePagesQuery(ctx.wikiId, 0.5);
-  const lowConfResult = await handleListLowConfidencePages(lowConfQuery, ctx.repos);
-  const lowConfidencePages = lowConfResult.data || [];
-
-  if (lowConfidencePages.length === 0) {
-    return { workItems: [] };
-  }
-
-  // TODO: Add quality improvement work items when we have meta agents
-  return { workItems: [] };
-};
-
-/**
- * Strategy 6: Meta agents (run on wiki after analysis is complete).
+ * Strategy 4: Meta agents (run on wiki after analysis is complete).
  */
 export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0) return { workItems: [] };
@@ -332,7 +286,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   if (workItems.length < remainingSlots) {
     const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0);
     if (pagesWithoutLinks.length > 0) {
-      const linkKey = 'link:null';
+      const linkKey = 'link:wiki';
       if (!ctx.existingWorkKeys.has(linkKey)) {
         ctx.existingWorkKeys.add(linkKey);
         workItems.push(
@@ -353,7 +307,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
       .filter(r => r.agentType === 'structure' && r.status === 'completed')
       .slice(0, 1);
 
-    const structureKey = 'structure:null';
+    const structureKey = 'structure:wiki';
     if (!ctx.existingWorkKeys.has(structureKey) && recentStructureRuns.length === 0) {
       ctx.existingWorkKeys.add(structureKey);
       workItems.push(
@@ -375,7 +329,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
         .filter(r => r.agentType === 'quality' && r.status === 'completed')
         .slice(0, 1);
 
-      const qualityKey = 'quality:null';
+      const qualityKey = 'quality:wiki';
       if (!ctx.existingWorkKeys.has(qualityKey) && recentQualityRuns.length === 0) {
         ctx.existingWorkKeys.add(qualityKey);
         workItems.push(
@@ -396,7 +350,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
       .filter(r => r.agentType === 'consistency' && r.status === 'completed')
       .slice(0, 1);
 
-    const consistencyKey = 'consistency:null';
+    const consistencyKey = 'consistency:wiki';
     if (!ctx.existingWorkKeys.has(consistencyKey) && recentConsistencyRuns.length === 0) {
       ctx.existingWorkKeys.add(consistencyKey);
       workItems.push(
@@ -421,7 +375,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
         .filter(r => r.agentType === 'consolidation' && r.status === 'completed')
         .slice(0, 1);
 
-      const consolidationKey = 'consolidation:null';
+      const consolidationKey = 'consolidation:wiki';
       if (!ctx.existingWorkKeys.has(consolidationKey) && recentConsolidationRuns.length === 0) {
         ctx.existingWorkKeys.add(consolidationKey);
         workItems.push(
@@ -487,7 +441,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
         .filter((r: AgentRun) => r.agentType === 'overview' && r.status === 'completed')
         .slice(0, 1);
 
-      const overviewKey = 'overview:null';
+      const overviewKey = 'overview:wiki';
       if (!ctx.existingWorkKeys.has(overviewKey) && recentOverviewRuns.length === 0) {
         ctx.existingWorkKeys.add(overviewKey);
         workItems.push(
@@ -514,7 +468,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
         .filter((r: AgentRun) => r.agentType === 'project-overview' && r.status === 'completed')
         .slice(0, 1);
 
-      const projectOverviewKey = 'project-overview:null';
+      const projectOverviewKey = 'project-overview:wiki';
       if (!ctx.existingWorkKeys.has(projectOverviewKey) && recentProjectOverviewRuns.length === 0) {
         ctx.existingWorkKeys.add(projectOverviewKey);
         workItems.push(
@@ -543,7 +497,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
         .filter((r: AgentRun) => r.agentType === 'getting-started' && r.status === 'completed')
         .slice(0, 1);
 
-      const gettingStartedKey = 'getting-started:null';
+      const gettingStartedKey = 'getting-started:wiki';
       if (!ctx.existingWorkKeys.has(gettingStartedKey) && recentGettingStartedRuns.length === 0) {
         ctx.existingWorkKeys.add(gettingStartedKey);
         workItems.push(
@@ -572,7 +526,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
         .filter((r: AgentRun) => r.agentType === 'testing-guide' && r.status === 'completed')
         .slice(0, 1);
 
-      const testingGuideKey = 'testing-guide:null';
+      const testingGuideKey = 'testing-guide:wiki';
       if (!ctx.existingWorkKeys.has(testingGuideKey) && recentTestingGuideRuns.length === 0) {
         ctx.existingWorkKeys.add(testingGuideKey);
         workItems.push(
@@ -603,7 +557,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
         .slice(0, 1);
 
       if (
-        !ctx.existingWorkKeys.has('extension-guide:null') &&
+        !ctx.existingWorkKeys.has('extension-guide:wiki') &&
         recentExtensionGuideRuns.length === 0
       ) {
         workItems.push(
@@ -640,7 +594,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     });
 
     if (pagesNeedingRewrite.length > 0) {
-      if (!ctx.existingWorkKeys.has('writer:null')) {
+      if (!ctx.existingWorkKeys.has('writer:wiki')) {
         workItems.push(
           createWorkItem({
             id: uuid(),
@@ -739,8 +693,6 @@ export const deterministicStrategies: Strategy[] = [
   pendingEditsStrategy,
   codebaseExplorationStrategy,
   commitAnalysisStrategy,
-  conflictResolutionStrategy,
-  lowConfidenceStrategy,
   metaAgentsStrategy,
   synthesisStrategy,
 ];
