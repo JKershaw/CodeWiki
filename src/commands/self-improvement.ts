@@ -10,7 +10,6 @@ import type { Repositories } from '../repositories/index.js';
 import {
   createSelfImprovementRun,
   completeSelfImprovementRun,
-  failSelfImprovementRun,
   type SelfImprovementRun,
 } from '../domain/self-improvement.js';
 

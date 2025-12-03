@@ -444,7 +444,7 @@ export const getWorkItemOutcomesTool: AnalysisToolDefinition = {
   execute: async (input, context) => {
     const agentType = input['agent_type'] as string | undefined;
     const limit = (input.limit as number) || 20;
-    const { repos, wikiId, repoId } = context;
+    const { repos, repoId } = context;
 
     // Get completed work items
     const workItems = await repos.workQueue.findByRepo(

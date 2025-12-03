@@ -266,10 +266,6 @@ export class ContextGatherer {
       return [];
     }
 
-    // Combine all wiki content for searching
-    const allWikiContent = wikiPages.map(p => p.content).join('\n').toLowerCase();
-    const allWikiPaths = wikiPages.map(p => p.path.toLowerCase()).join('\n');
-
     const coverage: DirectoryCoverage[] = [];
 
     // Scan first-level directories under src/

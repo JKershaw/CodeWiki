@@ -2,11 +2,6 @@ import type { AgentType } from './agent-run.js';
 import {
   type WorkTarget,
   legacyToWorkTarget,
-  workTargetToLegacy,
-  createCommitTarget,
-  createPathTarget,
-  createWikiTarget,
-  getWorkTargetKey,
   isCommitTarget,
   isPathTarget,
 } from './work-target.js';

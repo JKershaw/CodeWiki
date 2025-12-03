@@ -420,12 +420,15 @@ ${content}`;
       type: currentPage ? 'update' : 'create',
       path: editRequest.targetPagePath,
       content: decision.content || editRequest.proposedContent,
-      sourceCommitId: getSourceCommitSha(editRequest) ?? undefined,
       agentRunId: '', // Will be set by executor
       confidenceDelta: editRequest.confidenceDelta,
     };
 
     // Only add optional properties if they have values
+    const sourceCommitId = getSourceCommitSha(editRequest);
+    if (sourceCommitId) {
+      update.sourceCommitId = sourceCommitId;
+    }
     if (editRequest.targetPageTitle) {
       update.title = editRequest.targetPageTitle;
     }

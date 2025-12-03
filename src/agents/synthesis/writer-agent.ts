@@ -153,7 +153,6 @@ export class WriterAgent implements Agent {
    * Check if a page has content that needs rewriting.
    */
   private needsRewrite(page: WikiPage): boolean {
-    const content = page.content.toLowerCase();
     const firstParagraph = page.content.split('\n\n')[1] ?? ''; // After title
 
     // Indicators of raw commit-style content

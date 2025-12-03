@@ -12,7 +12,6 @@ import type { WikiPage } from '../domain/wiki-page.js';
 import {
   type PageQualityResult,
   type QualityBenchmarkRun,
-  calculateQualitySummary,
   createEmptyPageResult,
 } from '../domain/quality-benchmark.js';
 import {

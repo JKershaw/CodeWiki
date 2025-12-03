@@ -1,4 +1,4 @@
-import type { Iteration, IterationStatus } from '../../domain/iteration.js';
+import type { Iteration } from '../../domain/iteration.js';
 import type { AgentType } from '../../domain/agent-run.js';
 
 /**

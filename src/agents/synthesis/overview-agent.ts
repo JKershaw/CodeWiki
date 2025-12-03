@@ -155,7 +155,7 @@ export class OverviewAgent implements Agent {
 
   private findCategoriesNeedingOverview(
     categories: Map<string, WikiPage[]>,
-    allPages: WikiPage[]
+    _allPages: WikiPage[]
   ): Array<[string, WikiPage[]]> {
     const needsOverview: Array<[string, WikiPage[]]> = [];
 

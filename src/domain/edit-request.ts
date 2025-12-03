@@ -1,11 +1,8 @@
 import type { AgentType } from './agent-run.js';
 import {
   type EditSource,
-  type CommitEditSource,
   createCommitEditSource,
   legacyToEditSource,
-  editSourceToLegacy,
-  getEditSourceTimestamp,
   isCommitEditSource,
 } from './edit-source.js';
 

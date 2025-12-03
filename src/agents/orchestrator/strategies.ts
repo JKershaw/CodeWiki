@@ -31,9 +31,7 @@ import {
 
 // Agent type definitions
 import {
-  type AgentType,
   ANALYSIS_AGENTS,
-  META_AGENTS,
 } from '../../agents/registry.js';
 
 /**

@@ -1,6 +1,6 @@
 import type { AgentContext, AgentRunResult } from '../base-agent.js';
 import type { FindingGroup, FindingType } from '../../domain/finding.js';
-import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
+import type { WikiPage } from '../../domain/wiki-page.js';
 import { createGetWikiPageQuery, handleGetWikiPage } from '../../queries/index.js';
 
 /**

@@ -5,7 +5,6 @@ import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/ind
 import {
   wikiTools,
   type WikiToolContext,
-  type WikiToolDefinition,
 } from '../../services/llm/wiki-tools.js';
 
 /**

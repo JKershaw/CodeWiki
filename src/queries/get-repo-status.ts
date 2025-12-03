@@ -1,7 +1,7 @@
 import type { Query, QueryResult } from './types.js';
 import { found, notFound, queryError } from './types.js';
 import type { Repositories } from '../repositories/index.js';
-import type { Repo, RepoStatus } from '../domain/repo.js';
+import type { Repo } from '../domain/repo.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 
 /**

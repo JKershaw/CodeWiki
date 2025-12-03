@@ -7,7 +7,7 @@
 import type { Query, QueryResult } from './types.js';
 import { found, notFound, queryError } from './types.js';
 import type { Repositories } from '../repositories/index.js';
-import type { BenchmarkRun, BenchmarkResult, BenchmarkGrade } from '../domain/benchmark.js';
+import type { BenchmarkRun, BenchmarkGrade } from '../domain/benchmark.js';
 
 // ============================================================================
 // GetBenchmarkRun Query

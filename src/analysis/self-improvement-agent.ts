@@ -15,7 +15,6 @@ import type { WikiPage } from '../domain/wiki-page.js';
 import {
   analysisTools,
   type AnalysisToolContext,
-  type AnalysisToolDefinition,
 } from '../services/llm/analysis-tools.js';
 import { SELF_IMPROVEMENT_SYSTEM_PROMPT } from './prompts.js';
 import {
