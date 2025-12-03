@@ -16,6 +16,7 @@ import {
   createListWorkItemsQuery,
   handleListWorkItems,
 } from '../../queries/index.js';
+import { getTargetCommitId, getTargetPath } from '../../domain/work-item.js';
 
 /**
  * Create processing status routes.
@@ -69,8 +70,8 @@ export function createProcessingRoutes(deps: Dependencies): Router {
       const formatItem = (item: typeof pending[0]) => ({
         id: item.id,
         agentType: item.agentType,
-        targetCommitId: item.targetCommitId,
-        targetPath: item.targetPath,
+        targetCommitId: getTargetCommitId(item),
+        targetPath: getTargetPath(item),
         priority: item.priority,
         status: item.status,
         createdAt: item.createdAt,

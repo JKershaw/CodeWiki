@@ -87,7 +87,14 @@ export function createStoryEditSource(storyId: string, phase: string, timestamp?
  * Create a manual edit source.
  */
 export function createManualEditSource(userId?: string, reason?: string): ManualEditSource {
-  return { type: 'manual', userId, reason, timestamp: new Date() };
+  const source: ManualEditSource = { type: 'manual', timestamp: new Date() };
+  if (userId !== undefined) {
+    source.userId = userId;
+  }
+  if (reason !== undefined) {
+    source.reason = reason;
+  }
+  return source;
 }
 
 /**

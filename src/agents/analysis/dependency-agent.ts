@@ -186,7 +186,7 @@ CONFIDENCE: [0-1 value]
     if (changesMatch) {
       const changeLines = changesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
       for (const line of changeLines) {
-        const match = line.match(/^-\s*\[(ADDED|REMOVED|UPDATED)\]\s*([^\s\[]+)\s*(?:\[([^\]]*)\])?\s*(.*)$/i);
+        const match = line.match(/^-\s*\[(ADDED|REMOVED|UPDATED)]\s*([^\s[]+)\s*(?:\[([^\]]*)])?\s*(.*)$/i);
         if (match) {
           const change = {
             action: match[1]!.toLowerCase() as 'added' | 'removed' | 'updated',

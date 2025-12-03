@@ -138,7 +138,7 @@ export class CodebaseExplorerAgent implements Agent {
   private buildPrompt(
     targetPath: string,
     existingPagePaths: string[],
-    existingContent: string
+    _existingContent: string
   ): string {
     const existingPagesInfo = existingPagePaths.length > 0
       ? `\n\n## Existing Wiki Pages (avoid duplication)\n${existingPagePaths.slice(0, 20).map(p => `- ${p}`).join('\n')}`

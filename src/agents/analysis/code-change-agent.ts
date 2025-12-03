@@ -232,7 +232,7 @@ CONFIDENCE: [0-1 value]
   private generateUpdates(
     commit: { sha: string; message: string; diffSummary: { affectedFiles: string[] } },
     analysis: ParsedAnalysis,
-    repoId: string
+    _repoId: string
   ): WikiPageUpdate[] {
     const updates: WikiPageUpdate[] = [];
 
