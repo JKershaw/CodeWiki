@@ -72,6 +72,7 @@
             <select id="wiki-selector" class="wiki-selector">
               <option value="">Loading wikis...</option>
             </select>
+            <button id="delete-wiki-btn" class="btn danger small" title="Delete this wiki">Delete Wiki</button>
             <button id="back-to-repos" class="btn secondary">Back to Repos</button>
           </div>
         </div>
@@ -273,6 +274,26 @@
       <p>CodeWiki - Generate living wikis from Git repositories</p>
       <p class="model-info">Model: <span id="model-name">Loading...</span></p>
     </footer>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modal-title">Confirm Action</h3>
+        </div>
+        <div class="modal-body">
+          <p id="modal-message">Are you sure?</p>
+          <div id="modal-details" class="modal-details"></div>
+        </div>
+        <div class="modal-actions">
+          <button id="modal-cancel-btn" class="btn secondary">Cancel</button>
+          <button id="modal-confirm-btn" class="btn danger">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
   </div>
 
   <!-- Markdown parsing library -->

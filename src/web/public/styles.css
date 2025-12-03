@@ -2443,3 +2443,229 @@ footer .model-info {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
+
+/* ============================================================================
+   Modal Dialog Styles
+   ============================================================================ */
+
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.7);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+	backdrop-filter: blur(4px);
+}
+
+.modal-overlay.hidden {
+	display: none;
+}
+
+.modal-content {
+	background: var(--bg-elevated);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 0;
+	max-width: 480px;
+	width: 90%;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+	animation: modal-appear 0.2s ease-out;
+}
+
+@keyframes modal-appear {
+	from {
+		opacity: 0;
+		transform: scale(0.95) translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+.modal-header {
+	padding: var(--space-md);
+	border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+	margin: 0;
+	color: var(--text-primary);
+	font-size: 1.25rem;
+}
+
+.modal-body {
+	padding: var(--space-md);
+}
+
+.modal-body p {
+	margin: 0 0 var(--space-sm) 0;
+	color: var(--text-secondary);
+	line-height: 1.6;
+}
+
+.modal-details {
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: var(--space-sm);
+	margin-top: var(--space-sm);
+}
+
+.modal-details .detail-item {
+	display: flex;
+	justify-content: space-between;
+	padding: 6px 0;
+	font-size: 0.9rem;
+	border-bottom: 1px solid var(--border);
+}
+
+.modal-details .detail-item:last-child {
+	border-bottom: none;
+}
+
+.modal-details .detail-label {
+	color: var(--text-secondary);
+}
+
+.modal-details .detail-value {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+
+.modal-details .warning-text {
+	color: var(--error);
+	font-size: 0.85rem;
+	margin-top: var(--space-xs);
+	padding-top: var(--space-xs);
+	border-top: 1px solid var(--border);
+}
+
+.modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-sm);
+	padding: var(--space-md);
+	border-top: 1px solid var(--border);
+	background: var(--bg-card);
+	border-radius: 0 0 12px 12px;
+}
+
+/* ============================================================================
+   Toast Notification Styles
+   ============================================================================ */
+
+.toast-container {
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	z-index: 1100;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	pointer-events: none;
+}
+
+.toast {
+	background: var(--bg-elevated);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 14px 20px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 280px;
+	max-width: 400px;
+	animation: toast-slide-in 0.3s ease-out;
+	pointer-events: auto;
+}
+
+@keyframes toast-slide-in {
+	from {
+		opacity: 0;
+		transform: translateX(100%);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+.toast.toast-exit {
+	animation: toast-slide-out 0.3s ease-in forwards;
+}
+
+@keyframes toast-slide-out {
+	from {
+		opacity: 1;
+		transform: translateX(0);
+	}
+	to {
+		opacity: 0;
+		transform: translateX(100%);
+	}
+}
+
+.toast-icon {
+	font-size: 1.25rem;
+	flex-shrink: 0;
+}
+
+.toast-message {
+	flex: 1;
+	color: var(--text-primary);
+	font-size: 0.9rem;
+	line-height: 1.4;
+}
+
+.toast.success {
+	border-left: 4px solid var(--success);
+}
+
+.toast.success .toast-icon {
+	color: var(--success);
+}
+
+.toast.error {
+	border-left: 4px solid var(--error);
+}
+
+.toast.error .toast-icon {
+	color: var(--error);
+}
+
+.toast.warning {
+	border-left: 4px solid var(--warning);
+}
+
+.toast.warning .toast-icon {
+	color: var(--warning);
+}
+
+.toast.info {
+	border-left: 4px solid var(--link);
+}
+
+.toast.info .toast-icon {
+	color: var(--link);
+}
+
+.toast-close {
+	background: none;
+	border: none;
+	color: var(--text-tertiary);
+	cursor: pointer;
+	padding: 4px;
+	font-size: 1rem;
+	transition: color 0.2s;
+}
+
+.toast-close:hover {
+	color: var(--text-primary);
+}

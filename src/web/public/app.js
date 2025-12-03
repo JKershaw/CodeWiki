@@ -684,16 +684,26 @@ async function loadWikiSelector(repoId) {
       currentWiki = activeWiki;
       loadWikiPages(repoId, activeWiki.id);
     }
+    updateDeleteWikiButton();
   } catch (error) {
     selector.innerHTML = '<option value="">Error loading wikis</option>';
+    updateDeleteWikiButton();
   }
 }
 
 // Wiki selector change handler
 document.getElementById('wiki-selector').addEventListener('change', async (e) => {
   if (currentRepo && e.target.value) {
-    currentWiki = { id: e.target.value };
+    // Fetch the full wiki details to get isActive status
+    try {
+      const wiki = await api(`/repos/${currentRepo.id}/wikis/${e.target.value}`);
+      currentWiki = wiki;
+    } catch (error) {
+      // Fall back to partial info if fetch fails
+      currentWiki = { id: e.target.value, isActive: false };
+    }
     loadWikiPages(currentRepo.id, e.target.value);
+    updateDeleteWikiButton();
   }
 });
 
@@ -2781,6 +2791,256 @@ document.getElementById('chat-input').addEventListener('input', (e) => {
   const sendBtn = document.getElementById('send-chat-btn');
   sendBtn.disabled = !e.target.value.trim() || !currentChatSessionId;
 });
+
+// ============================================================================
+// Toast Notifications
+// ============================================================================
+
+/**
+ * Show a toast notification.
+ * @param {string} message - The message to display
+ * @param {'success' | 'error' | 'warning' | 'info'} type - The type of toast
+ * @param {number} duration - Duration in ms before auto-dismiss (default: 4000)
+ */
+function showToast(message, type = 'info', duration = 4000) {
+  const container = document.getElementById('toast-container');
+
+  const icons = {
+    success: '&#10003;', // checkmark
+    error: '&#10005;',   // X
+    warning: '&#9888;',  // warning triangle
+    info: '&#8505;',     // info
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type]}</span>
+    <span class="toast-message">${escapeHtml(message)}</span>
+    <button class="toast-close" aria-label="Close">&times;</button>
+  `;
+
+  // Close button handler
+  toast.querySelector('.toast-close').addEventListener('click', () => {
+    dismissToast(toast);
+  });
+
+  container.appendChild(toast);
+
+  // Auto-dismiss after duration
+  if (duration > 0) {
+    setTimeout(() => {
+      dismissToast(toast);
+    }, duration);
+  }
+
+  return toast;
+}
+
+/**
+ * Dismiss a toast with animation.
+ */
+function dismissToast(toast) {
+  if (!toast || toast.classList.contains('toast-exit')) return;
+
+  toast.classList.add('toast-exit');
+  setTimeout(() => {
+    toast.remove();
+  }, 300); // Match animation duration
+}
+
+// ============================================================================
+// Confirmation Modal
+// ============================================================================
+
+let modalConfirmCallback = null;
+
+/**
+ * Show a confirmation modal.
+ * @param {Object} options - Modal configuration
+ * @param {string} options.title - Modal title
+ * @param {string} options.message - Modal message
+ * @param {string} options.details - HTML for the details section (optional)
+ * @param {string} options.confirmText - Text for the confirm button (default: 'Confirm')
+ * @param {string} options.confirmClass - CSS class for confirm button (default: 'danger')
+ * @param {Function} options.onConfirm - Callback when confirmed
+ */
+function showConfirmModal(options) {
+  const modal = document.getElementById('confirm-modal');
+  const titleEl = document.getElementById('modal-title');
+  const messageEl = document.getElementById('modal-message');
+  const detailsEl = document.getElementById('modal-details');
+  const confirmBtn = document.getElementById('modal-confirm-btn');
+
+  titleEl.textContent = options.title || 'Confirm Action';
+  messageEl.textContent = options.message || 'Are you sure?';
+  detailsEl.innerHTML = options.details || '';
+  detailsEl.style.display = options.details ? 'block' : 'none';
+
+  confirmBtn.textContent = options.confirmText || 'Confirm';
+  confirmBtn.className = `btn ${options.confirmClass || 'danger'}`;
+
+  modalConfirmCallback = options.onConfirm || null;
+
+  modal.classList.remove('hidden');
+
+  // Focus the cancel button for safety
+  document.getElementById('modal-cancel-btn').focus();
+}
+
+/**
+ * Hide the confirmation modal.
+ */
+function hideConfirmModal() {
+  const modal = document.getElementById('confirm-modal');
+  modal.classList.add('hidden');
+  modalConfirmCallback = null;
+}
+
+// Modal event listeners
+document.getElementById('modal-cancel-btn').addEventListener('click', hideConfirmModal);
+document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+  if (modalConfirmCallback) {
+    modalConfirmCallback();
+  }
+  hideConfirmModal();
+});
+
+// Close modal on backdrop click
+document.getElementById('confirm-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'confirm-modal') {
+    hideConfirmModal();
+  }
+});
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('confirm-modal');
+    if (!modal.classList.contains('hidden')) {
+      hideConfirmModal();
+    }
+  }
+});
+
+// ============================================================================
+// Wiki Deletion
+// ============================================================================
+
+/**
+ * Update the delete wiki button state based on whether the current wiki is active.
+ */
+function updateDeleteWikiButton() {
+  const deleteBtn = document.getElementById('delete-wiki-btn');
+  if (!deleteBtn) return;
+
+  if (!currentWiki) {
+    deleteBtn.disabled = true;
+    deleteBtn.title = 'No wiki selected';
+    return;
+  }
+
+  if (currentWiki.isActive) {
+    deleteBtn.disabled = true;
+    deleteBtn.title = 'Cannot delete active wiki. Switch to another wiki first.';
+  } else {
+    deleteBtn.disabled = false;
+    deleteBtn.title = 'Delete this wiki';
+  }
+}
+
+/**
+ * Show confirmation dialog and delete the current wiki if confirmed.
+ */
+async function confirmDeleteWiki() {
+  if (!currentRepo || !currentWiki) {
+    showToast('No wiki selected', 'error');
+    return;
+  }
+
+  if (currentWiki.isActive) {
+    showToast('Cannot delete the active wiki. Please switch to another wiki first.', 'warning');
+    return;
+  }
+
+  // Fetch wiki details to show in confirmation
+  let wikiDetails;
+  try {
+    wikiDetails = await api(`/repos/${currentRepo.id}/wikis/${currentWiki.id}`);
+  } catch (error) {
+    // Fall back to current wiki info
+    wikiDetails = currentWiki;
+  }
+
+  const pageCount = wikiDetails.pageCount || 0;
+
+  showConfirmModal({
+    title: 'Delete Wiki',
+    message: `Are you sure you want to delete "${wikiDetails.name || 'this wiki'}"?`,
+    details: `
+      <div class="detail-item">
+        <span class="detail-label">Wiki Name</span>
+        <span class="detail-value">${escapeHtml(wikiDetails.name || currentWiki.id)}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Pages</span>
+        <span class="detail-value">${pageCount}</span>
+      </div>
+      <p class="warning-text">This will permanently delete all wiki pages, findings, benchmarks, and other associated data. This action cannot be undone.</p>
+    `,
+    confirmText: 'Delete Wiki',
+    confirmClass: 'danger',
+    onConfirm: () => deleteWiki(currentRepo.id, currentWiki.id, wikiDetails.name),
+  });
+}
+
+/**
+ * Delete a wiki and refresh the UI.
+ */
+async function deleteWiki(repoId, wikiId, wikiName) {
+  const deleteBtn = document.getElementById('delete-wiki-btn');
+  const originalText = deleteBtn.textContent;
+  deleteBtn.textContent = 'Deleting...';
+  deleteBtn.disabled = true;
+
+  try {
+    await fetch(`/api/repos/${repoId}/wikis/${wikiId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    }).then(async (response) => {
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete wiki');
+      }
+    });
+
+    showToast(`Wiki "${wikiName}" deleted successfully`, 'success');
+
+    // Refresh wiki selector and pages
+    await loadWikiSelector(repoId);
+
+    // If there are still wikis, load the first one
+    const selector = document.getElementById('wiki-selector');
+    if (selector.options.length > 0 && selector.value) {
+      loadWikiPages(repoId, selector.value);
+    } else {
+      // No more wikis, go back to repos
+      document.getElementById('wiki-content').innerHTML = '<p class="placeholder">No wikis available</p>';
+      document.getElementById('wiki-categories').innerHTML = '<p class="placeholder">No pages</p>';
+    }
+
+    // Refresh repos list to update wiki counts
+    loadRepos();
+
+  } catch (error) {
+    showToast(`Failed to delete wiki: ${error.message}`, 'error');
+    deleteBtn.textContent = originalText;
+    updateDeleteWikiButton();
+  }
+}
+
+// Delete wiki button event listener
+document.getElementById('delete-wiki-btn').addEventListener('click', confirmDeleteWiki);
 
 // Initialize
 loadRepos();
