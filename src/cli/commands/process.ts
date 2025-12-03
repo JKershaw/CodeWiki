@@ -72,7 +72,7 @@ export async function processCommand(args: string[]): Promise<void> {
 
     for (const entry of log.all) {
       // Get diff summary for each commit
-      let diffSummary = {
+      const diffSummary = {
         filesAdded: 0,
         filesModified: 0,
         filesDeleted: 0,

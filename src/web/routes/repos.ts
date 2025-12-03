@@ -169,7 +169,7 @@ export function createReposRoutes(deps: Dependencies): Router {
         const commits = await Promise.all(
           log.all.map((entry) =>
             limit(async () => {
-              let diffSummary = {
+              const diffSummary = {
                 filesAdded: 0,
                 filesModified: 0,
                 filesDeleted: 0,

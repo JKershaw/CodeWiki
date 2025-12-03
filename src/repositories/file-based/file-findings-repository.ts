@@ -55,7 +55,7 @@ export class FileFindingsRepository implements FindingsRepository {
 
   async findByPaths(wikiId: string, paths: string[]): Promise<Finding[]> {
     const pathSet = new Set(paths);
-    let results = await this.store.find(f => {
+    const results = await this.store.find(f => {
       if (f.wikiId !== wikiId) return false;
       return f.affectedPaths.some(p => pathSet.has(p));
     });
@@ -63,7 +63,7 @@ export class FileFindingsRepository implements FindingsRepository {
   }
 
   async findByAgentRun(agentRunId: string): Promise<Finding[]> {
-    let results = await this.store.find(f => f.sourceAgentRunId === agentRunId);
+    const results = await this.store.find(f => f.sourceAgentRunId === agentRunId);
     return results.map(hydrateDates);
   }
 
