@@ -6,7 +6,8 @@
 import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import simpleGit from 'simple-git';
+import * as git from 'isomorphic-git';
+import * as fs from 'fs';
 import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import { FileSystemGitService } from '../../src/services/git/git-service.js';
 import { MockLLMService } from './mock-llm.js';
@@ -54,7 +55,7 @@ export async function createTestContext(): Promise<TestContext> {
   // Use the async factory - auto-detects MongoDB vs file-based
   const connection = await createRepositories({ fileBasePath: dataDir });
   const repos = connection.repositories;
-  const git = new FileSystemGitService(reposDir);
+  const gitService = new FileSystemGitService(reposDir);
   const llm = new MockLLMService();
 
   return {
@@ -62,11 +63,11 @@ export async function createTestContext(): Promise<TestContext> {
     dataDir,
     reposDir,
     repos,
-    git,
+    git: gitService,
     llm,
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
-      return { repoId, wikiId: wiki.id, repos, git, llm };
+      return { repoId, wikiId: wiki.id, repos, git: gitService, llm };
     },
     async cleanup(): Promise<void> {
       clearIgnoreCache();
@@ -87,11 +88,9 @@ export async function createTestRepo(
   const repoPath = join(ctx.reposDir, repoId);
   await mkdir(repoPath, { recursive: true });
 
-  const git = simpleGit(repoPath);
-  await git.init();
-  await git.addConfig('user.email', 'test@example.com');
-  await git.addConfig('user.name', 'Test User');
-  await git.addConfig('commit.gpgsign', 'false');
+  await git.init({ fs, dir: repoPath });
+  await git.setConfig({ fs, dir: repoPath, path: 'user.email', value: 'test@example.com' });
+  await git.setConfig({ fs, dir: repoPath, path: 'user.name', value: 'Test User' });
 
   // Create default files if none provided
   const filesToCreate = Object.keys(files).length > 0
@@ -101,14 +100,19 @@ export async function createTestRepo(
   for (const [path, content] of Object.entries(filesToCreate)) {
     const fullPath = join(repoPath, path);
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
-    if (dir !== repoPath) {
+    if (dir !== repoPath && dir.length > 0) {
       await mkdir(dir, { recursive: true });
     }
     await writeFile(fullPath, content);
+    await git.add({ fs, dir: repoPath, filepath: path });
   }
 
-  await git.add('.');
-  await git.commit('Initial commit');
+  await git.commit({
+    fs,
+    dir: repoPath,
+    message: 'Initial commit',
+    author: { name: 'Test User', email: 'test@example.com' },
+  });
 
   // Register repo in the repositories
   await ctx.repos.repos.save({
@@ -138,20 +142,23 @@ export async function addCommit(
   message: string
 ): Promise<string> {
   const repoPath = join(ctx.reposDir, repoId);
-  const git = simpleGit(repoPath);
 
   for (const [path, content] of Object.entries(files)) {
     const fullPath = join(repoPath, path);
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
-    if (dir !== repoPath) {
+    if (dir !== repoPath && dir.length > 0) {
       await mkdir(dir, { recursive: true });
     }
     await writeFile(fullPath, content);
+    await git.add({ fs, dir: repoPath, filepath: path });
   }
 
-  await git.add('.');
-  await git.commit(message);
+  const sha = await git.commit({
+    fs,
+    dir: repoPath,
+    message,
+    author: { name: 'Test User', email: 'test@example.com' },
+  });
 
-  const log = await git.log({ maxCount: 1 });
-  return log.latest!.hash;
+  return sha;
 }
