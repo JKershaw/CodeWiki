@@ -2,7 +2,7 @@
  * Unit tests for the Self-Improvement Chat Service.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { mkdtemp } from 'fs/promises';
 import { join } from 'path';
@@ -75,6 +75,10 @@ describe('SelfImprovementChatService', () => {
       selfImprovementRunId: 'run-1',
     });
     await repos.chatSessions.save(session);
+  });
+
+  afterEach(async () => {
+    await repoConnection.close();
   });
 
   describe('chat', () => {

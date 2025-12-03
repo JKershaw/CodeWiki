@@ -2,7 +2,7 @@
  * Unit tests for Chat Session CQRS queries.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
 import { mkdtemp } from 'fs/promises';
@@ -26,6 +26,10 @@ describe('Chat Session Queries', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'chat-queries-test-'));
     repoConnection = await createRepositories({ fileBasePath: tempDir });
     repos = repoConnection.repositories;
+  });
+
+  afterEach(async () => {
+    await repoConnection.close();
   });
 
   describe('GetChatSession', () => {
