@@ -18,6 +18,53 @@ import { createOrchestrator } from '../../agents/orchestrator/orchestrator.js';
 import { createExecutor } from '../../executor/executor.js';
 import type { Dependencies } from './index.js';
 
+/**
+ * Validate a GitHub URL.
+ * Accepts formats like:
+ * - https://github.com/owner/repo
+ * - https://github.com/owner/repo.git
+ * - http://github.com/owner/repo
+ */
+export function isValidGitHubUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'github.com') return false;
+    // Path should be /owner/repo or /owner/repo.git
+    const pathMatch = parsed.pathname.match(/^\/([^/]+)\/([^/]+?)(\.git)?$/);
+    return pathMatch !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract owner/repo from GitHub URL.
+ */
+export function extractRepoNameFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const pathMatch = parsed.pathname.match(/^\/([^/]+)\/([^/]+?)(\.git)?$/);
+    if (pathMatch) {
+      return `${pathMatch[1]}/${pathMatch[2]}`;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
+ * Normalize GitHub URL to https format with .git extension.
+ */
+export function normalizeGitHubUrl(url: string): string {
+  const parsed = new URL(url);
+  const pathMatch = parsed.pathname.match(/^\/([^/]+)\/([^/]+?)(\.git)?$/);
+  if (pathMatch) {
+    return `https://github.com/${pathMatch[1]}/${pathMatch[2]}.git`;
+  }
+  return url;
+}
+
 // Import CQRS queries
 import {
   createGetRepositoryQuery,
@@ -120,30 +167,80 @@ export function createReposRoutes(deps: Dependencies): Router {
 
   /**
    * Add a new repository for processing.
+   * Accepts either:
+   * - { path: string } for local filesystem repositories
+   * - { url: string } for GitHub repositories (will be cloned)
    */
   router.post('/api/repos', async (req: Request, res: Response) => {
     try {
-      const { path: repoPath } = req.body;
-      if (!repoPath) {
-        res.status(400).json({ error: 'Repository path is required' });
+      const { path: repoPath, url: repoUrl } = req.body;
+
+      // Determine if this is a local path or GitHub URL
+      const isGitHubRepo = !!repoUrl;
+
+      if (!repoPath && !repoUrl) {
+        res.status(400).json({ error: 'Repository path or URL is required' });
         return;
       }
 
-      const absolutePath = resolve(repoPath);
+      let absolutePath: string;
+      let fullName: string;
+      let cloneUrl: string;
 
-      // Check if repo already exists (via CQRS query)
-      const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
-      const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
-      let repo = repoResult.data ?? null;
+      if (isGitHubRepo) {
+        // Validate GitHub URL
+        if (!isValidGitHubUrl(repoUrl)) {
+          res.status(400).json({ error: 'Invalid GitHub URL. Must be in format: https://github.com/owner/repo' });
+          return;
+        }
 
-      if (!repo) {
-        // Use RegisterRepository command
+        // Extract repo name from URL
+        const extractedName = extractRepoNameFromUrl(repoUrl);
+        if (!extractedName) {
+          res.status(400).json({ error: 'Could not extract repository name from URL' });
+          return;
+        }
+
+        fullName = extractedName;
+        cloneUrl = normalizeGitHubUrl(repoUrl);
+
+        // Check if repo already exists by fullName
+        const existingQuery = createGetRepositoryByFullNameQuery(fullName);
+        const existingResult = await handleGetRepositoryByFullName(existingQuery, repos);
+
+        if (existingResult.data) {
+          // Repository already exists, return it
+          res.json({
+            id: existingResult.data.id,
+            fullName: existingResult.data.fullName,
+            status: existingResult.data.status,
+          });
+          return;
+        }
+
+        // Clone the repository
         const repoId = uuid();
+        try {
+          absolutePath = await git.clone(cloneUrl, repoId);
+        } catch (cloneError) {
+          const errorMessage = cloneError instanceof Error ? cloneError.message : String(cloneError);
+          // Check for common clone errors
+          if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+            res.status(404).json({ error: 'Repository not found. Make sure it exists and is public.' });
+          } else if (errorMessage.includes('Authentication') || errorMessage.includes('403')) {
+            res.status(403).json({ error: 'Repository is private or requires authentication. Only public repositories are supported.' });
+          } else {
+            res.status(500).json({ error: `Failed to clone repository: ${errorMessage}` });
+          }
+          return;
+        }
+
+        // Register the repository
         const registerResult = await handleRegisterRepository(
           createRegisterRepositoryCommand({
             id: repoId,
-            fullName: absolutePath,
-            cloneUrl: absolutePath,
+            fullName,
+            cloneUrl,
             defaultBranch: 'main',
           }),
           repos
@@ -153,17 +250,15 @@ export function createReposRoutes(deps: Dependencies): Router {
           res.status(400).json({ error: registerResult.error });
           return;
         }
-        repo = registerResult.data!;
-        // repoId is already declared above and equals repo.id
 
-        // Load commits using simpleGit
+        const repo = registerResult.data!;
+
+        // Load commits from cloned repo
         const { simpleGit } = await import('simple-git');
         const gitRepo = simpleGit(absolutePath);
         const log = await gitRepo.log(['--all']);
 
         const { createCommit } = await import('../../domain/commit.js');
-
-        // Process commits in parallel with concurrency limit to avoid overwhelming git
         const limit = createConcurrencyLimiter(10);
 
         const commits = await Promise.all(
@@ -199,7 +294,7 @@ export function createReposRoutes(deps: Dependencies): Router {
 
               return createCommit({
                 id: uuid(),
-                repoId,
+                repoId: repo.id,
                 sha: entry.hash,
                 message: entry.message,
                 authorName: entry.author_name,
@@ -211,14 +306,106 @@ export function createReposRoutes(deps: Dependencies): Router {
           )
         );
 
-        // Use LoadRepositoryCommits command
         await handleLoadRepositoryCommits(
           createLoadRepositoryCommitsCommand(repo.id, commits),
           repos
         );
-      }
 
-      res.json({ id: repo.id, fullName: repo.fullName, status: repo.status });
+        res.json({ id: repo.id, fullName: repo.fullName, status: repo.status });
+      } else {
+        // Local repository path
+        absolutePath = resolve(repoPath);
+        fullName = absolutePath;
+        cloneUrl = absolutePath;
+
+        // Check if repo already exists (via CQRS query)
+        const repoQuery = createGetRepositoryByFullNameQuery(absolutePath);
+        const repoResult = await handleGetRepositoryByFullName(repoQuery, repos);
+        let repo = repoResult.data ?? null;
+
+        if (!repo) {
+          // Use RegisterRepository command
+          const repoId = uuid();
+          const registerResult = await handleRegisterRepository(
+            createRegisterRepositoryCommand({
+              id: repoId,
+              fullName: absolutePath,
+              cloneUrl: absolutePath,
+              defaultBranch: 'main',
+            }),
+            repos
+          );
+
+          if (!registerResult.success) {
+            res.status(400).json({ error: registerResult.error });
+            return;
+          }
+          repo = registerResult.data!;
+
+          // Load commits using simpleGit
+          const { simpleGit } = await import('simple-git');
+          const gitRepo = simpleGit(absolutePath);
+          const log = await gitRepo.log(['--all']);
+
+          const { createCommit } = await import('../../domain/commit.js');
+
+          // Process commits in parallel with concurrency limit to avoid overwhelming git
+          const limit = createConcurrencyLimiter(10);
+
+          const commits = await Promise.all(
+            log.all.map((entry) =>
+              limit(async () => {
+                const diffSummary = {
+                  filesAdded: 0,
+                  filesModified: 0,
+                  filesDeleted: 0,
+                  linesAdded: 0,
+                  linesDeleted: 0,
+                  affectedFiles: [] as string[],
+                };
+
+                try {
+                  const diffFiles = await gitRepo.diff([`${entry.hash}^`, entry.hash, '--name-status']);
+                  const lines = diffFiles.trim().split('\n').filter((l: string) => l.length > 0);
+
+                  for (const line of lines) {
+                    const [status, ...pathParts] = line.split('\t');
+                    const filePath = pathParts.join('\t');
+                    if (filePath) diffSummary.affectedFiles.push(filePath);
+
+                    switch (status?.[0]) {
+                      case 'A': diffSummary.filesAdded++; break;
+                      case 'D': diffSummary.filesDeleted++; break;
+                      default: diffSummary.filesModified++; break;
+                    }
+                  }
+                } catch {
+                  // Initial commit or error
+                }
+
+                return createCommit({
+                  id: uuid(),
+                  repoId: repo!.id,
+                  sha: entry.hash,
+                  message: entry.message,
+                  authorName: entry.author_name,
+                  authorEmail: entry.author_email,
+                  committedAt: new Date(entry.date),
+                  diffSummary,
+                });
+              })
+            )
+          );
+
+          // Use LoadRepositoryCommits command
+          await handleLoadRepositoryCommits(
+            createLoadRepositoryCommitsCommand(repo.id, commits),
+            repos
+          );
+        }
+
+        res.json({ id: repo.id, fullName: repo.fullName, status: repo.status });
+      }
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

@@ -989,6 +989,100 @@ nav {
 	cursor: not-allowed;
 }
 
+/* Repository Source Toggle */
+.repo-source-toggle {
+	display: flex;
+	gap: 0;
+	margin-bottom: 15px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.toggle-btn {
+	flex: 1;
+	background: var(--bg-card);
+	border: none;
+	color: var(--text-secondary);
+	padding: 10px 16px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	font-size: 0.9rem;
+	border-right: 1px solid var(--border);
+}
+
+.toggle-btn:last-child {
+	border-right: none;
+}
+
+.toggle-btn:hover:not(.active) {
+	background: var(--bg-elevated);
+	color: var(--text-primary);
+}
+
+.toggle-btn.active {
+	background: var(--accent-growth);
+	color: #fff;
+}
+
+/* Local Source Panel */
+#local-source-panel {
+	flex: 1;
+	min-width: 0;
+}
+
+#local-source-panel.hidden {
+	display: none;
+}
+
+/* GitHub Source Panel */
+#github-source-panel {
+	flex: 1;
+	min-width: 0;
+}
+
+#github-source-panel.hidden {
+	display: none;
+}
+
+.github-url-input {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.github-url-input label {
+	color: var(--text-secondary);
+	font-size: 0.9rem;
+	font-weight: 500;
+}
+
+.github-url-input input {
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	color: var(--text-primary);
+	padding: 12px 15px;
+	border-radius: 6px;
+	font-size: 1rem;
+	width: 100%;
+}
+
+.github-url-input input:focus {
+	outline: none;
+	border-color: var(--accent-growth);
+	box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.github-url-input input::placeholder {
+	color: var(--text-tertiary);
+}
+
+.input-hint {
+	color: var(--text-tertiary);
+	font-size: 0.8rem;
+	margin-top: 4px;
+}
+
 /* Footer */
 footer {
 	text-align: center;

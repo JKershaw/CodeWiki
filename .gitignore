@@ -26,6 +26,7 @@ test-results/
 
 # Local data (file-based repository)
 .codewiki-data/
+.codewiki-repos/
 
 # Generated wiki output
 wiki-output/
