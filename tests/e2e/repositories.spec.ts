@@ -31,8 +31,8 @@ test.describe('Repository Management', () => {
       await expect(card).toBeVisible();
       await expect(card.locator('.card-status')).toBeVisible();
     } else {
-      // No git repos found in folder browser, skip test
-      test.skip();
+      // No git repos found in folder browser
+      expect(false, 'Test requires a git repository to be visible in the folder browser').toBeTruthy();
     }
   });
 
@@ -57,12 +57,10 @@ test.describe('Repository Management', () => {
     // Wait for repos to load - should have at least one from global setup
     await page.waitForSelector('.card, .placeholder', { timeout: 10000 });
 
-    // If no repos exist, skip this test (global setup should have created one)
+    // If no repos exist, fail this test (global setup should have created one)
     const existingCard = page.locator('.card').first();
-    if (!(await existingCard.isVisible({ timeout: 3000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
+    const cardVisible = await existingCard.isVisible({ timeout: 3000 }).catch(() => false);
+    expect(cardVisible, 'Test requires at least one repository card to be visible').toBeTruthy();
 
     // Click process button
     const processBtn = page.locator('.process-btn').first();

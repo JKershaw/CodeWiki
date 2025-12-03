@@ -11,10 +11,7 @@ test.describe('Wiki Browser', () => {
     const repos = await response.json();
 
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     await page.goto('/');
     await page.waitForSelector('.card', { timeout: 10000 });
@@ -24,11 +21,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     // Find the card with wiki pages and click Browse Wiki
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
@@ -44,11 +37,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -74,11 +63,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -97,11 +82,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -121,11 +102,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -136,12 +113,7 @@ test.describe('Wiki Browser', () => {
     // Find a node with children (has visible toggle)
     const nodeWithChildren = page.locator('.tree-node-header[data-has-children="true"]').first();
     const hasExpandableNode = await nodeWithChildren.count() > 0;
-
-    if (!hasExpandableNode) {
-      // No nested structure to test, skip
-      test.skip();
-      return;
-    }
+    expect(hasExpandableNode, 'Test requires wiki tree with nested structure (expandable nodes)').toBeTruthy();
 
     // Get the path of this node
     const nodePath = await nodeWithChildren.getAttribute('data-path');
@@ -162,11 +134,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
@@ -184,11 +152,7 @@ test.describe('Wiki Browser', () => {
     const response = await request.get('/api/repos');
     const repos = await response.json();
     const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-
-    if (!repoWithWiki) {
-      test.skip();
-      return;
-    }
+    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();

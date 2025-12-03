@@ -48,10 +48,7 @@ test.describe('API Endpoints', () => {
     const reposResponse = await request.get('/api/repos');
     const repos = await reposResponse.json();
 
-    if (repos.length === 0) {
-      test.skip();
-      return;
-    }
+    expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
     const response = await request.get(`/api/repos/${repos[0].id}/wiki`);
     expect(response.ok()).toBeTruthy();
@@ -66,10 +63,7 @@ test.describe('API Endpoints', () => {
     const reposResponse = await request.get('/api/repos');
     const repos = await reposResponse.json();
 
-    if (repos.length === 0) {
-      test.skip();
-      return;
-    }
+    expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
     const response = await request.get(`/api/repos/${repos[0].id}/commits`);
     expect(response.ok()).toBeTruthy();
@@ -83,10 +77,7 @@ test.describe('API Endpoints', () => {
     const reposResponse = await request.get('/api/repos');
     const repos = await reposResponse.json();
 
-    if (repos.length === 0) {
-      test.skip();
-      return;
-    }
+    expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
     const response = await request.post(`/api/repos/${repos[0].id}/query`, {
       data: {},
@@ -107,10 +98,7 @@ test.describe('API Endpoints', () => {
       await request.post('/api/repos', { data: { path: '.' } });
       const newReposResponse = await request.get('/api/repos');
       const newRepos = await newReposResponse.json();
-      if (newRepos.length === 0) {
-        test.skip();
-        return;
-      }
+      expect(newRepos.length, 'Test requires at least one repository (failed to add one)').toBeGreaterThan(0);
     }
 
     const updatedReposResponse = await request.get('/api/repos');
@@ -190,10 +178,7 @@ test.describe('API Endpoints', () => {
     const reposResponse = await request.get('/api/repos');
     const repos = await reposResponse.json();
 
-    if (repos.length === 0) {
-      test.skip();
-      return;
-    }
+    expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
     const response = await request.post(`/api/repos/${repos[0].id}/spec`, {
       data: {},
@@ -215,10 +200,7 @@ test.describe('API Endpoints', () => {
       await request.post('/api/repos', { data: { path: '.' } });
       const newReposResponse = await request.get('/api/repos');
       const newRepos = await newReposResponse.json();
-      if (newRepos.length === 0) {
-        test.skip();
-        return;
-      }
+      expect(newRepos.length, 'Test requires at least one repository (failed to add one)').toBeGreaterThan(0);
     }
 
     const updatedReposResponse = await request.get('/api/repos');
@@ -259,10 +241,7 @@ test.describe('API Endpoints', () => {
       await request.post('/api/repos', { data: { path: '.' } });
       const newReposResponse = await request.get('/api/repos');
       repos = await newReposResponse.json();
-      if (repos.length === 0) {
-        test.skip();
-        return;
-      }
+      expect(repos.length, 'Test requires at least one repository (failed to add one)').toBeGreaterThan(0);
     }
 
     const response = await request.get(`/api/repos/${repos[0].id}/work-queue`);
@@ -308,10 +287,7 @@ test.describe('API Endpoints', () => {
       await request.post('/api/repos', { data: { path: '.' } });
       const newReposResponse = await request.get('/api/repos');
       repos = await newReposResponse.json();
-      if (repos.length === 0) {
-        test.skip();
-        return;
-      }
+      expect(repos.length, 'Test requires at least one repository (failed to add one)').toBeGreaterThan(0);
     }
 
     // Try to stop when no processing is active
@@ -332,10 +308,7 @@ test.describe('API Endpoints', () => {
       await request.post('/api/repos', { data: { path: '.' } });
       const newReposResponse = await request.get('/api/repos');
       repos = await newReposResponse.json();
-      if (repos.length === 0) {
-        test.skip();
-        return;
-      }
+      expect(repos.length, 'Test requires at least one repository (failed to add one)').toBeGreaterThan(0);
     }
 
     const response = await request.get(`/api/repos/${repos[0].id}/processing`);
