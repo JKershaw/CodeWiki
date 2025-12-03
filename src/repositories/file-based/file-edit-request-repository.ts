@@ -38,21 +38,23 @@ export class FileEditRequestRepository implements EditRequestRepository {
   }
 
   async findByPagePath(wikiId: string, pagePath: string): Promise<EditRequest[]> {
-    let results = await this.store.find(
+    const results = await this.store.find(
       (er) => er.wikiId === wikiId && er.targetPagePath === pagePath
     );
     return results.map((er) => this.hydrateDates(er));
   }
 
   async findByCommit(repoId: string, commitSha: string): Promise<EditRequest[]> {
-    let results = await this.store.find(
-      (er) => er.repoId === repoId && getSourceCommitSha(this.hydrateDates(er)) === commitSha
+    // Use getSourceCommitSha helper to extract SHA from EditSource abstraction
+    // No need to hydrate dates for SHA comparison (string doesn't need hydration)
+    const results = await this.store.find(
+      (er) => er.repoId === repoId && getSourceCommitSha(er) === commitSha
     );
     return results.map((er) => this.hydrateDates(er));
   }
 
   async findByAgentRun(agentRunId: string): Promise<EditRequest[]> {
-    let results = await this.store.find(
+    const results = await this.store.find(
       (er) => er.sourceAgentRunId === agentRunId
     );
     return results.map((er) => this.hydrateDates(er));
