@@ -5,7 +5,7 @@
  * where MongoDB is available.
  */
 
-import type { Db, MongoClient } from 'mongodb';
+import type { Db } from 'mongodb';
 import type { Repositories } from '../interfaces/index.js';
 
 export * from './mongo-utils.js';
