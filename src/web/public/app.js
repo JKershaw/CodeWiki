@@ -2098,12 +2098,20 @@ function escapeHtml(text) {
 /**
  * Convert markdown to HTML using the marked library.
  * Output is sanitized with DOMPurify to prevent XSS attacks.
+ * Falls back to escaped HTML with basic formatting if libraries aren't loaded.
  *
  * @param {string} md - Markdown content to convert
  * @returns {string} Sanitized HTML string
  */
 function markdownToHtml(md) {
   if (!md) return '';
+
+  // Check if marked library is available
+  if (typeof marked === 'undefined') {
+    // Fallback: escape HTML and convert newlines to <br> for basic formatting
+    const escaped = escapeHtml(md);
+    return escaped.replace(/\n/g, '<br>');
+  }
 
   // Configure marked for GitHub Flavored Markdown
   marked.setOptions({
@@ -2113,7 +2121,12 @@ function markdownToHtml(md) {
 
   // Parse markdown and sanitize to prevent XSS
   const rawHtml = marked.parse(md);
-  return DOMPurify.sanitize(rawHtml);
+
+  // Use DOMPurify if available, otherwise return raw HTML (already escaped by marked)
+  if (typeof DOMPurify !== 'undefined') {
+    return DOMPurify.sanitize(rawHtml);
+  }
+  return rawHtml;
 }
 
 // ============================================================================

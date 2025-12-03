@@ -17,6 +17,10 @@ import {
   handleRegisterRepository,
 } from '../../src/commands/repository.js';
 import { v4 as uuid } from 'uuid';
+import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
+import { homedir } from 'os';
+import simpleGit from 'simple-git';
 
 /**
  * Test wiki pages with nested structure.
@@ -181,8 +185,53 @@ export default async function globalSetup(): Promise<void> {
 
     const totalPages = existingPages.length + createdCount;
     console.log(`[E2E Setup] Wiki now has ${totalPages} pages (created ${createdCount} new)`);
+
+    // Step 4: Create a test git repository under $HOME for folder browser tests
+    // The folder browser starts at $HOME and is sandboxed there, so we need a git repo
+    // that's visible from within that directory.
+    await createTestGitRepo();
+
     console.log('[E2E Setup] Test data setup complete!');
   } finally {
     await connection.close();
+  }
+}
+
+/**
+ * Create a test git repository under $HOME for the folder browser test.
+ * This ensures there's at least one git repo visible when the folder browser opens.
+ */
+async function createTestGitRepo(): Promise<void> {
+  const testRepoPath = join(homedir(), 'e2e-test-repo');
+
+  try {
+    // Create the directory
+    await mkdir(testRepoPath, { recursive: true });
+
+    // Initialize git repo
+    const git = simpleGit(testRepoPath);
+
+    // Check if already initialized
+    const isRepo = await git.checkIsRepo().catch(() => false);
+    if (isRepo) {
+      console.log('[E2E Setup] Test git repo already exists at:', testRepoPath);
+      return;
+    }
+
+    await git.init();
+    await git.addConfig('user.email', 'test@example.com');
+    await git.addConfig('user.name', 'Test User');
+    await git.addConfig('commit.gpgsign', 'false');
+
+    // Create a README file
+    await writeFile(join(testRepoPath, 'README.md'), '# E2E Test Repository\n\nThis is a test repository for E2E tests.\n');
+
+    await git.add('.');
+    await git.commit('Initial commit');
+
+    console.log('[E2E Setup] Created test git repo at:', testRepoPath);
+  } catch (error) {
+    console.warn('[E2E Setup] Failed to create test git repo:', error);
+    // Don't fail the entire setup, just warn
   }
 }
