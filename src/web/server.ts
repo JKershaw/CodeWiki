@@ -62,6 +62,9 @@ export async function startServer(port = PORT) {
   const repos = repoConnection.repositories;
   const git = createGitService();
 
+  // JWT service for authenticated git operations (created even if GitHub auth not fully configured)
+  let jwtService: ReturnType<typeof createJwtService> | undefined;
+
   // Middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -73,7 +76,7 @@ export async function startServer(port = PORT) {
   // GitHub OAuth authentication routes (if configured)
   if (isGitHubAuthEnabled()) {
     const baseUrl = process.env['BASE_URL'] || `http://localhost:${port}`;
-    const jwtService = createJwtService(SESSION_SECRET);
+    jwtService = createJwtService(SESSION_SECRET);
     const githubAuth = createGitHubAuthService({
       clientId: GITHUB_CLIENT_ID!,
       clientSecret: GITHUB_CLIENT_SECRET!,
@@ -97,8 +100,13 @@ export async function startServer(port = PORT) {
   // Static files (after password protection)
   app.use(express.static(join(__dirname, 'public')));
 
-  // API Routes
-  app.use(createApiRoutes({ repos, git, createLLM }));
+  // API Routes (include jwtService for authenticated git operations if available)
+  const apiDeps = { repos, git, createLLM };
+  if (jwtService) {
+    app.use(createApiRoutes({ ...apiDeps, jwtService }));
+  } else {
+    app.use(createApiRoutes(apiDeps));
+  }
 
   // Serve index.html for all non-API routes (SPA support)
   app.get('*', (_req: Request, res: Response) => {
