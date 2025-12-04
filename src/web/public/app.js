@@ -1460,11 +1460,12 @@ async function loadBenchmarkHistory(repoId) {
 
     // Add click handlers for delete buttons
     container.querySelectorAll('.benchmark-delete-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
+      btn.addEventListener('click', (e) => {
         e.stopPropagation(); // Prevent card click
         const benchmarkId = btn.dataset.id;
         const benchmarkType = btn.dataset.type;
-        await deleteBenchmark(repoId, benchmarkId, benchmarkType);
+        const iteration = btn.dataset.iteration;
+        confirmDeleteBenchmark(repoId, benchmarkId, benchmarkType, iteration);
       });
     });
 
@@ -1475,10 +1476,44 @@ async function loadBenchmarkHistory(repoId) {
   }
 }
 
+/**
+ * Show confirmation dialog and delete a benchmark if confirmed.
+ */
+function confirmDeleteBenchmark(repoId, benchmarkId, benchmarkType, iteration) {
+  const typeLabel = benchmarkType === 'quality' ? 'Quality Benchmark' : 'Accuracy Benchmark';
+  const typeLabelLower = benchmarkType === 'quality' ? 'quality benchmark' : 'benchmark';
+
+  showConfirmModal({
+    title: `Delete ${typeLabel}`,
+    message: `Are you sure you want to delete this ${typeLabelLower}?`,
+    details: `
+      <div class="detail-item">
+        <span class="detail-label">Type</span>
+        <span class="detail-value">${typeLabel}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Iteration</span>
+        <span class="detail-value">${iteration}</span>
+      </div>
+      <p class="warning-text">This will permanently delete the benchmark results. This action cannot be undone.</p>
+    `,
+    confirmText: `Delete ${typeLabel}`,
+    confirmClass: 'danger',
+    onConfirm: () => deleteBenchmark(repoId, benchmarkId, benchmarkType),
+  });
+}
+
+/**
+ * Delete a benchmark and refresh the UI.
+ */
 async function deleteBenchmark(repoId, benchmarkId, benchmarkType) {
   const typeLabel = benchmarkType === 'quality' ? 'quality benchmark' : 'benchmark';
-  if (!confirm(`Are you sure you want to delete this ${typeLabel}? This action cannot be undone.`)) {
-    return;
+
+  // Find the delete button to show loading state
+  const deleteBtn = document.querySelector(`.benchmark-delete-btn[data-id="${benchmarkId}"]`);
+  if (deleteBtn) {
+    deleteBtn.textContent = '...';
+    deleteBtn.disabled = true;
   }
 
   try {
@@ -1492,13 +1527,21 @@ async function deleteBenchmark(repoId, benchmarkId, benchmarkType) {
 
     if (!response.ok) {
       const data = await response.json();
-      throw new Error(data.error || 'Failed to delete benchmark');
+      throw new Error(data.error || `Failed to delete ${typeLabel}`);
     }
+
+    showToast(`${benchmarkType === 'quality' ? 'Quality benchmark' : 'Benchmark'} deleted successfully`, 'success');
 
     // Reload the benchmark history
     await loadBenchmarkHistory(repoId);
   } catch (error) {
-    alert(`Error deleting benchmark: ${error.message}`);
+    showToast(`Failed to delete ${typeLabel}: ${error.message}`, 'error');
+
+    // Restore button state on error
+    if (deleteBtn) {
+      deleteBtn.textContent = '✕';
+      deleteBtn.disabled = false;
+    }
   }
 }
 
@@ -1719,7 +1762,7 @@ function renderBenchmarkCard(benchmark, prevBenchmark, type = 'accuracy') {
 
   // Only show delete button for non-running benchmarks
   const deleteBtn = benchmark.status !== 'running'
-    ? `<button class="benchmark-delete-btn" data-id="${benchmark.id}" data-type="${type}" title="Delete benchmark">×</button>`
+    ? `<button class="btn danger small benchmark-delete-btn" data-id="${benchmark.id}" data-type="${type}" data-iteration="${benchmark.iterationCount}" title="Delete benchmark">✕</button>`
     : '';
 
   return `
@@ -1763,7 +1806,7 @@ function renderQualityBenchmarkCard(benchmark, prevBenchmark) {
 
   // Only show delete button for non-running benchmarks
   const deleteBtn = benchmark.status !== 'running'
-    ? `<button class="benchmark-delete-btn" data-id="${benchmark.id}" data-type="quality" title="Delete benchmark">×</button>`
+    ? `<button class="btn danger small benchmark-delete-btn" data-id="${benchmark.id}" data-type="quality" data-iteration="${benchmark.iterationCount}" title="Delete benchmark">✕</button>`
     : '';
 
   return `
