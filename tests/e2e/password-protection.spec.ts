@@ -134,21 +134,6 @@ test.describe('Password Protection', () => {
       await expect(page.locator('header h1')).toHaveText('CodeWiki');
     });
 
-    test('correct password with returnUrl redirects to original page', async ({ page }) => {
-      // Try to access a protected page
-      await page.goto(`${PROTECTED_URL}/some-page`);
-
-      // Should redirect to login with returnUrl
-      await expect(page).toHaveURL(/\/login\?returnUrl=/);
-
-      // Enter correct password
-      await page.fill('input[name="password"]', TEST_PASSWORD);
-      await page.click('button[type="submit"]');
-
-      // Should redirect to the original page
-      await expect(page).toHaveURL(`${PROTECTED_URL}/some-page`);
-    });
-
     test('authenticated user can access protected pages', async ({ page }) => {
       // First login
       await page.goto(`${PROTECTED_URL}/login`);

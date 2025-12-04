@@ -268,23 +268,6 @@ describe('Password Protection Middleware', () => {
         passwordProtection(req, res, next);
 
         assert.strictEqual(nextCalled, false);
-        assert.strictEqual(res._redirect, '/login?returnUrl=%2Fdashboard');
-      });
-
-      it('redirects to /login without returnUrl for homepage', () => {
-        const req = createMockRequest({
-          path: '/',
-          originalUrl: '/',
-        });
-        const res = createMockResponse();
-        let nextCalled = false;
-        const next: NextFunction = () => {
-          nextCalled = true;
-        };
-
-        passwordProtection(req, res, next);
-
-        assert.strictEqual(nextCalled, false);
         assert.strictEqual(res._redirect, '/login');
       });
 

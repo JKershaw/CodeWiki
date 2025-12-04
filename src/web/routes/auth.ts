@@ -28,22 +28,20 @@ export function createAuthRoutes(): Router {
       return;
     }
 
-    const returnUrl = (req.query.returnUrl as string) || '/';
     const error = req.query.error as string;
 
-    res.send(getLoginPageHtml(returnUrl, error));
+    res.send(getLoginPageHtml(error));
   });
 
   /**
    * POST /login - Process login form
    */
   router.post('/login', (req: Request, res: Response) => {
-    const { password, returnUrl = '/' } = req.body;
+    const { password } = req.body;
 
     // Verify password
     if (!verifyPassword(password)) {
-      const errorUrl = `/login?error=invalid${returnUrl !== '/' ? `&returnUrl=${encodeURIComponent(returnUrl)}` : ''}`;
-      res.redirect(errorUrl);
+      res.redirect('/login?error=invalid');
       return;
     }
 
@@ -58,7 +56,7 @@ export function createAuthRoutes(): Router {
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     });
 
-    res.redirect(returnUrl);
+    res.redirect('/');
   });
 
   /**
@@ -83,7 +81,7 @@ export function createAuthRoutes(): Router {
 /**
  * Generate the login page HTML.
  */
-function getLoginPageHtml(returnUrl: string, error?: string): string {
+function getLoginPageHtml(error?: string): string {
   const errorHtml = error
     ? `<div class="error-message">Invalid password. Please try again.</div>`
     : '';
@@ -227,7 +225,6 @@ function getLoginPageHtml(returnUrl: string, error?: string): string {
     </div>
     ${errorHtml}
     <form method="POST" action="/login">
-      <input type="hidden" name="returnUrl" value="${escapeHtml(returnUrl)}">
       <div class="form-group">
         <label for="password">Password</label>
         <input
@@ -244,18 +241,4 @@ function getLoginPageHtml(returnUrl: string, error?: string): string {
   </div>
 </body>
 </html>`;
-}
-
-/**
- * Escape HTML special characters to prevent XSS.
- */
-function escapeHtml(text: string): string {
-  const map: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
-  };
-  return text.replace(/[&<>"']/g, (char) => map[char] ?? char);
 }
