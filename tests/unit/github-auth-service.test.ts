@@ -197,6 +197,13 @@ describe('GitHub Auth Service', () => {
 
   describe('getAccessibleRepos', () => {
     it('fetches repositories accessible via the GitHub App', async () => {
+      const mockInstallations = {
+        total_count: 1,
+        installations: [
+          { id: 12345, account: { login: 'owner' } },
+        ],
+      };
+
       const mockRepos = {
         total_count: 2,
         repositories: [
@@ -223,11 +230,19 @@ describe('GitHub Auth Service', () => {
 
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mock.fn(async (url: string) => {
-        assert.ok(url.includes('api.github.com/user/installations'));
-        return new Response(JSON.stringify(mockRepos), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        if (url.includes('/user/installations/12345/repositories')) {
+          return new Response(JSON.stringify(mockRepos), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/user/installations')) {
+          return new Response(JSON.stringify(mockInstallations), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
       }) as typeof fetch;
 
       try {
@@ -243,15 +258,15 @@ describe('GitHub Auth Service', () => {
       }
     });
 
-    it('returns empty array when no repos accessible', async () => {
-      const mockRepos = {
+    it('returns empty array when no installations exist', async () => {
+      const mockInstallations = {
         total_count: 0,
-        repositories: [],
+        installations: [],
       };
 
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mock.fn(async () => {
-        return new Response(JSON.stringify(mockRepos), {
+        return new Response(JSON.stringify(mockInstallations), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -261,6 +276,79 @@ describe('GitHub Auth Service', () => {
         const repos = await authService.getAccessibleRepos('ghu_test_token');
 
         assert.strictEqual(repos.length, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('combines repos from multiple installations', async () => {
+      const mockInstallations = {
+        total_count: 2,
+        installations: [
+          { id: 111, account: { login: 'owner1' } },
+          { id: 222, account: { login: 'owner2' } },
+        ],
+      };
+
+      const mockRepos1 = {
+        total_count: 1,
+        repositories: [
+          {
+            id: 1,
+            name: 'repo-1',
+            full_name: 'owner1/repo-1',
+            private: false,
+            html_url: 'https://github.com/owner1/repo-1',
+            clone_url: 'https://github.com/owner1/repo-1.git',
+            default_branch: 'main',
+          },
+        ],
+      };
+
+      const mockRepos2 = {
+        total_count: 1,
+        repositories: [
+          {
+            id: 2,
+            name: 'repo-2',
+            full_name: 'owner2/repo-2',
+            private: true,
+            html_url: 'https://github.com/owner2/repo-2',
+            clone_url: 'https://github.com/owner2/repo-2.git',
+            default_branch: 'main',
+          },
+        ],
+      };
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock.fn(async (url: string) => {
+        if (url.includes('/user/installations/111/repositories')) {
+          return new Response(JSON.stringify(mockRepos1), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/user/installations/222/repositories')) {
+          return new Response(JSON.stringify(mockRepos2), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/user/installations')) {
+          return new Response(JSON.stringify(mockInstallations), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      }) as typeof fetch;
+
+      try {
+        const repos = await authService.getAccessibleRepos('ghu_test_token');
+
+        assert.strictEqual(repos.length, 2);
+        assert.strictEqual(repos[0].fullName, 'owner1/repo-1');
+        assert.strictEqual(repos[1].fullName, 'owner2/repo-2');
       } finally {
         globalThis.fetch = originalFetch;
       }

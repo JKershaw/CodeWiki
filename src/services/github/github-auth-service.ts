@@ -264,9 +264,10 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
     },
 
     async getAccessibleRepos(accessToken: string): Promise<GitHubRepo[]> {
-      let response: Response;
+      // Step 1: Get list of installations the user has access to
+      let installationsResponse: Response;
       try {
-        response = await fetch(`${GITHUB_API_URL}/user/installations/repositories`, {
+        installationsResponse = await fetch(`${GITHUB_API_URL}/user/installations`, {
           headers: {
             'Accept': 'application/vnd.github+json',
             'Authorization': `Bearer ${accessToken}`,
@@ -274,49 +275,94 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
           },
         });
       } catch (error) {
-        console.error('GitHub API: Network error fetching repositories:', error);
+        console.error('GitHub API: Network error fetching installations:', error);
         throw new Error('Network error contacting GitHub');
       }
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({})) as { message?: string };
-        const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
-        console.error(`GitHub API: Failed to fetch repositories - ${response.status} ${response.statusText}`, {
+      if (!installationsResponse.ok) {
+        const error = await installationsResponse.json().catch(() => ({})) as { message?: string };
+        const rateLimitRemaining = installationsResponse.headers.get('x-ratelimit-remaining');
+        console.error(`GitHub API: Failed to fetch installations - ${installationsResponse.status} ${installationsResponse.statusText}`, {
           message: error.message,
           rateLimitRemaining,
         });
-        if (response.status === 401) {
+        if (installationsResponse.status === 401) {
           throw new Error('GitHub access token is invalid or expired');
         }
-        if (response.status === 403 && rateLimitRemaining === '0') {
+        if (installationsResponse.status === 403 && rateLimitRemaining === '0') {
           throw new Error('GitHub API rate limit exceeded');
         }
-        throw new Error(`Failed to fetch repositories: ${error.message || response.statusText}`);
+        throw new Error(`Failed to fetch installations: ${error.message || installationsResponse.statusText}`);
       }
 
-      const data = await response.json() as {
+      const installationsData = await installationsResponse.json() as {
         total_count: number;
-        repositories: Array<{
+        installations: Array<{
           id: number;
-          name: string;
-          full_name: string;
-          private: boolean;
-          html_url: string;
-          clone_url: string;
-          default_branch: string;
+          account: { login: string };
         }>;
       };
 
-      console.log(`GitHub API: Fetched ${data.total_count} accessible repositories`);
-      return data.repositories.map(repo => ({
-        id: repo.id,
-        name: repo.name,
-        fullName: repo.full_name,
-        isPrivate: repo.private,
-        htmlUrl: repo.html_url,
-        cloneUrl: repo.clone_url,
-        defaultBranch: repo.default_branch,
-      }));
+      console.log(`GitHub API: Found ${installationsData.total_count} app installations`);
+
+      if (installationsData.installations.length === 0) {
+        return [];
+      }
+
+      // Step 2: Get repositories for each installation
+      const allRepos: GitHubRepo[] = [];
+
+      for (const installation of installationsData.installations) {
+        try {
+          const reposResponse = await fetch(
+            `${GITHUB_API_URL}/user/installations/${installation.id}/repositories`,
+            {
+              headers: {
+                'Accept': 'application/vnd.github+json',
+                'Authorization': `Bearer ${accessToken}`,
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+            }
+          );
+
+          if (!reposResponse.ok) {
+            console.warn(`GitHub API: Failed to fetch repos for installation ${installation.id} (${installation.account.login})`);
+            continue;
+          }
+
+          const reposData = await reposResponse.json() as {
+            total_count: number;
+            repositories: Array<{
+              id: number;
+              name: string;
+              full_name: string;
+              private: boolean;
+              html_url: string;
+              clone_url: string;
+              default_branch: string;
+            }>;
+          };
+
+          const repos = reposData.repositories.map(repo => ({
+            id: repo.id,
+            name: repo.name,
+            fullName: repo.full_name,
+            isPrivate: repo.private,
+            htmlUrl: repo.html_url,
+            cloneUrl: repo.clone_url,
+            defaultBranch: repo.default_branch,
+          }));
+
+          allRepos.push(...repos);
+          console.log(`GitHub API: Fetched ${reposData.total_count} repos from installation ${installation.account.login}`);
+        } catch (error) {
+          console.warn(`GitHub API: Error fetching repos for installation ${installation.id}:`, error);
+          continue;
+        }
+      }
+
+      console.log(`GitHub API: Total ${allRepos.length} accessible repositories across all installations`);
+      return allRepos;
     },
 
     generateState(): string {
