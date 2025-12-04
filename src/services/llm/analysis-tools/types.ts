@@ -6,6 +6,8 @@ import type { Repositories } from '../../../repositories/index.js';
 import type { BenchmarkRun } from '../../../domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../../../domain/quality-benchmark.js';
 import type { WikiPage } from '../../../domain/wiki-page.js';
+import type { RepositoryService } from '../../repository/repository-service.js';
+import type { Repo } from '../../../domain/repo.js';
 
 /**
  * Context provided to analysis tools when they execute.
@@ -17,8 +19,12 @@ export interface AnalysisToolContext {
   repoId: string;
   /** Wiki ID being analyzed */
   wikiId: string;
-  /** Path to the source code repository (optional - if available enables codebase tools) */
+  /** Path to the source code repository (optional - if available enables codebase tools via filesystem) */
   repoPath?: string;
+  /** Repository service for GitHub API access (optional - fallback when repoPath not available) */
+  repoService?: RepositoryService;
+  /** Repository entity (required when using repoService) */
+  repo?: Repo;
   /** Benchmark runs included in analysis */
   benchmarkRuns: BenchmarkRun[];
   /** Quality benchmark runs included in analysis */

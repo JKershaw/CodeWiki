@@ -3,15 +3,26 @@
  *
  * These tools allow exploring the actual source code repository to understand
  * what code exists that wiki-building agents should be documenting.
+ *
+ * Supports both local filesystem access (via repoPath) and GitHub API access
+ * (via repoService) for flexibility with different repository types.
  */
 
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import fg from 'fast-glob';
-import type { AnalysisToolDefinition } from './types.js';
+import { minimatch } from 'minimatch';
+import type { AnalysisToolDefinition, AnalysisToolContext } from './types.js';
 import { loadIgnorePatterns } from '../../cwignore.js';
 
 const DEFAULT_MAX_FILE_SIZE = 100_000; // 100KB
+
+/**
+ * Check if source code access is available (either local or via API).
+ */
+function hasSourceAccess(context: AnalysisToolContext): boolean {
+  return !!(context.repoPath || (context.repoService && context.repo));
+}
 
 /**
  * Validate that a path is within the repository root.
@@ -45,34 +56,57 @@ export const readSourceFileTool: AnalysisToolDefinition = {
     required: ['path'],
   },
   execute: async (input, context) => {
-    if (!context.repoPath) {
-      return 'Source code access is not available for this repository.';
-    }
-
     const path = input['path'] as string;
-    try {
-      const fullPath = validateSourcePath(path, context.repoPath);
-      const stats = await stat(fullPath);
 
-      if (stats.size > DEFAULT_MAX_FILE_SIZE) {
-        return `Error: File "${path}" is too large (${stats.size} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
-      }
+    // Prefer local filesystem when available
+    if (context.repoPath) {
+      try {
+        const fullPath = validateSourcePath(path, context.repoPath);
+        const stats = await stat(fullPath);
 
-      const content = await readFile(fullPath, 'utf-8');
-      return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
-    } catch (error) {
-      if (error instanceof Error) {
-        // Provide cleaner error messages for common cases
-        if (error.message.includes('ENOENT')) {
-          return `Error: File "${path}" not found in repository`;
+        if (stats.size > DEFAULT_MAX_FILE_SIZE) {
+          return `Error: File "${path}" is too large (${stats.size} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
         }
-        if (error.message.includes('EACCES')) {
-          return `Error: Permission denied reading "${path}"`;
+
+        const content = await readFile(fullPath, 'utf-8');
+        return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message.includes('ENOENT')) {
+            return `Error: File "${path}" not found in repository`;
+          }
+          if (error.message.includes('EACCES')) {
+            return `Error: Permission denied reading "${path}"`;
+          }
+          return `Error reading "${path}": ${error.message}`;
         }
-        return `Error reading "${path}": ${error.message}`;
+        return `Error reading "${path}"`;
       }
-      return `Error reading "${path}"`;
     }
+
+    // Fall back to GitHub API
+    if (context.repoService && context.repo) {
+      try {
+        const content = await context.repoService.getFileContent(context.repo, path);
+
+        // Check content size (approximate, since we already have the content)
+        if (content.length > DEFAULT_MAX_FILE_SIZE) {
+          return `Error: File "${path}" is too large (${content.length} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
+        }
+
+        return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message.includes('Not Found') || error.message.includes('404')) {
+            return `Error: File "${path}" not found in repository`;
+          }
+          return `Error reading "${path}": ${error.message}`;
+        }
+        return `Error reading "${path}"`;
+      }
+    }
+
+    return 'Source code access is not available for this repository.';
   },
 };
 
@@ -95,44 +129,75 @@ export const searchSourceFilesTool: AnalysisToolDefinition = {
     required: ['pattern'],
   },
   execute: async (input, context) => {
-    if (!context.repoPath) {
-      return 'Source code access is not available for this repository.';
-    }
-
     const pattern = input['pattern'] as string;
-    try {
-      const ignorePatterns = await loadIgnorePatterns(context.repoPath);
-      const files = await fg(pattern, {
-        cwd: context.repoPath,
-        onlyFiles: true,
-        ignore: ignorePatterns,
-      });
+    const maxResults = 50;
 
-      if (files.length === 0) {
-        return `No files found matching "${pattern}"`;
-      }
+    // Prefer local filesystem when available
+    if (context.repoPath) {
+      try {
+        const ignorePatterns = await loadIgnorePatterns(context.repoPath);
+        const files = await fg(pattern, {
+          cwd: context.repoPath,
+          onlyFiles: true,
+          ignore: ignorePatterns,
+        });
 
-      // Limit results
-      const maxResults = 50;
-      const truncated = files.length > maxResults;
-      const displayFiles = files.slice(0, maxResults);
-
-      let result = `## Files matching: ${pattern}\n\nFound ${files.length} files:\n\n`;
-      result += displayFiles.join('\n');
-      if (truncated) {
-        result += `\n\n... and ${files.length - maxResults} more files`;
-      }
-
-      return result;
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.includes('ENOENT')) {
-          return `Error: Repository path not found or not accessible`;
+        if (files.length === 0) {
+          return `No files found matching "${pattern}"`;
         }
-        return `Error searching for "${pattern}": ${error.message}`;
+
+        const truncated = files.length > maxResults;
+        const displayFiles = files.slice(0, maxResults);
+
+        let result = `## Files matching: ${pattern}\n\nFound ${files.length} files:\n\n`;
+        result += displayFiles.join('\n');
+        if (truncated) {
+          result += `\n\n... and ${files.length - maxResults} more files`;
+        }
+
+        return result;
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message.includes('ENOENT')) {
+            return `Error: Repository path not found or not accessible`;
+          }
+          return `Error searching for "${pattern}": ${error.message}`;
+        }
+        return `Error searching for "${pattern}"`;
       }
-      return `Error searching for "${pattern}"`;
     }
+
+    // Fall back to GitHub API
+    if (context.repoService && context.repo) {
+      try {
+        const allFiles = await context.repoService.getFileTree(context.repo);
+
+        // Filter files matching the glob pattern
+        const matchingFiles = allFiles.filter(filePath => minimatch(filePath, pattern));
+
+        if (matchingFiles.length === 0) {
+          return `No files found matching "${pattern}"`;
+        }
+
+        const truncated = matchingFiles.length > maxResults;
+        const displayFiles = matchingFiles.slice(0, maxResults);
+
+        let result = `## Files matching: ${pattern}\n\nFound ${matchingFiles.length} files:\n\n`;
+        result += displayFiles.join('\n');
+        if (truncated) {
+          result += `\n\n... and ${matchingFiles.length - maxResults} more files`;
+        }
+
+        return result;
+      } catch (error) {
+        if (error instanceof Error) {
+          return `Error searching for "${pattern}": ${error.message}`;
+        }
+        return `Error searching for "${pattern}"`;
+      }
+    }
+
+    return 'Source code access is not available for this repository.';
   },
 };
 
@@ -155,48 +220,79 @@ export const listSourceDirectoryTool: AnalysisToolDefinition = {
     required: ['path'],
   },
   execute: async (input, context) => {
-    if (!context.repoPath) {
-      return 'Source code access is not available for this repository.';
-    }
-
     const path = input['path'] as string;
-    try {
-      const fullPath = validateSourcePath(path, context.repoPath);
-      const entries = await readdir(fullPath, { withFileTypes: true });
-      const ignorePatterns = await loadIgnorePatterns(context.repoPath);
 
-      // Filter out ignored entries
-      const filteredEntries = entries.filter(entry => {
-        const entryPath = path === '.' ? entry.name : join(path, entry.name);
-        // Simple ignore check
-        return !ignorePatterns.some(p => entryPath.includes(p.replace('/**', '').replace('*', '')));
-      });
+    // Prefer local filesystem when available
+    if (context.repoPath) {
+      try {
+        const fullPath = validateSourcePath(path, context.repoPath);
+        const entries = await readdir(fullPath, { withFileTypes: true });
+        const ignorePatterns = await loadIgnorePatterns(context.repoPath);
 
-      const dirs = filteredEntries.filter(e => e.isDirectory()).map(e => e.name + '/');
-      const files = filteredEntries.filter(e => !e.isDirectory()).map(e => e.name);
+        // Filter out ignored entries
+        const filteredEntries = entries.filter(entry => {
+          const entryPath = path === '.' ? entry.name : join(path, entry.name);
+          // Simple ignore check
+          return !ignorePatterns.some(p => entryPath.includes(p.replace('/**', '').replace('*', '')));
+        });
 
-      let result = `## Directory: ${path}\n\n`;
+        const dirs = filteredEntries.filter(e => e.isDirectory()).map(e => e.name + '/');
+        const files = filteredEntries.filter(e => !e.isDirectory()).map(e => e.name);
 
-      if (dirs.length > 0) {
-        result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
-      }
-      if (files.length > 0) {
-        result += '**Files:**\n' + files.sort().join('\n');
-      }
+        let result = `## Directory: ${path}\n\n`;
 
-      return result;
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.includes('ENOENT')) {
-          return `Error: Directory "${path}" not found in repository`;
+        if (dirs.length > 0) {
+          result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
         }
-        if (error.message.includes('ENOTDIR')) {
-          return `Error: "${path}" is not a directory`;
+        if (files.length > 0) {
+          result += '**Files:**\n' + files.sort().join('\n');
         }
-        return `Error listing "${path}": ${error.message}`;
+
+        return result;
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message.includes('ENOENT')) {
+            return `Error: Directory "${path}" not found in repository`;
+          }
+          if (error.message.includes('ENOTDIR')) {
+            return `Error: "${path}" is not a directory`;
+          }
+          return `Error listing "${path}": ${error.message}`;
+        }
+        return `Error listing "${path}"`;
       }
-      return `Error listing "${path}"`;
     }
+
+    // Fall back to GitHub API
+    if (context.repoService && context.repo) {
+      try {
+        const entries = await context.repoService.listDirectory(context.repo, path);
+
+        const dirs = entries.filter(e => e.type === 'dir').map(e => e.name + '/');
+        const files = entries.filter(e => e.type === 'file').map(e => e.name);
+
+        let result = `## Directory: ${path}\n\n`;
+
+        if (dirs.length > 0) {
+          result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
+        }
+        if (files.length > 0) {
+          result += '**Files:**\n' + files.sort().join('\n');
+        }
+
+        return result;
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message.includes('Not Found') || error.message.includes('404')) {
+            return `Error: Directory "${path}" not found in repository`;
+          }
+          return `Error listing "${path}": ${error.message}`;
+        }
+        return `Error listing "${path}"`;
+      }
+    }
+
+    return 'Source code access is not available for this repository.';
   },
 };
 

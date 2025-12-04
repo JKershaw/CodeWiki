@@ -7,6 +7,7 @@ import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
+import type { RepositoryServiceFactory } from '../../services/repository/repository-service.js';
 import { SelfImprovementAgent } from '../../analysis/self-improvement-agent.js';
 import { SelfImprovementChatService } from '../../services/self-improvement-chat-service.js';
 import { createChatSession } from '../../domain/chat-session.js';
@@ -55,7 +56,8 @@ interface ChatParams extends RunParams {
 export function createSelfImprovementRoutes(
   repos: Repositories,
   llm: LLMService,
-  git: GitService
+  git: GitService,
+  repoServiceFactory?: RepositoryServiceFactory
 ): Router {
   const router = Router({ mergeParams: true });
 
@@ -142,8 +144,10 @@ export function createSelfImprovementRoutes(
       }
       const repo = repoResult.data;
 
-      // Register the local repo path so git service can find it
-      git.registerLocalRepo(repo.id, repo.fullName);
+      // Register the local repo path so git service can find it (only for local repos)
+      if (!repo.isGitHubRepo) {
+        git.registerLocalRepo(repo.id, repo.fullName);
+      }
 
       // Get active wiki via CQRS query
       const wikiQuery = createGetActiveWikiQuery(repoId);
@@ -199,7 +203,7 @@ export function createSelfImprovementRoutes(
       }
 
       // Run analysis in background (don't await)
-      runAnalysisInBackground(repos, llm, git, runId, repoId, wiki.id, validBenchmarks.map(b => b.id));
+      runAnalysisInBackground(repos, llm, git, repoServiceFactory, runId, repoId, wiki.id, validBenchmarks.map(b => b.id));
 
       // Return immediately
       return res.json({
@@ -365,13 +369,14 @@ async function runAnalysisInBackground(
   repos: Repositories,
   llm: LLMService,
   git: GitService,
+  repoServiceFactory: RepositoryServiceFactory | undefined,
   runId: string,
   repoId: string,
   wikiId: string,
   benchmarkRunIds: string[]
 ): Promise<void> {
   try {
-    const agent = new SelfImprovementAgent(repos, llm, git);
+    const agent = new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
     const result = await agent.analyze(repoId, wikiId, benchmarkRunIds);
 
     // Update the run with results via CQRS commands

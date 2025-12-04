@@ -9,6 +9,8 @@ import { access } from 'fs/promises';
 import type { Repositories } from '../repositories/index.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { GitService } from '../services/git/git-service.js';
+import type { RepositoryServiceFactory, RepositoryService } from '../services/repository/repository-service.js';
+import type { Repo } from '../domain/repo.js';
 import type { BenchmarkRun } from '../domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../domain/quality-benchmark.js';
 import type { WikiPage } from '../domain/wiki-page.js';
@@ -41,7 +43,8 @@ export class SelfImprovementAgent {
   constructor(
     private readonly repos: Repositories,
     private readonly llm: LLMService,
-    private readonly git?: GitService
+    private readonly git?: GitService,
+    private readonly repoServiceFactory?: RepositoryServiceFactory
   ) {}
 
   /**
@@ -94,18 +97,11 @@ export class SelfImprovementAgent {
     });
 
     try {
-      // Get repo path for source code access (if git service available and path exists)
-      let repoPath: string | undefined;
-      if (this.git) {
-        try {
-          const candidatePath = this.git.getRepoPath(repoId);
-          // Verify the path actually exists before using it
-          await access(candidatePath);
-          repoPath = candidatePath;
-        } catch {
-          // Repo path not available or doesn't exist - codebase tools will be disabled
-        }
-      }
+      // Look up the repo entity
+      const repo = await this.repos.repos.findById(repoId);
+
+      // Build source code access context - supports both local repos and GitHub repos
+      const sourceContext = await this.buildSourceContext(repoId, repo);
 
       // Build the analysis context
       const toolContext: AnalysisToolContext = {
@@ -115,7 +111,7 @@ export class SelfImprovementAgent {
         benchmarkRuns,
         qualityBenchmarkRuns,
         wikiPages,
-        ...(repoPath && { repoPath }),
+        ...sourceContext,
       };
 
       // Build warm-start context
@@ -259,6 +255,52 @@ export class SelfImprovementAgent {
       return results;
     };
   }
+
+  /**
+   * Build the source code access context for a repository.
+   * Supports both local repos (via filesystem) and GitHub repos (via API).
+   */
+  private async buildSourceContext(repoId: string, repo: Repo | null): Promise<{
+    repoPath?: string;
+    repoService?: RepositoryService;
+    repo?: Repo;
+  }> {
+    // Try local filesystem first - but only if it's not a GitHub repo
+    // and the path actually exists on the filesystem
+    if (repo && !repo.isGitHubRepo && this.git) {
+      try {
+        const repoPath = this.git.getRepoPath(repoId);
+        // Verify the path actually exists before using it
+        await access(repoPath);
+        return { repoPath };
+      } catch {
+        // Path doesn't exist or isn't accessible - try GitHub API fallback
+      }
+    }
+
+    // Try GitHub API if we have a repo service factory and repo entity
+    if (this.repoServiceFactory && repo) {
+      // For GitHub repos, create an authenticated service if possible
+      let repoService: RepositoryService;
+      if (repo.isGitHubRepo && repo.userId) {
+        // Look up user's access token for authenticated GitHub access
+        const user = await this.repos.users.findById(repo.userId);
+        if (user?.accessToken) {
+          repoService = this.repoServiceFactory.getServiceWithToken(repo, user.accessToken);
+        } else {
+          // Fall back to unauthenticated access
+          repoService = this.repoServiceFactory.getService(repo);
+        }
+      } else {
+        repoService = this.repoServiceFactory.getService(repo);
+      }
+
+      return { repoService, repo };
+    }
+
+    // No source code access available
+    return {};
+  }
 }
 
 /**
@@ -267,7 +309,8 @@ export class SelfImprovementAgent {
 export function createSelfImprovementAgent(
   repos: Repositories,
   llm: LLMService,
-  git?: GitService
+  git?: GitService,
+  repoServiceFactory?: RepositoryServiceFactory
 ): SelfImprovementAgent {
-  return new SelfImprovementAgent(repos, llm, git);
+  return new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
 }
