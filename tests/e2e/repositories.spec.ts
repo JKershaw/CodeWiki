@@ -383,7 +383,10 @@ test.describe('Repository Delete API', () => {
     const initialRepos = await initialResponse.json();
     const initialCount = initialRepos.length;
 
-    // Create a new repository
+    // Check if a repo with path '.' already exists
+    const existingRepo = initialRepos.find((r: any) => r.fullName.endsWith('/CodeWiki') || r.fullName === '.');
+
+    // Create a new repository (or get existing one)
     const createResponse = await request.post('/api/repos', {
       data: { path: '.' },
     });
@@ -393,19 +396,25 @@ test.describe('Repository Delete API', () => {
       const data = await createResponse.json();
       repoId = data.id;
 
-      // Verify repo count increased
-      const afterCreateResponse = await request.get('/api/repos');
-      const afterCreateRepos = await afterCreateResponse.json();
-      expect(afterCreateRepos.length).toBe(initialCount + 1);
+      // Only verify count increased if repo didn't already exist
+      if (!existingRepo) {
+        const afterCreateResponse = await request.get('/api/repos');
+        const afterCreateRepos = await afterCreateResponse.json();
+        expect(afterCreateRepos.length).toBe(initialCount + 1);
+      }
 
       // Delete it
       const deleteResponse = await request.delete(`/api/repos/${repoId}`);
       expect(deleteResponse.status()).toBe(204);
 
-      // Verify repo count is back to initial
+      // Verify repo is gone (count decreased or repo not found)
       const afterDeleteResponse = await request.get('/api/repos');
       const afterDeleteRepos = await afterDeleteResponse.json();
-      expect(afterDeleteRepos.length).toBe(initialCount);
+
+      // If repo existed before test, count should be initial - 1
+      // If repo was created by test, count should be back to initial
+      const expectedCount = existingRepo ? initialCount - 1 : initialCount;
+      expect(afterDeleteRepos.length).toBe(expectedCount);
     } else {
       // Could not create repo, skip
       test.skip();
