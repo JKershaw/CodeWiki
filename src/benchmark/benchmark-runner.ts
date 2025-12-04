@@ -68,6 +68,10 @@ export class BenchmarkRunner {
     try {
       // Get repo name for loading questions
       const repo = await this.repos.repos.findById(repoId);
+      console.log(`[Benchmark] Repo lookup: ${repo ? `found ${repo.fullName}` : 'NOT FOUND'}`);
+      if (repo) {
+        console.log(`[Benchmark] Repo details - isGitHubRepo: ${repo.isGitHubRepo}, owner: ${repo.owner ?? 'NOT SET'}, repoName: ${repo.repoName ?? 'NOT SET'}, userId: ${repo.userId ?? 'NOT SET'}`);
+      }
       const repoName = repo?.fullName?.split('/').pop();
 
       // Load questions (repo-specific or default fallback)
@@ -265,25 +269,32 @@ export class BenchmarkRunner {
     // Try local filesystem first
     try {
       const repoPath = this.git.getRepoPath(repoId);
+      console.log(`[Benchmark] Using local filesystem for grading: ${repoPath}`);
       return { repoPath };
-    } catch {
+    } catch (error) {
       // No local path available, try GitHub API
+      console.log(`[Benchmark] No local path for repo ${repoId}: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // Try GitHub API if we have a repo service factory and repo entity
     if (this.repoServiceFactory && repo) {
+      console.log(`[Benchmark] Attempting GitHub API access for repo: ${repo.fullName} (isGitHubRepo: ${repo.isGitHubRepo}, userId: ${repo.userId ?? 'none'})`);
+
       // For GitHub repos, create an authenticated service if possible
       let repoService: RepositoryService;
       if (repo.isGitHubRepo && repo.userId) {
         // Look up user's access token for authenticated GitHub access
         const user = await this.repos.users.findById(repo.userId);
         if (user?.accessToken) {
+          console.log(`[Benchmark] Using authenticated GitHub access for user ${repo.userId}`);
           repoService = this.repoServiceFactory.getServiceWithToken(repo, user.accessToken);
         } else {
           // Fall back to unauthenticated access
+          console.warn(`[Benchmark] No access token found for user ${repo.userId}, using unauthenticated GitHub access`);
           repoService = this.repoServiceFactory.getService(repo);
         }
       } else {
+        console.log(`[Benchmark] Using default repository service (isGitHubRepo: ${repo.isGitHubRepo})`);
         repoService = this.repoServiceFactory.getService(repo);
       }
 
@@ -291,6 +302,7 @@ export class BenchmarkRunner {
     }
 
     // No access method available
+    console.error(`[Benchmark] No access method available for repo ${repoId} (repoServiceFactory: ${!!this.repoServiceFactory}, repo: ${!!repo})`);
     return null;
   }
 }
