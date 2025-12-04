@@ -96,12 +96,18 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
 
       // Validate state for CSRF protection
       if (!state || !expectedState || !safeCompare(state, expectedState)) {
+        console.warn('GitHub OAuth: State validation failed', {
+          hasState: !!state,
+          hasExpectedState: !!expectedState,
+          stateMatch: state && expectedState ? 'mismatch' : 'missing',
+        });
         res.status(400).json({ error: 'Invalid or missing state parameter' });
         return;
       }
 
       // Validate code
       if (!code) {
+        console.warn('GitHub OAuth: Callback received without authorization code');
         res.status(400).json({ error: 'Missing authorization code' });
         return;
       }
@@ -163,10 +169,12 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
           maxAge: 24 * 60 * 60 * 1000, // 24 hours
         });
 
+        console.log(`GitHub OAuth: Login successful for user ${user.login} (ID: ${user.id})`);
+
         // Redirect to app
         res.redirect('/');
       } catch (error) {
-        console.error('GitHub OAuth callback error:', error);
+        console.error('GitHub OAuth: Callback failed -', error instanceof Error ? error.message : error);
         res.status(500).json({ error: 'Authentication failed' });
       }
     },
@@ -178,6 +186,7 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
       const session = getSessionFromRequest(req);
 
       if (!session) {
+        // Don't log this - it's expected for unauthenticated users checking their status
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
@@ -185,6 +194,7 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
       const user = await userRepository.findById(session.userId);
 
       if (!user) {
+        console.warn(`GitHub OAuth: Session valid but user not found (userId: ${session.userId}, login: ${session.githubLogin})`);
         res.status(401).json({ error: 'User not found' });
         return;
       }
@@ -205,7 +215,11 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
     /**
      * POST /auth/logout - Clear session
      */
-    async logout(_req: Request, res: Response): Promise<void> {
+    async logout(req: Request, res: Response): Promise<void> {
+      const session = getSessionFromRequest(req);
+      if (session) {
+        console.log(`GitHub OAuth: User ${session.githubLogin} logged out`);
+      }
       res.clearCookie(GITHUB_SESSION_COOKIE);
       res.redirect('/');
     },
@@ -232,6 +246,7 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
       const user = await userRepository.findById(session.userId);
 
       if (!user) {
+        console.warn(`GitHub OAuth: Session valid but user not found for repos request (userId: ${session.userId})`);
         res.status(401).json({ error: 'User not found' });
         return;
       }
@@ -240,7 +255,7 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
         const repos = await githubAuth.getAccessibleRepos(user.accessToken);
         res.json({ repos });
       } catch (error) {
-        console.error('Failed to fetch repos:', error);
+        console.error(`GitHub OAuth: Failed to fetch repos for user ${user.login}:`, error instanceof Error ? error.message : error);
         res.status(500).json({ error: 'Failed to fetch repositories' });
       }
     },

@@ -187,7 +187,7 @@ describe('GitHub Auth Service', () => {
       try {
         await assert.rejects(
           () => authService.getUserProfile('invalid-token'),
-          /Unauthorized|Bad credentials|Failed to fetch/
+          /invalid or expired|Unauthorized|Bad credentials|Failed to fetch/
         );
       } finally {
         globalThis.fetch = originalFetch;

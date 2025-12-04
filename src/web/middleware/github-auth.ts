@@ -86,6 +86,8 @@ export function createGitHubAuthMiddleware(
       const session = getSessionFromRequest(req);
 
       if (!session) {
+        // Log protected endpoint access attempts without valid session
+        console.log(`GitHub Auth: Unauthorized access attempt to ${req.method} ${req.path}`);
         res.status(401).json({ error: 'Authentication required' });
         return;
       }
