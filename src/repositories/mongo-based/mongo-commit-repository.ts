@@ -38,14 +38,12 @@ export class MongoCommitRepository implements CommitRepository {
   }
 
   async findUnprocessedByAgent(repoId: string, agentType: string): Promise<Commit[]> {
-    // Find commits where processedBy doesn't include the given agentType
+    // Find commits where processedBy array doesn't contain an entry with the given agentType
+    // Using $not with $elemMatch to find commits where NO element has the agentType
     const docs = await this.collection
       .find({
         repoId,
-        $or: [
-          { processedBy: { $exists: false } },
-          { [`processedBy.${agentType}`]: { $exists: false } },
-        ],
+        'processedBy.agentType': { $ne: agentType },
       })
       .sort({ committedAt: -1 })
       .toArray();
@@ -70,9 +68,10 @@ export class MongoCommitRepository implements CommitRepository {
   }
 
   async countProcessedByAgent(repoId: string, agentType: string): Promise<number> {
+    // Count commits where processedBy array contains an entry with the given agentType
     return this.collection.countDocuments({
       repoId,
-      [`processedBy.${agentType}`]: { $exists: true },
+      'processedBy.agentType': agentType,
     });
   }
 
@@ -93,9 +92,15 @@ export class MongoCommitRepository implements CommitRepository {
   }
 
   async addProcessingRecord(commitId: string, record: AgentProcessingRecord): Promise<void> {
+    // Push the record to the processedBy array
+    // First remove any existing record for this agent type to avoid duplicates
     await this.collection.updateOne(
       byId(commitId),
-      { $set: { [`processedBy.${record.agentType}`]: record } }
+      { $pull: { processedBy: { agentType: record.agentType } } } as any
+    );
+    await this.collection.updateOne(
+      byId(commitId),
+      { $push: { processedBy: record } } as any
     );
   }
 }
