@@ -61,6 +61,24 @@ function createMockRepos(benchmarks: BenchmarkRun[]): Partial<Repositories> {
   const benchmarkMap = new Map(benchmarks.map(b => [b.id, b]));
 
   return {
+    repos: {
+      findById: async () => ({
+        id: 'test-repo',
+        name: 'test',
+        fullName: 'test/test',
+        isGitHubRepo: false,
+        owner: null,
+        repoName: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        status: 'active',
+      }),
+      findByFullName: async () => null,
+      findAll: async () => [],
+      save: async () => {},
+      delete: async () => {},
+      updateStatus: async () => {},
+    },
     benchmarks: {
       findById: async (id: string) => benchmarkMap.get(id) ?? null,
       findByRepo: async () => benchmarks,
