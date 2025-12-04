@@ -167,6 +167,7 @@ async function loadRepos() {
               </span>
             ` : ''}
             <span class="card-status ${repo.status}">${repo.status}</span>
+            <button class="btn danger small delete-repo-btn" data-id="${repo.id}" data-name="${escapeHtml(repo.fullName)}" title="Delete repository">✕</button>
           </div>
         </div>
         <div class="card-stats">
@@ -213,6 +214,12 @@ async function loadRepos() {
     });
     container.querySelectorAll('.benchmark-btn').forEach(btn => {
       btn.addEventListener('click', () => openBenchmark(btn.dataset.id));
+    });
+    container.querySelectorAll('.delete-repo-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent card click events
+        confirmDeleteRepository(btn.dataset.id, btn.dataset.name);
+      });
     });
 
     // Auto-resume polling for any repos that are currently processing
@@ -3103,6 +3110,98 @@ async function deleteWiki(repoId, wikiId, wikiName) {
 
 // Delete wiki button event listener
 document.getElementById('delete-wiki-btn').addEventListener('click', confirmDeleteWiki);
+
+// ============================================================================
+// Repository Deletion
+// ============================================================================
+
+/**
+ * Show confirmation dialog and delete a repository if confirmed.
+ * @param {string} repoId - The repository ID
+ * @param {string} repoName - The repository name for display
+ */
+async function confirmDeleteRepository(repoId, repoName) {
+  // Fetch repo details to show in confirmation
+  let repoDetails;
+  try {
+    repoDetails = await api(`/repos/${repoId}`);
+  } catch (error) {
+    // Fall back to basic info
+    repoDetails = { fullName: repoName, wikiCount: 0, totalCommits: 0, wikiPages: 0 };
+  }
+
+  showConfirmModal({
+    title: 'Delete Repository',
+    message: `Are you sure you want to delete "${repoName}"?`,
+    details: `
+      <div class="detail-item">
+        <span class="detail-label">Repository</span>
+        <span class="detail-value">${escapeHtml(repoName)}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Wikis</span>
+        <span class="detail-value">${repoDetails.wikiCount || 0}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Commits</span>
+        <span class="detail-value">${repoDetails.totalCommits || 0}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Wiki Pages</span>
+        <span class="detail-value">${repoDetails.wikiPages || 0}</span>
+      </div>
+      <p class="warning-text">This will permanently delete the repository and ALL associated data including wikis, pages, commits, benchmarks, and chat sessions. This action cannot be undone.</p>
+    `,
+    confirmText: 'Delete Repository',
+    confirmClass: 'danger',
+    onConfirm: () => deleteRepository(repoId, repoName),
+  });
+}
+
+/**
+ * Delete a repository and refresh the UI.
+ * @param {string} repoId - The repository ID
+ * @param {string} repoName - The repository name for display
+ */
+async function deleteRepository(repoId, repoName) {
+  // Find the delete button for this repo to update its state
+  const deleteBtn = document.querySelector(`.delete-repo-btn[data-id="${repoId}"]`);
+  if (deleteBtn) {
+    deleteBtn.textContent = '...';
+    deleteBtn.disabled = true;
+  }
+
+  try {
+    const response = await fetch(`/api/repos/${repoId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete repository');
+    }
+
+    showToast(`Repository "${repoName}" deleted successfully`, 'success');
+
+    // If we're currently viewing this repo's wiki, go back to repos view
+    if (currentRepo && currentRepo.id === repoId) {
+      currentRepo = null;
+      currentWiki = null;
+      showView('repos');
+    }
+
+    // Refresh the repos list
+    loadRepos();
+
+  } catch (error) {
+    showToast(`Failed to delete repository: ${error.message}`, 'error');
+    if (deleteBtn) {
+      deleteBtn.textContent = '✕';
+      deleteBtn.disabled = false;
+    }
+  }
+}
 
 // Initialize
 loadCurrentUser();

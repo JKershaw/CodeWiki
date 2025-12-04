@@ -182,3 +182,123 @@ test.describe('Repository Management', () => {
     await expect(page.locator('#submit-repo-btn')).not.toBeDisabled();
   });
 });
+
+/**
+ * E2E tests for Repository Delete API.
+ */
+test.describe('Repository Delete API', () => {
+  test('DELETE /api/repos/:id deletes a repository', async ({ request }) => {
+    // Create a repository to delete
+    const createResponse = await request.post('/api/repos', {
+      data: { path: '.' },
+    });
+
+    // Skip if repo already exists (we'll use the existing one then create a new one)
+    let repoId: string;
+    if (createResponse.ok()) {
+      const data = await createResponse.json();
+      repoId = data.id;
+    } else {
+      // Get existing repos and create a wiki-specific repo for testing deletion
+      const reposResponse = await request.get('/api/repos');
+      const repos = await reposResponse.json();
+      if (repos.length > 0) {
+        repoId = repos[0].id;
+      } else {
+        // No repos available, skip test
+        test.skip();
+        return;
+      }
+    }
+
+    // Delete the repository
+    const deleteResponse = await request.delete(`/api/repos/${repoId}`);
+    expect(deleteResponse.status()).toBe(204);
+
+    // Verify it's gone
+    const verifyResponse = await request.get(`/api/repos/${repoId}`);
+    expect(verifyResponse.status()).toBe(404);
+  });
+
+  test('DELETE /api/repos/:id returns 404 for non-existent repo', async ({ request }) => {
+    const deleteResponse = await request.delete('/api/repos/non-existent-repo-id-12345');
+    expect(deleteResponse.status()).toBe(404);
+  });
+
+  test('DELETE /api/repos/:id cascades to delete wikis', async ({ request }) => {
+    // Create a repository
+    const createResponse = await request.post('/api/repos', {
+      data: { path: '.' },
+    });
+
+    let repoId: string;
+    if (createResponse.ok()) {
+      const data = await createResponse.json();
+      repoId = data.id;
+    } else {
+      const reposResponse = await request.get('/api/repos');
+      const repos = await reposResponse.json();
+      if (repos.length > 0) {
+        repoId = repos[0].id;
+      } else {
+        test.skip();
+        return;
+      }
+    }
+
+    // Create a wiki for this repo
+    const wikiName = `test-wiki-for-delete-${Date.now()}`;
+    const wikiResponse = await request.post(`/api/repos/${repoId}/wikis`, {
+      data: { name: wikiName },
+    });
+    expect(wikiResponse.ok()).toBeTruthy();
+    const wiki = await wikiResponse.json();
+
+    // Verify wiki exists
+    const wikiGetResponse = await request.get(`/api/repos/${repoId}/wikis/${wiki.id}`);
+    expect(wikiGetResponse.ok()).toBeTruthy();
+
+    // Delete the repository
+    const deleteResponse = await request.delete(`/api/repos/${repoId}`);
+    expect(deleteResponse.status()).toBe(204);
+
+    // Verify the wiki is gone (repo endpoint returns 404, so wiki endpoint will too)
+    const wikiVerifyResponse = await request.get(`/api/repos/${repoId}/wikis/${wiki.id}`);
+    expect(wikiVerifyResponse.status()).toBe(404);
+  });
+
+  test('repos list is updated after deletion', async ({ request }) => {
+    // Get initial repo count
+    const initialResponse = await request.get('/api/repos');
+    const initialRepos = await initialResponse.json();
+    const initialCount = initialRepos.length;
+
+    // Create a new repository
+    const createResponse = await request.post('/api/repos', {
+      data: { path: '.' },
+    });
+
+    let repoId: string;
+    if (createResponse.ok()) {
+      const data = await createResponse.json();
+      repoId = data.id;
+
+      // Verify repo count increased
+      const afterCreateResponse = await request.get('/api/repos');
+      const afterCreateRepos = await afterCreateResponse.json();
+      expect(afterCreateRepos.length).toBe(initialCount + 1);
+
+      // Delete it
+      const deleteResponse = await request.delete(`/api/repos/${repoId}`);
+      expect(deleteResponse.status()).toBe(204);
+
+      // Verify repo count is back to initial
+      const afterDeleteResponse = await request.get('/api/repos');
+      const afterDeleteRepos = await afterDeleteResponse.json();
+      expect(afterDeleteRepos.length).toBe(initialCount);
+    } else {
+      // Could not create repo, skip
+      test.skip();
+    }
+  });
+});

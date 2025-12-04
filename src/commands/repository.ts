@@ -10,6 +10,7 @@ import { success, failure } from './types.js';
 import type { Repositories } from '../repositories/index.js';
 import { createRepo, type Repo, type RepoStatus } from '../domain/repo.js';
 import type { Commit, AgentProcessingRecord } from '../domain/commit.js';
+import type { Wiki } from '../domain/wiki.js';
 
 // ============================================================================
 // RegisterRepository Command
@@ -216,5 +217,79 @@ export async function handleMarkCommitProcessed(
     return success();
   } catch (error) {
     return failure(`Failed to mark commit processed: ${error}`);
+  }
+}
+
+// ============================================================================
+// DeleteRepository Command
+// ============================================================================
+
+/**
+ * Command to delete a repository and all its associated data.
+ */
+export interface DeleteRepositoryCommand extends Command {
+  readonly type: 'DeleteRepository';
+  readonly repoId: string;
+}
+
+export function createDeleteRepositoryCommand(repoId: string): DeleteRepositoryCommand {
+  return {
+    type: 'DeleteRepository',
+    repoId,
+  };
+}
+
+/**
+ * Handler for DeleteRepository command.
+ * Deletes a repository and cascades deletion to all related data:
+ * - Wiki pages, findings, edit requests, conflicts (per wiki)
+ * - Wikis, commits, agent runs, processing runs
+ * - Benchmarks, quality benchmarks, chat sessions
+ * - Learnings, work queue items, self-improvements
+ */
+export async function handleDeleteRepository(
+  command: DeleteRepositoryCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    // Verify repository exists
+    const repo = await repos.repos.findById(command.repoId);
+    if (!repo) {
+      return failure(`Repository not found: ${command.repoId}`);
+    }
+
+    // Get all wikis for this repo to cascade delete wiki-specific data
+    const wikis: Wiki[] = await repos.wikis.findByRepo(command.repoId);
+
+    // Delete wiki-specific data for each wiki
+    for (const wiki of wikis) {
+      // Delete wiki pages
+      await repos.wikiPages.deleteByWiki(wiki.id);
+      // Delete findings
+      await repos.findings.deleteByWiki(wiki.id);
+      // Delete edit requests
+      await repos.editRequests.deleteByWiki(wiki.id);
+      // Delete conflicts
+      await repos.conflicts.deleteByWiki(wiki.id);
+    }
+
+    // Delete repo-level data (order matters for foreign key-like relationships)
+    await repos.wikis.deleteByRepo(command.repoId);
+    await repos.commits.deleteByRepo(command.repoId);
+    await repos.agentRuns.deleteByRepo(command.repoId);
+    await repos.processingRuns.deleteByRepo(command.repoId);
+    await repos.benchmarks.deleteByRepo(command.repoId);
+    await repos.qualityBenchmarks.deleteByRepo(command.repoId);
+    await repos.chatSessions.deleteByRepo(command.repoId);
+    await repos.learnings.deleteByRepo(command.repoId);
+    await repos.workQueue.deleteByRepo(command.repoId);
+    await repos.selfImprovements.deleteByRepo(command.repoId);
+
+    // Finally, delete the repository itself
+    await repos.repos.delete(command.repoId);
+
+    return success();
+  } catch (error) {
+    return failure(`Failed to delete repository: ${error}`);
   }
 }
