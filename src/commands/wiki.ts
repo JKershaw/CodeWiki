@@ -113,7 +113,6 @@ export function createDeleteWikiCommand(wikiId: string): DeleteWikiCommand {
 /**
  * Handler for DeleteWiki command.
  * Deletes a wiki and all its pages.
- * Fails if the wiki is currently active.
  */
 export async function handleDeleteWiki(
   command: DeleteWikiCommand,
@@ -124,11 +123,6 @@ export async function handleDeleteWiki(
     const wiki = await repos.wikis.findById(command.wikiId);
     if (!wiki) {
       return failure(`Wiki not found: ${command.wikiId}`);
-    }
-
-    // Cannot delete active wiki
-    if (wiki.isActive) {
-      return failure('Cannot delete active wiki. Deactivate it first.');
     }
 
     // Delete all wiki pages first

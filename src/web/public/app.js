@@ -2992,7 +2992,7 @@ document.addEventListener('keydown', (e) => {
 // ============================================================================
 
 /**
- * Update the delete wiki button state based on whether the current wiki is active.
+ * Update the delete wiki button state based on whether a wiki is selected.
  */
 function updateDeleteWikiButton() {
   const deleteBtn = document.getElementById('delete-wiki-btn');
@@ -3001,15 +3001,9 @@ function updateDeleteWikiButton() {
   if (!currentWiki) {
     deleteBtn.disabled = true;
     deleteBtn.title = 'No wiki selected';
-    return;
-  }
-
-  if (currentWiki.isActive) {
-    deleteBtn.disabled = true;
-    deleteBtn.title = 'Cannot delete active wiki. Switch to another wiki first.';
   } else {
     deleteBtn.disabled = false;
-    deleteBtn.title = 'Delete this wiki';
+    deleteBtn.title = 'Delete this wiki and all its data';
   }
 }
 
@@ -3019,11 +3013,6 @@ function updateDeleteWikiButton() {
 async function confirmDeleteWiki() {
   if (!currentRepo || !currentWiki) {
     showToast('No wiki selected', 'error');
-    return;
-  }
-
-  if (currentWiki.isActive) {
-    showToast('Cannot delete the active wiki. Please switch to another wiki first.', 'warning');
     return;
   }
 
