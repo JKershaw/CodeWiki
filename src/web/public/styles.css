@@ -1651,6 +1651,36 @@ footer .model-info {
 	padding: 20px;
 	cursor: pointer;
 	transition: all 0.2s ease;
+	position: relative;
+}
+
+.benchmark-delete-btn {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	width: 24px;
+	height: 24px;
+	border: none;
+	background: transparent;
+	color: var(--text-tertiary);
+	font-size: 18px;
+	font-weight: bold;
+	cursor: pointer;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0;
+	transition: all 0.2s ease;
+}
+
+.benchmark-card:hover .benchmark-delete-btn {
+	opacity: 1;
+}
+
+.benchmark-delete-btn:hover {
+	background: var(--error-bg, rgba(239, 68, 68, 0.1));
+	color: var(--error, #ef4444);
 }
 
 .benchmark-card:hover {

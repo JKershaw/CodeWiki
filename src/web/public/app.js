@@ -1458,10 +1458,47 @@ async function loadBenchmarkHistory(repoId) {
       card.addEventListener('click', () => showQualityBenchmarkDetail(card.dataset.id));
     });
 
+    // Add click handlers for delete buttons
+    container.querySelectorAll('.benchmark-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent card click
+        const benchmarkId = btn.dataset.id;
+        const benchmarkType = btn.dataset.type;
+        await deleteBenchmark(repoId, benchmarkId, benchmarkType);
+      });
+    });
+
     // Populate self-improvement benchmark selector
     renderBenchmarkSelector(accuracyBenchmarks);
   } catch (error) {
     container.innerHTML = `<p class="placeholder">Error loading benchmarks: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function deleteBenchmark(repoId, benchmarkId, benchmarkType) {
+  const typeLabel = benchmarkType === 'quality' ? 'quality benchmark' : 'benchmark';
+  if (!confirm(`Are you sure you want to delete this ${typeLabel}? This action cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    const endpoint = benchmarkType === 'quality'
+      ? `/repos/${repoId}/quality-benchmarks/${benchmarkId}`
+      : `/repos/${repoId}/benchmarks/${benchmarkId}`;
+
+    const response = await fetch(`/api${endpoint}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to delete benchmark');
+    }
+
+    // Reload the benchmark history
+    await loadBenchmarkHistory(repoId);
+  } catch (error) {
+    alert(`Error deleting benchmark: ${error.message}`);
   }
 }
 
@@ -1680,8 +1717,14 @@ function renderBenchmarkCard(benchmark, prevBenchmark, type = 'accuracy') {
     }
   }
 
+  // Only show delete button for non-running benchmarks
+  const deleteBtn = benchmark.status !== 'running'
+    ? `<button class="benchmark-delete-btn" data-id="${benchmark.id}" data-type="${type}" title="Delete benchmark">×</button>`
+    : '';
+
   return `
     <div class="benchmark-card" data-id="${benchmark.id}" data-type="${type}">
+      ${deleteBtn}
       <div class="benchmark-card-header">
         <div class="benchmark-card-left">
           <div class="benchmark-date">${escapeHtml(date)}</div>
@@ -1718,8 +1761,14 @@ function renderQualityBenchmarkCard(benchmark, prevBenchmark) {
     }
   }
 
+  // Only show delete button for non-running benchmarks
+  const deleteBtn = benchmark.status !== 'running'
+    ? `<button class="benchmark-delete-btn" data-id="${benchmark.id}" data-type="quality" title="Delete benchmark">×</button>`
+    : '';
+
   return `
     <div class="benchmark-card quality" data-id="${benchmark.id}" data-type="quality">
+      ${deleteBtn}
       <div class="benchmark-card-header">
         <div class="benchmark-card-left">
           <div class="benchmark-date">${escapeHtml(date)}</div>
