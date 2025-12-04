@@ -174,3 +174,50 @@ export async function handleFailBenchmark(
     return failure(`Failed to fail benchmark: ${error}`);
   }
 }
+
+// ============================================================================
+// DeleteBenchmark Command
+// ============================================================================
+
+/**
+ * Command to delete a specific benchmark run.
+ */
+export interface DeleteBenchmarkCommand extends Command {
+  readonly type: 'DeleteBenchmark';
+  readonly benchmarkId: string;
+}
+
+export function createDeleteBenchmarkCommand(
+  benchmarkId: string
+): DeleteBenchmarkCommand {
+  return {
+    type: 'DeleteBenchmark',
+    benchmarkId,
+  };
+}
+
+/**
+ * Handler for DeleteBenchmark command.
+ */
+export async function handleDeleteBenchmark(
+  command: DeleteBenchmarkCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    // Verify benchmark run exists
+    const run = await repos.benchmarks.findById(command.benchmarkId);
+    if (!run) {
+      return failure(`Benchmark run not found: ${command.benchmarkId}`);
+    }
+
+    // Don't allow deleting a running benchmark
+    if (run.status === 'running') {
+      return failure(`Cannot delete a running benchmark. Wait for it to complete or fail first.`);
+    }
+
+    await repos.benchmarks.delete(command.benchmarkId);
+    return success();
+  } catch (error) {
+    return failure(`Failed to delete benchmark: ${error}`);
+  }
+}

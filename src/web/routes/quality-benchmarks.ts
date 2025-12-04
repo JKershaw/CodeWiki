@@ -15,6 +15,10 @@ import {
   createGetQualityBenchmarkHistoryQuery,
   createCompareQualityBenchmarksQuery,
 } from '../../queries/quality-benchmark.js';
+import {
+  handleDeleteQualityBenchmark,
+  createDeleteQualityBenchmarkCommand,
+} from '../../commands/quality-benchmark.js';
 
 /**
  * Create quality benchmark routes.
@@ -238,6 +242,54 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
       res.json({
         qualityBenchmark: result.data,
       });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * Delete a specific quality benchmark run.
+   */
+  router.delete('/api/repos/:id/quality-benchmarks/:runId', async (req: Request, res: Response) => {
+    try {
+      const { id: repoId, runId } = req.params;
+
+      // Verify repository exists
+      const repo = await repos.repos.findById(repoId!);
+      if (!repo) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+
+      // First, fetch the benchmark to verify it belongs to this repository
+      const getResult = await handleGetQualityBenchmarkRun(
+        createGetQualityBenchmarkRunQuery(runId!),
+        repos
+      );
+
+      if (!getResult.success) {
+        res.status(404).json({ error: getResult.error });
+        return;
+      }
+
+      // Verify the benchmark belongs to this repository
+      if (getResult.data!.repoId !== repoId) {
+        res.status(404).json({ error: 'Quality benchmark not found for this repository' });
+        return;
+      }
+
+      // Delete the benchmark
+      const deleteResult = await handleDeleteQualityBenchmark(
+        createDeleteQualityBenchmarkCommand(runId!),
+        repos
+      );
+
+      if (!deleteResult.success) {
+        res.status(400).json({ error: deleteResult.error });
+        return;
+      }
+
+      res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

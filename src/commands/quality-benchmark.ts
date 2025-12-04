@@ -171,3 +171,50 @@ export async function handleFailQualityBenchmark(
     return failure(`Failed to fail quality benchmark: ${error}`);
   }
 }
+
+// ============================================================================
+// DeleteQualityBenchmark Command
+// ============================================================================
+
+/**
+ * Command to delete a specific quality benchmark run.
+ */
+export interface DeleteQualityBenchmarkCommand extends Command {
+  readonly type: 'DeleteQualityBenchmark';
+  readonly benchmarkId: string;
+}
+
+export function createDeleteQualityBenchmarkCommand(
+  benchmarkId: string
+): DeleteQualityBenchmarkCommand {
+  return {
+    type: 'DeleteQualityBenchmark',
+    benchmarkId,
+  };
+}
+
+/**
+ * Handler for DeleteQualityBenchmark command.
+ */
+export async function handleDeleteQualityBenchmark(
+  command: DeleteQualityBenchmarkCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    // Verify benchmark run exists
+    const run = await repos.qualityBenchmarks.findById(command.benchmarkId);
+    if (!run) {
+      return failure(`Quality benchmark run not found: ${command.benchmarkId}`);
+    }
+
+    // Don't allow deleting a running benchmark
+    if (run.status === 'running') {
+      return failure(`Cannot delete a running quality benchmark. Wait for it to complete or fail first.`);
+    }
+
+    await repos.qualityBenchmarks.delete(command.benchmarkId);
+    return success();
+  } catch (error) {
+    return failure(`Failed to delete quality benchmark: ${error}`);
+  }
+}
