@@ -103,6 +103,18 @@ export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
     return { workItems: [], stopProcessing: true };  // Bootstrap pending, wait for it
   }
 
+  // Check if bootstrap work has failed (don't auto-retry to prevent infinite loop)
+  const failedBootstrapQuery = createListWorkItemsQuery(ctx.repoId, {
+    agentType: 'bootstrap',
+    status: 'failed',
+  });
+  const failedBootstrapResult = await handleListWorkItems(failedBootstrapQuery, ctx.repos);
+  const bootstrapWorkFailed = failedBootstrapResult.data || [];
+
+  if (bootstrapWorkFailed.length > 0) {
+    return { workItems: [], stopProcessing: true };  // Bootstrap failed, don't auto-retry
+  }
+
   // Check if bootstrap has already run
   const runsQuery = createListAgentRunsQuery(ctx.repoId);
   const runsResult = await handleListAgentRuns(runsQuery, ctx.repos);
@@ -113,6 +125,15 @@ export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
 
   if (bootstrapCompleted) {
     return { workItems: [] };  // Already done
+  }
+
+  // Check if bootstrap has failed (don't auto-retry to prevent infinite loop)
+  const bootstrapFailed = recentRuns.some(
+    r => r.agentType === 'bootstrap' && r.status === 'failed'
+  );
+
+  if (bootstrapFailed) {
+    return { workItems: [], stopProcessing: true };  // Bootstrap failed, don't auto-retry
   }
 
   // Need to bootstrap

@@ -157,7 +157,19 @@ export class Orchestrator {
       return null;
     }
 
-    // Check if bootstrap has already completed
+    // Check if bootstrap work has failed (don't auto-retry to prevent infinite loop)
+    const failedWorkQuery = createListWorkItemsQuery(repoId, {
+      agentType: 'bootstrap',
+      status: 'failed',
+    });
+    const failedWorkResult = await handleListWorkItems(failedWorkQuery, this.repos);
+    const bootstrapWorkFailed = failedWorkResult.data || [];
+
+    if (bootstrapWorkFailed.length > 0) {
+      return null;
+    }
+
+    // Check if bootstrap has already completed or failed
     const runsQuery = createListAgentRunsQuery(repoId);
     const runsResult = await handleListAgentRuns(runsQuery, this.repos);
     const recentRuns = runsResult.data || [];
@@ -166,6 +178,15 @@ export class Orchestrator {
     );
 
     if (bootstrapCompleted) {
+      return null;
+    }
+
+    // Check if bootstrap has failed (don't auto-retry to prevent infinite loop)
+    const bootstrapFailed = recentRuns.some(
+      r => r.agentType === 'bootstrap' && r.status === 'failed'
+    );
+
+    if (bootstrapFailed) {
       return null;
     }
 
