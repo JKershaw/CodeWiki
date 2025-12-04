@@ -70,6 +70,10 @@ export class GraderAgent {
       ? { repoPath: context }
       : context;
 
+    console.log(`[Grader] Starting grade for question: ${question.id}`);
+    console.log(`[Grader] Context type: ${typeof context === 'string' ? 'string (repoPath)' : 'GradeContext'}`);
+    console.log(`[Grader] Context details - repoPath: ${gradeContext.repoPath ?? 'none'}, repoService: ${!!gradeContext.repoService}, repo: ${gradeContext.repo?.fullName ?? 'none'}`);
+
     // Create tools based on what's available
     const toolSetup = this.createToolsForContext(gradeContext, filesChecked);
 
@@ -155,6 +159,7 @@ Start by reading the relevant code files, then provide your grade.`;
   } | null {
     // Try local filesystem first (if repoPath is provided)
     if (context.repoPath) {
+      console.log(`[Grader] Creating filesystem tools for path: ${context.repoPath}`);
       const toolContext: ToolContext = {
         repoPath: context.repoPath,
         maxFileSize: 50000, // 50KB per file for grading
@@ -170,14 +175,25 @@ Start by reading the relevant code files, then provide your grade.`;
           for (const call of calls) {
             const tool = tools.find(t => t.name === call.name);
             if (tool) {
-              const result = await tool.execute(call.input, toolContext);
-              results.push({ id: call.id, result });
+              console.log(`[Grader] Executing filesystem tool: ${call.name}(${JSON.stringify(call.input)})`);
+              try {
+                const result = await tool.execute(call.input, toolContext);
+                // Log truncated result for debugging
+                const truncatedResult = result.length > 200 ? result.substring(0, 200) + '...' : result;
+                console.log(`[Grader] Tool ${call.name} result: ${truncatedResult}`);
+                results.push({ id: call.id, result });
 
-              // Track file reads
-              if (call.name === 'read_file' && call.input['path']) {
-                filesChecked.push(call.input['path'] as string);
+                // Track file reads
+                if (call.name === 'read_file' && call.input['path']) {
+                  filesChecked.push(call.input['path'] as string);
+                }
+              } catch (error) {
+                const errorMsg = `Error executing ${call.name}: ${error instanceof Error ? error.message : String(error)}`;
+                console.error(`[Grader] ${errorMsg}`);
+                results.push({ id: call.id, result: errorMsg });
               }
             } else {
+              console.warn(`[Grader] Unknown tool: ${call.name}`);
               results.push({ id: call.id, result: `Unknown tool: ${call.name}` });
             }
           }
@@ -189,10 +205,12 @@ Start by reading the relevant code files, then provide your grade.`;
 
     // Try GitHub API (if repoService and repo are provided)
     if (context.repoService && context.repo) {
+      console.log(`[Grader] Creating API tools for repo: ${context.repo.fullName}`);
       return this.createApiTools(context.repoService, context.repo, filesChecked);
     }
 
     // No access method available
+    console.error(`[Grader] No tools available - repoPath: ${context.repoPath}, repoService: ${!!context.repoService}, repo: ${!!context.repo}`);
     return null;
   }
 
@@ -223,11 +241,17 @@ Start by reading the relevant code files, then provide your grade.`;
         },
         execute: async (input) => {
           const path = input['path'] as string;
+          console.log(`[Grader API] read_file: ${path}`);
           try {
             filesChecked.push(path);
-            return await repoService.getFileContent(repo, path);
+            const content = await repoService.getFileContent(repo, path);
+            const truncated = content.length > 200 ? content.substring(0, 200) + '...' : content;
+            console.log(`[Grader API] read_file success: ${truncated}`);
+            return content;
           } catch (error) {
-            return `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
+            const errorMsg = `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
+            console.error(`[Grader API] ${errorMsg}`);
+            return errorMsg;
           }
         },
       },
@@ -246,11 +270,16 @@ Start by reading the relevant code files, then provide your grade.`;
         },
         execute: async (input) => {
           const path = input['path'] as string;
+          console.log(`[Grader API] list_directory: ${path}`);
           try {
             const entries = await repoService.listDirectory(repo, path);
-            return entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
+            const result = entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
+            console.log(`[Grader API] list_directory success: ${result.substring(0, 200)}`);
+            return result;
           } catch (error) {
-            return `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
+            const errorMsg = `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
+            console.error(`[Grader API] ${errorMsg}`);
+            return errorMsg;
           }
         },
       },
@@ -269,16 +298,22 @@ Start by reading the relevant code files, then provide your grade.`;
         },
         execute: async (input) => {
           const pattern = input['pattern'] as string;
+          console.log(`[Grader API] search_files: ${pattern}`);
           try {
             const allFiles = await repoService.getFileTree(repo);
+            console.log(`[Grader API] getFileTree returned ${allFiles.length} files`);
             // Simple glob matching (supports **, *, and ?)
             const matches = filterByGlob(allFiles, pattern);
             if (matches.length === 0) {
+              console.log(`[Grader API] search_files: no matches for ${pattern}`);
               return `No files found matching "${pattern}"`;
             }
+            console.log(`[Grader API] search_files: ${matches.length} matches`);
             return matches.join('\n');
           } catch (error) {
-            return `Error searching for "${pattern}": ${error instanceof Error ? error.message : String(error)}`;
+            const errorMsg = `Error searching for "${pattern}": ${error instanceof Error ? error.message : String(error)}`;
+            console.error(`[Grader API] ${errorMsg}`);
+            return errorMsg;
           }
         },
       },
@@ -287,9 +322,11 @@ Start by reading the relevant code files, then provide your grade.`;
     return {
       tools: apiTools,
       executeTools: async (calls) => {
+        console.log(`[Grader API] Executing ${calls.length} tool calls`);
         const results = await Promise.all(calls.map(async (call) => {
           const tool = apiTools.find(t => t.name === call.name);
           if (!tool) {
+            console.warn(`[Grader API] Unknown tool: ${call.name}`);
             return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
           }
           // API tools don't need a toolContext, they use the repoService directly
