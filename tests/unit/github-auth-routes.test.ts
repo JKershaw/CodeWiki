@@ -160,6 +160,44 @@ describe('GitHub Auth Routes', () => {
   });
 
   describe('GET /auth/github/callback', () => {
+    it('redirects to OAuth flow when GitHub App installation callback is received', async () => {
+      const routes = createGitHubAuthRoutes(config);
+      const req = createMockRequest({
+        query: {
+          code: 'auth-code',
+          installation_id: '12345678',
+          setup_action: 'install',
+        },
+        // No state cookie - this is an installation flow
+        signedCookies: {},
+      });
+      const res = createMockResponse();
+
+      await routes.handleCallback(req, res);
+
+      // Should redirect to OAuth flow, not return an error
+      assert.strictEqual(res.redirectUrl, '/auth/github');
+      assert.strictEqual(res.statusCode, 200); // No error status set
+      assert.strictEqual(res.jsonData, null); // No error JSON
+    });
+
+    it('redirects to OAuth flow for GitHub App update callback', async () => {
+      const routes = createGitHubAuthRoutes(config);
+      const req = createMockRequest({
+        query: {
+          code: 'auth-code',
+          installation_id: '12345678',
+          setup_action: 'update',
+        },
+        signedCookies: {},
+      });
+      const res = createMockResponse();
+
+      await routes.handleCallback(req, res);
+
+      assert.strictEqual(res.redirectUrl, '/auth/github');
+    });
+
     it('returns error when state is missing', async () => {
       const routes = createGitHubAuthRoutes(config);
       const req = createMockRequest({

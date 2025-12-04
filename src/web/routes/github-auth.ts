@@ -88,13 +88,33 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
 
     /**
      * GET /auth/github/callback - Handle OAuth callback
+     *
+     * This handles two different flows:
+     * 1. OAuth login flow: has `code` and `state` parameters
+     * 2. GitHub App installation flow: has `code`, `installation_id`, and `setup_action` (no state)
+     *
+     * For installation flow, we redirect to start OAuth to authenticate the user.
      */
     async handleCallback(req: Request, res: Response): Promise<void> {
-      const { code, state } = req.query as { code?: string; state?: string };
+      const { code, state, installation_id, setup_action } = req.query as {
+        code?: string;
+        state?: string;
+        installation_id?: string;
+        setup_action?: string;
+      };
       const signedCookies = req.signedCookies as Record<string, string>;
       const expectedState = signedCookies[OAUTH_STATE_COOKIE];
 
-      // Validate state for CSRF protection
+      // Detect GitHub App installation flow (no state, but has installation_id)
+      // After app installation, redirect user to OAuth flow to authenticate
+      if (installation_id && setup_action && !state) {
+        console.log(`GitHub App: Installation completed (installation_id: ${installation_id}, action: ${setup_action}), redirecting to OAuth`);
+        // Redirect to start OAuth flow - this will authenticate the user
+        res.redirect('/auth/github');
+        return;
+      }
+
+      // Validate state for CSRF protection (OAuth flow)
       if (!state || !expectedState || !safeCompare(state, expectedState)) {
         console.warn('GitHub OAuth: State validation failed', {
           hasState: !!state,
