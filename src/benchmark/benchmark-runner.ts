@@ -68,6 +68,10 @@ export class BenchmarkRunner {
     try {
       // Get repo name for loading questions
       const repo = await this.repos.repos.findById(repoId);
+      console.log(`[Benchmark] Repo lookup: ${repo ? `found ${repo.fullName}` : 'NOT FOUND'}`);
+      if (repo) {
+        console.log(`[Benchmark] Repo details - isGitHubRepo: ${repo.isGitHubRepo}, owner: ${repo.owner ?? 'NOT SET'}, repoName: ${repo.repoName ?? 'NOT SET'}, userId: ${repo.userId ?? 'NOT SET'}`);
+      }
       const repoName = repo?.fullName?.split('/').pop();
 
       // Load questions (repo-specific or default fallback)

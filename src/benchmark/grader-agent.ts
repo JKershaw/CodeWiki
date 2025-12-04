@@ -95,6 +95,8 @@ export class GraderAgent {
       inputSchema: t.inputSchema as Record<string, unknown>,
     }));
 
+    console.log(`[Grader] Providing ${toolDefs.length} tools to LLM: ${toolDefs.map(t => t.name).join(', ')}`);
+
     // Build the grading prompt
     const verificationContext = question.verificationHints?.length
       ? `\nSuggested files to check: ${question.verificationHints.join(', ')}`
@@ -133,6 +135,14 @@ Start by reading the relevant code files, then provide your grade.`;
       temperature: 0.2,
       maxToolRounds: 5,
     });
+
+    // Log tool usage summary
+    console.log(`[Grader] LLM completed - toolRounds: ${result.toolRounds}, toolCalls: ${result.toolCalls.length}, filesChecked: ${filesChecked.length}`);
+    if (result.toolCalls.length > 0) {
+      console.log(`[Grader] Tool calls made: ${result.toolCalls.map(tc => `${tc.name}(${JSON.stringify(tc.input).substring(0, 50)})`).join(', ')}`);
+    } else {
+      console.warn(`[Grader] WARNING: LLM made NO tool calls - it cannot verify the wiki answer!`);
+    }
 
     // Parse the grading response
     const parsed = this.parseGradingResponse(result.content);
