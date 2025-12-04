@@ -13,6 +13,8 @@ import {
   handleLoadRepositoryCommits,
   createUpdateRepositoryStatusCommand,
   handleUpdateRepositoryStatus,
+  createDeleteRepositoryCommand,
+  handleDeleteRepository,
 } from '../../commands/repository.js';
 import { createOrchestrator } from '../../agents/orchestrator/orchestrator.js';
 import { createExecutor } from '../../executor/executor.js';
@@ -483,6 +485,37 @@ export function createReposRoutes(deps: Dependencies): Router {
       const commitsQuery = createListCommitsQuery(repo.id);
       const commitsResult = await handleListCommits(commitsQuery, repos);
       res.json(commitsResult.data || []);
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * Delete a repository and all associated data.
+   */
+  router.delete('/api/repos/:id', async (req: Request, res: Response) => {
+    try {
+      // Use CQRS query to verify repository exists
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+
+      // Use DeleteRepository command to delete the repo and all associated data
+      const deleteResult = await handleDeleteRepository(
+        createDeleteRepositoryCommand(req.params.id!),
+        repos
+      );
+
+      if (!deleteResult.success) {
+        res.status(400).json({ error: deleteResult.error });
+        return;
+      }
+
+      // Return 204 No Content on successful deletion
+      res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
