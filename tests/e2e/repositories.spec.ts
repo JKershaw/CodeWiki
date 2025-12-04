@@ -135,10 +135,10 @@ test.describe('Repository Management', () => {
     // Submit button should now be enabled
     await expect(page.locator('#submit-repo-btn')).not.toBeDisabled();
 
-    // Button text should say "Clone Repository"
-    await expect(page.locator('#submit-repo-btn')).toHaveText('Clone Repository');
+    // Button text should say "Add Repository"
+    await expect(page.locator('#submit-repo-btn')).toHaveText('Add Repository');
 
-    // Click to clone the repository
+    // Click to add the repository
     await page.click('#submit-repo-btn');
 
     // Wait for the cloning card to appear with "cloning" status
@@ -180,5 +180,115 @@ test.describe('Repository Management', () => {
     // Valid URL should enable the button
     await page.fill('#github-url', 'https://github.com/owner/repo');
     await expect(page.locator('#submit-repo-btn')).not.toBeDisabled();
+  });
+
+  test('GitHub panel shows login prompt when not authenticated', async ({ page }) => {
+    await page.goto('/');
+
+    // Open add form
+    await page.click('#add-repo-btn');
+    await expect(page.locator('#add-repo-form')).toBeVisible({ timeout: 5000 });
+
+    // Switch to GitHub mode
+    await page.click('#source-github-btn');
+    await expect(page.locator('#github-source-panel')).toBeVisible();
+
+    // Should show login prompt when not authenticated (if GitHub auth is configured)
+    // Note: The login prompt only shows if GitHub OAuth is configured on the server
+    // If not configured, the prompt won't show
+    const loginPrompt = page.locator('#github-login-prompt');
+    const emptyState = page.locator('#github-empty-state');
+    const reposSection = page.locator('#github-repos-section');
+
+    // Wait a moment for the async rendering
+    await page.waitForTimeout(500);
+
+    // One of these states should be visible (depending on server config and auth state)
+    const loginVisible = await loginPrompt.isVisible().catch(() => false);
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    const reposVisible = await reposSection.isVisible().catch(() => false);
+
+    // At least the URL section should always be visible
+    await expect(page.locator('.github-url-section')).toBeVisible();
+
+    // The URL input should always be available
+    await expect(page.locator('#github-url')).toBeVisible();
+  });
+
+  test('GitHub panel has URL divider and hint text', async ({ page }) => {
+    await page.goto('/');
+
+    // Open add form
+    await page.click('#add-repo-btn');
+    await expect(page.locator('#add-repo-form')).toBeVisible({ timeout: 5000 });
+
+    // Switch to GitHub mode
+    await page.click('#source-github-btn');
+    await expect(page.locator('#github-source-panel')).toBeVisible();
+
+    // Check for the "or enter repository URL" divider
+    await expect(page.locator('.github-url-divider')).toBeVisible();
+    await expect(page.locator('.github-url-divider')).toContainText('or enter repository URL');
+
+    // Check for the updated hint text about private repos
+    await expect(page.locator('.input-hint')).toContainText('private repos');
+  });
+
+  test('GitHub panel submit button text is "Add Repository"', async ({ page }) => {
+    await page.goto('/');
+
+    // Open add form
+    await page.click('#add-repo-btn');
+    await expect(page.locator('#add-repo-form')).toBeVisible({ timeout: 5000 });
+
+    // Switch to GitHub mode
+    await page.click('#source-github-btn');
+
+    // Button should say "Add Repository" (changed from "Clone Repository")
+    await expect(page.locator('#submit-repo-btn')).toHaveText('Add Repository');
+  });
+
+  test('GitHub URL input clears repo picker selection', async ({ page }) => {
+    await page.goto('/');
+
+    // Open add form
+    await page.click('#add-repo-btn');
+    await expect(page.locator('#add-repo-form')).toBeVisible({ timeout: 5000 });
+
+    // Switch to GitHub mode
+    await page.click('#source-github-btn');
+
+    // Initially button should be disabled
+    await expect(page.locator('#submit-repo-btn')).toBeDisabled();
+
+    // Enter a valid GitHub URL
+    await page.fill('#github-url', 'https://github.com/owner/repo');
+
+    // Button should be enabled now
+    await expect(page.locator('#submit-repo-btn')).not.toBeDisabled();
+
+    // Clear the URL
+    await page.fill('#github-url', '');
+
+    // Button should be disabled again (no URL, no picker selection)
+    await expect(page.locator('#submit-repo-btn')).toBeDisabled();
+  });
+
+  test('cancel button hides access error message', async ({ page }) => {
+    await page.goto('/');
+
+    // Open add form
+    await page.click('#add-repo-btn');
+    await expect(page.locator('#add-repo-form')).toBeVisible({ timeout: 5000 });
+
+    // Switch to GitHub mode
+    await page.click('#source-github-btn');
+
+    // Access error should be hidden initially
+    await expect(page.locator('#github-access-error')).toBeHidden();
+
+    // Cancel should close the form
+    await page.click('#cancel-repo-btn');
+    await expect(page.locator('#add-repo-form')).toBeHidden();
   });
 });

@@ -234,6 +234,9 @@ async function addRepo(pathOrUrl, isGitHubUrl = false) {
     ? 'Cloning repository from GitHub...'
     : 'Loading commits from git history...';
 
+  // Hide any previous access error
+  hideGitHubAccessError();
+
   // Create and insert loading card at the beginning
   const loadingCard = document.createElement('div');
   loadingCard.className = 'card repo-loading-card';
@@ -270,7 +273,26 @@ async function addRepo(pathOrUrl, isGitHubUrl = false) {
     loadRepos();
   } catch (error) {
     loadingCard.remove();
-    alert('Error adding repository: ' + error.message);
+
+    // Check if this is a permission/access error for a GitHub repo
+    // Only show the access error UI for clear permission issues (401/403)
+    const errorMsg = error.message.toLowerCase();
+    const isAccessError = isGitHubUrl && (
+      errorMsg.includes('401') ||
+      errorMsg.includes('403') ||
+      errorMsg.includes('unauthorized') ||
+      errorMsg.includes('forbidden') ||
+      (errorMsg.includes('private') && errorMsg.includes('repo'))
+    );
+
+    if (isAccessError) {
+      // Show the inline access error with install link
+      showGitHubAccessError();
+      // Re-show the form so user can see the error
+      addRepoForm.classList.remove('hidden');
+    } else {
+      alert('Error adding repository: ' + error.message);
+    }
   }
 }
 
@@ -551,9 +573,22 @@ const localSourcePanel = document.getElementById('local-source-panel');
 const githubSourcePanel = document.getElementById('github-source-panel');
 const githubUrlInput = document.getElementById('github-url');
 
+// GitHub repo picker elements
+const githubReposSection = document.getElementById('github-repos-section');
+const githubReposList = document.getElementById('github-repos-list');
+const githubManageAccess = document.getElementById('github-manage-access');
+const githubEmptyState = document.getElementById('github-empty-state');
+const githubInstallApp = document.getElementById('github-install-app');
+const githubLoginPrompt = document.getElementById('github-login-prompt');
+const githubAccessError = document.getElementById('github-access-error');
+const githubErrorInstall = document.getElementById('github-error-install');
+
 let selectedRepoPath = null;
+let selectedGitHubRepo = null; // Selected repo from picker
 let currentBrowsePath = null;
 let currentRepoSource = 'local'; // 'local' or 'github'
+let githubInstallationUrl = null; // Cached installation URL
+let accessibleGitHubRepos = []; // Cached accessible repos
 
 /**
  * Validate a GitHub URL.
@@ -591,11 +626,138 @@ function extractRepoName(url) {
 }
 
 /**
+ * Fetch the GitHub App installation URL.
+ */
+async function fetchGitHubInstallationUrl() {
+  if (githubInstallationUrl) return githubInstallationUrl;
+
+  try {
+    const response = await fetch('/auth/github/installation');
+    if (response.ok) {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        if (data && data.url) {
+          githubInstallationUrl = data.url;
+          return githubInstallationUrl;
+        }
+      }
+    }
+  } catch {
+    // GitHub auth not configured
+  }
+  return null;
+}
+
+/**
+ * Fetch repositories accessible to the current user via GitHub App.
+ */
+async function fetchAccessibleGitHubRepos() {
+  if (!currentUser) return [];
+
+  try {
+    const response = await fetch('/auth/github/repos');
+    if (response.ok) {
+      const data = await response.json();
+      accessibleGitHubRepos = data.repos || [];
+      return accessibleGitHubRepos;
+    }
+  } catch (error) {
+    console.error('Failed to fetch accessible repos:', error);
+  }
+  return [];
+}
+
+/**
+ * Render the GitHub repos picker panel based on auth state.
+ */
+async function renderGitHubReposPanel() {
+  // Hide all sections initially
+  githubReposSection.classList.add('hidden');
+  githubEmptyState.classList.add('hidden');
+  githubLoginPrompt.classList.add('hidden');
+  githubAccessError.classList.add('hidden');
+
+  // Fetch installation URL for manage/install links
+  const installUrl = await fetchGitHubInstallationUrl();
+
+  if (!installUrl) {
+    // GitHub auth not configured on server
+    return;
+  }
+
+  // Set up installation URLs on all relevant links
+  if (githubManageAccess) githubManageAccess.href = installUrl;
+  if (githubInstallApp) githubInstallApp.href = installUrl;
+  if (githubErrorInstall) githubErrorInstall.href = installUrl;
+
+  if (!currentUser) {
+    // Not logged in - show login prompt
+    githubLoginPrompt.classList.remove('hidden');
+    return;
+  }
+
+  // User is logged in - fetch their accessible repos
+  githubReposList.innerHTML = '<p class="loading">Loading your repositories...</p>';
+  githubReposSection.classList.remove('hidden');
+
+  const repos = await fetchAccessibleGitHubRepos();
+
+  if (repos.length === 0) {
+    // No repos accessible - show install prompt
+    githubReposSection.classList.add('hidden');
+    githubEmptyState.classList.remove('hidden');
+    return;
+  }
+
+  // Render the repo list
+  githubReposList.innerHTML = repos.map(repo => `
+    <div class="github-repo-item" data-full-name="${escapeHtml(repo.fullName)}" data-clone-url="${escapeHtml(repo.cloneUrl)}">
+      <span class="repo-icon">${repo.isPrivate ? '🔒' : '📦'}</span>
+      <span class="repo-name">${escapeHtml(repo.fullName)}</span>
+      ${repo.isPrivate ? '<span class="private-badge">Private</span>' : ''}
+    </div>
+  `).join('');
+
+  // Add click handlers
+  githubReposList.querySelectorAll('.github-repo-item').forEach(item => {
+    item.addEventListener('click', () => {
+      // Deselect all
+      githubReposList.querySelectorAll('.github-repo-item').forEach(i => i.classList.remove('selected'));
+      // Select this one
+      item.classList.add('selected');
+      selectedGitHubRepo = {
+        fullName: item.dataset.fullName,
+        cloneUrl: item.dataset.cloneUrl,
+      };
+      // Clear URL input and enable submit
+      githubUrlInput.value = '';
+      submitRepoBtn.disabled = false;
+    });
+  });
+}
+
+/**
+ * Show the GitHub access error with install link.
+ */
+function showGitHubAccessError() {
+  githubAccessError.classList.remove('hidden');
+}
+
+/**
+ * Hide the GitHub access error.
+ */
+function hideGitHubAccessError() {
+  githubAccessError.classList.add('hidden');
+}
+
+/**
  * Switch between local folder and GitHub URL source modes.
  */
 function setRepoSource(source) {
   currentRepoSource = source;
   selectedRepoPath = null;
+  selectedGitHubRepo = null;
 
   if (source === 'local') {
     sourceLocalBtn.classList.add('active');
@@ -610,18 +772,32 @@ function setRepoSource(source) {
     sourceGithubBtn.classList.add('active');
     localSourcePanel.classList.add('hidden');
     githubSourcePanel.classList.remove('hidden');
-    submitRepoBtn.textContent = 'Clone Repository';
+    submitRepoBtn.textContent = 'Add Repository';
+    submitRepoBtn.disabled = true;
+    // Load and render GitHub repos panel
+    renderGitHubReposPanel();
     updateGitHubSubmitButton();
   }
 }
 
 /**
- * Update submit button state based on GitHub URL validity.
+ * Update submit button state based on GitHub URL validity or selected repo.
  */
 function updateGitHubSubmitButton() {
   if (currentRepoSource === 'github') {
     const url = githubUrlInput.value.trim();
-    submitRepoBtn.disabled = !isValidGitHubUrl(url);
+    // Enable if either a repo is selected from picker OR a valid URL is entered
+    const hasValidUrl = isValidGitHubUrl(url);
+    const hasSelectedRepo = selectedGitHubRepo !== null;
+    submitRepoBtn.disabled = !hasValidUrl && !hasSelectedRepo;
+
+    // If user types in URL, deselect picker
+    if (url && githubReposList) {
+      githubReposList.querySelectorAll('.github-repo-item').forEach(i => i.classList.remove('selected'));
+      if (hasValidUrl) {
+        selectedGitHubRepo = null;
+      }
+    }
   }
 }
 
@@ -688,7 +864,9 @@ addRepoBtn.addEventListener('click', () => {
 cancelRepoBtn.addEventListener('click', () => {
   addRepoForm.classList.add('hidden');
   selectedRepoPath = null;
+  selectedGitHubRepo = null;
   githubUrlInput.value = '';
+  hideGitHubAccessError();
 });
 
 // Source toggle event listeners
@@ -706,6 +884,16 @@ submitRepoBtn.addEventListener('click', () => {
       selectedRepoPath = null;
     }
   } else if (currentRepoSource === 'github') {
+    // Check if repo selected from picker
+    if (selectedGitHubRepo) {
+      const url = `https://github.com/${selectedGitHubRepo.fullName}`;
+      addRepo(url, true);
+      addRepoForm.classList.add('hidden');
+      selectedGitHubRepo = null;
+      githubUrlInput.value = '';
+      return;
+    }
+    // Otherwise use manual URL input
     const url = githubUrlInput.value.trim();
     if (isValidGitHubUrl(url)) {
       addRepo(url, true);
