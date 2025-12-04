@@ -43,7 +43,11 @@ export class MongoCommitRepository implements CommitRepository {
     const docs = await this.collection
       .find({
         repoId,
-        'processedBy.agentType': { $ne: agentType },
+        processedBy: {
+          $not: {
+            $elemMatch: { agentType },
+          },
+        },
       })
       .sort({ committedAt: -1 })
       .toArray();
