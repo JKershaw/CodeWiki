@@ -112,7 +112,6 @@ export function passwordProtection(req: Request, res: Response, next: NextFuncti
     res.status(401).json({ error: 'Authentication required' });
   } else {
     // Browser requests get redirected to login
-    const returnUrl = req.originalUrl !== '/' ? `?returnUrl=${encodeURIComponent(req.originalUrl)}` : '';
-    res.redirect(`/login${returnUrl}`);
+    res.redirect('/login');
   }
 }
