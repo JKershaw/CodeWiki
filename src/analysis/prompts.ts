@@ -158,11 +158,13 @@ Round 1: get_question_history("q1") + get_question_history("q2") + get_question_
 - Fetch multiple wiki pages simultaneously when investigating content gaps
 - When checking source code, read several related files together
 
-**Phase 3 - Provenance & Orchestration (5-10 rounds):**
+**Phase 3 - Provenance & History (5-10 rounds):**
 - Call get_orchestrator_decisions to see what work was planned and prioritized
 - Call get_provenance_trace for problematic pages to see the full chain back to orchestrator decisions
 - Call get_work_item_outcomes to understand what happened after work was assigned
-- Call get_page_provenance for multiple problematic pages at once
+- Call get_page_provenance AND get_page_edit_history for multiple problematic pages at once
+- Call compare_wiki_versions for different iteration ranges in parallel
+- Call get_agent_run_changes for multiple agent runs simultaneously
 - Call get_iterations_between for different time periods in parallel
 - Compare: What did the orchestrator plan vs what benchmarks reveal is missing?
 
