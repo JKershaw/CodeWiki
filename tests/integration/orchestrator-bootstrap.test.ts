@@ -9,6 +9,7 @@ import { createTestContext, createTestRepo, addCommit, type TestContext } from '
 import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { createWorkItem } from '../../src/domain/work-item.js';
+import { createAgentRun } from '../../src/domain/agent-run.js';
 
 describe('Orchestrator Bootstrap Behavior', () => {
   let ctx: TestContext;
@@ -215,6 +216,101 @@ code-change,${sha},Analyze new commit`);
       // Should not create another bootstrap item
       const bootstrapItems = workItems.filter(w => w.agentType === 'bootstrap');
       assert.strictEqual(bootstrapItems.length, 0, 'Should not duplicate bootstrap work');
+    });
+
+    it('does not regenerate bootstrap if previous bootstrap work item failed', async () => {
+      const repoId = 'orchestrator-no-retry-failed-bootstrap-work';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      // Get the wiki for this repo (empty wiki)
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Pre-create a FAILED bootstrap work item (simulates first run failure)
+      const failedWorkItem = createWorkItem({
+        id: 'failed-bootstrap-work',
+        repoId,
+        agentType: 'bootstrap',
+        priority: 100,
+      });
+      failedWorkItem.status = 'failed';
+      failedWorkItem.completedAt = new Date();
+      await ctx.repos.workQueue.save(failedWorkItem);
+
+      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
+
+      // Should NOT create another bootstrap item - prevents infinite loop
+      const bootstrapItems = workItems.filter(w => w.agentType === 'bootstrap');
+      assert.strictEqual(bootstrapItems.length, 0,
+        'Should not regenerate bootstrap after work item failure (prevents infinite loop)');
+    });
+
+    it('does not regenerate bootstrap if previous bootstrap agent run failed', async () => {
+      const repoId = 'orchestrator-no-retry-failed-bootstrap-run';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      // Get the wiki for this repo (empty wiki)
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Pre-create a FAILED bootstrap agent run (simulates first run failure)
+      const failedAgentRun = createAgentRun({
+        id: 'failed-bootstrap-run',
+        repoId,
+        wikiId: wiki.id,
+        agentType: 'bootstrap',
+      });
+      failedAgentRun.status = 'failed';
+      failedAgentRun.error = 'LLM service unavailable';
+      failedAgentRun.completedAt = new Date();
+      await ctx.repos.agentRuns.save(failedAgentRun);
+
+      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
+
+      // Should NOT create another bootstrap item - prevents infinite loop
+      const bootstrapItems = workItems.filter(w => w.agentType === 'bootstrap');
+      assert.strictEqual(bootstrapItems.length, 0,
+        'Should not regenerate bootstrap after agent run failure (prevents infinite loop)');
+    });
+
+    it('prevents infinite loop when bootstrap fails on first run', async () => {
+      const repoId = 'orchestrator-infinite-loop-prevention';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      // Get the wiki for this repo (empty wiki)
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+
+      // First call: should generate bootstrap work
+      const firstWorkItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
+      assert.strictEqual(firstWorkItems.length, 1, 'First call should generate bootstrap');
+      assert.strictEqual(firstWorkItems[0]?.agentType, 'bootstrap');
+
+      // Simulate the bootstrap work item being claimed and failing
+      const bootstrapWorkItem = firstWorkItems[0]!;
+      bootstrapWorkItem.status = 'failed';
+      bootstrapWorkItem.completedAt = new Date();
+      await ctx.repos.workQueue.save(bootstrapWorkItem);
+
+      // Second call: should NOT generate new bootstrap (prevents infinite loop)
+      const secondWorkItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
+      const newBootstrapItems = secondWorkItems.filter(w => w.agentType === 'bootstrap');
+      assert.strictEqual(newBootstrapItems.length, 0,
+        'Second call should NOT regenerate bootstrap after failure (prevents infinite loop)');
+
+      // The system should return empty work list (nothing to do until bootstrap succeeds)
+      assert.strictEqual(secondWorkItems.length, 0,
+        'Should return empty work list when bootstrap has failed and wiki is empty');
     });
   });
 });
