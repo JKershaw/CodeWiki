@@ -6,6 +6,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { access } from 'fs/promises';
 import type { Repositories } from '../repositories/index.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { GitService } from '../services/git/git-service.js';
@@ -266,14 +267,21 @@ export class BenchmarkRunner {
    * Supports both local repos (via filesystem) and GitHub repos (via API).
    */
   private async buildGradeContext(repoId: string, repo: Repo | null): Promise<GradeContext | null> {
-    // Try local filesystem first
-    try {
-      const repoPath = this.git.getRepoPath(repoId);
-      console.log(`[Benchmark] Using local filesystem for grading: ${repoPath}`);
-      return { repoPath };
-    } catch (error) {
-      // No local path available, try GitHub API
-      console.log(`[Benchmark] No local path for repo ${repoId}: ${error instanceof Error ? error.message : String(error)}`);
+    // Try local filesystem first - but only if it's not a GitHub repo
+    // and the path actually exists on the filesystem
+    if (repo && !repo.isGitHubRepo) {
+      try {
+        const repoPath = this.git.getRepoPath(repoId);
+        // Verify the path actually exists before using it
+        await access(repoPath);
+        console.log(`[Benchmark] Using local filesystem for grading: ${repoPath}`);
+        return { repoPath };
+      } catch (error) {
+        // Path doesn't exist or isn't accessible
+        console.log(`[Benchmark] Local path not accessible for repo ${repoId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else if (repo?.isGitHubRepo) {
+      console.log(`[Benchmark] Repo ${repoId} is a GitHub repo, skipping local filesystem check`);
     }
 
     // Try GitHub API if we have a repo service factory and repo entity

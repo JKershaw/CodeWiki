@@ -55,8 +55,10 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
         return;
       }
 
-      // Register the local repo path so git service can find it
-      git.registerLocalRepo(repoId, repo.fullName);
+      // Register the local repo path so git service can find it (only for local repos)
+      if (!repo.isGitHubRepo) {
+        git.registerLocalRepo(repoId, repo.fullName);
+      }
 
       // Create LLM service and runner
       const llm = createLLM();
