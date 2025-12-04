@@ -279,10 +279,11 @@ async function recordHistory(
     operation: params.operation,
     contentBefore: params.contentBefore,
     contentAfter: params.contentAfter,
-    agentRunId: params.agentRunId,
-    workItemId: params.workItemId,
-    editRequestId: params.editRequestId,
     agentType,
+    // Only include optional properties if defined (exactOptionalPropertyTypes)
+    ...(params.agentRunId !== undefined && { agentRunId: params.agentRunId }),
+    ...(params.workItemId !== undefined && { workItemId: params.workItemId }),
+    ...(params.editRequestId !== undefined && { editRequestId: params.editRequestId }),
   });
 
   await repos.wikiPageHistory.save(history);

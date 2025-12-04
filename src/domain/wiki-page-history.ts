@@ -70,7 +70,7 @@ export interface CreateWikiPageHistoryParams {
  * Create a new wiki page history record.
  */
 export function createWikiPageHistory(params: CreateWikiPageHistoryParams): WikiPageHistory {
-  return {
+  const result: WikiPageHistory = {
     id: params.id,
     wikiId: params.wikiId,
     pageId: params.pageId,
@@ -79,9 +79,13 @@ export function createWikiPageHistory(params: CreateWikiPageHistoryParams): Wiki
     timestamp: params.timestamp ?? new Date(),
     contentBefore: params.contentBefore,
     contentAfter: params.contentAfter,
-    agentRunId: params.agentRunId,
-    workItemId: params.workItemId,
-    editRequestId: params.editRequestId,
     agentType: params.agentType,
   };
+
+  // Only include optional properties if defined (exactOptionalPropertyTypes)
+  if (params.agentRunId !== undefined) result.agentRunId = params.agentRunId;
+  if (params.workItemId !== undefined) result.workItemId = params.workItemId;
+  if (params.editRequestId !== undefined) result.editRequestId = params.editRequestId;
+
+  return result;
 }

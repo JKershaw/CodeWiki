@@ -27,7 +27,7 @@ export const getPageEditHistoryTool: AnalysisToolDefinition = {
   },
   execute: async (input, context) => {
     const pagePath = (input['page_path'] as string).toLowerCase();
-    const { repos, wikiId, wikiPages } = context;
+    const { repos, wikiPages } = context;
 
     // Find the page
     const page = wikiPages.find(p => p.path.toLowerCase() === pagePath);
