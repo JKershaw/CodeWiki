@@ -116,18 +116,24 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
     },
 
     async exchangeCodeForTokens(code: string): Promise<GitHubTokens> {
-      const response = await fetch(`${GITHUB_OAUTH_URL}/access_token`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          code,
-        }).toString(),
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${GITHUB_OAUTH_URL}/access_token`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            client_id: config.clientId,
+            client_secret: config.clientSecret,
+            code,
+          }).toString(),
+        });
+      } catch (error) {
+        console.error('GitHub OAuth: Network error during token exchange:', error);
+        throw new Error('Network error contacting GitHub');
+      }
 
       const data = await response.json() as {
         access_token?: string;
@@ -138,12 +144,15 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
       };
 
       if (data.error || !data.access_token) {
-        throw new Error(`Failed to exchange code: ${data.error_description || data.error || 'Unknown error'}`);
+        const errorMsg = data.error_description || data.error || 'Unknown error';
+        console.error(`GitHub OAuth: Token exchange failed - ${errorMsg} (error: ${data.error})`);
+        throw new Error(`Failed to exchange code: ${errorMsg}`);
       }
 
       const expiresIn = data.expires_in || 28800; // Default 8 hours
       const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
+      console.log('GitHub OAuth: Token exchange successful');
       return {
         accessToken: data.access_token,
         refreshToken: data.refresh_token || '',
@@ -152,19 +161,25 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
     },
 
     async refreshAccessToken(refreshToken: string): Promise<GitHubTokens> {
-      const response = await fetch(`${GITHUB_OAUTH_URL}/access_token`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken,
-        }).toString(),
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${GITHUB_OAUTH_URL}/access_token`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            client_id: config.clientId,
+            client_secret: config.clientSecret,
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+          }).toString(),
+        });
+      } catch (error) {
+        console.error('GitHub OAuth: Network error during token refresh:', error);
+        throw new Error('Network error contacting GitHub');
+      }
 
       const data = await response.json() as {
         access_token?: string;
@@ -175,12 +190,15 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
       };
 
       if (data.error || !data.access_token) {
-        throw new Error(`Failed to refresh token: ${data.error_description || data.error || 'Unknown error'}`);
+        const errorMsg = data.error_description || data.error || 'Unknown error';
+        console.error(`GitHub OAuth: Token refresh failed - ${errorMsg} (error: ${data.error})`);
+        throw new Error(`Failed to refresh token: ${errorMsg}`);
       }
 
       const expiresIn = data.expires_in || 28800;
       const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
+      console.log('GitHub OAuth: Token refresh successful');
       return {
         accessToken: data.access_token,
         refreshToken: data.refresh_token || refreshToken,
@@ -189,16 +207,33 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
     },
 
     async getUserProfile(accessToken: string): Promise<GitHubUserProfile> {
-      const response = await fetch(`${GITHUB_API_URL}/user`, {
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'Authorization': `Bearer ${accessToken}`,
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${GITHUB_API_URL}/user`, {
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': `Bearer ${accessToken}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        });
+      } catch (error) {
+        console.error('GitHub API: Network error fetching user profile:', error);
+        throw new Error('Network error contacting GitHub');
+      }
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({})) as { message?: string };
+        const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+        console.error(`GitHub API: Failed to fetch user profile - ${response.status} ${response.statusText}`, {
+          message: error.message,
+          rateLimitRemaining,
+        });
+        if (response.status === 401) {
+          throw new Error('GitHub access token is invalid or expired');
+        }
+        if (response.status === 403 && rateLimitRemaining === '0') {
+          throw new Error('GitHub API rate limit exceeded');
+        }
         throw new Error(`Failed to fetch user profile: ${error.message || response.statusText}`);
       }
 
@@ -224,20 +259,38 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
         profile.email = data.email;
       }
 
+      console.log(`GitHub API: Fetched profile for user ${data.login} (ID: ${data.id})`);
       return profile;
     },
 
     async getAccessibleRepos(accessToken: string): Promise<GitHubRepo[]> {
-      const response = await fetch(`${GITHUB_API_URL}/user/installations/repositories`, {
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'Authorization': `Bearer ${accessToken}`,
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${GITHUB_API_URL}/user/installations/repositories`, {
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': `Bearer ${accessToken}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        });
+      } catch (error) {
+        console.error('GitHub API: Network error fetching repositories:', error);
+        throw new Error('Network error contacting GitHub');
+      }
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({})) as { message?: string };
+        const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+        console.error(`GitHub API: Failed to fetch repositories - ${response.status} ${response.statusText}`, {
+          message: error.message,
+          rateLimitRemaining,
+        });
+        if (response.status === 401) {
+          throw new Error('GitHub access token is invalid or expired');
+        }
+        if (response.status === 403 && rateLimitRemaining === '0') {
+          throw new Error('GitHub API rate limit exceeded');
+        }
         throw new Error(`Failed to fetch repositories: ${error.message || response.statusText}`);
       }
 
@@ -254,6 +307,7 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
         }>;
       };
 
+      console.log(`GitHub API: Fetched ${data.total_count} accessible repositories`);
       return data.repositories.map(repo => ({
         id: repo.id,
         name: repo.name,

@@ -106,6 +106,13 @@ export async function startServer(port = PORT) {
     githubRepoService = createCachedGitHubRepoService(baseGithubRepoService, githubCache);
 
     console.log('GitHub OAuth authentication enabled');
+  } else {
+    // Log which environment variables are missing to help with debugging
+    const missing = [];
+    if (!GITHUB_CLIENT_ID) missing.push('GITHUB_APP_CLIENT_ID');
+    if (!GITHUB_CLIENT_SECRET) missing.push('GITHUB_APP_CLIENT_SECRET');
+    if (!GITHUB_APP_NAME) missing.push('GITHUB_APP_NAME');
+    console.log(`GitHub OAuth not configured (missing: ${missing.join(', ')})`);
   }
 
   // Password protection middleware

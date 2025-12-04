@@ -114,7 +114,17 @@ export function createJwtService(secret: string, options: JwtServiceOptions = {}
       try {
         const decoded = jwt.verify(token, secret) as SessionPayload;
         return decoded;
-      } catch {
+      } catch (error) {
+        // Log specific JWT verification failures for debugging
+        if (error instanceof jwt.TokenExpiredError) {
+          console.log(`JWT: Token expired at ${error.expiredAt.toISOString()}`);
+        } else if (error instanceof jwt.JsonWebTokenError) {
+          console.warn(`JWT: Invalid token - ${error.message}`);
+        } else if (error instanceof jwt.NotBeforeError) {
+          console.warn(`JWT: Token not yet valid (nbf: ${error.date.toISOString()})`);
+        } else {
+          console.error('JWT: Unexpected verification error:', error);
+        }
         return null;
       }
     },
