@@ -519,9 +519,24 @@ export class Executor {
     const repo = await this.repos.repos.findById(repoId);
 
     // Create repository service if factory is available
-    const repoService = repo && this.repoServiceFactory
-      ? this.repoServiceFactory.getService(repo)
-      : undefined;
+    // For GitHub repos with a userId, use authenticated access
+    let repoService: import('../services/repository/repository-service.js').RepositoryService | undefined;
+    if (repo && this.repoServiceFactory) {
+      if (repo.isGitHubRepo && repo.userId) {
+        // Look up user's access token for authenticated GitHub access
+        const user = await this.repos.users.findById(repo.userId);
+        if (user?.accessToken) {
+          repoService = this.repoServiceFactory.getServiceWithToken(repo, user.accessToken);
+        } else {
+          // User not found or no token, fall back to unauthenticated access
+          console.warn(`No access token found for user ${repo.userId}, using unauthenticated GitHub access`);
+          repoService = this.repoServiceFactory.getService(repo);
+        }
+      } else {
+        // Local repo or GitHub repo without userId
+        repoService = this.repoServiceFactory.getService(repo);
+      }
+    }
 
     // Build agent context, only including optional properties if they have values
     const context: AgentContext = {

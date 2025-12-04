@@ -30,19 +30,21 @@ export async function getCommitDiff(context: AgentContext, sha: string): Promise
  * Check if the repository is a local filesystem repository.
  *
  * Returns true if we can use filesystem-based tools.
+ * Returns false if repo is undefined or is a GitHub repo.
  */
 export function isLocalRepo(context: AgentContext): boolean {
-  return context.repo?.isGitHubRepo === false || !context.repo?.isGitHubRepo;
+  // Must have a repo object and it must explicitly be marked as not a GitHub repo
+  return context.repo?.isGitHubRepo === false;
 }
 
 /**
  * Get the local filesystem path for a repository.
  *
- * Returns undefined for GitHub repositories that don't have a local clone.
+ * Returns undefined for GitHub repositories or when repo info is not available.
  */
 export function getLocalRepoPath(context: AgentContext): string | undefined {
-  // For GitHub repos, there's no local path
-  if (context.repo?.isGitHubRepo) {
+  // Must have repo info and it must be a local repo (not GitHub)
+  if (!context.repo || context.repo.isGitHubRepo) {
     return undefined;
   }
 

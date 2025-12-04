@@ -31,6 +31,8 @@ export interface RegisterRepositoryCommand extends Command {
   readonly repoName?: string;
   /** Whether this is a GitHub repository (vs local filesystem) */
   readonly isGitHubRepo?: boolean;
+  /** User ID who added this repo (for GitHub auth) */
+  readonly userId?: string;
 }
 
 export function createRegisterRepositoryCommand(params: {
@@ -41,6 +43,7 @@ export function createRegisterRepositoryCommand(params: {
   owner?: string;
   repoName?: string;
   isGitHubRepo?: boolean;
+  userId?: string;
 }): RegisterRepositoryCommand {
   return {
     type: 'RegisterRepository',
@@ -71,6 +74,7 @@ export async function handleRegisterRepository(
       ...(command.owner && { owner: command.owner }),
       ...(command.repoName && { repoName: command.repoName }),
       ...(command.isGitHubRepo !== undefined && { isGitHubRepo: command.isGitHubRepo }),
+      ...(command.userId && { userId: command.userId }),
     });
 
     await repos.repos.save(repo);
