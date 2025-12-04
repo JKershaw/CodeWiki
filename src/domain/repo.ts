@@ -23,6 +23,8 @@ export interface Repo {
   createdAt: Date;
   /** Last time any processing occurred */
   lastProcessedAt: Date | null;
+  /** User ID who added this repo (for GitHub auth) */
+  userId?: string;
 }
 
 export type RepoStatus =
@@ -60,6 +62,8 @@ export interface CreateRepoParams {
   repoName?: string;
   /** Whether this is a GitHub repo (default: auto-detected from cloneUrl) */
   isGitHubRepo?: boolean;
+  /** User ID who added this repo (for GitHub auth) */
+  userId?: string;
 }
 
 /**
@@ -107,5 +111,6 @@ export function createRepo(params: CreateRepoParams): Repo {
     },
     createdAt: new Date(),
     lastProcessedAt: null,
+    ...(params.userId && { userId: params.userId }),
   };
 }

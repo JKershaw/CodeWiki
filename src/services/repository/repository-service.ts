@@ -270,31 +270,100 @@ function createLocalRepositoryService(
 export interface RepositoryServiceFactory {
   /**
    * Get a repository service for the given repository.
+   * For GitHub repos with a userId, this will use the user's access token.
    */
   getService(repo: Repo): RepositoryService;
+
+  /**
+   * Get a repository service with a specific access token.
+   * This is used for GitHub repos when we have a user's access token.
+   */
+  getServiceWithToken(repo: Repo, accessToken: string): RepositoryService;
+}
+
+/**
+ * User repository interface for looking up access tokens.
+ */
+interface UserRepository {
+  findById(id: string): Promise<{ accessToken?: string } | null>;
 }
 
 /**
  * Create a repository service factory.
+ *
+ * @param deps.githubRepoService - Unauthenticated GitHub service (for public repos)
+ * @param deps.gitService - Local git service
+ * @param deps.userRepository - Optional user repository for looking up access tokens
+ * @param deps.createGitHubService - Optional factory for creating authenticated GitHub services
  */
 export function createRepositoryServiceFactory(deps: {
   githubRepoService?: GitHubRepoService;
   gitService?: GitService;
+  userRepository?: UserRepository;
+  createGitHubService?: (accessToken: string) => GitHubRepoService;
 }): RepositoryServiceFactory {
+  // Cache keyed by repo ID + access token hash (or 'public' for unauthenticated)
   const serviceCache = new Map<string, RepositoryService>();
+
+  function getCacheKey(repoId: string, accessToken?: string): string {
+    if (!accessToken) {
+      return `${repoId}:public`;
+    }
+    // Use a simple hash to avoid storing tokens in cache keys
+    const tokenHash = accessToken.slice(-8);
+    return `${repoId}:${tokenHash}`;
+  }
 
   return {
     getService(repo: Repo): RepositoryService {
-      // Check cache
-      let service = serviceCache.get(repo.id);
+      // For local repos, use the standard path
+      if (!repo.isGitHubRepo) {
+        const cacheKey = getCacheKey(repo.id);
+        let service = serviceCache.get(cacheKey);
+        if (service) {
+          return service;
+        }
+        service = createRepositoryService(repo, deps);
+        serviceCache.set(cacheKey, service);
+        return service;
+      }
+
+      // For GitHub repos, use unauthenticated service (for public repos)
+      // The executor should call getServiceWithToken for private repos
+      const cacheKey = getCacheKey(repo.id);
+      let service = serviceCache.get(cacheKey);
       if (service) {
         return service;
       }
 
-      // Create new service
       service = createRepositoryService(repo, deps);
-      serviceCache.set(repo.id, service);
+      serviceCache.set(cacheKey, service);
+      return service;
+    },
 
+    getServiceWithToken(repo: Repo, accessToken: string): RepositoryService {
+      if (!repo.isGitHubRepo) {
+        // Local repos don't need tokens
+        return this.getService(repo);
+      }
+
+      const cacheKey = getCacheKey(repo.id, accessToken);
+      let service = serviceCache.get(cacheKey);
+      if (service) {
+        return service;
+      }
+
+      // Create authenticated GitHub service
+      if (!deps.createGitHubService) {
+        throw new Error('createGitHubService required for authenticated GitHub access');
+      }
+
+      const authGitHubService = deps.createGitHubService(accessToken);
+      service = createRepositoryService(repo, {
+        ...deps,
+        githubRepoService: authGitHubService,
+      });
+      serviceCache.set(cacheKey, service);
       return service;
     },
   };

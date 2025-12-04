@@ -126,6 +126,34 @@ async function getGitAuthFromRequest(
 }
 
 /**
+ * Get the user ID from the current request session.
+ * Returns undefined if user is not authenticated.
+ */
+async function getUserIdFromRequest(
+  req: Request,
+  deps: Dependencies
+): Promise<string | undefined> {
+  const { jwtService } = deps;
+
+  if (!jwtService) {
+    return undefined;
+  }
+
+  const signedCookies = req.signedCookies as Record<string, string>;
+  const token = signedCookies[GITHUB_SESSION_COOKIE];
+  if (!token) {
+    return undefined;
+  }
+
+  const session = jwtService.verifySessionToken(token);
+  if (!session) {
+    return undefined;
+  }
+
+  return session.userId;
+}
+
+/**
  * Get an authenticated GitHub repo service for the current request.
  * Returns undefined if user is not authenticated.
  */
@@ -313,6 +341,9 @@ export function createReposRoutes(deps: Dependencies): Router {
         const authGitHubService = await getAuthenticatedGitHubService(req, deps);
         const githubService = authGitHubService ?? deps.githubRepoService ?? createGitHubRepoService();
 
+        // Get the user ID if authenticated (for background processing)
+        const userId = await getUserIdFromRequest(req, deps);
+
         // Verify the repository exists and get info via GitHub API
         const repoId = uuid();
         let defaultBranch = 'main';
@@ -333,6 +364,7 @@ export function createReposRoutes(deps: Dependencies): Router {
         }
 
         // Register the repository (no local clone needed)
+        // Include userId so background processing can use user's auth token
         const registerResult = await handleRegisterRepository(
           createRegisterRepositoryCommand({
             id: repoId,
@@ -342,6 +374,7 @@ export function createReposRoutes(deps: Dependencies): Router {
             owner,
             repoName,
             isGitHubRepo: true,
+            ...(userId && { userId }),
           }),
           repos
         );

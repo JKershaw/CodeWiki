@@ -121,10 +121,17 @@ export async function startServer(port = PORT) {
   // Static files (after password protection)
   app.use(express.static(join(__dirname, 'public')));
 
-  // Create repository service factory
+  // Create repository service factory with support for authenticated GitHub access
   const repoServiceFactory = createRepositoryServiceFactory({
     ...(githubRepoService && { githubRepoService }),
     gitService: git,
+    userRepository: repos.users,
+    // Factory for creating authenticated GitHub services
+    createGitHubService: (accessToken: string) => {
+      const cache = createGitHubApiCache();
+      const baseService = createGitHubRepoService({ accessToken });
+      return createCachedGitHubRepoService(baseService, cache);
+    },
   });
 
   // API Routes (include jwtService and GitHub services if available)

@@ -111,7 +111,10 @@ describe('agent-helpers', () => {
       assert.strictEqual(isLocalRepo(context), true);
     });
 
-    it('returns true when isGitHubRepo is undefined', () => {
+    it('returns false when isGitHubRepo is undefined (safe default)', () => {
+      // When isGitHubRepo is undefined, we don't know if it's local,
+      // so we return false to avoid trying filesystem operations on
+      // what might be a GitHub-only repo
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
@@ -121,7 +124,7 @@ describe('agent-helpers', () => {
         repo: {} as Repo,
       };
 
-      assert.strictEqual(isLocalRepo(context), true);
+      assert.strictEqual(isLocalRepo(context), false);
     });
 
     it('returns false when repo is a GitHub repo', () => {
@@ -137,7 +140,9 @@ describe('agent-helpers', () => {
       assert.strictEqual(isLocalRepo(context), false);
     });
 
-    it('returns true when repo is not provided', () => {
+    it('returns false when repo is not provided (safe default)', () => {
+      // When repo is not provided, we can't determine if it's local,
+      // so we return false to avoid trying filesystem operations
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
@@ -146,7 +151,7 @@ describe('agent-helpers', () => {
         llm: {} as any,
       };
 
-      assert.strictEqual(isLocalRepo(context), true);
+      assert.strictEqual(isLocalRepo(context), false);
     });
   });
 
