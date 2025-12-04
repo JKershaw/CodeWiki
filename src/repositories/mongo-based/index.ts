@@ -27,6 +27,7 @@ export * from './mongo-quality-benchmark-repository.js';
 export * from './mongo-self-improvement-repository.js';
 export * from './mongo-chat-session-repository.js';
 export * from './mongo-user-repository.js';
+export * from './mongo-wiki-page-history-repository.js';
 
 import { MongoRepoRepository } from './mongo-repo-repository.js';
 import { MongoWikiRepository } from './mongo-wiki-repository.js';
@@ -46,6 +47,7 @@ import { MongoQualityBenchmarkRepository } from './mongo-quality-benchmark-repos
 import { MongoSelfImprovementRepository } from './mongo-self-improvement-repository.js';
 import { MongoChatSessionRepository } from './mongo-chat-session-repository.js';
 import { MongoUserRepository } from './mongo-user-repository.js';
+import { MongoWikiPageHistoryRepository } from './mongo-wiki-page-history-repository.js';
 
 /**
  * Create all MongoDB-based repositories.
@@ -72,6 +74,7 @@ export function createMongoRepositories(db: Db): Repositories {
     selfImprovements: new MongoSelfImprovementRepository(db),
     chatSessions: new MongoChatSessionRepository(db),
     users: new MongoUserRepository(db),
+    wikiPageHistory: new MongoWikiPageHistoryRepository(db),
   };
 }
 
@@ -223,5 +226,15 @@ export async function createMongoIndexes(db: Db): Promise<void> {
     { key: { githubId: 1 }, unique: true },
     { key: { login: 1 }, unique: true },
     { key: { createdAt: -1 } },
+  ]);
+
+  // Wiki page history collection
+  await db.collection('wiki-page-history').createIndexes([
+    { key: { wikiId: 1 } },
+    { key: { pageId: 1 } },
+    { key: { wikiId: 1, timestamp: -1 } },
+    { key: { pageId: 1, timestamp: -1 } },
+    { key: { wikiId: 1, pagePath: 1 } },
+    { key: { agentRunId: 1 } },
   ]);
 }

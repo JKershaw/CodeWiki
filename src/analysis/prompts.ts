@@ -103,6 +103,14 @@ Use provenance tools to answer: "Which agent is responsible for this content gap
 You can analyze **orchestrator decisions** to understand work prioritization:
 - **get_orchestrator_decisions**: See the LLM orchestrator's reasoning, what gaps it identified, what work items it created, and how it prioritized them
 
+You can explore **complete wiki edit history** with full before/after content:
+- **get_page_edit_history**: See all changes to a wiki page with full content snapshots for each edit
+- **get_agent_run_changes**: See all wiki changes made by a specific agent run - what pages it created, updated, or deleted
+- **compare_wiki_versions**: Get a summary of all wiki changes between two benchmark iterations - what pages were affected and how
+- **get_edit_details**: Get the full before and after content for a specific edit - see exactly what changed
+
+Use history tools to answer: "What exactly changed in the wiki between iterations? How did specific pages evolve over time?"
+
 **Full provenance tracing is now available.** The system tracks:
 - Which orchestrator decision created each work item (orchestratorRunId)
 - Which work item led to each edit request (workItemId)
@@ -150,11 +158,13 @@ Round 1: get_question_history("q1") + get_question_history("q2") + get_question_
 - Fetch multiple wiki pages simultaneously when investigating content gaps
 - When checking source code, read several related files together
 
-**Phase 3 - Provenance & Orchestration (5-10 rounds):**
+**Phase 3 - Provenance & History (5-10 rounds):**
 - Call get_orchestrator_decisions to see what work was planned and prioritized
 - Call get_provenance_trace for problematic pages to see the full chain back to orchestrator decisions
 - Call get_work_item_outcomes to understand what happened after work was assigned
-- Call get_page_provenance for multiple problematic pages at once
+- Call get_page_provenance AND get_page_edit_history for multiple problematic pages at once
+- Call compare_wiki_versions for different iteration ranges in parallel
+- Call get_agent_run_changes for multiple agent runs simultaneously
 - Call get_iterations_between for different time periods in parallel
 - Compare: What did the orchestrator plan vs what benchmarks reveal is missing?
 

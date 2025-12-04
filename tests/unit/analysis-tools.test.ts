@@ -1280,4 +1280,202 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('orchestrator'));
     });
   });
+
+  // Wiki Page History Tools
+  describe('get_page_edit_history', () => {
+    it('returns message when page not found', async () => {
+      const context = createMockContext({
+        wikiPages: [],
+      });
+
+      const { getPageEditHistoryTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getPageEditHistoryTool.execute({ page_path: 'nonexistent' }, context);
+      assert.ok(result.includes('not found'));
+    });
+
+    it('returns message when no history found', async () => {
+      const context = createMockContext({
+        wikiPages: [createMockPage('docs/api', 'API', 'Content')],
+        repos: {
+          wikiPageHistory: {
+            findByPage: async () => [],
+          },
+        } as unknown as Repositories,
+      });
+
+      const { getPageEditHistoryTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getPageEditHistoryTool.execute({ page_path: 'docs/api' }, context);
+      assert.ok(result.includes('No edit history found'));
+    });
+
+    it('returns formatted edit history', async () => {
+      const mockHistory = [
+        {
+          id: 'hist-1',
+          wikiId: 'wiki-1',
+          pageId: 'page-1',
+          pagePath: 'docs/api',
+          operation: 'update' as const,
+          timestamp: new Date('2024-01-15'),
+          contentBefore: 'Old content',
+          contentAfter: 'New content',
+          agentType: 'wiki-editor' as const,
+          agentRunId: 'run-1',
+        },
+        {
+          id: 'hist-2',
+          wikiId: 'wiki-1',
+          pageId: 'page-1',
+          pagePath: 'docs/api',
+          operation: 'create' as const,
+          timestamp: new Date('2024-01-10'),
+          contentBefore: null,
+          contentAfter: 'Initial content',
+          agentType: 'bootstrap' as const,
+        },
+      ];
+
+      const context = createMockContext({
+        wikiPages: [{ ...createMockPage('docs/api', 'API Docs', 'Content'), id: 'page-1' }],
+        repos: {
+          wikiPageHistory: {
+            findByPage: async () => mockHistory,
+          },
+        } as unknown as Repositories,
+      });
+
+      const { getPageEditHistoryTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getPageEditHistoryTool.execute({ page_path: 'docs/api' }, context);
+
+      assert.ok(result.includes('Edit History'));
+      assert.ok(result.includes('Total changes: 2'));
+      assert.ok(result.includes('UPDATE'));
+      assert.ok(result.includes('CREATE'));
+      assert.ok(result.includes('wiki-editor'));
+      assert.ok(result.includes('bootstrap'));
+    });
+  });
+
+  describe('get_agent_run_changes', () => {
+    it('returns message when no changes found', async () => {
+      const context = createMockContext({
+        repos: {
+          wikiPageHistory: {
+            findByAgentRun: async () => [],
+          },
+        } as unknown as Repositories,
+      });
+
+      const { getAgentRunChangesTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getAgentRunChangesTool.execute({ agent_run_id: 'run-1' }, context);
+      assert.ok(result.includes('No wiki changes found'));
+    });
+
+    it('returns formatted agent changes', async () => {
+      const mockHistory = [
+        {
+          id: 'hist-1',
+          wikiId: 'wiki-1',
+          pageId: 'page-1',
+          pagePath: 'docs/api',
+          operation: 'update' as const,
+          timestamp: new Date('2024-01-15'),
+          contentBefore: 'Old',
+          contentAfter: 'New content here',
+          agentType: 'wiki-editor' as const,
+          agentRunId: 'run-1',
+        },
+        {
+          id: 'hist-2',
+          wikiId: 'wiki-1',
+          pageId: 'page-2',
+          pagePath: 'docs/guide',
+          operation: 'create' as const,
+          timestamp: new Date('2024-01-15'),
+          contentBefore: null,
+          contentAfter: 'New page',
+          agentType: 'wiki-editor' as const,
+          agentRunId: 'run-1',
+        },
+      ];
+
+      const context = createMockContext({
+        repos: {
+          wikiPageHistory: {
+            findByAgentRun: async () => mockHistory,
+          },
+        } as unknown as Repositories,
+      });
+
+      const { getAgentRunChangesTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getAgentRunChangesTool.execute({ agent_run_id: 'run-1' }, context);
+
+      assert.ok(result.includes('Changes by Agent Run: run-1'));
+      assert.ok(result.includes('Total changes: 2'));
+      assert.ok(result.includes('docs/api'));
+      assert.ok(result.includes('docs/guide'));
+    });
+  });
+
+  describe('get_edit_details', () => {
+    it('returns message when page not found', async () => {
+      const context = createMockContext({
+        wikiPages: [],
+      });
+
+      const { getEditDetailsTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getEditDetailsTool.execute({ page_path: 'nonexistent', edit_index: '0' }, context);
+      assert.ok(result.includes('not found'));
+    });
+
+    it('returns message when edit index out of range', async () => {
+      const context = createMockContext({
+        wikiPages: [{ ...createMockPage('docs/api', 'API', 'Content'), id: 'page-1' }],
+        repos: {
+          wikiPageHistory: {
+            findByPage: async () => [{ id: 'hist-1', operation: 'create' }],
+          },
+        } as unknown as Repositories,
+      });
+
+      const { getEditDetailsTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getEditDetailsTool.execute({ page_path: 'docs/api', edit_index: '5' }, context);
+      assert.ok(result.includes('out of range'));
+    });
+
+    it('returns full edit details with content', async () => {
+      const mockHistory = [
+        {
+          id: 'hist-1',
+          wikiId: 'wiki-1',
+          pageId: 'page-1',
+          pagePath: 'docs/api',
+          operation: 'update' as const,
+          timestamp: new Date('2024-01-15'),
+          contentBefore: '# Old Content\n\nOld text here.',
+          contentAfter: '# New Content\n\nNew text here with more details.',
+          agentType: 'wiki-editor' as const,
+          agentRunId: 'run-1',
+        },
+      ];
+
+      const context = createMockContext({
+        wikiPages: [{ ...createMockPage('docs/api', 'API', 'Content'), id: 'page-1' }],
+        repos: {
+          wikiPageHistory: {
+            findByPage: async () => mockHistory,
+          },
+        } as unknown as Repositories,
+      });
+
+      const { getEditDetailsTool } = await import('../../src/services/llm/analysis-tools.js');
+      const result = await getEditDetailsTool.execute({ page_path: 'docs/api', edit_index: '0' }, context);
+
+      assert.ok(result.includes('Edit Details'));
+      assert.ok(result.includes('Content Before'));
+      assert.ok(result.includes('Old Content'));
+      assert.ok(result.includes('Content After'));
+      assert.ok(result.includes('New Content'));
+    });
+  });
 });

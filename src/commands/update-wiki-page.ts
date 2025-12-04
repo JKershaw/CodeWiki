@@ -3,6 +3,11 @@ import type { Command, CommandResult } from './types.js';
 import { success, failure } from './types.js';
 import type { Repositories } from '../repositories/index.js';
 import { createWikiPage, type WikiPage, type WikiPageUpdate } from '../domain/wiki-page.js';
+import {
+  createWikiPageHistory,
+  type WikiPageHistoryOperation,
+  type WikiPageHistoryAgentType,
+} from '../domain/wiki-page-history.js';
 
 /**
  * Command to update a wiki page.
@@ -55,6 +60,18 @@ export async function handleUpdateWikiPage(
       const page = createWikiPage(createParams);
 
       await repos.wikiPages.save(page);
+
+      // Record history for create
+      await recordHistory(repos, {
+        wikiId,
+        pageId: page.id,
+        pagePath: page.path,
+        operation: 'create',
+        contentBefore: null,
+        contentAfter: page.content,
+        agentRunId: update.agentRunId,
+      });
+
       return success(page);
     }
 
@@ -62,6 +79,9 @@ export async function handleUpdateWikiPage(
       if (!existing) {
         return failure(`Page not found at path: ${update.path}`);
       }
+
+      // Capture content before update for history
+      const contentBefore = existing.content;
 
       const updateParams: { content: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
         content: update.content,
@@ -74,6 +94,17 @@ export async function handleUpdateWikiPage(
         updateParams.sourceAgentRunId = update.agentRunId;
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
+
+      // Record history for update
+      await recordHistory(repos, {
+        wikiId,
+        pageId: existing.id,
+        pagePath: existing.path,
+        operation: 'update',
+        contentBefore,
+        contentAfter: update.content,
+        agentRunId: update.agentRunId,
+      });
 
       const updated = await repos.wikiPages.findById(existing.id);
       return success(updated!);
@@ -98,8 +129,23 @@ export async function handleUpdateWikiPage(
         const page = createWikiPage(createParams);
 
         await repos.wikiPages.save(page);
+
+        // Record history for create (merge on non-existent page)
+        await recordHistory(repos, {
+          wikiId,
+          pageId: page.id,
+          pagePath: page.path,
+          operation: 'create',
+          contentBefore: null,
+          contentAfter: page.content,
+          agentRunId: update.agentRunId,
+        });
+
         return success(page);
       }
+
+      // Capture content before merge for history
+      const contentBefore = existing.content;
 
       // Merge content (append new content to existing)
       const mergedContent = mergeContent(existing.content, update.content);
@@ -114,6 +160,17 @@ export async function handleUpdateWikiPage(
         mergeUpdateParams.sourceAgentRunId = update.agentRunId;
       }
       await repos.wikiPages.updateContent(existing.id, mergeUpdateParams);
+
+      // Record history for update (merge on existing page)
+      await recordHistory(repos, {
+        wikiId,
+        pageId: existing.id,
+        pagePath: existing.path,
+        operation: 'update',
+        contentBefore,
+        contentAfter: mergedContent,
+        agentRunId: update.agentRunId,
+      });
 
       const updated = await repos.wikiPages.findById(existing.id);
       return success(updated!);
@@ -142,6 +199,17 @@ export async function handleUpdateWikiPage(
           }
         }
       }
+
+      // Record history for delete (before actual deletion)
+      await recordHistory(repos, {
+        wikiId,
+        pageId: existing.id,
+        pagePath: existing.path,
+        operation: 'delete',
+        contentBefore: existing.content,
+        contentAfter: null,
+        agentRunId: update.agentRunId,
+      });
 
       // Delete the page
       await repos.wikiPages.delete(existing.id);
@@ -179,4 +247,43 @@ function mergeContent(existing: string, incoming: string): string {
  */
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Record a wiki page mutation in the history.
+ */
+async function recordHistory(
+  repos: Repositories,
+  params: {
+    wikiId: string;
+    pageId: string;
+    pagePath: string;
+    operation: WikiPageHistoryOperation;
+    contentBefore: string | null;
+    contentAfter: string | null;
+    agentRunId?: string;
+    workItemId?: string;
+    editRequestId?: string;
+  }
+): Promise<void> {
+  // Infer agent type from context (could be enhanced with more metadata)
+  const agentType: WikiPageHistoryAgentType = params.agentRunId
+    ? 'wiki-editor' // Default to wiki-editor when we have an agent run
+    : 'unknown';
+
+  const history = createWikiPageHistory({
+    id: uuid(),
+    wikiId: params.wikiId,
+    pageId: params.pageId,
+    pagePath: params.pagePath,
+    operation: params.operation,
+    contentBefore: params.contentBefore,
+    contentAfter: params.contentAfter,
+    agentRunId: params.agentRunId,
+    workItemId: params.workItemId,
+    editRequestId: params.editRequestId,
+    agentType,
+  });
+
+  await repos.wikiPageHistory.save(history);
 }

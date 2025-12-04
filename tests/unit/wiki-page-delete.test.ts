@@ -12,10 +12,12 @@ import {
 } from '../../src/commands/update-wiki-page.js';
 import type { Repositories } from '../../src/repositories/index.js';
 import type { WikiPage, WikiPageUpdate } from '../../src/domain/wiki-page.js';
+import type { WikiPageHistory } from '../../src/domain/wiki-page-history.js';
 
 // Create a minimal mock repositories object for testing
 function createMockRepos(): Repositories {
   const wikiPages = new Map<string, WikiPage>();
+  const wikiPageHistory = new Map<string, WikiPageHistory>();
 
   const mockWikiPages: Repositories['wikiPages'] = {
     findById: async (id) => wikiPages.get(id) ?? null,
@@ -50,8 +52,24 @@ function createMockRepos(): Repositories {
     removeBacklink: async () => {},
   };
 
+  const mockWikiPageHistory: Repositories['wikiPageHistory'] = {
+    findById: async (id) => wikiPageHistory.get(id) ?? null,
+    findByPage: async () => [],
+    findByWiki: async () => [],
+    findByAgentRun: async () => [],
+    findByTimeRange: async () => [],
+    findByPagePath: async () => [],
+    getLatestByPage: async () => null,
+    countByWiki: async () => 0,
+    save: async (history) => { wikiPageHistory.set(history.id, history); },
+    delete: async (id) => { wikiPageHistory.delete(id); },
+    deleteByWiki: async () => {},
+    deleteByPage: async () => {},
+  };
+
   return {
     wikiPages: mockWikiPages,
+    wikiPageHistory: mockWikiPageHistory,
   } as Repositories;
 }
 
