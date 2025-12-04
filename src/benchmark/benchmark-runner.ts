@@ -9,8 +9,10 @@ import { randomUUID } from 'crypto';
 import type { Repositories } from '../repositories/index.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { GitService } from '../services/git/git-service.js';
+import type { RepositoryServiceFactory, RepositoryService } from '../services/repository/repository-service.js';
+import type { Repo } from '../domain/repo.js';
 import { ResearchAgent } from '../agents/research/research-agent.js';
-import { GraderAgent } from './grader-agent.js';
+import { GraderAgent, type GradeContext } from './grader-agent.js';
 import { loadQuestions, loadQuestionsByIds } from './question-loader.js';
 import {
   handleStartBenchmark,
@@ -46,7 +48,8 @@ export class BenchmarkRunner {
   constructor(
     private readonly repos: Repositories,
     private readonly llm: LLMService,
-    private readonly git: GitService
+    private readonly git: GitService,
+    private readonly repoServiceFactory?: RepositoryServiceFactory
   ) {
     this.research = new ResearchAgent(repos, llm);
     this.grader = new GraderAgent(llm);
@@ -82,12 +85,10 @@ export class BenchmarkRunner {
       // Get current page count from wiki
       const pageCount = await this.getPageCount(wikiId);
 
-      // Get repository path from git service (may not be available for GitHub repos)
-      let repoPath: string;
-      try {
-        repoPath = this.git.getRepoPath(repoId);
-      } catch {
-        throw new Error('Benchmarking requires a local repository clone. GitHub API-only repos are not yet supported for benchmarks.');
+      // Build grading context - supports both local repos and GitHub repos
+      const gradeContext = await this.buildGradeContext(repoId, repo);
+      if (!gradeContext) {
+        throw new Error('Unable to access repository for benchmarking. No local path or repository service available.');
       }
 
       // Start benchmark run
@@ -111,7 +112,7 @@ export class BenchmarkRunner {
       const results = await this.executeQuestionsParallel(
         questions,
         wikiId,
-        repoPath,
+        gradeContext,
         maxConcurrency
       );
 
@@ -153,7 +154,7 @@ export class BenchmarkRunner {
   private async executeQuestionsParallel(
     questions: BenchmarkQuestion[],
     wikiId: string,
-    repoPath: string,
+    gradeContext: GradeContext,
     maxConcurrency: number
   ): Promise<BenchmarkResult[]> {
     const results: BenchmarkResult[] = [];
@@ -162,7 +163,7 @@ export class BenchmarkRunner {
 
     const executeOne = async (question: BenchmarkQuestion): Promise<void> => {
       try {
-        const result = await this.evaluateQuestion(question, wikiId, repoPath);
+        const result = await this.evaluateQuestion(question, wikiId, gradeContext);
         results.push(result);
       } catch (error) {
         // Create a failed result for this question
@@ -207,7 +208,7 @@ export class BenchmarkRunner {
   private async evaluateQuestion(
     question: BenchmarkQuestion,
     wikiId: string,
-    repoPath: string
+    gradeContext: GradeContext
   ): Promise<BenchmarkResult> {
     const startTime = Date.now();
 
@@ -218,7 +219,7 @@ export class BenchmarkRunner {
     const gradeResult = await this.grader.grade(
       question,
       researchResult.answer,
-      repoPath
+      gradeContext
     );
 
     const durationMs = Date.now() - startTime;
@@ -255,6 +256,43 @@ export class BenchmarkRunner {
     const pages = await this.repos.wikiPages.findByWiki(wikiId);
     return pages.length;
   }
+
+  /**
+   * Build the grading context for a repository.
+   * Supports both local repos (via filesystem) and GitHub repos (via API).
+   */
+  private async buildGradeContext(repoId: string, repo: Repo | null): Promise<GradeContext | null> {
+    // Try local filesystem first
+    try {
+      const repoPath = this.git.getRepoPath(repoId);
+      return { repoPath };
+    } catch {
+      // No local path available, try GitHub API
+    }
+
+    // Try GitHub API if we have a repo service factory and repo entity
+    if (this.repoServiceFactory && repo) {
+      // For GitHub repos, create an authenticated service if possible
+      let repoService: RepositoryService;
+      if (repo.isGitHubRepo && repo.userId) {
+        // Look up user's access token for authenticated GitHub access
+        const user = await this.repos.users.findById(repo.userId);
+        if (user?.accessToken) {
+          repoService = this.repoServiceFactory.getServiceWithToken(repo, user.accessToken);
+        } else {
+          // Fall back to unauthenticated access
+          repoService = this.repoServiceFactory.getService(repo);
+        }
+      } else {
+        repoService = this.repoServiceFactory.getService(repo);
+      }
+
+      return { repoService, repo };
+    }
+
+    // No access method available
+    return null;
+  }
 }
 
 /**
@@ -263,7 +301,8 @@ export class BenchmarkRunner {
 export function createBenchmarkRunner(
   repos: Repositories,
   llm: LLMService,
-  git: GitService
+  git: GitService,
+  repoServiceFactory?: RepositoryServiceFactory
 ): BenchmarkRunner {
-  return new BenchmarkRunner(repos, llm, git);
+  return new BenchmarkRunner(repos, llm, git, repoServiceFactory);
 }
