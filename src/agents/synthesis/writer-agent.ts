@@ -301,11 +301,20 @@ BAD article openings (NEVER write these):
 
 ## Content Structure
 
-A good wiki article typically has:
-1. Opening paragraph explaining what this is
-2. Why it matters / when to use it
-3. How it works (details)
-4. Examples or usage
-5. Related concepts (with links)
+A good wiki article MUST have:
+
+1. **Opening paragraph** - What this is and why it matters (not "this commit adds...")
+2. **How it works** - Explain the mechanism:
+   - What are the key components?
+   - How do they interact?
+   - What's the control flow?
+3. **Usage/Configuration** - Practical details:
+   - Required configuration or environment variables
+   - API signatures or function calls
+   - Code examples (prefer examples from tests when available)
+4. **Edge cases/Limitations** - What developers should watch out for
+5. **Related concepts** - Links to other wiki pages
+
+If the source content doesn't provide enough detail for sections 2-4, note what's unclear rather than making things up.
 
 Transform commit-focused content into timeless documentation that explains the codebase as it exists today.`;

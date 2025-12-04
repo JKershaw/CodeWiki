@@ -265,6 +265,9 @@ Link strength guidelines:
 - **medium**: Related context (same component area, similar patterns, same time period)
 - **weak**: Any topical connection (same category, mentioned concepts, related technology)
 
+Quality consideration:
+Before suggesting a link, consider whether the source page has enough context that the link will be useful. If a page is very shallow (just a title and one sentence), note in your reason that it "needs more content before linking would add value".
+
 Types of links to look for:
 1. Commits about the same feature area
 2. Architecture/design docs related to commits

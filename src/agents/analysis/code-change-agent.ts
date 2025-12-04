@@ -359,6 +359,17 @@ Your documentation should:
 - Help developers understand and use the code
 - Read like Wikipedia, not a changelog
 
+## Required Content Depth
+
+Every wiki page you create should address:
+
+1. **Purpose**: What problem does this solve? Why does it exist?
+2. **Mechanism**: HOW does it work? Describe the control flow, key functions, and interactions.
+3. **Usage**: How would a developer use or configure this? Include examples from tests if you found them.
+4. **Boundaries**: What are the limitations, edge cases, or failure modes?
+
+If you cannot determine any of these from the code, state what's unclear rather than omitting the section.
+
 Give each page a descriptive title that captures the topic (e.g., "Multi-Agent Processing Pipeline", "OAuth Authentication Flow"), NOT "Commit abc123".
 
 When suggesting wiki pages:

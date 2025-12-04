@@ -245,7 +245,13 @@ Review each page for:
 2. **Accuracy**: Does the content seem accurate based on what's described?
 3. **Completeness**: Are there missing pieces that should be added?
 4. **Usefulness**: Would a developer find this helpful?
-5. **Improvements**: What specific changes would improve each page?
+5. **Depth**: Does the page explain HOW things work, or just WHAT exists?
+6. **Improvements**: What specific changes would improve each page?
+
+FLAG pages that:
+- Describe something without explaining its mechanism
+- Lack usage examples or configuration details
+- Are too abstract to be actionable
 
 ## Required Output Format
 
@@ -342,10 +348,26 @@ Think like a technical editor reviewing documentation. Good wiki content:
 - Avoids vague or unclear language
 - Provides actionable information
 
+## Depth Check (Critical)
+
+For each page, verify it answers these questions:
+1. **What is it?** - Does the page explain the purpose clearly?
+2. **How does it work?** - Does it describe mechanisms, not just existence?
+3. **How do I use it?** - Are there examples, configuration details, or API signatures?
+4. **What can go wrong?** - Are edge cases, limitations, or failure modes mentioned?
+
+Pages that only describe WHAT something is without explaining HOW it works should be flagged as "needs depth".
+
+Example of SHALLOW content (flag this):
+> "The WorkQueue manages pending tasks for the executor."
+
+Example of SUBSTANTIVE content (this is good):
+> "The WorkQueue manages pending tasks using a Redis-backed priority queue. Tasks are claimed via WorkQueueRepository.claimBatch(), which uses atomic operations to prevent duplicate processing. If a task fails, it's re-queued with exponential backoff up to 3 retries."
+
 When reviewing:
 - Be specific about issues found
 - Suggest concrete improvements
-- Prioritize high-impact changes
-- Consider the reader's needs (developers looking for context)
+- Prioritize depth issues over style issues
+- Flag pages that describe but don't explain
 
 Focus on content quality, not structure (that's another agent's job).`;
