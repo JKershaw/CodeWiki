@@ -286,7 +286,7 @@ describe('Wiki Commands', () => {
       assert.strictEqual(pagesAfter.length, 0);
     });
 
-    it('fails when wiki is active', async () => {
+    it('succeeds when wiki is active', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -301,12 +301,11 @@ describe('Wiki Commands', () => {
       const command = createDeleteWikiCommand(wikiId);
       const result = await handleDeleteWiki(command, repos);
 
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('active'));
+      assert.strictEqual(result.success, true);
 
-      // Wiki should still exist
+      // Wiki should be deleted
       const existing = await repos.wikis.findById(wikiId);
-      assert.ok(existing);
+      assert.strictEqual(existing, null);
     });
 
     it('fails when wiki does not exist', async () => {
