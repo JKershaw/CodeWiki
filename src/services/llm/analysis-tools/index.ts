@@ -54,12 +54,21 @@ export {
   provenanceTools,
 } from './provenance-tools.js';
 
+export {
+  getPageEditHistoryTool,
+  getAgentRunChangesTool,
+  compareWikiVersionsTool,
+  getEditDetailsTool,
+  historyTools,
+} from './history-tools.js';
+
 // Import tool arrays
 import { benchmarkTools } from './benchmark-tools.js';
 import { qualityTools } from './quality-tools.js';
 import { wikiPageTools } from './wiki-page-tools.js';
 import { sourceTools } from './source-tools.js';
 import { provenanceTools } from './provenance-tools.js';
+import { historyTools } from './history-tools.js';
 
 import type { AnalysisToolDefinition } from './types.js';
 
@@ -72,4 +81,5 @@ export const analysisTools: AnalysisToolDefinition[] = [
   ...wikiPageTools,
   ...sourceTools,
   ...provenanceTools,
+  ...historyTools,
 ];
