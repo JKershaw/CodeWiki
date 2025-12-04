@@ -20,7 +20,7 @@ import {
  * Create benchmark routes.
  */
 export function createBenchmarksRoutes(deps: Dependencies): Router {
-  const { repos, git, createLLM } = deps;
+  const { repos, git, createLLM, repoServiceFactory } = deps;
   const router = Router();
 
   /**
@@ -60,7 +60,7 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
 
       // Create LLM service and runner
       const llm = createLLM();
-      const runner = new BenchmarkRunner(repos, llm, git);
+      const runner = new BenchmarkRunner(repos, llm, git, repoServiceFactory);
 
       // Parse options from request body
       const options: { questionIds?: string[]; maxConcurrency?: number } = {};

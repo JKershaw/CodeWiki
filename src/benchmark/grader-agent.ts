@@ -3,12 +3,17 @@
  *
  * The grader uses tool calls to read code files and verify
  * whether the wiki's answer is accurate, partial, or incorrect.
+ *
+ * Supports both local repositories (via filesystem) and GitHub
+ * repositories (via RepositoryService API).
  */
 
 import type { LLMService } from '../services/llm/llm-service.js';
-import type { ToolContext } from '../services/llm/tools.js';
-import { readFileTool, searchFilesTool, listDirectoryTool } from '../services/llm/codebase-tools.js';
+import type { ToolContext, ToolDefinition } from '../services/llm/tools.js';
+import { readFileTool, searchFilesTool, listDirectoryTool, codebaseTools } from '../services/llm/codebase-tools.js';
 import type { BenchmarkQuestion, BenchmarkGrade } from '../domain/benchmark.js';
+import type { RepositoryService } from '../services/repository/repository-service.js';
+import type { Repo } from '../domain/repo.js';
 
 /**
  * Result of grading a wiki answer.
@@ -27,6 +32,18 @@ export interface GradeResult {
 }
 
 /**
+ * Context for grading - supports both local and GitHub repos.
+ */
+export interface GradeContext {
+  /** Local filesystem path (for local repos) */
+  repoPath?: string;
+  /** Repository service (for GitHub repos) */
+  repoService?: RepositoryService;
+  /** Repository entity (required when using repoService) */
+  repo?: Repo;
+}
+
+/**
  * Grader Agent that evaluates wiki answers by checking against code.
  */
 export class GraderAgent {
@@ -36,51 +53,43 @@ export class GraderAgent {
 
   /**
    * Grade a wiki answer against the actual codebase.
+   *
+   * @param question - The benchmark question being evaluated
+   * @param wikiAnswer - The wiki's answer to the question
+   * @param context - Either a string (legacy repoPath) or GradeContext object
    */
   async grade(
     question: BenchmarkQuestion,
     wikiAnswer: string,
-    repoPath: string
+    context: string | GradeContext
   ): Promise<GradeResult> {
     const filesChecked: string[] = [];
 
-    // Create tool context
-    const toolContext: ToolContext = {
-      repoPath,
-      maxFileSize: 50000, // 50KB per file for grading
-    };
+    // Normalize context - support legacy string repoPath for backwards compatibility
+    const gradeContext: GradeContext = typeof context === 'string'
+      ? { repoPath: context }
+      : context;
 
-    // Define available tools
-    const tools = [readFileTool, searchFilesTool, listDirectoryTool];
+    // Create tools based on what's available
+    const toolSetup = this.createToolsForContext(gradeContext, filesChecked);
+
+    if (!toolSetup) {
+      // No tools available - return a result indicating we couldn't verify
+      return {
+        grade: 'partial',
+        confidence: 0.3,
+        reasoning: 'Unable to access repository to verify the wiki answer. No local path or repository service available.',
+        filesChecked: [],
+        costUsd: 0,
+      };
+    }
+
+    const { tools, executeTools } = toolSetup;
     const toolDefs = tools.map(t => ({
       name: t.name,
       description: t.description,
       inputSchema: t.inputSchema as Record<string, unknown>,
     }));
-
-    // Execute tool function
-    const executeTools = async (
-      calls: Array<{ id: string; name: string; input: Record<string, unknown> }>
-    ): Promise<Array<{ id: string; result: string }>> => {
-      const results: Array<{ id: string; result: string }> = [];
-
-      for (const call of calls) {
-        const tool = tools.find(t => t.name === call.name);
-        if (tool) {
-          const result = await tool.execute(call.input, toolContext);
-          results.push({ id: call.id, result });
-
-          // Track file reads
-          if (call.name === 'read_file' && call.input['path']) {
-            filesChecked.push(call.input['path'] as string);
-          }
-        } else {
-          results.push({ id: call.id, result: `Unknown tool: ${call.name}` });
-        }
-      }
-
-      return results;
-    };
 
     // Build the grading prompt
     const verificationContext = question.verificationHints?.length
@@ -130,6 +139,165 @@ Start by reading the relevant code files, then provide your grade.`;
       reasoning: parsed.reasoning,
       filesChecked,
       costUsd: result.costUsd,
+    };
+  }
+
+  /**
+   * Create tools for the given grading context.
+   * Returns null if no tools can be created (no access method available).
+   */
+  private createToolsForContext(
+    context: GradeContext,
+    filesChecked: string[]
+  ): {
+    tools: ToolDefinition[];
+    executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
+  } | null {
+    // Try local filesystem first (if repoPath is provided)
+    if (context.repoPath) {
+      const toolContext: ToolContext = {
+        repoPath: context.repoPath,
+        maxFileSize: 50000, // 50KB per file for grading
+      };
+
+      const tools = [readFileTool, searchFilesTool, listDirectoryTool];
+
+      return {
+        tools,
+        executeTools: async (calls) => {
+          const results: Array<{ id: string; result: string }> = [];
+
+          for (const call of calls) {
+            const tool = tools.find(t => t.name === call.name);
+            if (tool) {
+              const result = await tool.execute(call.input, toolContext);
+              results.push({ id: call.id, result });
+
+              // Track file reads
+              if (call.name === 'read_file' && call.input['path']) {
+                filesChecked.push(call.input['path'] as string);
+              }
+            } else {
+              results.push({ id: call.id, result: `Unknown tool: ${call.name}` });
+            }
+          }
+
+          return results;
+        },
+      };
+    }
+
+    // Try GitHub API (if repoService and repo are provided)
+    if (context.repoService && context.repo) {
+      return this.createApiTools(context.repoService, context.repo, filesChecked);
+    }
+
+    // No access method available
+    return null;
+  }
+
+  /**
+   * Create API-based tools for GitHub repositories.
+   */
+  private createApiTools(
+    repoService: RepositoryService,
+    repo: Repo,
+    filesChecked: string[]
+  ): {
+    tools: ToolDefinition[];
+    executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
+  } {
+    const apiTools: ToolDefinition[] = [
+      {
+        name: 'read_file',
+        description: 'Read the contents of a file from the repository.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Relative path from repository root',
+            },
+          },
+          required: ['path'],
+        },
+        execute: async (input) => {
+          const path = input['path'] as string;
+          try {
+            filesChecked.push(path);
+            return await repoService.getFileContent(repo, path);
+          } catch (error) {
+            return `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+      {
+        name: 'list_directory',
+        description: 'List contents of a directory.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Directory path relative to repo root',
+            },
+          },
+          required: ['path'],
+        },
+        execute: async (input) => {
+          const path = input['path'] as string;
+          try {
+            const entries = await repoService.listDirectory(repo, path);
+            return entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
+          } catch (error) {
+            return `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+      {
+        name: 'search_files',
+        description: 'Search for files matching a pattern. Returns file paths.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'Glob pattern (e.g., "**/*.ts")',
+            },
+          },
+          required: ['pattern'],
+        },
+        execute: async (input) => {
+          const pattern = input['pattern'] as string;
+          try {
+            const allFiles = await repoService.getFileTree(repo);
+            // Simple glob matching (supports **, *, and ?)
+            const matches = filterByGlob(allFiles, pattern);
+            if (matches.length === 0) {
+              return `No files found matching "${pattern}"`;
+            }
+            return matches.join('\n');
+          } catch (error) {
+            return `Error searching for "${pattern}": ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+    ];
+
+    return {
+      tools: apiTools,
+      executeTools: async (calls) => {
+        const results = await Promise.all(calls.map(async (call) => {
+          const tool = apiTools.find(t => t.name === call.name);
+          if (!tool) {
+            return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
+          }
+          // API tools don't need a toolContext, they use the repoService directly
+          const result = await tool.execute(call.input, { repoPath: '', maxFileSize: 100000 });
+          return { id: call.id, result };
+        }));
+        return results;
+      },
     };
   }
 
@@ -198,6 +366,21 @@ GRADE: [accurate|partial|inaccurate|no_answer]
 CONFIDENCE: [0.0-1.0]
 
 Then explain your reasoning briefly.`;
+
+/**
+ * Simple glob pattern matching for file paths.
+ */
+function filterByGlob(files: string[], pattern: string): string[] {
+  // Convert glob pattern to regex
+  const regexPattern = pattern
+    .replace(/\*\*/g, '<<<GLOBSTAR>>>')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\?/g, '.')
+    .replace(/<<<GLOBSTAR>>>/g, '.*');
+
+  const regex = new RegExp(`^${regexPattern}$`);
+  return files.filter(file => regex.test(file));
+}
 
 /**
  * Create a grader agent instance.
