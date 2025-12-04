@@ -185,25 +185,21 @@ test.describe('Wiki Management API', () => {
     expect(verifyResponse.status()).toBe(404);
   });
 
-  test('cannot delete active wiki', async ({ request }) => {
-    // Find or create an active wiki
-    const wikisResponse = await request.get(`/api/repos/${repoId}/wikis`);
-    const wikis = await wikisResponse.json();
+  test('can delete active wiki', async ({ request }) => {
+    // Create an active wiki specifically for deletion
+    const createResponse = await request.post(`/api/repos/${repoId}/wikis`, {
+      data: { name: `active-wiki-delete-${testId}`, setActive: true },
+    });
+    expect(createResponse.ok()).toBeTruthy();
+    const activeWiki = await createResponse.json();
 
-    let activeWiki = wikis.find((w: any) => w.isActive);
-    if (!activeWiki) {
-      const createResponse = await request.post(`/api/repos/${repoId}/wikis`, {
-        data: { name: `active-wiki-nodelete-${testId}`, setActive: true },
-      });
-      activeWiki = await createResponse.json();
-    }
-
-    // Try to delete active wiki
+    // Delete the active wiki - should succeed
     const deleteResponse = await request.delete(`/api/repos/${repoId}/wikis/${activeWiki.id}`);
+    expect(deleteResponse.status()).toBe(204);
 
-    expect(deleteResponse.status()).toBe(400);
-    const error = await deleteResponse.json();
-    expect(error.error).toContain('active');
+    // Verify it's gone
+    const verifyResponse = await request.get(`/api/repos/${repoId}/wikis/${activeWiki.id}`);
+    expect(verifyResponse.status()).toBe(404);
   });
 
   test('repos endpoint includes active wiki info', async ({ request }) => {
