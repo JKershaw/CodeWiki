@@ -2,9 +2,8 @@ import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-ag
 import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
-import { codebaseTools } from '../../services/llm/codebase-tools.js';
-import type { ToolContext } from '../../services/llm/tools.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import { createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Extension Guide Agent - Creates documentation for extending the codebase.
@@ -80,29 +79,8 @@ export class ExtensionGuideAgent implements Agent {
       };
     }
 
-    // Set up tool context for codebase exploration
-    const repoPath = context.git.getRepoPath(context.repoId);
-    const toolContext: ToolContext = {
-      repoPath,
-      maxFileSize: 50000, // 50KB limit per file
-    };
-
-    // Create tool executor
-    const executeTools = async (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => {
-      const results = await Promise.all(calls.map(async (call) => {
-        const tool = codebaseTools.find(t => t.name === call.name);
-        if (!tool) {
-          return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
-        }
-        try {
-          const result = await tool.execute(call.input, toolContext);
-          return { id: call.id, result };
-        } catch (error) {
-          return { id: call.id, result: `Error: ${error instanceof Error ? error.message : String(error)}` };
-        }
-      }));
-      return results;
-    };
+    // Set up codebase exploration tools (works with both local and GitHub repos)
+    const toolExecutor = createCodebaseToolExecutor(context);
 
     // Build the prompt
     const prompt = this.buildPrompt(pages.length);
@@ -111,12 +89,12 @@ export class ExtensionGuideAgent implements Agent {
     const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      tools: codebaseTools.map(t => ({
+      tools: toolExecutor?.tools.map(t => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
-      })),
-      executeTools,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
       maxToolRounds: 7, // More rounds for deeper exploration
       maxTokens: 5000,
     });

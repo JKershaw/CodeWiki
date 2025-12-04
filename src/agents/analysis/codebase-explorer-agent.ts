@@ -2,11 +2,11 @@ import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-ag
 import { createAgentResult, createFinding, isPathTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
-import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
 import {
   createListWikiPagesQuery,
   handleListWikiPages,
 } from '../../queries/index.js';
+import { createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Codebase Explorer Agent - Documents undocumented parts of the codebase.
@@ -51,9 +51,6 @@ export class CodebaseExplorerAgent implements Agent {
   }
 
   private async runOnPathImpl(targetPath: string, context: AgentContext): Promise<AgentRunResult> {
-    // Get the full repo path
-    const repoPath = context.git.getRepoPath(context.repoId);
-
     // Check existing wiki pages to avoid duplication
     const pagesQuery = createListWikiPagesQuery(context.wikiId);
     const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
@@ -64,32 +61,19 @@ export class CodebaseExplorerAgent implements Agent {
     // Build the prompt for the LLM
     const prompt = this.buildPrompt(targetPath, existingPagePaths, existingContent);
 
-    // Set up tool context for codebase exploration
-    const toolContext: ToolContext = { repoPath, maxFileSize: 50000 };
-
-    // Create tool executor
-    const executeTools = async (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => {
-      const results = await Promise.all(calls.map(async (call) => {
-        const tool = codebaseTools.find(t => t.name === call.name);
-        if (!tool) {
-          return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
-        }
-        const result = await tool.execute(call.input, toolContext);
-        return { id: call.id, result };
-      }));
-      return results;
-    };
+    // Set up codebase exploration tools (works with both local and GitHub repos)
+    const toolExecutor = createCodebaseToolExecutor(context);
 
     // Get LLM analysis with tool use for deep exploration
     const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      tools: codebaseTools.map(t => ({
+      tools: toolExecutor?.tools.map(t => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
-      })),
-      executeTools,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
       maxToolRounds: 10, // Allow more exploration for directories
       maxTokens: 4000,
       temperature: 0.3,

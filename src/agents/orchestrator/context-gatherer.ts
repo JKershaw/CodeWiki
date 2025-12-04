@@ -258,7 +258,14 @@ export class ContextGatherer {
       return [];
     }
 
-    const repoPath = this.git.getRepoPath(repoId);
+    // For GitHub repos without a local clone, getRepoPath will throw
+    let repoPath: string;
+    try {
+      repoPath = this.git.getRepoPath(repoId);
+    } catch {
+      // No local path available (e.g., GitHub repo without clone)
+      return [];
+    }
     const srcPath = path.join(repoPath, 'src');
 
     // Check if src directory exists

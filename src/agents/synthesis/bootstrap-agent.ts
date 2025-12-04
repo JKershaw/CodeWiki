@@ -2,8 +2,8 @@ import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-ag
 import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
-import { codebaseTools, type ToolContext } from '../../services/llm/index.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import { createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Bootstrap Agent - Creates foundation pages for empty wikis.
@@ -60,33 +60,19 @@ export class BootstrapAgent implements Agent {
       };
     }
 
-    // Set up tool context for codebase exploration
-    const repoPath = context.git.getRepoPath(context.repoId);
-    const toolContext: ToolContext = { repoPath, maxFileSize: 50000 };
-
-    // Create tool executor
-    const executeTools = async (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => {
-      const results = await Promise.all(calls.map(async (call) => {
-        const tool = codebaseTools.find(t => t.name === call.name);
-        if (!tool) {
-          return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
-        }
-        const result = await tool.execute(call.input, toolContext);
-        return { id: call.id, result };
-      }));
-      return results;
-    };
+    // Set up codebase exploration tools (works with both local and GitHub repos)
+    const toolExecutor = createCodebaseToolExecutor(context);
 
     // Call LLM with tools to explore the repo
     const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: USER_PROMPT }],
-      tools: codebaseTools.map(t => ({
+      tools: toolExecutor?.tools.map(t => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
-      })),
-      executeTools,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
       maxToolRounds: 5,
       maxTokens: 4000,
     });

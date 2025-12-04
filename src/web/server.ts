@@ -21,6 +21,9 @@ import { createGitHubAuthRouter } from './routes/github-auth.js';
 import { passwordProtection } from './middleware/password-protection.js';
 import { createJwtService } from '../services/auth/jwt-service.js';
 import { createGitHubAuthService } from '../services/github/github-auth-service.js';
+import { createGitHubRepoService, type GitHubRepoService } from '../services/github/github-repo-service.js';
+import { createGitHubApiCache, createCachedGitHubRepoService } from '../services/github/github-api-cache.js';
+import { createRepositoryServiceFactory } from '../services/repository/repository-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -62,6 +65,13 @@ export async function startServer(port = PORT) {
   const repos = repoConnection.repositories;
   const git = createGitService();
 
+  // Create GitHub API cache
+  const githubCache = createGitHubApiCache();
+
+  // GitHub repo service (for API-based repository access)
+  // Will be configured with user's access token per-request
+  let githubRepoService: GitHubRepoService | undefined;
+
   // JWT service for authenticated git operations (created even if GitHub auth not fully configured)
   let jwtService: ReturnType<typeof createJwtService> | undefined;
 
@@ -91,6 +101,10 @@ export async function startServer(port = PORT) {
       sessionSecret: SESSION_SECRET,
     }));
 
+    // Create a base GitHub repo service (without auth - will be wrapped per-request)
+    const baseGithubRepoService = createGitHubRepoService();
+    githubRepoService = createCachedGitHubRepoService(baseGithubRepoService, githubCache);
+
     console.log('GitHub OAuth authentication enabled');
   }
 
@@ -100,8 +114,20 @@ export async function startServer(port = PORT) {
   // Static files (after password protection)
   app.use(express.static(join(__dirname, 'public')));
 
-  // API Routes (include jwtService for authenticated git operations if available)
-  const apiDeps = { repos, git, createLLM };
+  // Create repository service factory
+  const repoServiceFactory = createRepositoryServiceFactory({
+    ...(githubRepoService && { githubRepoService }),
+    gitService: git,
+  });
+
+  // API Routes (include jwtService and GitHub services if available)
+  const apiDeps = {
+    repos,
+    git,
+    createLLM,
+    repoServiceFactory,
+    ...(githubRepoService && { githubRepoService }),
+  };
   if (jwtService) {
     app.use(createApiRoutes({ ...apiDeps, jwtService }));
   } else {
