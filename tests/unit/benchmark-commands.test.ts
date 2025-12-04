@@ -13,6 +13,8 @@ import {
   handleCompleteBenchmark,
   createFailBenchmarkCommand,
   handleFailBenchmark,
+  createDeleteBenchmarkCommand,
+  handleDeleteBenchmark,
 } from '../../src/commands/benchmark.js';
 import {
   createGetBenchmarkHistoryQuery,
@@ -257,6 +259,91 @@ describe('Benchmark Commands', () => {
       const failed = await repos.benchmarks.findById(runId);
       assert.strictEqual(failed?.status, 'failed');
       assert.strictEqual(failed?.error, 'Something went wrong');
+    });
+  });
+
+  describe('DeleteBenchmark', () => {
+    it('deletes a completed benchmark', async () => {
+      const repos = createMockRepos();
+      const runId = uuid();
+
+      // Create a completed benchmark
+      const run = createBenchmarkRun({
+        id: runId,
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        iterationCount: 10,
+      });
+      (run as any).status = 'completed';
+      (run as any).completedAt = new Date();
+      await repos.benchmarks.save(run);
+
+      const command = createDeleteBenchmarkCommand(runId);
+      const result = await handleDeleteBenchmark(command, repos);
+
+      assert.strictEqual(result.success, true);
+
+      const deleted = await repos.benchmarks.findById(runId);
+      assert.strictEqual(deleted, null);
+    });
+
+    it('deletes a failed benchmark', async () => {
+      const repos = createMockRepos();
+      const runId = uuid();
+
+      // Create a failed benchmark
+      const run = createBenchmarkRun({
+        id: runId,
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        iterationCount: 10,
+      });
+      (run as any).status = 'failed';
+      (run as any).completedAt = new Date();
+      (run as any).error = 'Some error';
+      await repos.benchmarks.save(run);
+
+      const command = createDeleteBenchmarkCommand(runId);
+      const result = await handleDeleteBenchmark(command, repos);
+
+      assert.strictEqual(result.success, true);
+
+      const deleted = await repos.benchmarks.findById(runId);
+      assert.strictEqual(deleted, null);
+    });
+
+    it('fails to delete a running benchmark', async () => {
+      const repos = createMockRepos();
+      const runId = uuid();
+
+      // Create a running benchmark
+      const run = createBenchmarkRun({
+        id: runId,
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        iterationCount: 10,
+      });
+      await repos.benchmarks.save(run);
+
+      const command = createDeleteBenchmarkCommand(runId);
+      const result = await handleDeleteBenchmark(command, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('Cannot delete a running benchmark'));
+
+      // Benchmark should still exist
+      const stillExists = await repos.benchmarks.findById(runId);
+      assert.notStrictEqual(stillExists, null);
+    });
+
+    it('fails for non-existent benchmark', async () => {
+      const repos = createMockRepos();
+
+      const command = createDeleteBenchmarkCommand('non-existent');
+      const result = await handleDeleteBenchmark(command, repos);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('not found'));
     });
   });
 });
