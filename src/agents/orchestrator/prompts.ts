@@ -22,9 +22,6 @@ NOTE: Codebase exploration (documenting undocumented directories) is handled AUT
 You do NOT need to schedule codebase-explorer work items - the system handles this based on
 directory coverage data. Focus your decisions on commit analysis, synthesis, and meta work.
 
-The Directory Coverage section shows which parts of the codebase are documented, but you
-don't need to act on it directly - use it to understand the wiki's current state.
-
 ## Available Agents
 
 ANALYSIS AGENTS (run on specific commits - require targetCommitId):

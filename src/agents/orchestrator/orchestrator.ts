@@ -258,7 +258,7 @@ export class Orchestrator {
    * Hybrid approach:
    * - Codebase exploration runs DETERMINISTICALLY (reliable, no format issues)
    * - LLM decides on commit analysis, synthesis, and meta work
-   * - LLM still sees directory coverage for phase reasoning
+   * - LLM sees wiki state (page count, key pages) for phase-based decisions
    */
   private async generateWithLLM(
     repoId: string,
@@ -295,7 +295,7 @@ export class Orchestrator {
       return explorationWork;
     }
 
-    // Gather context for LLM (still includes directory coverage for phase reasoning)
+    // Gather context for LLM (wiki state, commits, key pages - no directory coverage)
     const context = await this.contextGatherer.gather(repoId, wikiId);
     const contextString = this.contextGatherer.formatForPrompt(context);
 

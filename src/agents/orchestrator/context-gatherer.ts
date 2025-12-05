@@ -415,40 +415,10 @@ export class ContextGatherer {
     }
     lines.push('');
 
-    // Directory coverage (which parts of the codebase are documented)
-    if (ctx.directoryCoverage.length > 0) {
-      lines.push('## Directory Coverage (Source Code Documentation)\n');
-      lines.push('Shows how well each source directory is documented in the wiki:');
-      lines.push('');
-
-      // Find directories with very low coverage (candidates for codebase-explorer)
-      const lowCoverageDirs = ctx.directoryCoverage.filter(d => d.coveragePercent < 20);
-      const mediumCoverageDirs = ctx.directoryCoverage.filter(d => d.coveragePercent >= 20 && d.coveragePercent < 50);
-      const goodCoverageDirs = ctx.directoryCoverage.filter(d => d.coveragePercent >= 50);
-
-      if (lowCoverageDirs.length > 0) {
-        lines.push('**⚠️ UNDOCUMENTED (< 20% coverage) - use codebase-explorer:**');
-        for (const dir of lowCoverageDirs) {
-          lines.push(`- ${dir.path}: ${dir.coveragePercent}% (${dir.fileCount} files, ${dir.wikiMentions} wiki mentions)`);
-        }
-        lines.push('');
-      }
-
-      if (mediumCoverageDirs.length > 0) {
-        lines.push('**Partially documented (20-50% coverage):**');
-        for (const dir of mediumCoverageDirs) {
-          lines.push(`- ${dir.path}: ${dir.coveragePercent}% (${dir.fileCount} files, ${dir.wikiMentions} wiki mentions)`);
-        }
-        lines.push('');
-      }
-
-      if (goodCoverageDirs.length > 0) {
-        lines.push('**Well documented (50%+ coverage):**');
-        for (const dir of goodCoverageDirs) {
-          lines.push(`- ${dir.path}: ${dir.coveragePercent}% (${dir.fileCount} files, ${dir.wikiMentions} wiki mentions)`);
-        }
-      }
-    }
+    // Note: Directory coverage is NOT sent to the LLM prompt.
+    // Codebase exploration is handled deterministically by codebaseExplorationStrategy,
+    // so including it in the LLM prompt would be noise (the LLM can't act on it).
+    // The directoryCoverage data is still gathered and used by the deterministic strategy.
 
     return lines.join('\n');
   }
