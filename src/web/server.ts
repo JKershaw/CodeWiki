@@ -80,6 +80,10 @@ export async function startServer(port = PORT) {
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser(SESSION_SECRET));
 
+  // Configure EJS as the view engine
+  app.set('view engine', 'ejs');
+  app.set('views', join(__dirname, 'views'));
+
   // Password-based authentication routes (must be before password protection)
   app.use(createAuthRoutes());
 
@@ -148,9 +152,9 @@ export async function startServer(port = PORT) {
     app.use(createApiRoutes(apiDeps));
   }
 
-  // Serve index.html for all non-API routes (SPA support)
+  // Render the main page for all non-API routes (SPA support)
   app.get('*', (_req: Request, res: Response) => {
-    res.sendFile(join(__dirname, 'public', 'index.html'));
+    res.render('index');
   });
 
   const server = app.listen(port, () => {
