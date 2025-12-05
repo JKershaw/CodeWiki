@@ -26,6 +26,7 @@ import {
 import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 import {
   executeStrategies,
+  codebaseExplorationStrategy,
   Priority,
   type StrategyContext,
 } from './strategies.js';
@@ -253,7 +254,11 @@ export class Orchestrator {
 
   /**
    * Generate work list using LLM reasoning with tool-calling capability.
-   * The orchestrator can now explore the codebase before making decisions.
+   *
+   * Hybrid approach:
+   * - Codebase exploration runs DETERMINISTICALLY (reliable, no format issues)
+   * - LLM decides on commit analysis, synthesis, and meta work
+   * - LLM sees wiki state (page count, key pages) for phase-based decisions
    */
   private async generateWithLLM(
     repoId: string,
@@ -267,12 +272,35 @@ export class Orchestrator {
     const keysResult = await handleGetPendingWorkKeys(keysQuery, this.repos);
     const existingWorkKeys = keysResult.data || new Set<string>();
 
-    // Gather context
+    // Run codebase exploration DETERMINISTICALLY first
+    // This avoids LLM format issues while still prioritizing exploration
+    const explorationWork: WorkItem[] = [];
+    if (this.git && this.contextGatherer) {
+      const explorationCtx: StrategyContext = {
+        repos: this.repos,
+        repoId,
+        wikiId,
+        existingWorkKeys,
+        git: this.git,
+        contextGatherer: this.contextGatherer,
+      };
+      const explorationResult = await codebaseExplorationStrategy(explorationCtx, maxItems);
+      explorationWork.push(...explorationResult.workItems);
+    }
+
+    // Calculate remaining slots for LLM
+    const remainingSlots = maxItems - explorationWork.length;
+    if (remainingSlots <= 0) {
+      // Exploration filled all slots
+      return explorationWork;
+    }
+
+    // Gather context for LLM (wiki state, commits, key pages - no directory coverage)
     const context = await this.contextGatherer.gather(repoId, wikiId);
     const contextString = this.contextGatherer.formatForPrompt(context);
 
-    // Build prompt
-    const userPrompt = buildUserPrompt(context, contextString, maxItems);
+    // Build prompt - LLM only needs to fill remaining slots
+    const userPrompt = buildUserPrompt(context, contextString, remainingSlots);
 
     // Create tracking record
     const runId = uuid();
@@ -321,21 +349,14 @@ export class Orchestrator {
     (orchestratorRun as { toolCalls?: ToolUseResult['toolCalls']; toolRounds?: number }).toolCalls = completion.toolCalls;
     (orchestratorRun as { toolRounds?: number }).toolRounds = completion.toolRounds;
 
-    // Convert to work items
-    const workItems: WorkItem[] = [];
+    // Convert LLM decisions to work items
+    // Note: codebase-explorer is handled deterministically, so skip any LLM attempts
+    const llmWorkItems: WorkItem[] = [];
     for (const item of decision.workItems) {
-      if (workItems.length >= maxItems) break;
+      if (llmWorkItems.length >= remainingSlots) break;
 
-      // Safety check: exploration agents (codebase-explorer) require targetPath
-      // Skip if missing to prevent "cannot handle target type: wiki" errors
-      if (item.agentType === 'codebase-explorer' && !item.targetPath) {
-        console.warn(`Skipping codebase-explorer work item: missing required targetPath`);
-        continue;
-      }
-
-      const key = item.targetPath
-        ? `${item.agentType}:path:${item.targetPath}`
-        : `${item.agentType}:${item.targetCommitId ?? 'null'}`;
+      // LLM only outputs commit-based and wiki-based work (no codebase-explorer)
+      const key = `${item.agentType}:${item.targetCommitId ?? 'wiki'}`;
       if (existingWorkKeys.has(key)) continue;
 
       existingWorkKeys.add(key);
@@ -346,23 +367,26 @@ export class Orchestrator {
         agentType: item.agentType as AgentType,
         priority: this.getPriority(item.agentType),
         ...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
-        ...(item.targetPath ? { targetPath: item.targetPath } : {}),
         orchestratorRunId: runId,
       });
 
-      workItems.push(workItem);
+      llmWorkItems.push(workItem);
     }
 
+    // Combine exploration work (deterministic) with LLM work
+    const allWorkItems = [...explorationWork, ...llmWorkItems];
+
     // Save tracking record
-    orchestratorRun.workItemsCreated = workItems.map(w => w.id);
+    orchestratorRun.workItemsCreated = allWorkItems.map(w => w.id);
     await this.repos.orchestratorRuns.save(orchestratorRun);
 
     const toolInfo = completion.toolRounds > 0 ? `, ${completion.toolRounds} tool rounds` : '';
+    const explorationInfo = explorationWork.length > 0 ? ` (${explorationWork.length} exploration + ${llmWorkItems.length} LLM)` : '';
     console.log(
-      `🤖 LLM Orchestrator: "${decision.reasoning}" (${workItems.length} items${toolInfo}, $${completion.costUsd.toFixed(4)})`
+      `🤖 LLM Orchestrator: "${decision.reasoning}" (${allWorkItems.length} items${explorationInfo}${toolInfo}, $${completion.costUsd.toFixed(4)})`
     );
 
-    return workItems;
+    return allWorkItems;
   }
 
   /**
