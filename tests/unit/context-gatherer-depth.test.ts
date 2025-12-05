@@ -1,11 +1,15 @@
 /**
- * Unit tests for ContextGatherer depth metrics.
- * Tests the shallowPages and pagesLackingExamples calculations.
+ * Unit tests for ContextGatherer depth metrics and GitHub mode.
+ * Tests the shallowPages and pagesLackingExamples calculations,
+ * as well as directory coverage for GitHub repositories.
  */
 
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
+import type { RepositoryServiceFactory, RepositoryService, FileEntry } from '../../src/services/repository/repository-service.js';
+import type { Repo } from '../../src/domain/repo.js';
+import { ContextGatherer } from '../../src/agents/orchestrator/context-gatherer.js';
 
 // Suppress console output during tests
 mock.method(console, 'warn', () => {});
@@ -210,6 +214,223 @@ describe('ContextGatherer Depth Metrics', () => {
 
       assert.strictEqual(shallowCount, 2, 'Should count 2 shallow pages');
       assert.strictEqual(lackingCount, 2, 'Should count 2 pages lacking examples');
+    });
+  });
+});
+
+describe('ContextGatherer GitHub Mode', () => {
+  /**
+   * Create mock repositories for testing.
+   */
+  function createMockRepos(repo: Partial<Repo> | null) {
+    return {
+      repos: {
+        findById: mock.fn(async () => repo),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => []),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+  }
+
+  /**
+   * Create mock repository service factory.
+   */
+  function createMockRepoServiceFactory(
+    srcEntries: FileEntry[],
+    fileTree: string[]
+  ): RepositoryServiceFactory {
+    const mockService: Partial<RepositoryService> = {
+      listDirectory: mock.fn(async (_repo, path) => {
+        if (path === 'src') return srcEntries;
+        return [];
+      }),
+      getFileTree: mock.fn(async () => fileTree),
+    };
+
+    return {
+      getService: mock.fn(() => mockService as RepositoryService),
+      getServiceWithToken: mock.fn(() => mockService as RepositoryService),
+    };
+  }
+
+  describe('calculateDirectoryCoverage', () => {
+    it('returns empty for repo not found', async () => {
+      const repos = createMockRepos(null);
+      const gatherer = new ContextGatherer(repos, undefined, undefined);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      assert.strictEqual(context.directoryCoverage.length, 0);
+    });
+
+    it('returns empty for GitHub repo without repoServiceFactory', async () => {
+      const repos = createMockRepos({ id: 'repo-1', isGitHubRepo: true } as Repo);
+      const gatherer = new ContextGatherer(repos, undefined, undefined);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      assert.strictEqual(context.directoryCoverage.length, 0);
+    });
+
+    it('calculates coverage for GitHub repos via API', async () => {
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: true,
+        owner: 'test',
+        repoName: 'repo',
+      } as Repo);
+
+      const srcEntries: FileEntry[] = [
+        { name: 'agents', path: 'src/agents', type: 'dir', size: 0 },
+        { name: 'services', path: 'src/services', type: 'dir', size: 0 },
+        { name: 'index.ts', path: 'src/index.ts', type: 'file', size: 100 },
+      ];
+
+      const fileTree = [
+        'src/agents/base-agent.ts',
+        'src/agents/code-change-agent.ts',
+        'src/services/git/git-service.ts',
+        'src/services/llm/llm-service.ts',
+        'src/index.ts',
+      ];
+
+      const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
+      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      // Should have coverage for 2 directories (agents, services)
+      assert.strictEqual(context.directoryCoverage.length, 2);
+
+      // Both should have 0% coverage since there are no wiki pages mentioning them
+      for (const dir of context.directoryCoverage) {
+        assert.ok(dir.path.startsWith('src/'));
+        assert.strictEqual(dir.wikiMentions, 0);
+        assert.strictEqual(dir.coveragePercent, 0);
+      }
+    });
+
+    it('counts wiki mentions correctly for GitHub repos', async () => {
+      // Create mock wiki pages that mention directories
+      const wikiPages = [
+        createMockWikiPage('architecture/agents', 'The agents module handles...'),
+        createMockWikiPage('guides/services', 'The src/services directory contains...'),
+      ];
+
+      const repos = {
+        repos: {
+          findById: mock.fn(async () => ({
+            id: 'repo-1',
+            isGitHubRepo: true,
+            owner: 'test',
+            repoName: 'repo',
+          })),
+        },
+        commits: {
+          findByRepo: mock.fn(async () => []),
+        },
+        wikiPages: {
+          findByWiki: mock.fn(async () => wikiPages),
+        },
+        agentRuns: {
+          findByRepo: mock.fn(async () => []),
+        },
+        editRequests: {
+          countPending: mock.fn(async () => 0),
+        },
+      } as any;
+
+      const srcEntries: FileEntry[] = [
+        { name: 'agents', path: 'src/agents', type: 'dir', size: 0 },
+        { name: 'services', path: 'src/services', type: 'dir', size: 0 },
+      ];
+
+      const fileTree = [
+        'src/agents/base-agent.ts',
+        'src/agents/code-change-agent.ts',
+        'src/services/git/git-service.ts',
+        'src/services/llm/llm-service.ts',
+      ];
+
+      const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
+      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      // Both directories should have mentions
+      const agentsCoverage = context.directoryCoverage.find(d => d.path === 'src/agents');
+      const servicesCoverage = context.directoryCoverage.find(d => d.path === 'src/services');
+
+      assert.ok(agentsCoverage, 'Should have agents coverage');
+      assert.ok(servicesCoverage, 'Should have services coverage');
+      assert.ok(agentsCoverage.wikiMentions > 0, 'Agents should have wiki mentions');
+      assert.ok(servicesCoverage.wikiMentions > 0, 'Services should have wiki mentions');
+    });
+
+    it('filters out test and declaration files', async () => {
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: true,
+        owner: 'test',
+        repoName: 'repo',
+      } as Repo);
+
+      const srcEntries: FileEntry[] = [
+        { name: 'utils', path: 'src/utils', type: 'dir', size: 0 },
+      ];
+
+      const fileTree = [
+        'src/utils/helper.ts',
+        'src/utils/helper.test.ts',  // Should be excluded
+        'src/utils/helper.spec.ts',  // Should be excluded
+        'src/utils/types.d.ts',      // Should be excluded
+      ];
+
+      const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
+      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      const utilsCoverage = context.directoryCoverage.find(d => d.path === 'src/utils');
+      assert.ok(utilsCoverage, 'Should have utils coverage');
+      assert.strictEqual(utilsCoverage.fileCount, 1, 'Should only count helper.ts');
+    });
+
+    it('returns empty when src directory does not exist', async () => {
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: true,
+        owner: 'test',
+        repoName: 'repo',
+      } as Repo);
+
+      const mockService: Partial<RepositoryService> = {
+        listDirectory: mock.fn(async () => {
+          throw new Error('Directory not found');
+        }),
+        getFileTree: mock.fn(async () => []),
+      };
+
+      const repoServiceFactory = {
+        getService: mock.fn(() => mockService as RepositoryService),
+        getServiceWithToken: mock.fn(() => mockService as RepositoryService),
+      };
+
+      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      assert.strictEqual(context.directoryCoverage.length, 0);
     });
   });
 });

@@ -12,6 +12,7 @@ import {
   isLocalRepo,
   getLocalRepoPath,
   createCodebaseToolExecutor,
+  fetchAffectedFileContents,
 } from '../../src/agents/agent-helpers.js';
 import type { AgentContext } from '../../src/agents/base-agent.js';
 import type { GitService } from '../../src/services/git/git-service.js';
@@ -421,6 +422,201 @@ describe('agent-helpers', () => {
 
       assert.ok(results[0].result.includes('Error'));
       assert.ok(results[0].result.includes('File not found'));
+    });
+  });
+
+  describe('fetchAffectedFileContents', () => {
+    it('uses repoService when available for GitHub repos', async () => {
+      const mockRepoService: Partial<RepositoryService> = {
+        getFileContent: mock.fn(async (_repo, path) => `content of ${path}`),
+      };
+
+      const mockRepo: Partial<Repo> = {
+        id: 'repo-1',
+        isGitHubRepo: true,
+      };
+
+      const mockGit: Partial<GitService> = {
+        getRepoPath: mock.fn(() => '/path/to/repo'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repoService: mockRepoService as RepositoryService,
+        repo: mockRepo as Repo,
+      };
+
+      const results = await fetchAffectedFileContents(context, ['src/index.ts', 'src/utils.ts']);
+
+      assert.strictEqual(results.length, 2);
+      assert.strictEqual(results[0].path, 'src/index.ts');
+      assert.strictEqual(results[0].content, 'content of src/index.ts');
+      assert.strictEqual(results[1].path, 'src/utils.ts');
+      assert.strictEqual(results[1].content, 'content of src/utils.ts');
+    });
+
+    it('returns error for GitHub repo without repoService', async () => {
+      const mockGit: Partial<GitService> = {
+        getRepoPath: mock.fn(() => '/path/to/repo'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repo: { isGitHubRepo: true } as Repo,
+        // No repoService provided
+      };
+
+      const results = await fetchAffectedFileContents(context, ['src/index.ts']);
+
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].path, 'src/index.ts');
+      assert.strictEqual(results[0].content, null);
+      assert.ok(results[0].error?.includes('GitHub repository requires RepositoryService'));
+    });
+
+    it('skips non-source files', async () => {
+      const mockRepoService: Partial<RepositoryService> = {
+        getFileContent: mock.fn(async (_repo, path) => `content of ${path}`),
+      };
+
+      const mockRepo: Partial<Repo> = {
+        id: 'repo-1',
+        isGitHubRepo: true,
+      };
+
+      const mockGit: Partial<GitService> = {
+        getRepoPath: mock.fn(() => '/path/to/repo'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repoService: mockRepoService as RepositoryService,
+        repo: mockRepo as Repo,
+      };
+
+      const results = await fetchAffectedFileContents(context, [
+        'src/index.ts',
+        'package-lock.json', // Should be skipped
+        'image.png', // Should be skipped
+      ]);
+
+      // Only index.ts should be fetched
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].path, 'src/index.ts');
+    });
+
+    it('truncates large files', async () => {
+      const largeContent = 'A'.repeat(50000);
+      const mockRepoService: Partial<RepositoryService> = {
+        getFileContent: mock.fn(async () => largeContent),
+      };
+
+      const mockRepo: Partial<Repo> = {
+        id: 'repo-1',
+        isGitHubRepo: true,
+      };
+
+      const mockGit: Partial<GitService> = {
+        getRepoPath: mock.fn(() => '/path/to/repo'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repoService: mockRepoService as RepositoryService,
+        repo: mockRepo as Repo,
+      };
+
+      const results = await fetchAffectedFileContents(context, ['src/large.ts'], 1000);
+
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].content?.length, 1000);
+      assert.strictEqual(results[0].truncated, true);
+    });
+
+    it('handles API errors gracefully', async () => {
+      const mockRepoService: Partial<RepositoryService> = {
+        getFileContent: mock.fn(async () => {
+          throw new Error('File not found');
+        }),
+      };
+
+      const mockRepo: Partial<Repo> = {
+        id: 'repo-1',
+        isGitHubRepo: true,
+      };
+
+      const mockGit: Partial<GitService> = {
+        getRepoPath: mock.fn(() => '/path/to/repo'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repoService: mockRepoService as RepositoryService,
+        repo: mockRepo as Repo,
+      };
+
+      const results = await fetchAffectedFileContents(context, ['src/missing.ts']);
+
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].path, 'src/missing.ts');
+      assert.strictEqual(results[0].content, null);
+      assert.ok(results[0].error?.includes('File not found'));
+    });
+
+    it('respects total size limit', async () => {
+      const mockRepoService: Partial<RepositoryService> = {
+        getFileContent: mock.fn(async (_repo, path) => `content of ${path} ${'x'.repeat(500)}`),
+      };
+
+      const mockRepo: Partial<Repo> = {
+        id: 'repo-1',
+        isGitHubRepo: true,
+      };
+
+      const mockGit: Partial<GitService> = {
+        getRepoPath: mock.fn(() => '/path/to/repo'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repoService: mockRepoService as RepositoryService,
+        repo: mockRepo as Repo,
+      };
+
+      const results = await fetchAffectedFileContents(
+        context,
+        ['file1.ts', 'file2.ts', 'file3.ts'],
+        10000, // max per file
+        1000   // max total - only 1-2 files should fit
+      );
+
+      // At least one file should be skipped due to total size limit
+      const skippedFiles = results.filter(r => r.error?.includes('total size limit'));
+      assert.ok(skippedFiles.length > 0, 'At least one file should be skipped due to total size limit');
     });
   });
 });

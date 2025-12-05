@@ -15,6 +15,7 @@ import { createWorkItem } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
+import type { RepositoryServiceFactory } from '../../services/repository/repository-service.js';
 import { codebaseTools } from '../../services/llm/codebase-tools.js';
 import type { ToolContext } from '../../services/llm/tools.js';
 import { ContextGatherer } from './context-gatherer.js';
@@ -83,9 +84,10 @@ export class Orchestrator {
     private readonly repos: Repositories,
     private readonly llm?: LLMService,
     config?: OrchestratorConfig,
-    private readonly git?: GitService
+    private readonly git?: GitService,
+    private readonly repoServiceFactory?: RepositoryServiceFactory
   ) {
-    this.contextGatherer = new ContextGatherer(repos, git);
+    this.contextGatherer = new ContextGatherer(repos, git, repoServiceFactory);
     this.config = {
       useLLM: config?.useLLM ?? false,
       model: config?.model ?? 'anthropic/claude-haiku-4.5',
@@ -555,7 +557,8 @@ export function createOrchestrator(
   repos: Repositories,
   llm?: LLMService,
   config?: OrchestratorConfig,
-  git?: GitService
+  git?: GitService,
+  repoServiceFactory?: RepositoryServiceFactory
 ): Orchestrator {
-  return new Orchestrator(repos, llm, config, git);
+  return new Orchestrator(repos, llm, config, git, repoServiceFactory);
 }
