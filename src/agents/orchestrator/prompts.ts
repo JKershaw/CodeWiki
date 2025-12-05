@@ -93,7 +93,12 @@ Brief explanation of your overall strategy for this batch (1-2 sentences)
 # Work Items
 agentType,targetCommitId,targetPath,reason for this work item
 
-Examples:
+Format examples by agent type:
+- Analysis agents: code-change,abc123def456789..,,reason (commitId in field 2, field 3 empty)
+- Exploration agents: codebase-explorer,,src/services/llm,reason (field 2 empty, PATH in field 3)
+- Meta/synthesis agents: writer,,,reason (fields 2 AND 3 empty)
+
+Full example:
 # Reasoning
 Focus on building base wiki content with code-change analysis, document undocumented services, then improve readability.
 
@@ -103,14 +108,14 @@ code-change,def789abc123456..,,Contains API changes that need documentation
 codebase-explorer,,src/services/llm,0% coverage - LLM service needs documentation
 writer,,,5 pages need rewriting from commit-style to article-style
 
-IMPORTANT:
+CRITICAL FORMAT RULES:
 - One work item per line in the Work Items section
-- Format: agentType,targetCommitId,targetPath,reason (comma-separated, reason can contain commas)
+- Format: agentType,targetCommitId,targetPath,reason (4 comma-separated fields)
 - targetCommitId is REQUIRED for analysis agents (code-change, narrative, security, technical-debt, pattern, dependency)
-- targetPath is REQUIRED for exploration agents (codebase-explorer) - use the directory path from Directory Coverage section
-- BOTH targetCommitId AND targetPath must be EMPTY for meta/synthesis agents (link, structure, quality, consistency, overview, writer, etc.)
+- targetPath is REQUIRED for codebase-explorer - MUST be a directory path like "src/services/llm"
+- BOTH targetCommitId AND targetPath must be EMPTY for meta/synthesis agents
 - Use the full commit ID from the context, not abbreviated
-- When Directory Coverage shows < 20% for a directory, use codebase-explorer with that directory as targetPath`;
+- codebase-explorer WITHOUT a path will be IGNORED - always include the directory path from Directory Coverage`;
 
 /**
  * Build the user prompt with current context.
@@ -270,6 +275,10 @@ export function parseOrchestratorResponse(
             } else {
               console.warn(`Invalid or missing commit ID for analysis agent ${agentType}`);
             }
+          } else if (EXPLORATION_AGENTS.includes(agentType)) {
+            // Exploration agents need targetPath, which legacy format doesn't support
+            // Skip and warn - LLM should use 4-field format for exploration agents
+            console.warn(`Exploration agent ${agentType} requires 4-field format with targetPath`);
           } else {
             validWorkItems.push({ agentType, reason });
           }

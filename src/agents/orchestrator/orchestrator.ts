@@ -326,6 +326,13 @@ export class Orchestrator {
     for (const item of decision.workItems) {
       if (workItems.length >= maxItems) break;
 
+      // Safety check: exploration agents (codebase-explorer) require targetPath
+      // Skip if missing to prevent "cannot handle target type: wiki" errors
+      if (item.agentType === 'codebase-explorer' && !item.targetPath) {
+        console.warn(`Skipping codebase-explorer work item: missing required targetPath`);
+        continue;
+      }
+
       const key = item.targetPath
         ? `${item.agentType}:path:${item.targetPath}`
         : `${item.agentType}:${item.targetCommitId ?? 'null'}`;
