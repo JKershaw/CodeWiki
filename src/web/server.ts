@@ -74,6 +74,8 @@ export async function startServer(port = PORT) {
 
   // JWT service for authenticated git operations (created even if GitHub auth not fully configured)
   let jwtService: ReturnType<typeof createJwtService> | undefined;
+  // GitHub auth service for token refresh
+  let githubAuthService: ReturnType<typeof createGitHubAuthService> | undefined;
 
   // Middleware
   app.use(express.json());
@@ -87,7 +89,7 @@ export async function startServer(port = PORT) {
   if (isGitHubAuthEnabled()) {
     const baseUrl = process.env['BASE_URL'] || `http://localhost:${port}`;
     jwtService = createJwtService(SESSION_SECRET);
-    const githubAuth = createGitHubAuthService({
+    githubAuthService = createGitHubAuthService({
       clientId: GITHUB_CLIENT_ID!,
       clientSecret: GITHUB_CLIENT_SECRET!,
       appName: GITHUB_APP_NAME!,
@@ -96,7 +98,7 @@ export async function startServer(port = PORT) {
 
     app.use(createGitHubAuthRouter({
       jwtService,
-      githubAuth,
+      githubAuth: githubAuthService,
       userRepository: repos.users,
       sessionSecret: SESSION_SECRET,
     }));
@@ -141,6 +143,7 @@ export async function startServer(port = PORT) {
     createLLM,
     repoServiceFactory,
     ...(githubRepoService && { githubRepoService }),
+    ...(githubAuthService && { githubAuthService }),
   };
   if (jwtService) {
     app.use(createApiRoutes({ ...apiDeps, jwtService }));

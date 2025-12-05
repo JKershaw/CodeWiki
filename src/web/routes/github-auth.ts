@@ -10,8 +10,9 @@ import { timingSafeEqual } from 'crypto';
 import type { JwtService } from '../../services/auth/jwt-service.js';
 import type { GitHubAuthService } from '../../services/github/github-auth-service.js';
 import type { UserRepository } from '../../repositories/interfaces/user-repository.js';
-import { createUser, updateUserTokens } from '../../domain/user.js';
+import { createUser, updateUserTokens, isTokenExpired } from '../../domain/user.js';
 import { GITHUB_SESSION_COOKIE } from '../middleware/github-auth.js';
+import { ensureValidToken, TokenRefreshError } from '../../services/github/token-refresh.js';
 
 /** Cookie name for OAuth state */
 const OAUTH_STATE_COOKIE = 'github_oauth_state';
@@ -219,6 +220,9 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
         return;
       }
 
+      // Check if token is expired or about to expire
+      const tokenExpired = isTokenExpired(user);
+
       // Return user info (excluding sensitive tokens)
       res.json({
         user: {
@@ -229,6 +233,7 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
           name: user.name,
           email: user.email,
         },
+        tokenExpired,
       });
     },
 
@@ -272,9 +277,21 @@ export function createGitHubAuthRoutes(config: GitHubAuthRoutesConfig): GitHubAu
       }
 
       try {
-        const repos = await githubAuth.getAccessibleRepos(user.accessToken);
+        // Ensure token is valid (refresh if expired)
+        const tokenResult = await ensureValidToken(user, githubAuth, userRepository);
+
+        const repos = await githubAuth.getAccessibleRepos(tokenResult.accessToken);
         res.json({ repos });
       } catch (error) {
+        if (error instanceof TokenRefreshError) {
+          console.warn(`GitHub OAuth: Token refresh failed for user ${user.login}: ${error.message}`);
+          res.status(401).json({
+            error: 'Session expired',
+            requiresReauth: true,
+            message: error.message,
+          });
+          return;
+        }
         console.error(`GitHub OAuth: Failed to fetch repos for user ${user.login}:`, error instanceof Error ? error.message : error);
         res.status(500).json({ error: 'Failed to fetch repositories' });
       }

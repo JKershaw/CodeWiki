@@ -23,6 +23,7 @@ import type { GitAuthOptions } from '../../services/git/git-service.js';
 import { GITHUB_SESSION_COOKIE } from '../middleware/github-auth.js';
 import { createGitHubRepoService, type GitHubRepoService } from '../../services/github/github-repo-service.js';
 import { createGitHubApiCache, createCachedGitHubRepoService } from '../../services/github/github-api-cache.js';
+import { ensureValidToken, TokenRefreshError } from '../../services/github/token-refresh.js';
 
 /**
  * Validate a GitHub URL.
@@ -87,12 +88,13 @@ import {
 
 /**
  * Helper to extract GitHub auth options from request if user is authenticated.
+ * Automatically refreshes expired tokens if possible.
  */
 async function getGitAuthFromRequest(
   req: Request,
   deps: Dependencies
 ): Promise<GitAuthOptions | undefined> {
-  const { repos, jwtService } = deps;
+  const { repos, jwtService, githubAuthService } = deps;
 
   // No JWT service means no auth available
   if (!jwtService) {
@@ -118,10 +120,25 @@ async function getGitAuthFromRequest(
     return undefined;
   }
 
+  // Ensure token is valid (refresh if expired)
+  let accessToken = user.accessToken;
+  if (githubAuthService) {
+    try {
+      const result = await ensureValidToken(user, githubAuthService, repos.users);
+      accessToken = result.accessToken;
+    } catch (error) {
+      if (error instanceof TokenRefreshError) {
+        console.warn(`Token refresh failed for user ${user.login}: ${error.message}`);
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
   // Return auth options for GitHub (x-access-token is the standard username for token auth)
   return {
     username: 'x-access-token',
-    password: user.accessToken,
+    password: accessToken,
   };
 }
 
@@ -156,12 +173,13 @@ async function getUserIdFromRequest(
 /**
  * Get an authenticated GitHub repo service for the current request.
  * Returns undefined if user is not authenticated.
+ * Automatically refreshes expired tokens if possible.
  */
 async function getAuthenticatedGitHubService(
   req: Request,
   deps: Dependencies
 ): Promise<GitHubRepoService | undefined> {
-  const { repos, jwtService } = deps;
+  const { repos, jwtService, githubAuthService } = deps;
 
   if (!jwtService) {
     return undefined;
@@ -183,9 +201,24 @@ async function getAuthenticatedGitHubService(
     return undefined;
   }
 
+  // Ensure token is valid (refresh if expired)
+  let accessToken = user.accessToken;
+  if (githubAuthService) {
+    try {
+      const result = await ensureValidToken(user, githubAuthService, repos.users);
+      accessToken = result.accessToken;
+    } catch (error) {
+      if (error instanceof TokenRefreshError) {
+        console.warn(`Token refresh failed for user ${user.login}: ${error.message}`);
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
   // Create an authenticated service with user's token
   const cache = createGitHubApiCache();
-  const baseService = createGitHubRepoService({ accessToken: user.accessToken });
+  const baseService = createGitHubRepoService({ accessToken });
   return createCachedGitHubRepoService(baseService, cache);
 }
 
