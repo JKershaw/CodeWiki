@@ -217,3 +217,135 @@ function filterByGlob(files: string[], pattern: string): string[] {
   const regex = new RegExp(`^${regexPattern}$`);
   return files.filter(file => regex.test(file));
 }
+
+/**
+ * Result of fetching file contents.
+ */
+export interface FetchedFileContent {
+  path: string;
+  content: string | null;
+  error?: string;
+  truncated?: boolean;
+}
+
+/**
+ * Fetch the full contents of affected files from a commit.
+ *
+ * This gives the LLM complete context about the files being changed,
+ * not just the diff. Files that are deleted or too large are handled gracefully.
+ *
+ * @param context - Agent context with repo access
+ * @param affectedFiles - List of file paths from the commit
+ * @param maxFileSize - Maximum size per file (default 30000 chars)
+ * @param maxTotalSize - Maximum total size for all files (default 100000 chars)
+ * @returns Array of file contents with metadata
+ */
+export async function fetchAffectedFileContents(
+  context: AgentContext,
+  affectedFiles: string[],
+  maxFileSize: number = 30000,
+  maxTotalSize: number = 100000
+): Promise<FetchedFileContent[]> {
+  const results: FetchedFileContent[] = [];
+  let totalSize = 0;
+
+  // Filter to source code files (skip binaries, lock files, etc.)
+  const sourceFiles = affectedFiles.filter(f => isSourceCodeFile(f));
+
+  for (const filePath of sourceFiles) {
+    if (totalSize >= maxTotalSize) {
+      results.push({
+        path: filePath,
+        content: null,
+        error: 'Skipped: total size limit reached',
+      });
+      continue;
+    }
+
+    try {
+      let content: string;
+
+      if (context.repoService && context.repo) {
+        // Use repository service (works for both GitHub and local)
+        content = await context.repoService.getFileContent(context.repo, filePath);
+      } else {
+        // Fall back to local file reading via git service
+        const repoPath = context.git.getRepoPath(context.repoId);
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const fullPath = path.join(repoPath, filePath);
+        content = await fs.readFile(fullPath, 'utf-8');
+      }
+
+      // Check if file is too large
+      if (content.length > maxFileSize) {
+        results.push({
+          path: filePath,
+          content: content.slice(0, maxFileSize),
+          truncated: true,
+        });
+        totalSize += maxFileSize;
+      } else {
+        results.push({
+          path: filePath,
+          content,
+        });
+        totalSize += content.length;
+      }
+    } catch (error) {
+      // File might be deleted in this commit, or inaccessible
+      results.push({
+        path: filePath,
+        content: null,
+        error: error instanceof Error ? error.message : 'Failed to read file',
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Check if a file path is likely a source code file worth reading.
+ */
+function isSourceCodeFile(filePath: string): boolean {
+  // Skip common non-source files
+  const skipPatterns = [
+    /\.lock$/,
+    /package-lock\.json$/,
+    /yarn\.lock$/,
+    /pnpm-lock\.yaml$/,
+    /\.min\.(js|css)$/,
+    /\.(png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/i,
+    /\.(pdf|doc|docx|xls|xlsx)$/i,
+    /\.(zip|tar|gz|rar)$/i,
+    /node_modules\//,
+    /dist\//,
+    /build\//,
+    /\.git\//,
+  ];
+
+  return !skipPatterns.some(pattern => pattern.test(filePath));
+}
+
+/**
+ * Format fetched file contents for inclusion in a prompt.
+ */
+export function formatFileContentsForPrompt(files: FetchedFileContent[]): string {
+  const sections: string[] = [];
+
+  for (const file of files) {
+    if (file.content) {
+      const truncatedNote = file.truncated ? ' (truncated)' : '';
+      sections.push(`### ${file.path}${truncatedNote}\n\n\`\`\`\n${file.content}\n\`\`\``);
+    } else if (file.error) {
+      sections.push(`### ${file.path}\n\n*${file.error}*`);
+    }
+  }
+
+  if (sections.length === 0) {
+    return '*No source files available*';
+  }
+
+  return sections.join('\n\n');
+}

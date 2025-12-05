@@ -157,8 +157,30 @@ SECURITY_NOTES:
 IMPACT:
 [Overall impact assessment: minimal/moderate/significant]
 
+DEPENDENCY_DETAILS:
+For each significant new dependency, provide detailed documentation.
+
+=== [PACKAGE_NAME] ===
+PURPOSE:
+[2-3 sentences explaining what problem this dependency solves and why it was chosen]
+
+USAGE:
+[How this dependency is used in the codebase - key functions, configuration, patterns]
+
+CONSIDERATIONS:
+[Any important notes: version constraints, security considerations, bundle size impact, alternatives considered]
+=== END ===
+
+(Repeat for each significant dependency)
+
 WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+For each additional wiki page that should be created or updated, provide FULL article content.
+
+=== [PAGE_PATH] [ACTION:create/update] ===
+[Write the FULL markdown content for this wiki page here.]
+=== END ===
+
+(Repeat for each page)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -171,6 +193,7 @@ CONFIDENCE: [0-1 value]
       breakingChanges: [],
       securityNotes: [],
       impact: 'minimal',
+      dependencyDetails: [],
       findings: [],
       wikiUpdates: [],
       confidence: 0.5,
@@ -244,18 +267,61 @@ CONFIDENCE: [0-1 value]
       analysis.impact = impactMatch[1]!.toLowerCase() as 'minimal' | 'moderate' | 'significant';
     }
 
-    // Parse wiki updates
-    const updatesMatch = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesMatch) {
-      const updateLines = updatesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of updateLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
-        if (match) {
+    // Parse dependency details - new detailed format
+    const detailsSection = response.match(/DEPENDENCY_DETAILS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
+    if (detailsSection) {
+      // Match blocks like: === [package] ===\n...\n=== END ===
+      const blockRegex = /===\s*\[([^\]]+)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
+      let blockMatch;
+      while ((blockMatch = blockRegex.exec(detailsSection[1]!)) !== null) {
+        const packageName = blockMatch[1]!.trim();
+        const blockContent = blockMatch[2]!;
+
+        const purposeMatch = blockContent.match(/PURPOSE:\s*([\s\S]*?)(?=USAGE:|CONSIDERATIONS:|$)/i);
+        const usageMatch = blockContent.match(/USAGE:\s*([\s\S]*?)(?=CONSIDERATIONS:|$)/i);
+        const considerationsMatch = blockContent.match(/CONSIDERATIONS:\s*([\s\S]*?)$/i);
+
+        analysis.dependencyDetails.push({
+          packageName,
+          purpose: purposeMatch ? purposeMatch[1]!.trim() : '',
+          usage: usageMatch ? usageMatch[1]!.trim() : '',
+          considerations: considerationsMatch ? considerationsMatch[1]!.trim() : '',
+        });
+      }
+    }
+
+    // Parse wiki updates - new format with full content blocks
+    const updatesSection = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    if (updatesSection) {
+      // Match blocks like: === [path] [action] ===\n[content]\n=== END ===
+      const blockRegex = /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
+      let blockMatch;
+      while ((blockMatch = blockRegex.exec(updatesSection[1]!)) !== null) {
+        const path = blockMatch[1]!.trim();
+        const action = blockMatch[2]!.toLowerCase() as 'create' | 'update';
+        const content = blockMatch[3]!.trim();
+
+        if (content && content.length > 0) {
           analysis.wikiUpdates.push({
-            path: match[1]!.trim(),
-            action: match[2]!.toLowerCase() as 'create' | 'update',
-            description: match[3]!.trim(),
+            path,
+            action,
+            content,
           });
+        }
+      }
+
+      // Fallback: also try to parse old format for backward compatibility
+      if (analysis.wikiUpdates.length === 0) {
+        const updateLines = updatesSection[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+        for (const line of updateLines) {
+          const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
+          if (match) {
+            analysis.wikiUpdates.push({
+              path: match[1]!.trim(),
+              action: match[2]!.toLowerCase() as 'create' | 'update',
+              content: match[3]!.trim(), // Use description as content for legacy format
+            });
+          }
         }
       }
     }
@@ -328,10 +394,37 @@ ${analysis.securityNotes.map(sn => `- ${sn}`).join('\n')}
     // Create individual pages for significant new dependencies
     for (const dep of addedDeps) {
       if (analysis.impact !== 'minimal') {
-        updates.push({
-          type: 'create',
-          path: `dependencies/${slugify(dep.packageName)}`,
-          content: `# ${dep.packageName}
+        // Look for detailed info from DEPENDENCY_DETAILS
+        const detail = analysis.dependencyDetails.find(
+          d => d.packageName.toLowerCase() === dep.packageName.toLowerCase()
+        );
+
+        let content: string;
+        if (detail && (detail.purpose || detail.usage || detail.considerations)) {
+          // Use the detailed info from the LLM
+          content = `# ${dep.packageName}
+
+## Purpose
+
+${detail.purpose || dep.reason}
+
+## Usage
+
+${detail.usage || '*Usage patterns not yet documented.*'}
+
+## Considerations
+
+${detail.considerations || '*No specific considerations noted.*'}
+
+## Version
+
+${dep.versionChange || 'See package.json'}
+
+---
+*Documentation created from commit ${commit.sha.slice(0, 8)}*`;
+        } else {
+          // Fallback to basic info
+          content = `# ${dep.packageName}
 
 ## Purpose
 
@@ -341,18 +434,41 @@ ${dep.reason}
 
 ${dep.versionChange || 'See package.json'}
 
-## Added In
-
-Commit ${commit.sha.slice(0, 8)}
-
 ---
-*Documentation created from commit ${commit.sha.slice(0, 8)}*
-`,
+*Documentation created from commit ${commit.sha.slice(0, 8)}*`;
+        }
+
+        updates.push({
+          type: 'create',
+          path: `dependencies/${slugify(dep.packageName)}`,
+          title: dep.packageName,
+          content,
           sourceCommitId: commit.sha,
           agentRunId: '',
-          confidenceDelta: 0.15,
+          confidenceDelta: detail ? 0.25 : 0.15,
         });
       }
+    }
+
+    // Add any wiki updates suggested by the LLM
+    for (const wikiUpdate of analysis.wikiUpdates) {
+      // Use the full content provided by the LLM
+      let content = wikiUpdate.content;
+      if (!content.includes('*Updated from commit') && !content.includes('*Source:')) {
+        content = `${content}
+
+---
+*Updated from commit ${commit.sha.slice(0, 8)}*`;
+      }
+
+      updates.push({
+        type: wikiUpdate.action,
+        path: wikiUpdate.path,
+        content,
+        sourceCommitId: commit.sha,
+        agentRunId: '',
+        confidenceDelta: 0.2,
+      });
     }
 
     return updates;
@@ -366,12 +482,20 @@ interface DependencyChange {
   reason: string;
 }
 
+interface DependencyDetail {
+  packageName: string;
+  purpose: string;
+  usage: string;
+  considerations: string;
+}
+
 interface ParsedAnalysis {
   summary: string;
   changes: DependencyChange[];
   breakingChanges: string[];
   securityNotes: string[];
   impact: 'minimal' | 'moderate' | 'significant';
+  dependencyDetails: DependencyDetail[];
   findings: Array<{
     type: string;
     importance: 'low' | 'medium' | 'high';
@@ -381,7 +505,7 @@ interface ParsedAnalysis {
   wikiUpdates: Array<{
     path: string;
     action: 'create' | 'update';
-    description: string;
+    content: string;
   }>;
   confidence: number;
 }
