@@ -13,8 +13,10 @@ import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
 import { createWorkItem } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
-import type { LLMService } from '../../services/llm/llm-service.js';
+import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
+import { codebaseTools } from '../../services/llm/codebase-tools.js';
+import type { ToolContext } from '../../services/llm/tools.js';
 import { ContextGatherer } from './context-gatherer.js';
 import {
   ORCHESTRATOR_SYSTEM_PROMPT,
@@ -250,7 +252,8 @@ export class Orchestrator {
   }
 
   /**
-   * Generate work list using LLM reasoning.
+   * Generate work list using LLM reasoning with tool-calling capability.
+   * The orchestrator can now explore the codebase before making decisions.
    */
   private async generateWithLLM(
     repoId: string,
@@ -280,10 +283,20 @@ export class Orchestrator {
       promptSent: userPrompt,
     });
 
-    // Call LLM
-    const completion = await this.llm!.complete({
+    // Create tool executor for codebase exploration
+    const toolExecutor = this.createToolExecutor(repoId);
+
+    // Call LLM with tools - orchestrator can now explore before deciding
+    const completion = await this.llm!.completeWithTools({
       system: ORCHESTRATOR_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
+      tools: toolExecutor.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })),
+      executeTools: toolExecutor.executeTools,
+      maxToolRounds: 5,
       maxTokens: 4000,
       temperature: 0.3,
     });
@@ -304,6 +317,9 @@ export class Orchestrator {
     orchestratorRun.costUsd = completion.costUsd;
     orchestratorRun.durationMs = Date.now() - startTime;
     orchestratorRun.usedLLM = true;
+    // Track tool usage
+    (orchestratorRun as { toolCalls?: ToolUseResult['toolCalls']; toolRounds?: number }).toolCalls = completion.toolCalls;
+    (orchestratorRun as { toolRounds?: number }).toolRounds = completion.toolRounds;
 
     // Convert to work items
     const workItems: WorkItem[] = [];
@@ -334,11 +350,46 @@ export class Orchestrator {
     orchestratorRun.workItemsCreated = workItems.map(w => w.id);
     await this.repos.orchestratorRuns.save(orchestratorRun);
 
+    const toolInfo = completion.toolRounds > 0 ? `, ${completion.toolRounds} tool rounds` : '';
     console.log(
-      `🤖 LLM Orchestrator: "${decision.reasoning}" (${workItems.length} items, $${completion.costUsd.toFixed(4)})`
+      `🤖 LLM Orchestrator: "${decision.reasoning}" (${workItems.length} items${toolInfo}, $${completion.costUsd.toFixed(4)})`
     );
 
     return workItems;
+  }
+
+  /**
+   * Create a tool executor for the orchestrator to explore the codebase.
+   */
+  private createToolExecutor(repoId: string): {
+    tools: typeof codebaseTools;
+    executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
+  } {
+    // Get repo path from git service
+    const repoPath = this.git?.getRepoPath(repoId);
+    const toolContext: ToolContext = { repoPath: repoPath ?? '', maxFileSize: 50000 };
+
+    return {
+      tools: codebaseTools,
+      executeTools: async (calls) => {
+        const results = await Promise.all(calls.map(async (call) => {
+          const tool = codebaseTools.find(t => t.name === call.name);
+          if (!tool) {
+            return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
+          }
+          try {
+            const result = await tool.execute(call.input, toolContext);
+            return { id: call.id, result };
+          } catch (error) {
+            return {
+              id: call.id,
+              result: `Error executing ${call.name}: ${error instanceof Error ? error.message : String(error)}`,
+            };
+          }
+        }));
+        return results;
+      },
+    };
   }
 
   /**
