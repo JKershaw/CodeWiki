@@ -31,6 +31,11 @@ import {
   selectPagesForEvaluation,
   type PageSelectionOptions,
 } from './page-selector.js';
+import {
+  startQualityTracking,
+  recordQualityResult,
+  clearQualityTracking,
+} from '../benchmark/benchmark-progress.js';
 
 /**
  * Options for running a quality benchmark.
@@ -109,9 +114,13 @@ export class QualityBenchmarkRunner {
         throw new Error(startResult.error);
       }
 
+      // Start in-memory progress tracking
+      startQualityTracking(runId, repoId, wikiId, selection.pages.length);
+
       // Execute evaluations in parallel with concurrency limit
       const maxConcurrency = options.maxConcurrency ?? 5;
       const results = await this.evaluatePagesParallel(
+        runId,
         selection.pages,
         allPages,
         maxConcurrency
@@ -130,6 +139,9 @@ export class QualityBenchmarkRunner {
         this.repos
       );
 
+      // Clear in-memory progress tracking
+      clearQualityTracking(runId);
+
       // Fetch and return the completed run
       const completedRun = await this.repos.qualityBenchmarks.findById(runId);
       if (!completedRun) {
@@ -138,6 +150,9 @@ export class QualityBenchmarkRunner {
 
       return completedRun;
     } catch (error) {
+      // Clear in-memory progress tracking
+      clearQualityTracking(runId);
+
       // Mark benchmark as failed
       await handleFailQualityBenchmark(
         createFailQualityBenchmarkCommand(runId, String(error)),
@@ -152,6 +167,7 @@ export class QualityBenchmarkRunner {
    * Evaluate pages in parallel with concurrency limit.
    */
   private async evaluatePagesParallel(
+    runId: string,
     pagesToEvaluate: WikiPage[],
     allPages: WikiPage[],
     maxConcurrency: number
@@ -161,21 +177,22 @@ export class QualityBenchmarkRunner {
     const inProgress: Promise<void>[] = [];
 
     const evaluateOne = async (page: WikiPage): Promise<void> => {
+      let result: PageQualityResult;
       try {
         const context = buildWikiContext(allPages, page);
-        const result = await this.evaluator.evaluate(page, context);
-        results.push(result);
+        result = await this.evaluator.evaluate(page, context);
       } catch (error) {
         // Create a failed result for this page
-        results.push(
-          createEmptyPageResult(
-            page.id,
-            page.path,
-            page.title,
-            String(error)
-          )
+        result = createEmptyPageResult(
+          page.id,
+          page.path,
+          page.title,
+          String(error)
         );
       }
+      results.push(result);
+      // Record progress for live updates
+      recordQualityResult(runId, result);
     };
 
     // Process pages with concurrency limit

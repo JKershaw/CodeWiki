@@ -1787,6 +1787,8 @@ function startBenchmarkPolling(repoId) {
   stopBenchmarkPolling();
 
   const progressDiv = document.getElementById('benchmark-progress');
+  const progressFill = document.getElementById('benchmark-progress-fill');
+  const progressText = document.getElementById('benchmark-progress-text');
   progressDiv.classList.remove('hidden');
 
   benchmarkPollingInterval = setInterval(async () => {
@@ -1803,12 +1805,22 @@ function startBenchmarkPolling(repoId) {
         return;
       }
 
-      // Update progress (we don't have detailed progress, so show indeterminate)
-      document.getElementById('benchmark-progress-text').textContent = 'Benchmark in progress... This may take a few minutes.';
+      // Try to get live progress
+      try {
+        const progressData = await api(`/repos/${repoId}/benchmarks/${latest.id}/progress`);
+        const { completedCount, totalQuestions } = progressData;
+        const percent = totalQuestions > 0 ? Math.round((completedCount / totalQuestions) * 100) : 0;
+        progressFill.style.width = `${percent}%`;
+        progressText.textContent = `Accuracy benchmark: ${completedCount} of ${totalQuestions} questions (${percent}%)`;
+      } catch {
+        // No progress data available (server restarted?) - show indeterminate
+        progressFill.style.width = '0%';
+        progressText.textContent = 'Accuracy benchmark in progress...';
+      }
     } catch (error) {
       console.error('Error polling benchmark status:', error);
     }
-  }, 3000);
+  }, 2000);
 }
 
 function stopBenchmarkPolling() {
@@ -2002,6 +2014,8 @@ function startQualityBenchmarkPolling(repoId) {
   stopQualityBenchmarkPolling();
 
   const progressDiv = document.getElementById('benchmark-progress');
+  const progressFill = document.getElementById('benchmark-progress-fill');
+  const progressText = document.getElementById('benchmark-progress-text');
   progressDiv.classList.remove('hidden');
 
   qualityBenchmarkPollingInterval = setInterval(async () => {
@@ -2018,12 +2032,22 @@ function startQualityBenchmarkPolling(repoId) {
         return;
       }
 
-      // Update progress
-      document.getElementById('benchmark-progress-text').textContent = 'Quality benchmark in progress... This may take a few minutes.';
+      // Try to get live progress
+      try {
+        const progressData = await api(`/repos/${repoId}/quality-benchmarks/${latest.id}/progress`);
+        const { completedCount, totalPages } = progressData;
+        const percent = totalPages > 0 ? Math.round((completedCount / totalPages) * 100) : 0;
+        progressFill.style.width = `${percent}%`;
+        progressText.textContent = `Quality benchmark: ${completedCount} of ${totalPages} pages (${percent}%)`;
+      } catch {
+        // No progress data available (server restarted?) - show indeterminate
+        progressFill.style.width = '0%';
+        progressText.textContent = 'Quality benchmark in progress...';
+      }
     } catch (error) {
       console.error('Error polling quality benchmark status:', error);
     }
-  }, 3000);
+  }, 2000);
 }
 
 function stopQualityBenchmarkPolling() {
