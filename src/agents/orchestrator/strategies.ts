@@ -23,8 +23,6 @@ import {
   handleListAgentRuns,
   createListUnprocessedCommitsQuery,
   handleListUnprocessedCommits,
-  createCountPendingEditRequestsQuery,
-  handleCountPendingEditRequests,
   createListOpenFindingsQuery,
   handleListOpenFindings,
 } from '../../queries/index.js';
@@ -151,43 +149,7 @@ export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
 };
 
 /**
- * Strategy 1: Process pending edit requests.
- * Wiki-editor should run when edit requests pile up to keep wiki updated incrementally.
- */
-export const pendingEditsStrategy: Strategy = async (ctx, remainingSlots) => {
-  if (remainingSlots <= 0) return { workItems: [] };
-
-  const PENDING_EDITS_THRESHOLD = 5;
-
-  // Check pending edit request count
-  const pendingEditsQuery = createCountPendingEditRequestsQuery(ctx.wikiId);
-  const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, ctx.repos);
-  const pendingEditCount = pendingEditsResult.data || 0;
-
-  if (pendingEditCount < PENDING_EDITS_THRESHOLD) {
-    return { workItems: [] };
-  }
-
-  const wikiEditorKey = 'wiki-editor:wiki';
-  if (ctx.existingWorkKeys.has(wikiEditorKey)) {
-    return { workItems: [] };
-  }
-
-  ctx.existingWorkKeys.add(wikiEditorKey);
-  return {
-    workItems: [
-      createWorkItem({
-        id: uuid(),
-        repoId: ctx.repoId,
-        agentType: 'wiki-editor',
-        priority: Priority.USER_REQUEST - 1,
-      }),
-    ],
-  };
-};
-
-/**
- * Strategy 2: Codebase exploration.
+ * Strategy 1: Codebase exploration.
  * Document undocumented code before commit analysis to establish current state.
  *
  * "Useful Wiki First" approach:
@@ -248,7 +210,7 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
 };
 
 /**
- * Strategy 3: Process unprocessed commits with all analysis agents.
+ * Strategy 2: Process unprocessed commits with all analysis agents.
  */
 export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0) return { workItems: [] };
@@ -294,7 +256,7 @@ export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
 };
 
 /**
- * Strategy 4: Meta agents (run on wiki after analysis is complete).
+ * Strategy 3: Meta agents (run on wiki after analysis is complete).
  */
 export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0) return { workItems: [] };
@@ -746,17 +708,19 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
  * - Users want to USE the wiki immediately, not wait for full commit analysis
  * - Build from CURRENT codebase first (exploration), then add historical context (commits)
  *
+ * Note: Pending edit requests are now handled automatically by the Executor
+ * before asking the Orchestrator for work. This simplifies the Orchestrator's
+ * responsibility to focus on "what new work to generate".
+ *
  * Order:
  * 1. Bootstrap - foundation for empty wikis
- * 2. Pending Edits - always process user/agent edit requests
- * 3. Codebase Exploration - PRIMARY early: document what exists NOW
- * 4. Synthesis - ELEVATED: create overviews/guides early from exploration pages
- * 5. Meta Agents - improve quality and linking
- * 6. Commit Analysis - DEMOTED: add historical context after wiki is useful
+ * 2. Codebase Exploration - PRIMARY early: document what exists NOW
+ * 3. Synthesis - ELEVATED: create overviews/guides early from exploration pages
+ * 4. Meta Agents - improve quality and linking
+ * 5. Commit Analysis - DEMOTED: add historical context after wiki is useful
  */
 export const deterministicStrategies: Strategy[] = [
   bootstrapStrategy,
-  pendingEditsStrategy,
   codebaseExplorationStrategy,
   synthesisStrategy,           // Elevated: create structure early
   metaAgentsStrategy,

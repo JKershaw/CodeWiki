@@ -4,7 +4,7 @@ import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { getTargetCommitId, getTargetPath } from '../domain/work-item.js';
+import { createWorkItem, getTargetCommitId, getTargetPath } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -71,6 +71,9 @@ import { createEditRequest } from '../domain/edit-request.js';
 
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../agents/registry.js';
+
+// Import priority levels for work items
+import { Priority } from '../agents/orchestrator/strategies.js';
 
 /**
  * Queue water marks for proactive refill.
@@ -167,6 +170,89 @@ export class Executor {
         if (this.llm.isRateLimited()) {
           console.log('Rate limited, waiting...');
           await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        }
+
+        // Process any pending edit requests first (before asking Orchestrator for work)
+        // This is a mechanical operation that always happens when edits exist
+        const pendingEdits = await this.repos.editRequests.countPending(wikiId);
+        if (pendingEdits > 0) {
+          console.log(`📝 Found ${pendingEdits} pending edit requests, processing first...`);
+
+          // Create a wiki-editor work item for tracking
+          const wikiEditorWorkItem = createWorkItem({
+            id: uuid(),
+            repoId,
+            agentType: 'wiki-editor',
+            priority: Priority.USER_REQUEST, // Highest priority - process edits immediately
+          });
+
+          // Save and immediately claim it
+          await handleSaveWorkItems(createSaveWorkItemsCommand([wikiEditorWorkItem]), this.repos);
+          wikiEditorWorkItem.status = 'claimed';
+          wikiEditorWorkItem.claimedAt = new Date();
+          await this.repos.workQueue.save(wikiEditorWorkItem);
+
+          // Execute the wiki-editor work item
+          iterationNumber++;
+          const iterationId = uuid();
+          await handleStartIteration(
+            createStartIterationCommand({
+              id: iterationId,
+              processingRunId,
+              iterationNumber,
+            }),
+            this.repos
+          );
+          await handleUpdateIterationWorkItem(
+            createUpdateIterationWorkItemCommand(iterationId, {
+              workItemId: wikiEditorWorkItem.id,
+              agentType: wikiEditorWorkItem.agentType,
+            }),
+            this.repos
+          );
+
+          const result = await this.executeWorkItem(wikiEditorWorkItem, repoId, wikiId);
+
+          if (result.success) {
+            await handleCompleteIteration(
+              createCompleteIterationCommand(iterationId, {
+                agentRunId: result.agentRunId!,
+                durationMs: result.durationMs,
+                costUsd: result.cost,
+                pagesCreated: result.pagesCreated,
+                pagesUpdated: result.pagesUpdated,
+              }),
+              this.repos
+            );
+            summary.successful++;
+          } else {
+            await handleFailIteration(
+              createFailIterationCommand(iterationId, result.error || 'Unknown error', result.durationMs),
+              this.repos
+            );
+            summary.failed++;
+          }
+
+          summary.iterations++;
+          summary.totalCost += result.cost;
+          summary.wikiPagesCreated += result.pagesCreated;
+          summary.wikiPagesUpdated += result.pagesUpdated;
+
+          // Update progress
+          await handleUpdateProcessingProgress(
+            createUpdateProcessingProgressCommand(processingRunId, {
+              completedIterations: summary.iterations,
+              successfulIterations: summary.successful,
+              failedIterations: summary.failed,
+              totalCostUsd: summary.totalCost,
+              wikiPagesCreated: summary.wikiPagesCreated,
+              wikiPagesUpdated: summary.wikiPagesUpdated,
+            }),
+            this.repos
+          );
+
+          // Continue to next iteration (check for more edits or regular work)
           continue;
         }
 
