@@ -268,13 +268,21 @@ export async function fetchAffectedFileContents(
       if (context.repoService && context.repo) {
         // Use repository service (works for both GitHub and local)
         content = await context.repoService.getFileContent(context.repo, filePath);
-      } else {
-        // Fall back to local file reading via git service
+      } else if (isLocalRepo(context)) {
+        // Fall back to local file reading via git service (only for local repos)
         const repoPath = context.git.getRepoPath(context.repoId);
         const fs = await import('fs/promises');
         const path = await import('path');
         const fullPath = path.join(repoPath, filePath);
         content = await fs.readFile(fullPath, 'utf-8');
+      } else {
+        // GitHub repo without repoService - cannot read file
+        results.push({
+          path: filePath,
+          content: null,
+          error: 'Cannot read file: GitHub repository requires RepositoryService',
+        });
+        continue;
       }
 
       // Check if file is too large

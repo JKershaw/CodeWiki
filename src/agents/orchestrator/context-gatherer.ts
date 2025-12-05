@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Repositories } from '../../repositories/index.js';
 import type { GitService } from '../../services/git/git-service.js';
+import type { RepositoryServiceFactory, RepositoryService, FileEntry } from '../../services/repository/repository-service.js';
+import type { Repo } from '../../domain/repo.js';
 
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
@@ -91,7 +93,8 @@ export interface OrchestratorContext {
 export class ContextGatherer {
   constructor(
     private readonly repos: Repositories,
-    private readonly git?: GitService
+    private readonly git?: GitService,
+    private readonly repoServiceFactory?: RepositoryServiceFactory
   ) {}
 
   /**
@@ -269,24 +272,176 @@ export class ContextGatherer {
    * Calculate coverage of source directories in the wiki.
    * Scans the repository's src/ directory and checks how well each
    * subdirectory is documented in the wiki.
+   *
+   * Works with both local repositories (filesystem) and GitHub repositories (API).
    */
   private async calculateDirectoryCoverage(
     repoId: string,
     wikiPages: Array<{ path: string; content: string }>
   ): Promise<DirectoryCoverage[]> {
-    // If we don't have git service, return empty coverage
+    // Look up the repository to determine if it's local or GitHub
+    const repo = await this.repos.repos.findById(repoId);
+    if (!repo) {
+      return [];
+    }
+
+    // For GitHub repos, use API-based approach
+    if (repo.isGitHubRepo) {
+      return this.calculateDirectoryCoverageViaApi(repo, wikiPages);
+    }
+
+    // For local repos, use filesystem-based approach
+    return this.calculateDirectoryCoverageViaFilesystem(repoId, wikiPages);
+  }
+
+  /**
+   * Calculate directory coverage using GitHub API.
+   */
+  private async calculateDirectoryCoverageViaApi(
+    repo: Repo,
+    wikiPages: Array<{ path: string; content: string }>
+  ): Promise<DirectoryCoverage[]> {
+    if (!this.repoServiceFactory) {
+      return [];
+    }
+
+    try {
+      const repoService = this.repoServiceFactory.getService(repo);
+
+      // Check if src directory exists
+      let srcEntries: FileEntry[];
+      try {
+        srcEntries = await repoService.listDirectory(repo, 'src');
+      } catch {
+        // src directory doesn't exist - try root level instead
+        return [];
+      }
+
+      const coverage: DirectoryCoverage[] = [];
+
+      // Process directories under src/
+      for (const entry of srcEntries) {
+        if (entry.type !== 'dir') continue;
+
+        const relativePath = `src/${entry.name}`;
+
+        // Count source files in this directory via API
+        const fileCount = await this.countSourceFilesViaApi(repoService, repo, relativePath);
+        if (fileCount === 0) continue;
+
+        // Check for wiki mentions
+        const wikiMentions = this.countWikiMentions(entry.name, relativePath, wikiPages);
+
+        // Calculate coverage percentage
+        const coveragePercent = fileCount > 0
+          ? Math.min(100, (wikiMentions / fileCount) * 100)
+          : 0;
+
+        coverage.push({
+          path: relativePath,
+          fileCount,
+          wikiMentions,
+          coveragePercent: Math.round(coveragePercent),
+        });
+      }
+
+      // Sort by coverage (lowest first to highlight gaps)
+      coverage.sort((a, b) => a.coveragePercent - b.coveragePercent);
+
+      return coverage;
+    } catch (error) {
+      console.warn(`Failed to calculate directory coverage via API: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Count source files in a directory using repository API.
+   */
+  private async countSourceFilesViaApi(
+    repoService: RepositoryService,
+    repo: Repo,
+    dirPath: string
+  ): Promise<number> {
+    try {
+      // Get all files in repo and filter to this directory
+      const allFiles = await repoService.getFileTree(repo);
+      const filesInDir = allFiles.filter(f =>
+        f.startsWith(dirPath + '/') &&
+        this.isSourceFile(f)
+      );
+      return filesInDir.length;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Check if a file path is a source code file.
+   */
+  private isSourceFile(filePath: string): boolean {
+    // Only TypeScript and JavaScript files
+    if (!filePath.endsWith('.ts') && !filePath.endsWith('.js')) {
+      return false;
+    }
+    // Skip test files and declaration files
+    if (filePath.includes('.test.') ||
+        filePath.includes('.spec.') ||
+        filePath.endsWith('.d.ts')) {
+      return false;
+    }
+    // Skip common non-source directories
+    const skipDirs = ['node_modules', 'dist', 'build', '__pycache__'];
+    if (skipDirs.some(dir => filePath.includes(`/${dir}/`))) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Count wiki mentions for a directory.
+   */
+  private countWikiMentions(
+    dirName: string,
+    relativePath: string,
+    wikiPages: Array<{ path: string; content: string }>
+  ): number {
+    const searchTerms = [
+      dirName.toLowerCase(),
+      relativePath.toLowerCase(),
+      relativePath.replace(/\//g, '-').toLowerCase(),
+    ];
+
+    let wikiMentions = 0;
+    for (const term of searchTerms) {
+      const mentionCount = wikiPages.filter(p =>
+        p.content.toLowerCase().includes(term) ||
+        p.path.toLowerCase().includes(term)
+      ).length;
+      wikiMentions = Math.max(wikiMentions, mentionCount);
+    }
+    return wikiMentions;
+  }
+
+  /**
+   * Calculate directory coverage using filesystem (for local repos).
+   */
+  private async calculateDirectoryCoverageViaFilesystem(
+    repoId: string,
+    wikiPages: Array<{ path: string; content: string }>
+  ): Promise<DirectoryCoverage[]> {
     if (!this.git) {
       return [];
     }
 
-    // For GitHub repos without a local clone, getRepoPath will throw
+    // For local repos, get the filesystem path
     let repoPath: string;
     try {
       repoPath = this.git.getRepoPath(repoId);
     } catch {
-      // No local path available (e.g., GitHub repo without clone)
       return [];
     }
+
     const srcPath = path.join(repoPath, 'src');
 
     // Check if src directory exists
@@ -305,31 +460,14 @@ export class ContextGatherer {
       const dirPath = path.join(srcPath, entry.name);
       const relativePath = `src/${entry.name}`;
 
-      // Count source files recursively (only .ts, .js files)
+      // Count source files recursively
       const fileCount = this.countSourceFiles(dirPath);
       if (fileCount === 0) continue;
 
-      // Check for wiki mentions of this directory
-      // Look for: directory name, path references, and file names from this dir
-      const searchTerms = [
-        entry.name.toLowerCase(),
-        relativePath.toLowerCase(),
-        relativePath.replace(/\//g, '-').toLowerCase(),
-      ];
-
-      // Count distinct mentions
-      let wikiMentions = 0;
-      for (const term of searchTerms) {
-        // Count pages that mention this term
-        const mentionCount = wikiPages.filter(p =>
-          p.content.toLowerCase().includes(term) ||
-          p.path.toLowerCase().includes(term)
-        ).length;
-        wikiMentions = Math.max(wikiMentions, mentionCount);
-      }
+      // Check for wiki mentions
+      const wikiMentions = this.countWikiMentions(entry.name, relativePath, wikiPages);
 
       // Calculate coverage percentage
-      // Use min(wikiMentions, fileCount) to cap at 100%
       const coveragePercent = fileCount > 0
         ? Math.min(100, (wikiMentions / fileCount) * 100)
         : 0;
@@ -450,6 +588,10 @@ export class ContextGatherer {
 /**
  * Create a context gatherer instance.
  */
-export function createContextGatherer(repos: Repositories, git?: GitService): ContextGatherer {
-  return new ContextGatherer(repos, git);
+export function createContextGatherer(
+  repos: Repositories,
+  git?: GitService,
+  repoServiceFactory?: RepositoryServiceFactory
+): ContextGatherer {
+  return new ContextGatherer(repos, git, repoServiceFactory);
 }

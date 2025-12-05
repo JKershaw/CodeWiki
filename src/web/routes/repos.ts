@@ -509,7 +509,9 @@ export function createReposRoutes(deps: Dependencies): Router {
       );
 
       // Create orchestrator and executor (uses LLM-powered orchestration)
-      const orchestrator = createOrchestrator(repos, llm, { useLLM: true });
+      // Pass git service and repoServiceFactory to orchestrator so it can calculate directory coverage
+      // for both local repos (via filesystem) and GitHub repos (via API)
+      const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, git, deps.repoServiceFactory);
       const executor = createExecutor(repos, git, llm, orchestrator, deps.repoServiceFactory);
 
       // Run in background (don't await)
