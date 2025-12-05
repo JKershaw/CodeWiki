@@ -71,11 +71,13 @@ export class SelfImprovementAgent {
     // Sort by iteration count
     benchmarkRuns.sort((a, b) => a.iterationCount - b.iterationCount);
 
-    // Load quality benchmark runs in the same iteration range
+    // Load quality benchmark runs for the same wiki in the same iteration range
     const minIteration = benchmarkRuns[0]!.iterationCount;
     const maxIteration = benchmarkRuns[benchmarkRuns.length - 1]!.iterationCount;
 
-    const allQualityRuns = await this.repos.qualityBenchmarks.findByRepo(repoId);
+    // Use findByWiki to ensure we only get quality benchmarks for the same wiki
+    // as the accuracy benchmarks being analyzed (not orphaned data from deleted wikis)
+    const allQualityRuns = await this.repos.qualityBenchmarks.findByWiki(wikiId);
     const qualityBenchmarkRuns = allQualityRuns
       .filter(r =>
         r.status === 'completed' &&
