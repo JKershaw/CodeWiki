@@ -4,14 +4,18 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { mkdtemp } from 'fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { createRepositories, type Repositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import { SelfImprovementChatService } from '../../src/services/self-improvement-chat-service.js';
 import { createSelfImprovementRun, completeSelfImprovementRun } from '../../src/domain/self-improvement.js';
 import { createChatSession } from '../../src/domain/chat-session.js';
-import type { LLMService, ToolUseResult } from '../../src/services/llm/llm-service.js';
+import { createRepo } from '../../src/domain/repo.js';
+import type { LLMService, ToolUseResult, CompleteWithToolsOptions } from '../../src/services/llm/llm-service.js';
+import type { GitService } from '../../src/services/git/git-service.js';
+import type { RepositoryServiceFactory, RepositoryService } from '../../src/services/repository/repository-service.js';
+import type { Repo } from '../../src/domain/repo.js';
 
 // Helper to create a mock LLM service
 function createMockLLM(responseContent: string, toolCalls: Array<{ name: string; input: Record<string, unknown>; result: string }> = []): LLMService {
@@ -256,6 +260,202 @@ describe('SelfImprovementChatService', () => {
       if (!result.success) {
         assert.ok(result.error.includes('Rate limit'));
       }
+    });
+  });
+
+  describe('source tools context', () => {
+    it('provides source context via repoServiceFactory for GitHub repos', async () => {
+      // Create a GitHub repo entity
+      const githubRepo = createRepo({
+        id: 'repo-1',
+        fullName: 'test-owner/test-repo',
+        owner: 'test-owner',
+        repoName: 'test-repo',
+        isGitHubRepo: true,
+        cloneUrl: 'https://github.com/test-owner/test-repo.git',
+        defaultBranch: 'main',
+      });
+      await repos.repos.save(githubRepo);
+
+      // Create mock repoService that we can verify was created
+      let repoServiceCreated = false;
+      const mockRepoService: RepositoryService = {
+        loadCommits: async () => [],
+        getCommitDiff: async () => '',
+        getFileContent: async () => 'file content',
+        listDirectory: async () => [],
+        getFileTree: async () => [],
+        fileExists: async () => true,
+        getDefaultBranch: async () => 'main',
+      };
+
+      const mockRepoServiceFactory: RepositoryServiceFactory = {
+        getService: (_repo: Repo) => {
+          repoServiceCreated = true;
+          return mockRepoService;
+        },
+        getServiceWithToken: (_repo: Repo, _token: string) => {
+          repoServiceCreated = true;
+          return mockRepoService;
+        },
+      };
+
+      // Capture what context is passed to the tool executor
+      let capturedOptions: CompleteWithToolsOptions | null = null;
+      const llm: LLMService = {
+        ...createMockLLM('Response'),
+        completeWithTools: async (options) => {
+          capturedOptions = options;
+          return {
+            content: 'Response',
+            inputTokens: 1000,
+            outputTokens: 500,
+            costUsd: 0.05,
+            model: 'mock',
+            truncated: false,
+            toolCalls: [],
+            toolRounds: 0,
+          };
+        },
+      };
+
+      const service = new SelfImprovementChatService(repos, llm, undefined, mockRepoServiceFactory);
+      await service.chat('session-1', 'Read the source code');
+
+      // Verify repoServiceFactory was used
+      assert.strictEqual(repoServiceCreated, true);
+      assert.ok(capturedOptions);
+    });
+
+    it('provides source context via local filesystem for local repos', async () => {
+      // Create a local repo entity
+      const localRepo = createRepo({
+        id: 'repo-1',
+        fullName: 'local/test-repo',
+        isGitHubRepo: false,
+        cloneUrl: '/path/to/local/repo',
+        defaultBranch: 'main',
+      });
+      await repos.repos.save(localRepo);
+
+      // Create a mock local repo directory
+      const localRepoPath = join(tempDir, 'repos', 'repo-1');
+      await mkdir(localRepoPath, { recursive: true });
+      await writeFile(join(localRepoPath, 'README.md'), '# Test Repo');
+
+      // Create mock git service that returns the local path
+      const mockGitService: Partial<GitService> = {
+        getRepoPath: (repoId: string) => join(tempDir, 'repos', repoId),
+      };
+
+      let repoServiceCreated = false;
+      const mockRepoServiceFactory: RepositoryServiceFactory = {
+        getService: () => {
+          repoServiceCreated = true;
+          return {} as RepositoryService;
+        },
+        getServiceWithToken: () => {
+          repoServiceCreated = true;
+          return {} as RepositoryService;
+        },
+      };
+
+      const llm = createMockLLM('Response');
+      const service = new SelfImprovementChatService(
+        repos,
+        llm,
+        mockGitService as GitService,
+        mockRepoServiceFactory
+      );
+
+      await service.chat('session-1', 'Read the source code');
+
+      // For local repos with existing paths, repoServiceFactory should NOT be used
+      // because the local filesystem takes precedence
+      assert.strictEqual(repoServiceCreated, false);
+    });
+
+    it('falls back to repoServiceFactory when local path does not exist', async () => {
+      // Create a local repo entity but don't create the directory
+      const localRepo = createRepo({
+        id: 'repo-1',
+        fullName: 'local/test-repo',
+        isGitHubRepo: false,
+        cloneUrl: '/path/to/local/repo',
+        defaultBranch: 'main',
+      });
+      await repos.repos.save(localRepo);
+
+      // Mock git service that returns a non-existent path
+      const mockGitService: Partial<GitService> = {
+        getRepoPath: () => '/non/existent/path',
+      };
+
+      let repoServiceCreated = false;
+      const mockRepoServiceFactory: RepositoryServiceFactory = {
+        getService: () => {
+          repoServiceCreated = true;
+          return {} as RepositoryService;
+        },
+        getServiceWithToken: () => {
+          repoServiceCreated = true;
+          return {} as RepositoryService;
+        },
+      };
+
+      const llm = createMockLLM('Response');
+      const service = new SelfImprovementChatService(
+        repos,
+        llm,
+        mockGitService as GitService,
+        mockRepoServiceFactory
+      );
+
+      await service.chat('session-1', 'Read the source code');
+
+      // Should fall back to repoServiceFactory when local path doesn't exist
+      assert.strictEqual(repoServiceCreated, true);
+    });
+
+    it('uses authenticated service for GitHub repos with user access token', async () => {
+      // Create a user with an access token
+      await repos.users.save({
+        id: 'user-1',
+        githubId: '12345',
+        username: 'testuser',
+        accessToken: 'test-access-token',
+        createdAt: new Date(),
+      });
+
+      // Create a GitHub repo linked to the user
+      const githubRepo = createRepo({
+        id: 'repo-1',
+        fullName: 'test-owner/test-repo',
+        owner: 'test-owner',
+        repoName: 'test-repo',
+        isGitHubRepo: true,
+        cloneUrl: 'https://github.com/test-owner/test-repo.git',
+        defaultBranch: 'main',
+        userId: 'user-1',
+      });
+      await repos.repos.save(githubRepo);
+
+      let usedToken: string | undefined;
+      const mockRepoServiceFactory: RepositoryServiceFactory = {
+        getService: () => ({} as RepositoryService),
+        getServiceWithToken: (_repo: Repo, token: string) => {
+          usedToken = token;
+          return {} as RepositoryService;
+        },
+      };
+
+      const llm = createMockLLM('Response');
+      const service = new SelfImprovementChatService(repos, llm, undefined, mockRepoServiceFactory);
+
+      await service.chat('session-1', 'Read the source code');
+
+      // Should use authenticated service with the user's token
+      assert.strictEqual(usedToken, 'test-access-token');
     });
   });
 });

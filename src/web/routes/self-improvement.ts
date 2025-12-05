@@ -221,7 +221,7 @@ export function createSelfImprovementRoutes(
   // Chat Routes
   // ============================================================================
 
-  const chatService = new SelfImprovementChatService(repos, llm);
+  const chatService = new SelfImprovementChatService(repos, llm, git, repoServiceFactory);
 
   /**
    * POST /api/repos/:id/self-improvements/:runId/chat
