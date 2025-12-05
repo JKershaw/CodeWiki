@@ -46,6 +46,8 @@ function createMockOrchestratorRun(
       lowConfidencePages: 1,
       recentRuns: [],
       pagesWithoutLinks: 3,
+      shallowPages: 0,
+      pagesLackingExamples: 0,
       hasProjectOverview: true,
       hasGettingStarted: false,
       hasTestingGuide: false,
