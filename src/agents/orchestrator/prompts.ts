@@ -52,29 +52,36 @@ Example: If code-change is at 50% and security is at 0%, include security work i
 
 ## Decision Guidelines (Page-Count Based)
 
-These thresholds ensure even large repos (1000+ commits) get useful synthesis early:
+Key principle: Users want to USE the wiki immediately, not wait for full commit analysis.
+Build a useful wiki from the CURRENT codebase first, then add historical context from commits.
 
-**0-5 pages:** Focus on code-change to build base content (100% analysis)
+**0-5 pages (Foundation Phase):** Focus on codebase-explorer to document current architecture (80% exploration, 20% synthesis)
+- Run codebase-explorer on key directories (src/, lib/, core modules)
+- Prioritize directories that appear to contain core functionality
+- Start project-overview early if 3+ exploration pages exist
+- Goal: Someone can understand "what this code does" NOW
 
-**5-10 pages:** Start synthesis work (70% analysis, 30% meta/synthesis)
-- Run writer agent on pages needing rewrite
-- Run link agent to connect pages
-- Start pattern/narrative analysis
-
-**10-15 pages:** Increase synthesis priority (50% analysis, 50% meta/synthesis)
-- Run overview agent for categories with 3+ pages
-- Run project-overview agent if architecture/overview doesn't exist
+**5-10 pages (Navigability Phase):** Build structure and start synthesis (60% exploration/synthesis, 40% commit analysis)
+- Continue codebase-explorer for uncovered directories
+- Run project-overview if architecture/overview doesn't exist
 - Run getting-started agent if guides/getting-started doesn't exist
-- Ensure pages are cross-linked
-- Quality reviews become valuable
+- Run link agent to connect pages
+- Start processing RECENT commits (last week) for context
+- Goal: Wiki is useful for onboarding
 
-**15+ pages:** Wiki needs strong synthesis (40% analysis, 60% meta/synthesis)
-- PRIORITIZE project-overview if architecture/overview missing
-- PRIORITIZE getting-started if guides/getting-started missing
-- Run testing-guide if guides/testing missing
-- Run extension-guide if guides/extension-patterns missing
-- Continue writer agent for readability
-- Focus on making wiki navigable and useful
+**10-20 pages (Enrichment Phase):** Balance exploration and commit analysis (40% exploration, 60% commit analysis)
+- Fill remaining coverage gaps with codebase-explorer
+- Run overview agent for categories with 3+ pages
+- Process commits to add "why" context to existing pages
+- Run quality and consistency agents
+- Goal: Wiki has both current state AND historical context
+
+**20+ pages (Historical Phase):** Backfill historical context (20% exploration, 80% commit analysis)
+- Process older commits for historical context
+- Run narrative agent to find ADRs and planning docs
+- Run technical-debt agent to identify code smells
+- Continue synthesis (testing-guide, extension-guide)
+- Goal: Complete documentation with full history
 
 ## Response Format
 
@@ -111,12 +118,12 @@ IMPORTANT:
 export function buildUserPrompt(ctx: OrchestratorContext, contextString: string, maxItems: number): string {
   const pageCount = ctx.wikiPages;
   const synthesisGuidance = pageCount < 5
-    ? 'Focus entirely on code-change analysis to build base content.'
+    ? 'FOUNDATION PHASE: Focus on codebase-explorer to document current architecture. Users need to understand the code NOW - 80% exploration, 20% early synthesis.'
     : pageCount < 10
-    ? 'Mix in synthesis work (writer, link agents) - aim for 70% analysis, 30% synthesis.'
-    : pageCount < 15
-    ? 'Balanced approach - 50% analysis, 50% synthesis. Run overview agent for categories with 3+ pages.'
-    : 'Prioritize synthesis and overview - 40% analysis, 60% synthesis. Project overview is critical if missing.';
+    ? 'NAVIGABILITY PHASE: Continue exploration + start synthesis. Create project-overview and getting-started if missing - 60% exploration/synthesis, 40% commit analysis.'
+    : pageCount < 20
+    ? 'ENRICHMENT PHASE: Balance exploration gaps with commit analysis. Add historical context to existing pages - 40% exploration, 60% commit analysis.'
+    : 'HISTORICAL PHASE: Backfill commit history for context and rationale. Process older commits, find ADRs - 20% exploration, 80% commit analysis.';
 
   // Find agents with 0% coverage that have pending commits
   const coverageGaps = Object.entries(ctx.commitsByAgent)
