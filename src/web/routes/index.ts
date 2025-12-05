@@ -10,6 +10,7 @@ import type { GitService } from '../../services/git/git-service.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { JwtService } from '../../services/auth/jwt-service.js';
 import type { GitHubRepoService } from '../../services/github/github-repo-service.js';
+import type { GitHubAuthService } from '../../services/github/github-auth-service.js';
 import type { RepositoryServiceFactory } from '../../services/repository/repository-service.js';
 
 import { createReposRoutes } from './repos.js';
@@ -34,6 +35,8 @@ export interface Dependencies {
   jwtService?: JwtService;
   /** GitHub repository service for API-based access */
   githubRepoService?: GitHubRepoService;
+  /** GitHub auth service for token refresh */
+  githubAuthService?: GitHubAuthService;
   /** Factory for creating repository services */
   repoServiceFactory?: RepositoryServiceFactory;
 }
