@@ -31,6 +31,39 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env['PORT'] || 3000;
 
+/**
+ * Available models for the model selector.
+ */
+export const AVAILABLE_MODELS = [
+  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5' },
+  { id: 'anthropic/claude-opus-4.5', name: 'Claude Opus 4.5' },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+  { id: 'x-ai/grok-4.1-fast:free', name: 'Grok 4.1 Fast (Free)' },
+  { id: 'meta-llama/llama-4-maverick', name: 'Llama 4 Maverick' },
+  { id: 'openai/gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini' },
+  { id: 'qwen/qwen-turbo', name: 'Qwen Turbo' },
+] as const;
+
+/**
+ * Runtime model override. When null, uses OPENROUTER_MODEL env var.
+ */
+let currentModelOverride: string | null = null;
+
+/**
+ * Get the current model ID.
+ * Returns the runtime override if set, otherwise the env var, otherwise the first available model.
+ */
+export function getCurrentModel(): string {
+  return currentModelOverride ?? process.env['OPENROUTER_MODEL'] ?? AVAILABLE_MODELS[0].id;
+}
+
+/**
+ * Set the current model override.
+ */
+export function setCurrentModel(modelId: string): void {
+  currentModelOverride = modelId;
+}
+
 // Session secret for signing cookies and JWTs
 const SESSION_SECRET = process.env['SESSION_SECRET'] || randomBytes(32).toString('hex');
 
@@ -52,7 +85,7 @@ let repoConnection: RepositoryConnection | null = null;
 function createLLM(): LLMService {
   const apiKey = process.env['OPENROUTER_API_KEY'];
   if (apiKey) {
-    const model = process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5';
+    const model = getCurrentModel();
     return createOpenRouterLLM({ apiKey, model });
   }
   return createMockLLMForCodeAnalysis();

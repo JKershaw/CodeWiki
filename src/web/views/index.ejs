@@ -319,7 +319,12 @@
 
     <footer>
       <p>CodeWiki - Generate living wikis from Git repositories</p>
-      <p class="model-info">Model: <span id="model-name">Loading...</span></p>
+      <div class="model-selector-container">
+        <label for="model-selector">Model:</label>
+        <select id="model-selector" class="model-selector">
+          <option value="">Loading...</option>
+        </select>
+      </div>
     </footer>
 
     <!-- Confirmation Modal -->
