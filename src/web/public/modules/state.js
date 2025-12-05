@@ -15,6 +15,7 @@ const views = {
   query: document.getElementById('query-view'),
   spec: document.getElementById('spec-view'),
   benchmark: document.getElementById('benchmark-view'),
+  debug: document.getElementById('debug-view'),
 };
 
 const navBtns = document.querySelectorAll('.nav-btn');

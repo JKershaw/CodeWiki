@@ -3,6 +3,9 @@
  * Displays orchestrator decisions, agent runs, and system metrics.
  */
 
+// Track the current repo being debugged
+let debugCurrentRepoId = null;
+
 /**
  * Initialize debug view event listeners.
  */
@@ -14,21 +17,21 @@ function initDebugListeners() {
 
   // Refresh buttons
   document.getElementById('debug-refresh-orchestrator')?.addEventListener('click', () => {
-    loadOrchestratorRuns(appState.currentRepoId);
+    if (debugCurrentRepoId) loadOrchestratorRuns(debugCurrentRepoId);
   });
   document.getElementById('debug-refresh-agents')?.addEventListener('click', () => {
-    loadAgentRuns(appState.currentRepoId);
+    if (debugCurrentRepoId) loadAgentRuns(debugCurrentRepoId);
   });
 
   // Filter controls
   document.getElementById('debug-filter-llm')?.addEventListener('change', () => {
-    loadOrchestratorRuns(appState.currentRepoId);
+    if (debugCurrentRepoId) loadOrchestratorRuns(debugCurrentRepoId);
   });
   document.getElementById('debug-agent-filter')?.addEventListener('change', () => {
-    loadAgentRuns(appState.currentRepoId);
+    if (debugCurrentRepoId) loadAgentRuns(debugCurrentRepoId);
   });
   document.getElementById('debug-status-filter')?.addEventListener('change', () => {
-    loadAgentRuns(appState.currentRepoId);
+    if (debugCurrentRepoId) loadAgentRuns(debugCurrentRepoId);
   });
 
   // Close detail panel
@@ -41,7 +44,7 @@ function initDebugListeners() {
  * Open the debug view for a repository.
  */
 async function openDebug(repoId) {
-  appState.currentRepoId = repoId;
+  debugCurrentRepoId = repoId;
 
   // Get repo info for display
   try {
