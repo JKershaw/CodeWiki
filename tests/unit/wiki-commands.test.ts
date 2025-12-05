@@ -95,9 +95,18 @@ function createMockRepos(): Repositories {
     bulkUpdateStatus: async () => {},
   };
 
+  // Stub out additional repositories needed for DeleteWiki
+  const noopDeleteByWiki = async () => {};
+
   return {
     wikis: mockWikis,
     wikiPages: mockWikiPages,
+    wikiPageHistory: { deleteByWiki: noopDeleteByWiki },
+    findings: { deleteByWiki: noopDeleteByWiki },
+    editRequests: { deleteByWiki: noopDeleteByWiki },
+    conflicts: { deleteByWiki: noopDeleteByWiki },
+    benchmarks: { deleteByWiki: noopDeleteByWiki },
+    qualityBenchmarks: { deleteByWiki: noopDeleteByWiki },
   } as Repositories;
 }
 

@@ -112,7 +112,7 @@ export function createDeleteWikiCommand(wikiId: string): DeleteWikiCommand {
 
 /**
  * Handler for DeleteWiki command.
- * Deletes a wiki and all its pages.
+ * Deletes a wiki and all associated data (pages, benchmarks, findings, etc.).
  */
 export async function handleDeleteWiki(
   command: DeleteWikiCommand,
@@ -125,10 +125,16 @@ export async function handleDeleteWiki(
       return failure(`Wiki not found: ${command.wikiId}`);
     }
 
-    // Delete all wiki pages first
+    // Delete all wiki-specific data
     await repos.wikiPages.deleteByWiki(command.wikiId);
+    await repos.wikiPageHistory.deleteByWiki(command.wikiId);
+    await repos.findings.deleteByWiki(command.wikiId);
+    await repos.editRequests.deleteByWiki(command.wikiId);
+    await repos.conflicts.deleteByWiki(command.wikiId);
+    await repos.benchmarks.deleteByWiki(command.wikiId);
+    await repos.qualityBenchmarks.deleteByWiki(command.wikiId);
 
-    // Delete the wiki
+    // Delete the wiki itself
     await repos.wikis.delete(command.wikiId);
 
     return success();
