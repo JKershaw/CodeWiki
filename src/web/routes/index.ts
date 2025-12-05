@@ -23,6 +23,7 @@ import { createBenchmarksRoutes } from './benchmarks.js';
 import { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
 import { createSelfImprovementRoutes } from './self-improvement.js';
 import { createConfigRoutes } from './config.js';
+import { createObservabilityRoutes } from './observability.js';
 
 /**
  * Dependencies required by route handlers.
@@ -54,6 +55,7 @@ export function createApiRoutes(deps: Dependencies): Router {
   router.use(createWikiContentRoutes(deps));
   router.use(createAgentsRoutes(deps));
   router.use(createProcessingRoutes(deps));
+  router.use(createObservabilityRoutes(deps));
   router.use(createFilesystemRoutes(deps));
   router.use(createBenchmarksRoutes(deps));
   router.use(createQualityBenchmarksRoutes(deps));
@@ -68,6 +70,7 @@ export { createWikisRoutes } from './wikis.js';
 export { createWikiContentRoutes } from './wiki-content.js';
 export { createAgentsRoutes } from './agents.js';
 export { createProcessingRoutes } from './processing.js';
+export { createObservabilityRoutes } from './observability.js';
 export { createFilesystemRoutes } from './filesystem.js';
 export { createBenchmarksRoutes } from './benchmarks.js';
 export { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
