@@ -162,18 +162,21 @@ async function getProxyFetch(): Promise<typeof fetch> {
  */
 export class OpenRouterLLMService extends BaseLLMService {
   private apiKey: string;
+  private provider: string | undefined;
   private fetchFn: typeof fetch | null = null;
 
   constructor(
     apiKey: string,
     model = 'anthropic/claude-sonnet-4.5',
-    rateLimit?: Partial<RateLimitConfig>
+    rateLimit?: Partial<RateLimitConfig>,
+    provider?: string
   ) {
     super(model, {
       maxRequestsPerMinute: rateLimit?.maxRequestsPerMinute ?? 50,
       maxCostPerHour: rateLimit?.maxCostPerHour ?? 5,
     });
     this.apiKey = apiKey;
+    this.provider = provider;
   }
 
   private async getFetch(): Promise<typeof fetch> {
@@ -181,6 +184,20 @@ export class OpenRouterLLMService extends BaseLLMService {
       this.fetchFn = await getProxyFetch();
     }
     return this.fetchFn;
+  }
+
+  /**
+   * Build the provider configuration object for OpenRouter requests.
+   * Returns undefined if no provider is configured.
+   */
+  private getProviderConfig(): { order: string[]; allow_fallbacks: true } | undefined {
+    if (!this.provider) {
+      return undefined;
+    }
+    return {
+      order: [this.provider],
+      allow_fallbacks: true,
+    };
   }
 
   private async callAPI(body: Record<string, unknown>): Promise<ChatResponse> {
@@ -252,11 +269,13 @@ export class OpenRouterLLMService extends BaseLLMService {
     }
 
     try {
+      const providerConfig = this.getProviderConfig();
       const response = await this.callAPI({
         model: this.model,
         max_tokens: options.maxTokens ?? 2000,
         messages,
         ...(options.stopSequences ? { stop: options.stopSequences } : {}),
+        ...(providerConfig ? { provider: providerConfig } : {}),
       });
 
       const content = response.choices[0]?.message?.content ?? '';
@@ -314,6 +333,7 @@ export class OpenRouterLLMService extends BaseLLMService {
     let finalContent = '';
 
     try {
+      const providerConfig = this.getProviderConfig();
       while (toolRounds < maxRounds) {
         const response = await this.callAPI({
           model: this.model,
@@ -321,6 +341,7 @@ export class OpenRouterLLMService extends BaseLLMService {
           messages,
           tools,
           tool_choice: 'auto',
+          ...(providerConfig ? { provider: providerConfig } : {}),
         });
 
         totalInputTokens += response.usage?.prompt_tokens ?? 0;
@@ -405,6 +426,7 @@ export class OpenRouterLLMService extends BaseLLMService {
           model: this.model,
           max_tokens: options.maxTokens ?? 4000,
           messages,
+          ...(providerConfig ? { provider: providerConfig } : {}),
         });
 
         totalInputTokens += finalResponse.usage?.prompt_tokens ?? 0;
@@ -440,6 +462,7 @@ export function createOpenRouterLLM(options?: {
   apiKey?: string;
   model?: string;
   rateLimit?: Partial<RateLimitConfig>;
+  provider?: string;
 }): OpenRouterLLMService {
   const apiKey = options?.apiKey ?? process.env['OPENROUTER_API_KEY'];
 
@@ -450,6 +473,7 @@ export function createOpenRouterLLM(options?: {
   return new OpenRouterLLMService(
     apiKey,
     options?.model ?? process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5',
-    options?.rateLimit
+    options?.rateLimit,
+    options?.provider ?? process.env['OPENROUTER_PROVIDER']
   );
 }
