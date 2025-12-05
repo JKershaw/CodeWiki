@@ -177,6 +177,9 @@ export class OpenRouterLLMService extends BaseLLMService {
     });
     this.apiKey = apiKey;
     this.provider = provider;
+    if (provider) {
+      console.log(`[LLM] Preferred provider configured: ${provider}`);
+    }
   }
 
   private async getFetch(): Promise<typeof fetch> {
