@@ -163,13 +163,15 @@ async function getProxyFetch(): Promise<typeof fetch> {
 export class OpenRouterLLMService extends BaseLLMService {
   private apiKey: string;
   private provider: string | undefined;
+  private allowFallbacks: boolean;
   private fetchFn: typeof fetch | null = null;
 
   constructor(
     apiKey: string,
     model = 'anthropic/claude-sonnet-4.5',
     rateLimit?: Partial<RateLimitConfig>,
-    provider?: string
+    provider?: string,
+    allowFallbacks = true
   ) {
     super(model, {
       maxRequestsPerMinute: rateLimit?.maxRequestsPerMinute ?? 50,
@@ -177,8 +179,9 @@ export class OpenRouterLLMService extends BaseLLMService {
     });
     this.apiKey = apiKey;
     this.provider = provider;
+    this.allowFallbacks = allowFallbacks;
     if (provider) {
-      console.log(`[LLM] Preferred provider configured: ${provider}`);
+      console.log(`[LLM] Preferred provider configured: ${provider} (fallbacks: ${allowFallbacks})`);
     }
   }
 
@@ -193,13 +196,13 @@ export class OpenRouterLLMService extends BaseLLMService {
    * Build the provider configuration object for OpenRouter requests.
    * Returns undefined if no provider is configured.
    */
-  private getProviderConfig(): { order: string[]; allow_fallbacks: true } | undefined {
+  private getProviderConfig(): { order: string[]; allow_fallbacks: boolean } | undefined {
     if (!this.provider) {
       return undefined;
     }
     return {
       order: [this.provider],
-      allow_fallbacks: true,
+      allow_fallbacks: this.allowFallbacks,
     };
   }
 
@@ -466,6 +469,7 @@ export function createOpenRouterLLM(options?: {
   model?: string;
   rateLimit?: Partial<RateLimitConfig>;
   provider?: string;
+  allowFallbacks?: boolean;
 }): OpenRouterLLMService {
   const apiKey = options?.apiKey ?? process.env['OPENROUTER_API_KEY'];
 
@@ -473,10 +477,16 @@ export function createOpenRouterLLM(options?: {
     throw new Error('OPENROUTER_API_KEY environment variable is required');
   }
 
+  // Parse allowFallbacks from env var (defaults to true)
+  const envAllowFallbacks = process.env['OPENROUTER_PROVIDER_ALLOW_FALLBACKS'];
+  const allowFallbacks = options?.allowFallbacks ??
+    (envAllowFallbacks !== undefined ? envAllowFallbacks.toLowerCase() === 'true' : true);
+
   return new OpenRouterLLMService(
     apiKey,
     options?.model ?? process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5',
     options?.rateLimit,
-    options?.provider ?? process.env['OPENROUTER_PROVIDER']
+    options?.provider ?? process.env['OPENROUTER_PROVIDER'],
+    allowFallbacks
   );
 }

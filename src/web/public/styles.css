@@ -1348,10 +1348,44 @@ footer {
 	font-size: 0.9rem;
 }
 
-footer .model-info {
-	margin-top: 8px;
+footer .model-selector-container {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 12px;
 	font-size: 0.8rem;
+}
+
+footer .model-selector-container label {
+	color: var(--text-secondary);
 	opacity: 0.7;
+}
+
+footer .model-selector {
+	background: var(--bg-elevated);
+	border: 1px solid var(--border);
+	color: var(--text-primary);
+	padding: 6px 10px;
+	border-radius: 6px;
+	font-size: 0.8rem;
+	cursor: pointer;
+	min-width: 180px;
+}
+
+footer .model-selector:hover {
+	border-color: var(--accent-wisdom);
+}
+
+footer .model-selector:focus {
+	outline: none;
+	border-color: var(--accent-wisdom);
+	box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+footer .model-selector option {
+	background: var(--bg-elevated);
+	color: var(--text-primary);
 }
 
 /* Job List */
