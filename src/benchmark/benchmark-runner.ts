@@ -113,7 +113,7 @@ export class BenchmarkRunner {
       }
 
       // Execute all questions in parallel with concurrency limit
-      const maxConcurrency = options.maxConcurrency ?? 5;
+      const maxConcurrency = options.maxConcurrency ?? 15;
       const results = await this.executeQuestionsParallel(
         questions,
         wikiId,
