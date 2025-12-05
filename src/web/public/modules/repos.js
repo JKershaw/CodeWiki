@@ -57,6 +57,7 @@ async function loadRepos() {
           <button class="btn query-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Ask</button>
           <button class="btn spec-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Spec</button>
           <button class="btn benchmark-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Benchmark</button>
+          <button class="btn debug-btn" data-id="${repo.id}">Debug</button>
         </div>
       </div>
     `).join('');
@@ -76,6 +77,9 @@ async function loadRepos() {
     });
     container.querySelectorAll('.benchmark-btn').forEach(btn => {
       btn.addEventListener('click', () => openBenchmark(btn.dataset.id));
+    });
+    container.querySelectorAll('.debug-btn').forEach(btn => {
+      btn.addEventListener('click', () => openDebug(btn.dataset.id));
     });
     container.querySelectorAll('.delete-repo-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {

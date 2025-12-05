@@ -26,6 +26,7 @@
       <button class="nav-btn" data-view="query" disabled>Ask</button>
       <button class="nav-btn" data-view="spec" disabled>Spec</button>
       <button class="nav-btn" data-view="benchmark" disabled>Benchmark</button>
+      <button class="nav-btn" data-view="debug" disabled>Debug</button>
     </nav>
 
     <main>
@@ -315,6 +316,96 @@
           <div id="benchmark-detail-content"></div>
         </div>
       </section>
+
+      <!-- Debug/Observability View -->
+      <section id="debug-view" class="view">
+        <div class="section-header">
+          <h2>Debug: <span id="debug-repo-name"></span></h2>
+          <button id="back-to-repos-debug" class="btn secondary">Back to Repos</button>
+        </div>
+
+        <div class="debug-container">
+          <!-- Summary Cards -->
+          <div id="debug-summary" class="debug-summary">
+            <div class="summary-card">
+              <h4>Total Cost</h4>
+              <div class="summary-value" id="debug-total-cost">$0.00</div>
+              <div class="summary-breakdown">
+                <span>Orchestrator: <span id="debug-orchestrator-cost">$0.00</span></span>
+                <span>Agents: <span id="debug-agent-cost">$0.00</span></span>
+              </div>
+            </div>
+            <div class="summary-card">
+              <h4>Agent Runs</h4>
+              <div class="summary-value" id="debug-total-runs">0</div>
+              <div class="summary-breakdown">
+                <span class="status-completed">Completed: <span id="debug-completed-runs">0</span></span>
+                <span class="status-failed">Failed: <span id="debug-failed-runs">0</span></span>
+              </div>
+            </div>
+            <div class="summary-card">
+              <h4>Success Rate</h4>
+              <div class="summary-value" id="debug-success-rate">100%</div>
+            </div>
+            <div class="summary-card">
+              <h4>Orchestrator Decisions</h4>
+              <div class="summary-value" id="debug-orchestrator-runs">0</div>
+              <div class="summary-breakdown">
+                <span>LLM: <span id="debug-llm-decisions">0</span></span>
+                <span>Deterministic: <span id="debug-deterministic-decisions">0</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabs for different views -->
+          <div class="debug-tabs">
+            <button class="debug-tab active" data-tab="orchestrator">Orchestrator Decisions</button>
+            <button class="debug-tab" data-tab="agents">Agent Runs</button>
+          </div>
+
+          <!-- Orchestrator Decisions Tab -->
+          <div id="debug-orchestrator-tab" class="debug-tab-content active">
+            <div class="debug-controls">
+              <label>
+                <input type="checkbox" id="debug-filter-llm"> LLM only
+              </label>
+              <button id="debug-refresh-orchestrator" class="btn secondary small">Refresh</button>
+            </div>
+            <div id="debug-orchestrator-list" class="debug-list">
+              <p class="placeholder">Loading orchestrator decisions...</p>
+            </div>
+          </div>
+
+          <!-- Agent Runs Tab -->
+          <div id="debug-agents-tab" class="debug-tab-content">
+            <div class="debug-controls">
+              <select id="debug-agent-filter">
+                <option value="">All Agents</option>
+              </select>
+              <select id="debug-status-filter">
+                <option value="">All Statuses</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="running">Running</option>
+                <option value="pending">Pending</option>
+              </select>
+              <button id="debug-refresh-agents" class="btn secondary small">Refresh</button>
+            </div>
+            <div id="debug-agents-list" class="debug-list">
+              <p class="placeholder">Loading agent runs...</p>
+            </div>
+          </div>
+
+          <!-- Detail Panel (shown when clicking an item) -->
+          <div id="debug-detail-panel" class="debug-detail-panel hidden">
+            <div class="detail-header">
+              <h3 id="debug-detail-title">Details</h3>
+              <button id="debug-close-detail" class="btn secondary small">Close</button>
+            </div>
+            <div id="debug-detail-content" class="detail-content"></div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer>
@@ -370,6 +461,7 @@
   <script src="/modules/spec.js"></script>
   <script src="/modules/benchmark.js"></script>
   <script src="/modules/chat.js"></script>
+  <script src="/modules/debug.js"></script>
   <!-- Main application entry point -->
   <script src="/app.js"></script>
 </body>
