@@ -57,8 +57,6 @@ import {
   handleListOpenFindings,
   createListLowConfidencePagesQuery,
   handleListLowConfidencePages,
-  createCountPendingEditRequestsQuery,
-  handleCountPendingEditRequests,
 } from '../../queries/index.js';
 
 // Import agent registry for type lists
@@ -108,29 +106,21 @@ export class Orchestrator {
       return [bootstrapWork];
     }
 
-    const pendingEditsWork = await this.checkPendingEditsNeeded(repoId, wikiId);
+    // Note: Pending edit requests are now handled automatically by the Executor
+    // before asking the Orchestrator for work. This simplifies the Orchestrator's
+    // responsibility to focus on "what new work to generate".
 
     // If LLM mode enabled and LLM is available, try LLM first
     if (this.config.useLLM && this.llm) {
       try {
-        const llmWork = await this.generateWithLLM(repoId, wikiId, maxItems);
-        // Prepend high-priority deterministic work
-        const allWork = pendingEditsWork ? [pendingEditsWork, ...llmWork] : llmWork;
-        return allWork.slice(0, maxItems);
+        return await this.generateWithLLM(repoId, wikiId, maxItems);
       } catch (error) {
         console.warn('LLM orchestration failed, falling back to deterministic:', error);
       }
     }
 
     // Deterministic fallback
-    const deterministicWork = await this.generateDeterministic(repoId, wikiId, maxItems);
-
-    // Prepend high-priority deterministic work
-    const allWork = pendingEditsWork
-      ? [pendingEditsWork, ...deterministicWork]
-      : deterministicWork;
-
-    return allWork.slice(0, maxItems);
+    return await this.generateDeterministic(repoId, wikiId, maxItems);
   }
 
   /**
@@ -198,57 +188,6 @@ export class Orchestrator {
       repoId,
       agentType: 'bootstrap',
       priority: Priority.USER_REQUEST,
-    });
-  }
-
-  /**
-   * Check if wiki-editor is needed due to pending edit requests.
-   */
-  private async checkPendingEditsNeeded(
-    repoId: string,
-    wikiId: string
-  ): Promise<WorkItem | null> {
-    const PENDING_EDITS_THRESHOLD = 5;
-    const PENDING_EDITS_URGENT = 20;
-
-    const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
-    const pendingEditsResult = await handleCountPendingEditRequests(pendingEditsQuery, this.repos);
-    const pendingEditCount = pendingEditsResult.data || 0;
-
-    if (pendingEditCount === 0) {
-      return null;
-    }
-
-    const isUrgent = pendingEditCount > PENDING_EDITS_URGENT;
-
-    if (!isUrgent) {
-      const unprocessedQuery = createListUnprocessedCommitsQuery(repoId, 'code-change');
-      const unprocessedResult = await handleListUnprocessedCommits(unprocessedQuery, this.repos);
-      const unprocessedCommits = unprocessedResult.data || [];
-      const analysisComplete = unprocessedCommits.length === 0;
-
-      if (!analysisComplete && pendingEditCount < PENDING_EDITS_THRESHOLD) {
-        return null;
-      }
-    }
-
-    // Check if wiki-editor work already pending
-    const workQuery = createListWorkItemsQuery(repoId, {
-      agentType: 'wiki-editor',
-      status: 'pending',
-    });
-    const workResult = await handleListWorkItems(workQuery, this.repos);
-    const wikiEditorWorkExists = workResult.data || [];
-
-    if (wikiEditorWorkExists.length > 0) {
-      return null;
-    }
-
-    return createWorkItem({
-      id: uuid(),
-      repoId,
-      agentType: 'wiki-editor',
-      priority: Priority.USER_REQUEST - 1,
     });
   }
 
