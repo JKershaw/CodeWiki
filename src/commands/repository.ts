@@ -267,13 +267,10 @@ export async function handleDeleteRepository(
 
     // Delete wiki-specific data for each wiki
     for (const wiki of wikis) {
-      // Delete wiki pages
       await repos.wikiPages.deleteByWiki(wiki.id);
-      // Delete findings
+      await repos.wikiPageHistory.deleteByWiki(wiki.id);
       await repos.findings.deleteByWiki(wiki.id);
-      // Delete edit requests
       await repos.editRequests.deleteByWiki(wiki.id);
-      // Delete conflicts
       await repos.conflicts.deleteByWiki(wiki.id);
     }
 

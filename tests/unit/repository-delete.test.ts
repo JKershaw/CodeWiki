@@ -326,10 +326,23 @@ function createMockRepos(): Repositories {
     delete: async () => {},
   };
 
+  const mockWikiPageHistory: Repositories['wikiPageHistory'] = {
+    findById: async () => null,
+    findByWiki: async () => [],
+    findByPage: async () => [],
+    findByAgentRun: async () => [],
+    findByIterationRange: async () => [],
+    save: async () => {},
+    delete: async () => {},
+    deleteByWiki: async () => {},
+    deleteByPage: async () => {},
+  };
+
   return {
     repos: mockRepos,
     wikis: mockWikis,
     wikiPages: mockWikiPages,
+    wikiPageHistory: mockWikiPageHistory,
     commits: mockCommits,
     agentRuns: mockAgentRuns,
     processingRuns: mockProcessingRuns,
