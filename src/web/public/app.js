@@ -18,6 +18,7 @@
  *  - modules/spec.js - Spec generation
  *  - modules/benchmark.js - Benchmarks and self-improvement
  *  - modules/chat.js - Chat sessions
+ *  - modules/debug.js - Debug/observability view
  */
 
 // Initialize application when DOM is ready
@@ -33,6 +34,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initSpecListeners();
   initBenchmarkListeners();
   initChatListeners();
+  initDebugListeners();
 
   // Initialize back buttons
   initBackButtons();
@@ -58,6 +60,10 @@ function initBackButtons() {
     loadRepos();
   });
   document.getElementById('back-to-repos-spec').addEventListener('click', () => {
+    showView('repos');
+    loadRepos();
+  });
+  document.getElementById('back-to-repos-debug')?.addEventListener('click', () => {
     showView('repos');
     loadRepos();
   });

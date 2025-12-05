@@ -52,8 +52,12 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
       const usedLLM = req.query.usedLLM === 'true' ? true :
                       req.query.usedLLM === 'false' ? false : undefined;
 
-      // Fetch orchestrator runs
-      const query = createListOrchestratorRunsQuery(req.params.id!, { limit, usedLLM });
+      // Fetch orchestrator runs - only include usedLLM filter if specified
+      const queryOptions: { limit: number; usedLLM?: boolean } = { limit };
+      if (usedLLM !== undefined) {
+        queryOptions.usedLLM = usedLLM;
+      }
+      const query = createListOrchestratorRunsQuery(req.params.id!, queryOptions);
       const result = await handleListOrchestratorRuns(query, repos);
 
       if (!result.success) {
@@ -136,8 +140,15 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
       const agentType = req.query.agentType as AgentType | undefined;
       const status = req.query.status as AgentRunStatus | undefined;
 
-      // Fetch agent runs
-      const query = createListAgentRunsQuery(req.params.id!, { limit, offset, agentType, status });
+      // Fetch agent runs - only include filters if specified
+      const queryOptions: { limit: number; offset: number; agentType?: AgentType; status?: AgentRunStatus } = { limit, offset };
+      if (agentType !== undefined) {
+        queryOptions.agentType = agentType;
+      }
+      if (status !== undefined) {
+        queryOptions.status = status;
+      }
+      const query = createListAgentRunsQuery(req.params.id!, queryOptions);
       const result = await handleListAgentRuns(query, repos);
 
       if (!result.success) {
@@ -243,15 +254,17 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
         if (!agentDistribution[run.agentType]) {
           agentDistribution[run.agentType] = { count: 0, cost: 0, avgDuration: 0 };
         }
-        agentDistribution[run.agentType].count++;
-        agentDistribution[run.agentType].cost += run.costUsd ?? 0;
-        agentDistribution[run.agentType].avgDuration += run.durationMs ?? 0;
+        const dist = agentDistribution[run.agentType]!;
+        dist.count++;
+        dist.cost += run.costUsd ?? 0;
+        dist.avgDuration += run.durationMs ?? 0;
       }
 
       // Calculate averages
       for (const type of Object.keys(agentDistribution)) {
-        if (agentDistribution[type].count > 0) {
-          agentDistribution[type].avgDuration /= agentDistribution[type].count;
+        const dist = agentDistribution[type]!;
+        if (dist.count > 0) {
+          dist.avgDuration /= dist.count;
         }
       }
 
