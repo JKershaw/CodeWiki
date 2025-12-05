@@ -270,6 +270,10 @@ export function parseOrchestratorResponse(
             } else {
               console.warn(`Invalid or missing commit ID for analysis agent ${agentType}`);
             }
+          } else if (EXPLORATION_AGENTS.includes(agentType)) {
+            // Exploration agents need targetPath, which legacy format doesn't support
+            // Skip and warn - LLM should use 4-field format for exploration agents
+            console.warn(`Exploration agent ${agentType} requires 4-field format with targetPath`);
           } else {
             validWorkItems.push({ agentType, reason });
           }
