@@ -198,6 +198,9 @@ export function createDeleteBenchmarkCommand(
 
 /**
  * Handler for DeleteBenchmark command.
+ *
+ * Note: Running benchmarks can be deleted to handle cleanup after server
+ * restarts where benchmarks get stuck in "running" status.
  */
 export async function handleDeleteBenchmark(
   command: DeleteBenchmarkCommand,
@@ -210,11 +213,7 @@ export async function handleDeleteBenchmark(
       return failure(`Benchmark run not found: ${command.benchmarkId}`);
     }
 
-    // Don't allow deleting a running benchmark
-    if (run.status === 'running') {
-      return failure(`Cannot delete a running benchmark. Wait for it to complete or fail first.`);
-    }
-
+    // Running benchmarks can be deleted for cleanup after server restarts
     await repos.benchmarks.delete(command.benchmarkId);
     return success();
   } catch (error) {

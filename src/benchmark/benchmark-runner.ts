@@ -28,6 +28,11 @@ import type {
   BenchmarkResult,
   BenchmarkRun,
 } from '../domain/benchmark.js';
+import {
+  startAccuracyTracking,
+  recordAccuracyResult,
+  clearAccuracyTracking,
+} from './benchmark-progress.js';
 
 /**
  * Options for running a benchmark.
@@ -112,9 +117,13 @@ export class BenchmarkRunner {
         throw new Error(startResult.error);
       }
 
+      // Start in-memory progress tracking
+      startAccuracyTracking(runId, repoId, wikiId, questions.length);
+
       // Execute all questions in parallel with concurrency limit
       const maxConcurrency = options.maxConcurrency ?? 15;
       const results = await this.executeQuestionsParallel(
+        runId,
         questions,
         wikiId,
         gradeContext,
@@ -135,6 +144,9 @@ export class BenchmarkRunner {
         this.repos
       );
 
+      // Clear in-memory progress tracking
+      clearAccuracyTracking(runId);
+
       // Fetch and return the completed run
       const completedRun = await this.repos.benchmarks.findById(runId);
       if (!completedRun) {
@@ -143,6 +155,9 @@ export class BenchmarkRunner {
 
       return completedRun;
     } catch (error) {
+      // Clear in-memory progress tracking
+      clearAccuracyTracking(runId);
+
       // Mark benchmark as failed
       await handleFailBenchmark(
         createFailBenchmarkCommand(runId, String(error)),
@@ -157,6 +172,7 @@ export class BenchmarkRunner {
    * Execute questions in parallel with concurrency limit.
    */
   private async executeQuestionsParallel(
+    runId: string,
     questions: BenchmarkQuestion[],
     wikiId: string,
     gradeContext: GradeContext,
@@ -167,12 +183,12 @@ export class BenchmarkRunner {
     const inProgress: Promise<void>[] = [];
 
     const executeOne = async (question: BenchmarkQuestion): Promise<void> => {
+      let result: BenchmarkResult;
       try {
-        const result = await this.evaluateQuestion(question, wikiId, gradeContext);
-        results.push(result);
+        result = await this.evaluateQuestion(question, wikiId, gradeContext);
       } catch (error) {
         // Create a failed result for this question
-        results.push({
+        result = {
           questionId: question.id,
           wikiAnswer: '',
           grade: 'no_answer',
@@ -181,8 +197,11 @@ export class BenchmarkRunner {
           codeReferences: [],
           durationMs: 0,
           costUsd: 0,
-        });
+        };
       }
+      results.push(result);
+      // Record progress for live updates
+      recordAccuracyResult(runId, result);
     };
 
     // Process questions with concurrency limit

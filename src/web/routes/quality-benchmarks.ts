@@ -19,6 +19,7 @@ import {
   handleDeleteQualityBenchmark,
   createDeleteQualityBenchmarkCommand,
 } from '../../commands/quality-benchmark.js';
+import { getQualityProgress } from '../../benchmark/benchmark-progress.js';
 
 /**
  * Create quality benchmark routes.
@@ -241,6 +242,36 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
 
       res.json({
         qualityBenchmark: result.data,
+      });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * Get live progress for a running quality benchmark.
+   * Returns in-memory progress data if available.
+   */
+  router.get('/api/repos/:id/quality-benchmarks/:runId/progress', async (req: Request, res: Response) => {
+    try {
+      const { runId } = req.params;
+
+      const progress = getQualityProgress(runId!);
+
+      if (!progress) {
+        // No in-memory progress - benchmark may have completed or server restarted
+        res.status(404).json({
+          error: 'No progress data available',
+          message: 'Benchmark may have completed or server was restarted',
+        });
+        return;
+      }
+
+      res.json({
+        runId: progress.runId,
+        totalPages: progress.totalPages,
+        completedCount: progress.completedCount,
+        startedAt: progress.startedAt,
       });
     } catch (error) {
       res.status(500).json({ error: String(error) });

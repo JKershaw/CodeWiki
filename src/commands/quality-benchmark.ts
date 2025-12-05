@@ -195,6 +195,9 @@ export function createDeleteQualityBenchmarkCommand(
 
 /**
  * Handler for DeleteQualityBenchmark command.
+ *
+ * Note: Running benchmarks can be deleted to handle cleanup after server
+ * restarts where benchmarks get stuck in "running" status.
  */
 export async function handleDeleteQualityBenchmark(
   command: DeleteQualityBenchmarkCommand,
@@ -207,11 +210,7 @@ export async function handleDeleteQualityBenchmark(
       return failure(`Quality benchmark run not found: ${command.benchmarkId}`);
     }
 
-    // Don't allow deleting a running benchmark
-    if (run.status === 'running') {
-      return failure(`Cannot delete a running quality benchmark. Wait for it to complete or fail first.`);
-    }
-
+    // Running benchmarks can be deleted for cleanup after server restarts
     await repos.qualityBenchmarks.delete(command.benchmarkId);
     return success();
   } catch (error) {
