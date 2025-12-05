@@ -1,58 +1,12 @@
 /**
  * CodeWiki Frontend Application
+ *
+ * Dependencies (loaded before this file):
+ *  - modules/utils.js - Utility functions (escapeHtml, formatters, etc.)
+ *  - modules/api.js - API helper
+ *  - modules/ui.js - Toast and modal utilities
+ *  - modules/state.js - Application state and navigation
  */
-
-// State
-let currentRepo = null;
-let currentWiki = null;
-let currentPage = null;
-let currentUser = null;
-
-// DOM Elements
-const views = {
-  repos: document.getElementById('repos-view'),
-  wiki: document.getElementById('wiki-view'),
-  query: document.getElementById('query-view'),
-  spec: document.getElementById('spec-view'),
-  benchmark: document.getElementById('benchmark-view'),
-};
-
-const navBtns = document.querySelectorAll('.nav-btn');
-
-// Navigation
-function showView(viewName) {
-  Object.values(views).forEach(v => v.classList.remove('active'));
-  views[viewName].classList.add('active');
-
-  navBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === viewName);
-  });
-}
-
-navBtns.forEach(btn => {
-  btn.addEventListener('click', async () => {
-    if (!btn.disabled) {
-      showView(btn.dataset.view);
-      // Reload data when switching to benchmark view
-      if (btn.dataset.view === 'benchmark' && currentRepo) {
-        await loadBenchmarkHistory(currentRepo.id);
-      }
-    }
-  });
-});
-
-// API Helpers
-async function api(path, options = {}) {
-  const response = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'API Error');
-  }
-  return response.json();
-}
 
 // Configuration
 async function loadConfig() {
@@ -135,12 +89,6 @@ function renderUserSection() {
 
 function logout() {
   window.location.href = '/auth/logout';
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 // Repositories
@@ -525,43 +473,6 @@ function renderJobItem(job, status) {
       <span class="job-priority" title="Priority: ${job.priority}">${getPriorityLabel(job.priority)}</span>
     </div>
   `;
-}
-
-/**
- * Get a human-readable priority label.
- */
-function getPriorityLabel(priority) {
-  if (priority >= 100) return 'Urgent';
-  if (priority >= 80) return 'High';
-  if (priority >= 50) return 'Normal';
-  if (priority >= 20) return 'Low';
-  return 'Background';
-}
-
-function formatAgentType(type) {
-  const names = {
-    'code-change': 'Analyzing Code',
-    'narrative': 'Narrative Analysis',
-    'security': 'Security Review',
-    'technical-debt': 'Tech Debt Analysis',
-    'pattern': 'Pattern Detection',
-    'dependency': 'Dependency Analysis',
-    'structure': 'Structure Analysis',
-    'link': 'Linking Pages',
-    'quality': 'Quality Check',
-    'consistency': 'Consistency Check',
-    'guide': 'Creating Guides',
-    'overview': 'Creating Overview',
-    'project-overview': 'Project Overview',
-    'getting-started': 'Getting Started',
-    'history': 'History Analysis',
-    'convention': 'Convention Analysis',
-    'bootstrap': 'Bootstrapping Wiki',
-    'research': 'Research',
-    'writer': 'Writing Content',
-    'orchestrator': 'Planning...',
-  };
-  return names[type] || type;
 }
 
 // Add Repo Form - Folder Browser
@@ -1832,18 +1743,6 @@ function renderQualityBenchmarkCard(benchmark, prevBenchmark) {
   `;
 }
 
-function formatDuration(startedAt, completedAt) {
-  const start = new Date(startedAt);
-  const end = new Date(completedAt);
-  const durationMs = end - start;
-  const seconds = Math.floor(durationMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`;
-  }
-  return `${seconds}s`;
-}
-
 async function runBenchmark() {
   if (!currentRepo) return;
 
@@ -2020,16 +1919,6 @@ async function showBenchmarkDetail(benchmarkId) {
   } catch (error) {
     contentDiv.innerHTML = `<p class="placeholder">Error loading details: ${escapeHtml(error.message)}</p>`;
   }
-}
-
-function formatGrade(grade) {
-  const labels = {
-    'accurate': 'Accurate',
-    'partial': 'Partial',
-    'inaccurate': 'Inaccurate',
-    'no_answer': 'No Answer',
-  };
-  return labels[grade] || grade;
 }
 
 // Quality Benchmark Functions
@@ -2268,20 +2157,6 @@ async function showQualityBenchmarkDetail(benchmarkId) {
   } catch (error) {
     contentDiv.innerHTML = `<p class="placeholder">Error loading details: ${escapeHtml(error.message)}</p>`;
   }
-}
-
-function formatDimensionName(dimension) {
-  const names = {
-    'contextual_richness': 'Contextual Richness',
-    'coherence_consistency': 'Coherence & Consistency',
-    'completeness_coverage': 'Completeness Coverage',
-    'actionability': 'Actionability',
-    'structural_quality': 'Structural Quality',
-    'confidence_calibration': 'Confidence Calibration',
-    'machine_readability': 'Machine Readability',
-    'information_density': 'Information Density',
-  };
-  return names[dimension] || dimension;
 }
 
 document.getElementById('run-benchmark-btn').addEventListener('click', runBenchmark);
@@ -2559,47 +2434,6 @@ document.getElementById('back-to-repos-spec').addEventListener('click', () => {
   showView('repos');
   loadRepos();
 });
-
-// Utility Functions
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-/**
- * Convert markdown to HTML using the marked library.
- * Output is sanitized with DOMPurify to prevent XSS attacks.
- * Falls back to escaped HTML with basic formatting if libraries aren't loaded.
- *
- * @param {string} md - Markdown content to convert
- * @returns {string} Sanitized HTML string
- */
-function markdownToHtml(md) {
-  if (!md) return '';
-
-  // Check if marked library is available
-  if (typeof marked === 'undefined') {
-    // Fallback: escape HTML and convert newlines to <br> for basic formatting
-    const escaped = escapeHtml(md);
-    return escaped.replace(/\n/g, '<br>');
-  }
-
-  // Configure marked for GitHub Flavored Markdown
-  marked.setOptions({
-    gfm: true,        // GitHub Flavored Markdown
-    breaks: true,     // Convert \n to <br>
-  });
-
-  // Parse markdown and sanitize to prevent XSS
-  const rawHtml = marked.parse(md);
-
-  // Use DOMPurify if available, otherwise return raw HTML (already escaped by marked)
-  if (typeof DOMPurify !== 'undefined') {
-    return DOMPurify.sanitize(rawHtml);
-  }
-  return rawHtml;
-}
 
 // ============================================================================
 // Self-Improvement Analysis
@@ -3110,14 +2944,6 @@ function toggleChatToolCalls(header) {
 }
 
 /**
- * Truncate text to a maximum length.
- */
-function truncateText(text, maxLength) {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '... (truncated)';
-}
-
-/**
  * Close the current chat session.
  */
 async function closeChatSession() {
@@ -3150,137 +2976,6 @@ document.getElementById('chat-input').addEventListener('keydown', (e) => {
 document.getElementById('chat-input').addEventListener('input', (e) => {
   const sendBtn = document.getElementById('send-chat-btn');
   sendBtn.disabled = !e.target.value.trim() || !currentChatSessionId;
-});
-
-// ============================================================================
-// Toast Notifications
-// ============================================================================
-
-/**
- * Show a toast notification.
- * @param {string} message - The message to display
- * @param {'success' | 'error' | 'warning' | 'info'} type - The type of toast
- * @param {number} duration - Duration in ms before auto-dismiss (default: 4000)
- */
-function showToast(message, type = 'info', duration = 4000) {
-  const container = document.getElementById('toast-container');
-
-  const icons = {
-    success: '&#10003;', // checkmark
-    error: '&#10005;',   // X
-    warning: '&#9888;',  // warning triangle
-    info: '&#8505;',     // info
-  };
-
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.innerHTML = `
-    <span class="toast-icon">${icons[type]}</span>
-    <span class="toast-message">${escapeHtml(message)}</span>
-    <button class="toast-close" aria-label="Close">&times;</button>
-  `;
-
-  // Close button handler
-  toast.querySelector('.toast-close').addEventListener('click', () => {
-    dismissToast(toast);
-  });
-
-  container.appendChild(toast);
-
-  // Auto-dismiss after duration
-  if (duration > 0) {
-    setTimeout(() => {
-      dismissToast(toast);
-    }, duration);
-  }
-
-  return toast;
-}
-
-/**
- * Dismiss a toast with animation.
- */
-function dismissToast(toast) {
-  if (!toast || toast.classList.contains('toast-exit')) return;
-
-  toast.classList.add('toast-exit');
-  setTimeout(() => {
-    toast.remove();
-  }, 300); // Match animation duration
-}
-
-// ============================================================================
-// Confirmation Modal
-// ============================================================================
-
-let modalConfirmCallback = null;
-
-/**
- * Show a confirmation modal.
- * @param {Object} options - Modal configuration
- * @param {string} options.title - Modal title
- * @param {string} options.message - Modal message
- * @param {string} options.details - HTML for the details section (optional)
- * @param {string} options.confirmText - Text for the confirm button (default: 'Confirm')
- * @param {string} options.confirmClass - CSS class for confirm button (default: 'danger')
- * @param {Function} options.onConfirm - Callback when confirmed
- */
-function showConfirmModal(options) {
-  const modal = document.getElementById('confirm-modal');
-  const titleEl = document.getElementById('modal-title');
-  const messageEl = document.getElementById('modal-message');
-  const detailsEl = document.getElementById('modal-details');
-  const confirmBtn = document.getElementById('modal-confirm-btn');
-
-  titleEl.textContent = options.title || 'Confirm Action';
-  messageEl.textContent = options.message || 'Are you sure?';
-  detailsEl.innerHTML = options.details || '';
-  detailsEl.style.display = options.details ? 'block' : 'none';
-
-  confirmBtn.textContent = options.confirmText || 'Confirm';
-  confirmBtn.className = `btn ${options.confirmClass || 'danger'}`;
-
-  modalConfirmCallback = options.onConfirm || null;
-
-  modal.classList.remove('hidden');
-
-  // Focus the cancel button for safety
-  document.getElementById('modal-cancel-btn').focus();
-}
-
-/**
- * Hide the confirmation modal.
- */
-function hideConfirmModal() {
-  const modal = document.getElementById('confirm-modal');
-  modal.classList.add('hidden');
-  modalConfirmCallback = null;
-}
-
-// Modal event listeners
-document.getElementById('modal-cancel-btn').addEventListener('click', hideConfirmModal);
-document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-  if (modalConfirmCallback) {
-    modalConfirmCallback();
-  }
-  hideConfirmModal();
-});
-
-// Close modal on backdrop click
-document.getElementById('confirm-modal').addEventListener('click', (e) => {
-  if (e.target.id === 'confirm-modal') {
-    hideConfirmModal();
-  }
-});
-
-// Close modal on Escape key
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    const modal = document.getElementById('confirm-modal');
-    if (!modal.classList.contains('hidden')) {
-      hideConfirmModal();
-    }
-  }
 });
 
 // ============================================================================
@@ -3483,7 +3178,9 @@ async function deleteRepository(repoId, repoName) {
   }
 }
 
-// Initialize
+// Initialize modules and application
+initNavigation();
+initModalListeners();
 loadCurrentUser();
 loadRepos();
 loadConfig();
