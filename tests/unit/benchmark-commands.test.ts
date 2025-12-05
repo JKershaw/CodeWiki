@@ -312,7 +312,7 @@ describe('Benchmark Commands', () => {
       assert.strictEqual(deleted, null);
     });
 
-    it('fails to delete a running benchmark', async () => {
+    it('allows deleting a running benchmark for cleanup', async () => {
       const repos = createMockRepos();
       const runId = uuid();
 
@@ -328,12 +328,12 @@ describe('Benchmark Commands', () => {
       const command = createDeleteBenchmarkCommand(runId);
       const result = await handleDeleteBenchmark(command, repos);
 
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('Cannot delete a running benchmark'));
+      // Running benchmarks can be deleted for cleanup after server restarts
+      assert.strictEqual(result.success, true);
 
-      // Benchmark should still exist
-      const stillExists = await repos.benchmarks.findById(runId);
-      assert.notStrictEqual(stillExists, null);
+      // Benchmark should be deleted
+      const deleted = await repos.benchmarks.findById(runId);
+      assert.strictEqual(deleted, null);
     });
 
     it('fails for non-existent benchmark', async () => {
