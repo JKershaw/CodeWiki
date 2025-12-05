@@ -189,6 +189,12 @@ export const pendingEditsStrategy: Strategy = async (ctx, remainingSlots) => {
 /**
  * Strategy 2: Codebase exploration.
  * Document undocumented code before commit analysis to establish current state.
+ *
+ * "Useful Wiki First" approach:
+ * - When wiki is small (< 10 pages), be aggressive about exploration
+ * - Higher coverage threshold = explore more directories
+ * - More directories at once = faster foundation building
+ * - As wiki grows, become more selective (only truly undocumented areas)
  */
 export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0 || !ctx.git || !ctx.contextGatherer) {
@@ -199,9 +205,26 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
 
   // Calculate directory coverage
   const context = await ctx.contextGatherer.gather(ctx.repoId, ctx.wikiId);
+  const wikiPageCount = context.wikiPages;
+
+  // Adaptive thresholds based on wiki size:
+  // - Small wiki (< 5 pages): Aggressively explore anything < 60% covered, up to 5 dirs
+  // - Growing wiki (5-10 pages): Explore < 40% covered, up to 4 dirs
+  // - Established wiki (10-20 pages): Explore < 30% covered, up to 3 dirs
+  // - Mature wiki (20+ pages): Only truly undocumented < 20%, up to 2 dirs
+  const coverageThreshold = wikiPageCount < 5 ? 60
+    : wikiPageCount < 10 ? 40
+    : wikiPageCount < 20 ? 30
+    : 20;
+
+  const maxDirectories = wikiPageCount < 5 ? 5
+    : wikiPageCount < 10 ? 4
+    : wikiPageCount < 20 ? 3
+    : 2;
+
   const lowCoverageDirs = context.directoryCoverage
-    .filter(d => d.coveragePercent < 20)
-    .slice(0, 3);
+    .filter(d => d.coveragePercent < coverageThreshold)
+    .slice(0, maxDirectories);
 
   for (const dir of lowCoverageDirs) {
     if (workItems.length >= remainingSlots) break;
@@ -413,7 +436,14 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
 };
 
 /**
- * Strategy 7: Synthesis work (when we have enough raw material).
+ * Strategy 4: Synthesis work (elevated in "Useful Wiki First" approach).
+ *
+ * Key change: Trigger synthesis EARLIER to make wiki useful sooner.
+ * - Old approach: Wait for 5+ pages, project-overview at 10+
+ * - New approach: Start at 3 pages, project-overview at 5+
+ *
+ * Rationale: Users need navigation and overview pages early to understand
+ * the wiki structure, even if content is still being added.
  */
 export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0) return { workItems: [] };
@@ -423,7 +453,9 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
   const pagesResult = await handleListWikiPages(pagesQuery, ctx.repos);
   const wikiPages = pagesResult.data || [];
 
-  if (wikiPages.length < 5) {
+  // Lower threshold: start synthesis at 3 pages (was 5)
+  // This supports "Useful Wiki First" - create structure early
+  if (wikiPages.length < 3) {
     return { workItems: [] };
   }
 
@@ -476,8 +508,9 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Project Overview Agent: trigger when 10+ pages but no architecture/overview
-  if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+  // Project Overview Agent: trigger when 5+ pages but no architecture/overview
+  // (Lowered from 10 to support "Useful Wiki First" - users need architecture overview early)
+  if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const hasProjectOverview = wikiPages.some(
       p => p.path === 'architecture/overview' || p.path === 'architecture/index'
     );
@@ -502,8 +535,9 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Getting Started Agent: trigger when 10+ pages but no guides/getting-started
-  if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+  // Getting Started Agent: trigger when 5+ pages but no guides/getting-started
+  // (Lowered from 10 to support "Useful Wiki First" - users need onboarding guide early)
+  if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const hasGettingStarted = wikiPages.some(
       p =>
         p.path === 'guides/getting-started' ||
@@ -626,8 +660,9 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Wiki Index Agent: trigger when 10+ pages but no navigation/wiki-index
-  if (workItems.length < remainingSlots && wikiPages.length >= 10) {
+  // Wiki Index Agent: trigger when 5+ pages but no navigation/wiki-index
+  // (Lowered from 10 to support "Useful Wiki First" - users need navigation early)
+  if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const hasWikiIndex = wikiPages.some(
       p =>
         p.path === 'navigation/wiki-index' ||
@@ -706,14 +741,26 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
 
 /**
  * All deterministic strategies in priority order.
+ *
+ * Strategy: "Useful Wiki First"
+ * - Users want to USE the wiki immediately, not wait for full commit analysis
+ * - Build from CURRENT codebase first (exploration), then add historical context (commits)
+ *
+ * Order:
+ * 1. Bootstrap - foundation for empty wikis
+ * 2. Pending Edits - always process user/agent edit requests
+ * 3. Codebase Exploration - PRIMARY early: document what exists NOW
+ * 4. Synthesis - ELEVATED: create overviews/guides early from exploration pages
+ * 5. Meta Agents - improve quality and linking
+ * 6. Commit Analysis - DEMOTED: add historical context after wiki is useful
  */
 export const deterministicStrategies: Strategy[] = [
   bootstrapStrategy,
   pendingEditsStrategy,
   codebaseExplorationStrategy,
-  commitAnalysisStrategy,
+  synthesisStrategy,           // Elevated: create structure early
   metaAgentsStrategy,
-  synthesisStrategy,
+  commitAnalysisStrategy,      // Demoted: historical context comes after useful wiki
 ];
 
 /**
