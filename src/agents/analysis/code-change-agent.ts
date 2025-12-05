@@ -3,7 +3,12 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  getCommitDiff,
+  createCodebaseToolExecutor,
+  fetchAffectedFileContents,
+  formatFileContentsForPrompt,
+} from '../agent-helpers.js';
 
 /**
  * Code Change Agent - Standard analysis of what changed in a commit.
@@ -45,8 +50,15 @@ export class CodeChangeAgent implements Agent {
     // Get the diff for this commit (uses repoService if available, falls back to git)
     const diff = await getCommitDiff(context, commit.sha);
 
+    // Pre-fetch full contents of affected files for richer context
+    const fileContents = await fetchAffectedFileContents(
+      context,
+      commit.diffSummary.affectedFiles
+    );
+    const formattedFileContents = formatFileContentsForPrompt(fileContents);
+
     // Build the prompt for the LLM
-    const prompt = this.buildPrompt(commit, diff);
+    const prompt = this.buildPrompt(commit, diff, formattedFileContents);
 
     // Set up codebase exploration tools (works with both local and GitHub repos)
     const toolExecutor = createCodebaseToolExecutor(context);
@@ -104,10 +116,14 @@ export class CodeChangeAgent implements Agent {
     };
   }
 
-  private buildPrompt(commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } }, diff: string): string {
+  private buildPrompt(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    fileContents: string
+  ): string {
     const truncatedDiff = diff.length > 10000 ? diff.slice(0, 10000) + '\n... (diff truncated)' : diff;
 
-    return `Analyze this git commit and write a wiki article about the changes.
+    return `Analyze this git commit and write wiki articles about the changes.
 
 ## Commit Information
 
@@ -122,13 +138,19 @@ export class CodeChangeAgent implements Agent {
 
 ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 
+## Full File Contents
+
+These are the complete source files (not just diffs) so you can understand the full context:
+
+${fileContents}
+
 ## Diff
 
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
 
-Write documentation as a wiki article that a developer would find useful. Focus on:
+Write documentation as wiki articles that a developer would find useful. Focus on:
 1. What capability or change was introduced (not "this commit adds...")
 2. Why it matters and how it fits into the system
 3. Key technical details and design decisions
@@ -146,7 +168,21 @@ FINDINGS:
 - [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths comma-separated]
 
 WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update/merge] [Brief description of content]
+For each additional wiki page that should be created or updated, provide FULL article content.
+Write each page as a complete, standalone article (2-4 paragraphs minimum).
+
+=== [PAGE_PATH] [ACTION:create/update/merge] ===
+[Write the FULL markdown content for this wiki page here.
+Include:
+- A clear explanation of what this component/concept is
+- How it works (mechanism, key functions, data flow)
+- Usage examples or patterns if applicable
+- Any important caveats or edge cases
+
+Do NOT just write a brief description - write a complete article.]
+=== END ===
+
+(Repeat for each page)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -190,18 +226,38 @@ CONFIDENCE: [0-1 value]
       }
     }
 
-    // Parse wiki updates
-    const updatesMatch = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesMatch) {
-      const updateLines = updatesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of updateLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(\w+)\]\s*(.+)$/i);
-        if (match) {
+    // Parse wiki updates - new format with full content blocks
+    const updatesSection = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    if (updatesSection) {
+      // Match blocks like: === [path] [action] ===\n[content]\n=== END ===
+      const blockRegex = /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
+      let blockMatch;
+      while ((blockMatch = blockRegex.exec(updatesSection[1]!)) !== null) {
+        const path = blockMatch[1]!.trim();
+        const action = blockMatch[2]!.toLowerCase() as 'create' | 'update' | 'merge';
+        const content = blockMatch[3]!.trim();
+
+        if (content && content.length > 0) {
           analysis.wikiUpdates.push({
-            path: match[1]!.trim(),
-            action: match[2]!.toLowerCase() as 'create' | 'update' | 'merge',
-            description: match[3]!.trim(),
+            path,
+            action,
+            content,
           });
+        }
+      }
+
+      // Fallback: also try to parse old format for backward compatibility
+      if (analysis.wikiUpdates.length === 0) {
+        const updateLines = updatesSection[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+        for (const line of updateLines) {
+          const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*(.+)$/i);
+          if (match) {
+            analysis.wikiUpdates.push({
+              path: match[1]!.trim(),
+              action: match[2]!.toLowerCase() as 'create' | 'update' | 'merge',
+              content: match[3]!.trim(), // Use description as content for legacy format
+            });
+          }
         }
       }
     }
@@ -260,19 +316,28 @@ ${findingsSection}
       // Skip commit page as we already handle it
       if (wikiUpdate.path.startsWith('commits/')) continue;
 
+      // Use the full content provided by the LLM
+      // Add a source footer if not already present
+      let content = wikiUpdate.content;
+      if (!content.includes('*Updated based on commit') && !content.includes('*Source:')) {
+        content = `${content}
+
+---
+*Updated based on commit ${commit.sha.slice(0, 8)}*`;
+      }
+
+      // Extract title from content if it starts with a heading, otherwise generate from path
+      const titleMatch = content.match(/^#\s+(.+)$/m);
+      const title = titleMatch ? titleMatch[1]!.trim() : pathToTitle(wikiUpdate.path);
+
       updates.push({
         type: wikiUpdate.action,
         path: wikiUpdate.path,
-        content: `# ${pathToTitle(wikiUpdate.path)}
-
-${wikiUpdate.description}
-
----
-*Updated based on commit ${commit.sha.slice(0, 8)}*
-`,
+        title,
+        content,
         sourceCommitId: commit.sha,
         agentRunId: '',
-        confidenceDelta: wikiUpdate.action === 'create' ? 0.3 : 0.1,
+        confidenceDelta: wikiUpdate.action === 'create' ? 0.3 : 0.15,
       });
     }
 
@@ -292,7 +357,7 @@ interface ParsedAnalysis {
   wikiUpdates: Array<{
     path: string;
     action: 'create' | 'update' | 'merge';
-    description: string;
+    content: string;
   }>;
   confidence: number;
 }

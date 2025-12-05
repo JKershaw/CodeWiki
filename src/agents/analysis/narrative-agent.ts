@@ -119,7 +119,21 @@ KEY_DECISIONS:
 - [Decision description with context]
 
 WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+For each additional wiki page that should be created or updated, provide FULL article content.
+Write each page as a complete, standalone article (2-4 paragraphs minimum).
+
+=== [PAGE_PATH] [ACTION:create/update] ===
+[Write the FULL markdown content for this wiki page here.
+Include:
+- What decision was made or what concept is being documented
+- The reasoning and context behind it
+- Implications for developers working in this codebase
+- Any alternatives that were considered
+
+Do NOT just write a brief description - write a complete article.]
+=== END ===
+
+(Repeat for each page)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -180,18 +194,38 @@ CONFIDENCE: [0-1 value]
       }
     }
 
-    // Parse wiki updates
-    const updatesMatch = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesMatch) {
-      const updateLines = updatesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of updateLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
-        if (match) {
+    // Parse wiki updates - new format with full content blocks
+    const updatesSection = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    if (updatesSection) {
+      // Match blocks like: === [path] [action] ===\n[content]\n=== END ===
+      const blockRegex = /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
+      let blockMatch;
+      while ((blockMatch = blockRegex.exec(updatesSection[1]!)) !== null) {
+        const path = blockMatch[1]!.trim();
+        const action = blockMatch[2]!.toLowerCase() as 'create' | 'update';
+        const content = blockMatch[3]!.trim();
+
+        if (content && content.length > 0) {
           analysis.wikiUpdates.push({
-            path: match[1]!.trim(),
-            action: match[2]!.toLowerCase() as 'create' | 'update',
-            description: match[3]!.trim(),
+            path,
+            action,
+            content,
           });
+        }
+      }
+
+      // Fallback: also try to parse old format for backward compatibility
+      if (analysis.wikiUpdates.length === 0) {
+        const updateLines = updatesSection[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+        for (const line of updateLines) {
+          const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
+          if (match) {
+            analysis.wikiUpdates.push({
+              path: match[1]!.trim(),
+              action: match[2]!.toLowerCase() as 'create' | 'update',
+              content: match[3]!.trim(), // Use description as content for legacy format
+            });
+          }
         }
       }
     }
@@ -267,19 +301,28 @@ ${commit.diffSummary.affectedFiles.map(f => `- \`${f}\``).join('\n')}
 
     // Add any wiki updates suggested by the LLM
     for (const wikiUpdate of analysis.wikiUpdates) {
+      // Use the full content provided by the LLM
+      // Add a source footer if not already present
+      let content = wikiUpdate.content;
+      if (!content.includes('*Updated from commit') && !content.includes('*Source:')) {
+        content = `${content}
+
+---
+*Updated from commit ${commit.sha.slice(0, 8)}*`;
+      }
+
+      // Extract title from content if it starts with a heading, otherwise generate from path
+      const titleMatch = content.match(/^#\s+(.+)$/m);
+      const title = titleMatch ? titleMatch[1]!.trim() : pathToTitle(wikiUpdate.path);
+
       updates.push({
         type: wikiUpdate.action,
         path: wikiUpdate.path,
-        content: `# ${pathToTitle(wikiUpdate.path)}
-
-${wikiUpdate.description}
-
----
-*Updated from commit ${commit.sha.slice(0, 8)}*
-`,
+        title,
+        content,
         sourceCommitId: commit.sha,
         agentRunId: '',
-        confidenceDelta: 0.2,
+        confidenceDelta: 0.25,
       });
     }
 
@@ -303,7 +346,7 @@ interface ParsedAnalysis {
   wikiUpdates: Array<{
     path: string;
     action: 'create' | 'update';
-    description: string;
+    content: string;
   }>;
   confidence: number;
 }
