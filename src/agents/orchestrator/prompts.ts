@@ -17,13 +17,10 @@ Your job is to decide what work to do next to make the wiki most useful. You bal
 
 Key insight: A useful wiki balances structure AND depth. Shallow pages that only describe WHAT exists without explaining HOW are less valuable than substantive pages with examples.
 
-## Automatic Codebase Exploration
-
-NOTE: Codebase exploration (documenting undocumented directories) is handled AUTOMATICALLY.
-You do NOT need to schedule codebase-explorer work items - the system handles this based on
-directory coverage data. Focus your decisions on commit analysis, synthesis, and meta work.
-
 ## Available Agents
+
+EXPLORATION AGENT (run on specific directories - require targetPath):
+- codebase-explorer: Documents undocumented code directories. Use the Directory Coverage tree to identify gaps (marked with ⚠️). Target specific paths like "src/services/llm" to explore.
 
 ANALYSIS AGENTS (run on specific commits - require targetCommitId):
 - code-change: Analyzes what changed with implementation details. Include HOW code works, not just WHAT changed. Run this first on new commits.
@@ -92,17 +89,20 @@ When selecting analysis agents for commits, ensure diverse coverage:
 Brief explanation of your overall strategy for this batch (1-2 sentences)
 
 # Work Items
-agentType,targetCommitId,reason
+agentType,target,reason
 
 Examples:
+- Exploration agent: codebase-explorer,src/services/llm,Low coverage directory needs documentation
 - Analysis agent: code-change,abc123def456789..,Recent commit with API changes
 - Meta/synthesis agent: writer,,5 pages need rewriting for readability
 
 FORMAT RULES:
 - One work item per line
-- Format: agentType,targetCommitId,reason (3 comma-separated fields)
-- targetCommitId is REQUIRED for analysis agents (code-change, narrative, security, technical-debt, pattern, dependency)
-- targetCommitId must be EMPTY for meta/synthesis agents (writer, overview, project-overview, link, etc.)
+- Format: agentType,target,reason (3 comma-separated fields)
+- target is a PATH for codebase-explorer (e.g., "src/services/llm")
+- target is a COMMIT ID for analysis agents (code-change, narrative, security, technical-debt, pattern, dependency)
+- target must be EMPTY for meta/synthesis agents (writer, overview, project-overview, link, etc.)
+- Use paths from the Directory Coverage tree for exploration
 - Use the full commit ID from the context, not abbreviated`;
 
 /**
@@ -129,9 +129,9 @@ export function buildUserPrompt(ctx: OrchestratorContext, contextString: string,
 
 Generate up to ${maxItems} work items that would make the wiki most useful right now.
 
-NOTE: Codebase exploration is handled automatically - focus on commit analysis, synthesis, and meta work.
-
 **Current wiki size: ${pageCount} pages** - ${synthesisGuidance}
+
+**Exploration priority:** Review the Directory Coverage tree above. Target directories with ⚠️ (low coverage) for codebase-explorer, prioritizing larger directories first.
 
 Consider:
 - Pending edit requests: ${ctx.pendingEditRequests}${ctx.pendingEditRequests > 0 ? ' - run wiki-editor agent FIRST!' : ''}
@@ -159,33 +159,37 @@ export interface OrchestratorDecision {
   workItems: Array<{
     agentType: string;
     targetCommitId?: string;
+    targetPath?: string;
     reason: string;
   }>;
 }
 
-// Agent types the LLM can output (codebase-explorer is handled automatically)
+// Agent types the LLM can output
+const EXPLORATION_AGENTS = ['codebase-explorer'];
 const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency'];
 const META_AGENTS = ['wiki-editor', 'link', 'structure', 'quality', 'consistency'];
 const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'testing-guide', 'extension-guide', 'writer', 'wiki-index', 'toc'];
-const ALL_AGENTS = [...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
+const ALL_AGENTS = [...EXPLORATION_AGENTS, ...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 
 /**
  * Parse the LLM response from markdown format into a structured decision.
  *
- * Expected format (simplified - no more codebase-explorer):
+ * Expected format:
  * # Reasoning
  * Brief explanation...
  *
  * # Work Items
- * agentType,targetCommitId,reason
+ * agentType,target,reason
  *
  * Examples:
+ * - codebase-explorer,src/services/llm,Low coverage directory
  * - code-change,abc123def456,Recent commit with API changes
  * - writer,,5 pages need rewriting for readability
  */
 export function parseOrchestratorResponse(
   response: string,
-  validCommitIds: Set<string>
+  validCommitIds: Set<string>,
+  validPaths?: Set<string>
 ): OrchestratorDecision {
   const lines = response.split('\n');
   let reasoning = '';
@@ -220,7 +224,7 @@ export function parseOrchestratorResponse(
     if (currentSection === 'reasoning') {
       reasoning += (reasoning ? ' ' : '') + trimmedLine;
     } else if (currentSection === 'workItems') {
-      // Parse work item line: agentType,targetCommitId,reason (3 fields)
+      // Parse work item line: agentType,target,reason (3 fields)
       const parts = trimmedLine.split(',');
 
       if (parts.length < 3) {
@@ -229,37 +233,53 @@ export function parseOrchestratorResponse(
       }
 
       const agentType = parts[0]!.trim();
-      const targetCommitId = parts[1]!.trim() || undefined;
+      const target = parts[1]!.trim() || undefined;
       // Join remaining parts as reason (in case reason contains commas)
       const reason = parts.slice(2).join(',').trim() || 'No reason provided';
 
       // Validate agent type
       if (!ALL_AGENTS.includes(agentType)) {
-        // Skip codebase-explorer silently - it's handled automatically
-        if (agentType === 'codebase-explorer') {
+        console.warn(`Invalid agent type: ${agentType}`);
+        continue;
+      }
+
+      // Exploration agents need a valid path
+      if (EXPLORATION_AGENTS.includes(agentType)) {
+        if (!target) {
+          console.warn(`Exploration agent ${agentType} missing targetPath`);
           continue;
         }
-        console.warn(`Invalid agent type: ${agentType}`);
+        // Validate path looks like a directory path (basic check)
+        if (!target.startsWith('src/') && !target.startsWith('lib/')) {
+          console.warn(`Invalid path for ${agentType}: ${target} (must start with src/ or lib/)`);
+          continue;
+        }
+        // If validPaths provided, check against it
+        if (validPaths && !validPaths.has(target)) {
+          console.warn(`Path not found in coverage tree for ${agentType}: ${target}`);
+          continue;
+        }
+        validWorkItems.push({ agentType, targetPath: target, reason });
         continue;
       }
 
       // Analysis agents need a valid commit ID
       if (ANALYSIS_AGENTS.includes(agentType)) {
-        if (!targetCommitId) {
+        if (!target) {
           console.warn(`Analysis agent ${agentType} missing targetCommitId`);
           continue;
         }
-        if (!validCommitIds.has(targetCommitId)) {
-          console.warn(`Invalid commit ID for ${agentType}: ${targetCommitId}`);
+        if (!validCommitIds.has(target)) {
+          console.warn(`Invalid commit ID for ${agentType}: ${target}`);
           continue;
         }
-        validWorkItems.push({ agentType, targetCommitId, reason });
+        validWorkItems.push({ agentType, targetCommitId: target, reason });
         continue;
       }
 
-      // Meta/synthesis agents should NOT have commit ID
-      if (targetCommitId) {
-        console.warn(`Meta/synthesis agent ${agentType} should not have targetCommitId (ignoring)`);
+      // Meta/synthesis agents should NOT have target
+      if (target) {
+        console.warn(`Meta/synthesis agent ${agentType} should not have target (ignoring)`);
       }
       validWorkItems.push({ agentType, reason });
     }
