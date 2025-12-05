@@ -12,9 +12,10 @@ Your job is to decide what work to do next to make the wiki most useful. You bal
 - COVERAGE: Has every commit been analyzed?
 - STRUCTURE: Does the wiki have good organization and navigation?
 - QUALITY: Are pages readable, linked, and confidence-scored?
+- DEPTH: Do pages explain HOW things work with examples, not just WHAT exists?
 - USEFULNESS: Can someone use this wiki to understand the codebase NOW?
 
-Key insight: A useful wiki with good structure beats comprehensive coverage. Prioritize synthesis early.
+Key insight: A useful wiki balances structure AND depth. Shallow pages that only describe WHAT exists without explaining HOW are less valuable than substantive pages with examples.
 
 ## Automatic Codebase Exploration
 
@@ -25,18 +26,18 @@ directory coverage data. Focus your decisions on commit analysis, synthesis, and
 ## Available Agents
 
 ANALYSIS AGENTS (run on specific commits - require targetCommitId):
-- code-change: Basic analysis of what changed. Run this first on new commits.
+- code-change: Analyzes what changed with implementation details. Include HOW code works, not just WHAT changed. Run this first on new commits.
 - narrative: Detects ADRs, planning docs, READMEs. Good for commits with .md files or significant docs.
 - security: Security audit. Important for auth, crypto, API, or sensitive changes.
 - technical-debt: Identifies code smells, TODOs/FIXMEs, SOLID violations, complexity issues.
-- pattern: Identifies design patterns. Good after code-change has run.
+- pattern: Identifies design patterns with usage examples and trade-offs. Good after code-change has run.
 - dependency: Tracks dependency changes. Only useful for package.json/lock file changes.
 
 META AGENTS (run on wiki, not commits - no targetCommitId):
 - wiki-editor: Processes pending edit requests. Run FIRST when there are pending edits.
 - link: Adds cross-references between pages. Run when pages lack links.
 - structure: Analyzes wiki organization. Run periodically when wiki grows.
-- quality: Reviews content quality. Run on low-confidence pages.
+- quality: Reviews content quality and flags shallow pages lacking depth. Run on low-confidence or shallow pages.
 - consistency: Checks for contradictions. Run when wiki is substantial (10+ pages).
 
 SYNTHESIS AGENTS (create new content from existing - no targetCommitId):
@@ -45,7 +46,7 @@ SYNTHESIS AGENTS (create new content from existing - no targetCommitId):
 - getting-started: Creates a practical getting started guide. Run when 5+ pages.
 - testing-guide: Creates a testing guide. Run when 15+ pages.
 - extension-guide: Creates an extension patterns guide. Run when 15+ pages.
-- writer: Rewrites "This commit..." style pages as proper articles. HIGH IMPACT on readability.
+- writer: Transforms shallow or commit-style pages into substantive articles with examples. HIGH IMPACT on depth and readability.
 
 ## Agent Coverage Balance
 
@@ -65,20 +66,25 @@ When selecting analysis agents for commits, ensure diverse coverage:
 - Run getting-started agent if guides/getting-started doesn't exist
 - Run link agent to connect pages
 - Start processing RECENT commits (last week) for context
+- Ensure early pages include code examples where relevant
 - Goal: Wiki is useful for onboarding
 
-**10-20 pages (Enrichment Phase):** Balance synthesis with commit analysis.
+**10-20 pages (Enrichment Phase):** Balance synthesis with DEPTH.
 - Run overview agent for categories with 3+ pages
+- Prioritize adding depth to shallow pages (< 500 chars)
+- Run writer agent on pages lacking code examples
+- Run quality agent to identify pages needing improvement
 - Process commits to add "why" context to existing pages
-- Run quality and consistency agents
-- Goal: Wiki has both current state AND historical context
+- Goal: Wiki has substantive, actionable content with examples
 
-**20+ pages (Historical Phase):** Backfill historical context.
+**20+ pages (Depth & Historical Phase):** Deepen existing content while backfilling history.
+- Prioritize deepening high-value pages that are shallow
+- Run writer agent on pages without code examples
 - Process older commits for historical context
 - Run narrative agent to find ADRs and planning docs
 - Run technical-debt agent to identify code smells
 - Continue synthesis (testing-guide, extension-guide)
-- Goal: Complete documentation with full history
+- Goal: Complete documentation with depth AND full history
 
 ## Response Format
 
@@ -107,10 +113,10 @@ export function buildUserPrompt(ctx: OrchestratorContext, contextString: string,
   const synthesisGuidance = pageCount < 5
     ? 'FOUNDATION PHASE: Exploration runs automatically. Focus on early synthesis (project-overview if 3+ pages).'
     : pageCount < 10
-    ? 'NAVIGABILITY PHASE: Create project-overview and getting-started if missing. Start processing recent commits.'
+    ? 'NAVIGABILITY PHASE: Create project-overview and getting-started if missing. Start processing recent commits. Ensure early pages have examples.'
     : pageCount < 20
-    ? 'ENRICHMENT PHASE: Balance synthesis with commit analysis. Add historical context to existing pages.'
-    : 'HISTORICAL PHASE: Backfill commit history for context and rationale. Process older commits, find ADRs.';
+    ? 'ENRICHMENT PHASE: Prioritize DEPTH - add examples to shallow pages. Run writer agent on pages lacking code examples.'
+    : 'DEPTH & HISTORICAL PHASE: Deepen shallow pages while backfilling commit history. Prioritize pages without examples.';
 
   // Find agents with 0% coverage that have pending commits
   const coverageGaps = Object.entries(ctx.commitsByAgent)
@@ -130,6 +136,8 @@ NOTE: Codebase exploration is handled automatically - focus on commit analysis, 
 Consider:
 - Pending edit requests: ${ctx.pendingEditRequests}${ctx.pendingEditRequests > 0 ? ' - run wiki-editor agent FIRST!' : ''}
 - Pages needing rewrite: ${ctx.pagesNeedingRewrite} (writer agent improves readability)
+- Shallow pages (< 500 chars): ${ctx.shallowPages}${ctx.shallowPages > 0 ? ' - run writer agent to add depth!' : ''}
+- Pages without code examples: ${ctx.pagesLackingExamples}${ctx.pagesLackingExamples > 0 ? ' - run writer agent to add examples!' : ''}
 - Categories without overview: ${ctx.categoriesWithoutOverview.join(', ') || 'none'} (overview agent helps navigation)
 - Has project overview: ${ctx.hasProjectOverview ? 'YES' : 'NO - run project-overview agent!'}
 - Has getting started: ${ctx.hasGettingStarted ? 'YES' : 'NO - run getting-started agent!'}

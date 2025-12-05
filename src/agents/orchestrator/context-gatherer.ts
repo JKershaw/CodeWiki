@@ -66,6 +66,12 @@ export interface OrchestratorContext {
   // Quality Indicators
   pagesWithoutLinks: number;
 
+  // Depth Indicators (heuristic-based)
+  /** Pages with < 500 chars content (excluding overview/index pages) */
+  shallowPages: number;
+  /** Pages without fenced code blocks (excluding overview/index pages) */
+  pagesLackingExamples: number;
+
   // Key pages existence
   hasProjectOverview: boolean;
   hasGettingStarted: boolean;
@@ -197,6 +203,19 @@ export class ContextGatherer {
     // Pages without links
     const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0).length;
 
+    // Depth metrics (heuristic-based)
+    // Shallow pages: content < 500 chars, excluding overview/index pages
+    const shallowPages = wikiPages.filter(p => {
+      if (p.path.endsWith('/overview') || p.path.endsWith('/index')) return false;
+      return p.content.length < 500;
+    }).length;
+
+    // Pages lacking examples: no fenced code blocks, excluding overview/index pages
+    const pagesLackingExamples = wikiPages.filter(p => {
+      if (p.path.endsWith('/overview') || p.path.endsWith('/index')) return false;
+      return !p.content.includes('```');
+    }).length;
+
     // Key pages existence
     const hasProjectOverview = wikiPages.some(p =>
       p.path === 'architecture/overview' ||
@@ -235,6 +254,8 @@ export class ContextGatherer {
       lowConfidencePages,
       recentRuns,
       pagesWithoutLinks,
+      shallowPages,
+      pagesLackingExamples,
       hasProjectOverview,
       hasGettingStarted,
       hasTestingGuide,
@@ -392,6 +413,8 @@ export class ContextGatherer {
     lines.push(`**Has extension guide (guides/extension-patterns):** ${ctx.hasExtensionGuide ? 'YES' : 'NO'}`);
     lines.push(`**Pages without links:** ${ctx.pagesWithoutLinks}`);
     lines.push(`**Low confidence pages:** ${ctx.lowConfidencePages}`);
+    lines.push(`**Shallow pages (< 500 chars):** ${ctx.shallowPages}`);
+    lines.push(`**Pages without code examples:** ${ctx.pagesLackingExamples}`);
     if (ctx.pendingEditRequests > 0) {
       lines.push(`**⚠️ Pending edit requests:** ${ctx.pendingEditRequests} (run wiki-editor agent!)`);
     }
