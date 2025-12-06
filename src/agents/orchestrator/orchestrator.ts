@@ -86,7 +86,7 @@ export class Orchestrator {
     private readonly git?: GitService,
     private readonly repoServiceFactory?: RepositoryServiceFactory
   ) {
-    this.contextGatherer = new ContextGatherer(repos, git, repoServiceFactory);
+    this.contextGatherer = new ContextGatherer(repos, repoServiceFactory);
     this.config = {
       useLLM: config?.useLLM ?? false,
       model: config?.model ?? 'anthropic/claude-haiku-4.5',

@@ -266,7 +266,7 @@ describe('ContextGatherer GitHub Mode', () => {
   describe('calculateDirectoryCoverage', () => {
     it('returns empty for repo not found', async () => {
       const repos = createMockRepos(null);
-      const gatherer = new ContextGatherer(repos, undefined, undefined);
+      const gatherer = new ContextGatherer(repos);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -275,7 +275,7 @@ describe('ContextGatherer GitHub Mode', () => {
 
     it('returns empty for GitHub repo without repoServiceFactory', async () => {
       const repos = createMockRepos({ id: 'repo-1', isGitHubRepo: true } as Repo);
-      const gatherer = new ContextGatherer(repos, undefined, undefined);
+      const gatherer = new ContextGatherer(repos);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -305,7 +305,7 @@ describe('ContextGatherer GitHub Mode', () => {
       ];
 
       const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
-      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+      const gatherer = new ContextGatherer(repos, repoServiceFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -363,7 +363,7 @@ describe('ContextGatherer GitHub Mode', () => {
       ];
 
       const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
-      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+      const gatherer = new ContextGatherer(repos, repoServiceFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -397,7 +397,7 @@ describe('ContextGatherer GitHub Mode', () => {
       ];
 
       const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
-      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+      const gatherer = new ContextGatherer(repos, repoServiceFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -426,7 +426,7 @@ describe('ContextGatherer GitHub Mode', () => {
         getServiceWithToken: mock.fn(() => mockService as RepositoryService),
       };
 
-      const gatherer = new ContextGatherer(repos, undefined, repoServiceFactory);
+      const gatherer = new ContextGatherer(repos, repoServiceFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -459,7 +459,7 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
   describe('formatCoverageTree', () => {
     it('should format a simple tree correctly', () => {
       const repos = createMockRepos(null);
-      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+      const gatherer = new ContextGatherer(repos as any);
 
       const tree = createNode('src', 'src', 10, 50);
       const result = gatherer.formatCoverageTree(tree);
@@ -471,7 +471,7 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
 
     it('should mark low coverage directories with warning emoji', () => {
       const repos = createMockRepos(null);
-      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+      const gatherer = new ContextGatherer(repos as any);
 
       const tree = createNode('src', 'src', 10, 30, [
         createNode('agents', 'src/agents', 5, 20),  // Low coverage
@@ -487,7 +487,7 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
 
     it('should format nested tree with proper indentation', () => {
       const repos = createMockRepos(null);
-      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+      const gatherer = new ContextGatherer(repos as any);
 
       const tree = createNode('src', 'src', 20, 40, [
         createNode('services', 'src/services', 15, 30, [
@@ -510,7 +510,7 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
 
     it('should truncate to maxLines', () => {
       const repos = createMockRepos(null);
-      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+      const gatherer = new ContextGatherer(repos as any);
 
       // Create a tree with many children
       const manyChildren = Array.from({ length: 20 }, (_, i) =>
@@ -528,7 +528,7 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
 
     it('should return placeholder for null tree', () => {
       const repos = createMockRepos(null);
-      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+      const gatherer = new ContextGatherer(repos as any);
 
       const result = gatherer.formatCoverageTree(null);
 
@@ -537,7 +537,7 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
 
     it('should sort children by file count (largest first)', () => {
       const repos = createMockRepos(null);
-      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+      const gatherer = new ContextGatherer(repos as any);
 
       // Children are passed in wrong order but should be sorted by totalFileCount
       const tree = createNode('src', 'src', 30, 40, [
@@ -632,7 +632,7 @@ describe('ContextGatherer Project Overview Content', () => {
       },
     } as any;
 
-    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.strictEqual(context.projectOverviewContent, overviewContent);
@@ -664,7 +664,7 @@ describe('ContextGatherer Project Overview Content', () => {
       },
     } as any;
 
-    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.ok(context.projectOverviewContent);
@@ -692,7 +692,7 @@ describe('ContextGatherer Project Overview Content', () => {
       },
     } as any;
 
-    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.strictEqual(context.projectOverviewContent, null);
@@ -724,7 +724,7 @@ describe('ContextGatherer Project Overview Content', () => {
       },
     } as any;
 
-    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.strictEqual(context.hasProjectOverview, true);
@@ -760,7 +760,7 @@ describe('ContextGatherer Project Overview Content', () => {
       },
     } as any;
 
-    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.strictEqual(context.hasProjectOverview, true);
@@ -793,7 +793,7 @@ describe('ContextGatherer Project Overview Content', () => {
       },
     } as any;
 
-    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.strictEqual(context.hasProjectOverview, true);
