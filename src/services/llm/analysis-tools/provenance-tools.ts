@@ -11,6 +11,7 @@ import {
   createListOrchestratorRunsQuery,
   handleListOrchestratorRuns,
 } from '../../../queries/orchestrator-run.js';
+import { findPageByPath } from '../wiki-page-helpers.js';
 
 /**
  * Tool to get the edit history and agent provenance for a wiki page.
@@ -31,11 +32,11 @@ export const getPageProvenanceTool: AnalysisToolDefinition = {
     required: ['page_path'],
   },
   execute: async (input, context) => {
-    const pagePath = (input['page_path'] as string).toLowerCase();
+    const pagePath = input['page_path'] as string;
     const { repos, wikiId, wikiPages } = context;
 
     // Find the page
-    const page = wikiPages.find(p => p.path.toLowerCase() === pagePath);
+    const { page } = findPageByPath(wikiPages, pagePath);
     if (!page) {
       return `Page "${pagePath}" not found in wiki.`;
     }
@@ -302,11 +303,11 @@ export const getProvenanceTraceTool: AnalysisToolDefinition = {
     required: ['page_path'],
   },
   execute: async (input, context) => {
-    const pagePath = (input['page_path'] as string).toLowerCase();
+    const pagePath = input['page_path'] as string;
     const { repos, wikiId, wikiPages, repoId } = context;
 
     // Find the page
-    const page = wikiPages.find(p => p.path.toLowerCase() === pagePath);
+    const { page } = findPageByPath(wikiPages, pagePath);
     if (!page) {
       return `Page "${pagePath}" not found in wiki.`;
     }

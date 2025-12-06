@@ -7,6 +7,14 @@
 
 import type { AnalysisToolDefinition } from './types.js';
 import { getAgentPrompt, getAvailableAgentTypes } from '../../../agents/registry.js';
+import {
+  findPageByPath,
+  formatPageNotFoundError,
+  filterPagesByCategory,
+  groupPagesByCategory,
+  truncateContent,
+  DEFAULT_MAX_CONTENT_LENGTH,
+} from '../wiki-page-helpers.js';
 
 /**
  * Tool to read a wiki page.
@@ -26,36 +34,15 @@ export const getPageContentTool: AnalysisToolDefinition = {
     required: ['path'],
   },
   execute: async (input, context) => {
-    const path = (input['path'] as string).toLowerCase();
+    const path = input['path'] as string;
     const { wikiPages } = context;
-
-    // Find the page
-    let page = wikiPages.find(p => p.path.toLowerCase() === path);
+    const { page } = findPageByPath(wikiPages, path);
 
     if (!page) {
-      // Try partial match
-      page = wikiPages.find(p => p.path.toLowerCase().includes(path));
+      return formatPageNotFoundError(path, wikiPages);
     }
 
-    if (!page) {
-      const suggestions = wikiPages
-        .filter(p => {
-          const pathParts = path.split('/');
-          return pathParts.some(part => p.path.toLowerCase().includes(part));
-        })
-        .slice(0, 5);
-
-      if (suggestions.length > 0) {
-        return `Page "${path}" not found. Did you mean one of these?\n${suggestions.map(p => `- ${p.path}`).join('\n')}`;
-      }
-      return `Page "${path}" not found.`;
-    }
-
-    const maxLength = 4000;
-    let content = page.content;
-    if (content.length > maxLength) {
-      content = content.slice(0, maxLength) + '\n\n... (truncated)';
-    }
+    const { content } = truncateContent(page.content, DEFAULT_MAX_CONTENT_LENGTH);
 
     return [
       `# ${page.title}`,
@@ -91,11 +78,7 @@ export const listWikiPagesTool: AnalysisToolDefinition = {
     let { wikiPages } = context;
 
     if (category) {
-      const lowerCategory = category.toLowerCase();
-      wikiPages = wikiPages.filter(p =>
-        p.path.toLowerCase().startsWith(lowerCategory) ||
-        p.path.toLowerCase().includes('/' + lowerCategory)
-      );
+      wikiPages = filterPagesByCategory(wikiPages, category);
     }
 
     if (wikiPages.length === 0) {
@@ -105,13 +88,7 @@ export const listWikiPagesTool: AnalysisToolDefinition = {
     }
 
     // Group by top-level category
-    const grouped: Record<string, typeof wikiPages> = {};
-    for (const page of wikiPages) {
-      const parts = page.path.split('/');
-      const topLevel = parts.length > 1 ? parts[0]! : '(root)';
-      if (!grouped[topLevel]) grouped[topLevel] = [];
-      grouped[topLevel]!.push(page);
-    }
+    const grouped = groupPagesByCategory(wikiPages);
 
     const sections: string[] = [];
     sections.push(`## Wiki Pages (${wikiPages.length} total)`);

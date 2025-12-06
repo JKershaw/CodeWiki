@@ -6,6 +6,7 @@
  */
 
 import type { AnalysisToolDefinition } from './types.js';
+import { findPageByPath } from '../wiki-page-helpers.js';
 
 /**
  * Tool to get the edit history for a wiki page with full content.
@@ -26,11 +27,11 @@ export const getPageEditHistoryTool: AnalysisToolDefinition = {
     required: ['page_path'],
   },
   execute: async (input, context) => {
-    const pagePath = (input['page_path'] as string).toLowerCase();
+    const pagePath = input['page_path'] as string;
     const { repos, wikiPages } = context;
 
     // Find the page
-    const page = wikiPages.find(p => p.path.toLowerCase() === pagePath);
+    const { page } = findPageByPath(wikiPages, pagePath);
     if (!page) {
       return `Page "${pagePath}" not found in wiki.`;
     }
@@ -268,12 +269,12 @@ export const getEditDetailsTool: AnalysisToolDefinition = {
     required: ['page_path', 'edit_index'],
   },
   execute: async (input, context) => {
-    const pagePath = (input['page_path'] as string).toLowerCase();
+    const pagePath = input['page_path'] as string;
     const editIndex = parseInt(input['edit_index'] as string, 10);
     const { repos, wikiPages } = context;
 
     // Find the page
-    const page = wikiPages.find(p => p.path.toLowerCase() === pagePath);
+    const { page } = findPageByPath(wikiPages, pagePath);
     if (!page) {
       return `Page "${pagePath}" not found in wiki.`;
     }
