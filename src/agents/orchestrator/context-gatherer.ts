@@ -121,6 +121,29 @@ export class ContextGatherer {
   ) {}
 
   /**
+   * Get a repository service for the given repo, using authentication when available.
+   * For GitHub repos with a userId, this looks up the user's access token
+   * and uses authenticated access (required for private repos).
+   */
+  private async getRepoService(repo: Repo): Promise<RepositoryService | null> {
+    if (!this.repoServiceFactory) {
+      return null;
+    }
+
+    // For GitHub repos with a userId, try to use authenticated access
+    if (repo.isGitHubRepo && repo.userId) {
+      const user = await this.repos.users.findById(repo.userId);
+      if (user?.accessToken) {
+        return this.repoServiceFactory.getServiceWithToken(repo, user.accessToken);
+      }
+      // Fall through to unauthenticated access if no token
+      console.warn(`No access token found for user ${repo.userId}, using unauthenticated GitHub access`);
+    }
+
+    return this.repoServiceFactory.getService(repo);
+  }
+
+  /**
    * Gather a complete snapshot of the wiki state.
    */
   async gather(repoId: string, wikiId: string): Promise<OrchestratorContext> {
@@ -338,13 +361,17 @@ export class ContextGatherer {
   ): Promise<DirectoryCoverage[]> {
     // Look up the repository
     const repo = await this.repos.repos.findById(repoId);
-    if (!repo || !this.repoServiceFactory) {
+    if (!repo) {
+      return [];
+    }
+
+    // Get authenticated service for private GitHub repos
+    const repoService = await this.getRepoService(repo);
+    if (!repoService) {
       return [];
     }
 
     try {
-      const repoService = this.repoServiceFactory.getService(repo);
-
       // Get all files via unified RepositoryService interface
       const allFiles = await repoService.getFileTree(repo);
 
@@ -466,14 +493,15 @@ export class ContextGatherer {
       console.warn(`buildCoverageTree: repo not found for ${repoId}`);
       return null;
     }
-    if (!this.repoServiceFactory) {
+
+    // Get authenticated service for private GitHub repos
+    const repoService = await this.getRepoService(repo);
+    if (!repoService) {
       console.warn(`buildCoverageTree: repoServiceFactory not available`);
       return null;
     }
 
     try {
-      const repoService = this.repoServiceFactory.getService(repo);
-
       // Get all files via unified RepositoryService interface
       const allFiles = await repoService.getFileTree(repo);
 

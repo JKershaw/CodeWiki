@@ -146,11 +146,32 @@ function createGitHubRepositoryService(
     },
 
     async getFileTree(_repo: Repo, ref?: string): Promise<string[]> {
-      const sha = ref ?? await githubService.getDefaultBranch(owner, repoName);
-      const tree = await githubService.getTree(owner, repoName, sha, true);
-      return tree
-        .filter(entry => entry.type === 'blob')
-        .map(entry => entry.path);
+      try {
+        // Get the default branch (or use provided ref)
+        let treeRef = ref;
+        if (!treeRef) {
+          try {
+            treeRef = await githubService.getDefaultBranch(owner, repoName);
+          } catch (branchError) {
+            console.warn(`getFileTree: getDefaultBranch failed for ${owner}/${repoName}: ${branchError}`);
+            throw branchError;
+          }
+        }
+
+        // Get the tree
+        try {
+          const tree = await githubService.getTree(owner, repoName, treeRef, true);
+          return tree
+            .filter(entry => entry.type === 'blob')
+            .map(entry => entry.path);
+        } catch (treeError) {
+          console.warn(`getFileTree: getTree failed for ${owner}/${repoName} at ref '${treeRef}': ${treeError}`);
+          throw treeError;
+        }
+      } catch (error) {
+        // Re-throw - error already logged above
+        throw error;
+      }
     },
 
     async fileExists(_repo: Repo, path: string, ref?: string): Promise<boolean> {
