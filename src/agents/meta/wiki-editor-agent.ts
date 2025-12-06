@@ -235,6 +235,8 @@ export class WikiEditorAgent implements Agent {
     };
   }
 
+  private readonly CONTENT_TRUNCATION_LIMIT = 4000;
+
   /**
    * Build prompt for the LLM to decide how to handle a historical edit.
    */
@@ -246,6 +248,11 @@ export class WikiEditorAgent implements Agent {
     const hasHistorySection = currentPage.content.includes(this.HISTORY_SECTION_HEADER);
     const sourceSha = getSourceCommitSha(editRequest) ?? 'unknown';
     const sourceTimestamp = getSourceCommitTimestamp(editRequest);
+    const truncationLimit = this.CONTENT_TRUNCATION_LIMIT;
+
+    // Build truncation notice with remaining content hint
+    const currentContentTruncated = currentPage.content.length > truncationLimit;
+    const proposedContentTruncated = editRequest.proposedContent.length > truncationLimit;
 
     return `You are editing a wiki page. An analysis from an OLDER commit has arrived and needs to be processed.
 
@@ -257,18 +264,18 @@ export class WikiEditorAgent implements Agent {
 
 **Current Content:**
 \`\`\`markdown
-${currentPage.content.slice(0, 2000)}${currentPage.content.length > 2000 ? '\n... (truncated)' : ''}
+${currentPage.content.slice(0, truncationLimit)}${currentContentTruncated ? `\n... (${currentPage.content.length - truncationLimit} more characters)` : ''}
 \`\`\`
 
 ## Proposed Edit (from older commit)
+**Source Agent:** ${editRequest.sourceAgentType} ${this.getAgentBiasHint(editRequest.sourceAgentType)}
 **Commit SHA:** ${sourceSha.slice(0, 7)}
 **Commit Date:** ${sourceTimestamp ? this.formatDate(sourceTimestamp) : 'unknown'}
 **Update Type:** ${editRequest.proposedUpdateType}
-**Agent:** ${editRequest.sourceAgentType}
 
 **Proposed Content:**
 \`\`\`markdown
-${editRequest.proposedContent.slice(0, 2000)}${editRequest.proposedContent.length > 2000 ? '\n... (truncated)' : ''}
+${editRequest.proposedContent.slice(0, truncationLimit)}${proposedContentTruncated ? `\n... (${editRequest.proposedContent.length - truncationLimit} more characters)` : ''}
 \`\`\`
 
 ## Decision Required
@@ -280,6 +287,8 @@ The proposed edit comes from code that existed BEFORE the current page content w
 3. **MERGE** - Some specific information from the historical edit should be incorporated into the main content
 4. **CONFLICT** - The information contradicts current content in a way that needs human review
 
+Remember: When in doubt between SKIP and MERGE, prefer MERGE. High-priority information (security, API contracts, error handling, configuration) should be preserved unless explicitly contradicted.
+
 ## Response Format
 
 Respond with EXACTLY this format:
@@ -288,6 +297,22 @@ DECISION: [SKIP|HISTORY|MERGE|CONFLICT]
 REASONING: [Your reasoning in 1-2 sentences]
 CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NOT a description of it. Write the content directly as it should appear on the page. Do not include meta-text like "The merged content could be:" - just write the wiki content itself.]
 `;
+  }
+
+  /**
+   * Get a hint about decision bias based on the source agent type.
+   */
+  private getAgentBiasHint(agentType: AgentType): string {
+    switch (agentType) {
+      case 'security':
+        return '(bias toward MERGE - security details are critical)';
+      case 'technical-debt':
+        return '(bias toward MERGE - debt context helps prioritization)';
+      case 'pattern':
+        return '(bias toward HISTORY - pattern evolution aids understanding)';
+      default:
+        return '';
+    }
   }
 
   /**
@@ -470,9 +495,9 @@ const SYSTEM_PROMPT = `You are a Wiki Editor Agent for CodeWiki. Your job is to 
 When an edit request comes from a commit OLDER than what's already on the wiki page, you must decide:
 
 1. **SKIP** - Use this when:
-   - The current content clearly supersedes the historical information
-   - The historical edit adds no new value
-   - The information is completely outdated
+   - The information is demonstrably obsolete or removed from the codebase
+   - The current content explicitly contradicts and replaces this information
+   - The historical edit adds nothing not already covered
 
 2. **HISTORY** - Use this when:
    - The historical context helps understand how the code evolved
@@ -489,10 +514,35 @@ When an edit request comes from a commit OLDER than what's already on the wiki p
    - You can't determine which information is correct
    - Human review is needed
 
-Guidelines:
-- Prefer SKIP for truly obsolete information
+## Information Priority (preserve these even when older)
+High-priority information should be MERGEd unless explicitly contradicted:
+1. Security notes, vulnerability details, authentication requirements
+2. API contracts, function signatures, required parameters
+3. Error handling, failure modes, edge cases
+4. Configuration options, environment variables
+5. Performance characteristics, limitations, caveats
+
+## Source Agent Considerations
+Weight your decision based on which agent produced the edit:
+- **security**: Bias toward MERGE - security details are critical and easily lost
+- **code-change**: Standard evaluation based on content
+- **pattern**: Bias toward HISTORY - design pattern evolution aids understanding
+- **technical-debt**: Bias toward MERGE - debt context helps prioritization
+
+## Decision Guidelines
+- When in doubt between SKIP and MERGE, prefer MERGE
+- Only SKIP when information is demonstrably obsolete or already covered
 - Prefer HISTORY for evolutionary context that aids understanding
-- Prefer MERGE only when specific details add value
 - Use CONFLICT sparingly - only when truly unresolvable
+
+## Examples
+
+**SKIP**: Historical edit describes a "Redis cache layer". Current page says "Redis was replaced with in-memory caching in v2.0". The historical info is explicitly superseded.
+
+**MERGE**: Historical edit documents error codes (ERR_AUTH_FAILED, ERR_RATE_LIMIT). Current page describes the auth system but lacks error details. Merge the error codes in.
+
+**HISTORY**: Historical edit explains the original callback-based API design. Current page documents the Promise-based API. The evolution context helps understand legacy code.
+
+**CONFLICT**: Historical edit says "tokens expire after 24 hours". Current page says "tokens expire after 1 hour". Cannot determine which is correct without code review.
 
 For HISTORY entries, summarize the key points rather than including all content verbatim.`;
