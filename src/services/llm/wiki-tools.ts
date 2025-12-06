@@ -5,13 +5,19 @@
  * the wiki, read pages, follow links, and refine searches.
  */
 
-import type { WikiPage } from '../../domain/wiki-page.js';
 import type { ToolDefinition, WikiToolContext } from './tools.js';
+import {
+  findPageByPath,
+  formatPageNotFoundError,
+  filterPagesByCategory,
+  groupPagesByCategory,
+  truncateContent,
+  DEFAULT_MAX_CONTENT_LENGTH,
+} from './wiki-page-helpers.js';
 
 // Re-export WikiToolContext for backwards compatibility during migration
 export type { WikiToolContext } from './tools.js';
 
-const DEFAULT_MAX_CONTENT_LENGTH = 4000;
 const MAX_SEARCH_RESULTS = 10;
 const SNIPPET_LENGTH = 200;
 
@@ -141,36 +147,15 @@ export const readPageTool: ToolDefinition<WikiToolContext> = {
     required: ['path'],
   },
   execute: async (input, context) => {
-    const path = (input['path'] as string).toLowerCase();
-
-    // Find the page (try exact match first, then partial)
-    let page = context.pages.find(p => p.path.toLowerCase() === path);
+    const path = input['path'] as string;
+    const { page } = findPageByPath(context.pages, path);
 
     if (!page) {
-      // Try partial match
-      page = context.pages.find(p => p.path.toLowerCase().includes(path));
-    }
-
-    if (!page) {
-      // List similar pages as suggestions
-      const similar = context.pages
-        .filter(p => {
-          const pathParts = path.split('/');
-          return pathParts.some(part => p.path.toLowerCase().includes(part));
-        })
-        .slice(0, 5);
-
-      if (similar.length > 0) {
-        return `Page "${path}" not found. Did you mean one of these?\n${similar.map(p => `- ${p.path}`).join('\n')}`;
-      }
-      return `Page "${path}" not found. Use search_wiki to find relevant pages.`;
+      return formatPageNotFoundError(path, context.pages);
     }
 
     const maxLength = context.maxContentLength ?? DEFAULT_MAX_CONTENT_LENGTH;
-    let content = page.content;
-    if (content.length > maxLength) {
-      content = content.slice(0, maxLength) + '\n\n... (content truncated, page continues)';
-    }
+    const { content } = truncateContent(page.content, maxLength);
 
     const metadata = [
       `# ${page.title}`,
@@ -212,12 +197,7 @@ export const listPagesTool: ToolDefinition<WikiToolContext> = {
     let pages = context.pages;
 
     if (category) {
-      const lowerCategory = category.toLowerCase();
-      pages = pages.filter(
-        p =>
-          p.path.toLowerCase().startsWith(lowerCategory) ||
-          p.path.toLowerCase().includes('/' + lowerCategory)
-      );
+      pages = filterPagesByCategory(pages, category);
     }
 
     if (pages.length === 0) {
@@ -228,13 +208,7 @@ export const listPagesTool: ToolDefinition<WikiToolContext> = {
     }
 
     // Group by top-level category
-    const grouped: Record<string, WikiPage[]> = {};
-    for (const page of pages) {
-      const parts = page.path.split('/');
-      const topLevel = parts.length > 1 ? parts[0]! : '(root)';
-      if (!grouped[topLevel]) grouped[topLevel] = [];
-      grouped[topLevel]!.push(page);
-    }
+    const grouped = groupPagesByCategory(pages);
 
     // Format output
     const sections = Object.entries(grouped)
@@ -269,9 +243,8 @@ export const getRelatedPagesTool: ToolDefinition<WikiToolContext> = {
     required: ['path'],
   },
   execute: async (input, context) => {
-    const path = (input['path'] as string).toLowerCase();
-
-    const page = context.pages.find(p => p.path.toLowerCase() === path);
+    const path = input['path'] as string;
+    const { page } = findPageByPath(context.pages, path);
 
     if (!page) {
       return `Page "${path}" not found. Use search_wiki to find the correct path.`;

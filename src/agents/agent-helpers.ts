@@ -6,6 +6,7 @@
  * - GitHub repositories (via RepositoryService)
  */
 
+import { minimatch } from 'minimatch';
 import type { AgentContext } from './base-agent.js';
 import type { ToolContext, ToolDefinition } from '../services/llm/tools.js';
 import { codebaseTools } from '../services/llm/codebase-tools.js';
@@ -204,18 +205,10 @@ function createApiCodebaseTools(context: AgentContext): {
 }
 
 /**
- * Simple glob pattern matching for file paths.
+ * Filter files by glob pattern using minimatch.
  */
 function filterByGlob(files: string[], pattern: string): string[] {
-  // Convert glob pattern to regex
-  const regexPattern = pattern
-    .replace(/\*\*/g, '<<<GLOBSTAR>>>')
-    .replace(/\*/g, '[^/]*')
-    .replace(/\?/g, '.')
-    .replace(/<<<GLOBSTAR>>>/g, '.*');
-
-  const regex = new RegExp(`^${regexPattern}$`);
-  return files.filter(file => regex.test(file));
+  return files.filter(file => minimatch(file, pattern));
 }
 
 /**
