@@ -46,6 +46,8 @@ export interface WikiPageHistory {
   editRequestId?: string;
   /** Type of agent that made the change */
   agentType: WikiPageHistoryAgentType;
+  /** Monotonically increasing sequence number per wiki for deterministic ordering */
+  sequenceNumber: number;
 }
 
 /**
@@ -64,6 +66,7 @@ export interface CreateWikiPageHistoryParams {
   editRequestId?: string;
   agentType: WikiPageHistoryAgentType;
   timestamp?: Date;
+  sequenceNumber: number;
 }
 
 /**
@@ -80,6 +83,7 @@ export function createWikiPageHistory(params: CreateWikiPageHistoryParams): Wiki
     contentBefore: params.contentBefore,
     contentAfter: params.contentAfter,
     agentType: params.agentType,
+    sequenceNumber: params.sequenceNumber,
   };
 
   // Only include optional properties if defined (exactOptionalPropertyTypes)

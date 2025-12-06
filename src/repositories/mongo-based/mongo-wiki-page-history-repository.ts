@@ -18,7 +18,7 @@ export class MongoWikiPageHistoryRepository implements WikiPageHistoryRepository
   async findByPage(pageId: string): Promise<WikiPageHistory[]> {
     const docs = await this.collection
       .find({ pageId })
-      .sort({ timestamp: -1 })
+      .sort({ timestamp: -1, sequenceNumber: -1 })
       .toArray();
     return toEntities<WikiPageHistory>(docs);
   }
@@ -26,7 +26,7 @@ export class MongoWikiPageHistoryRepository implements WikiPageHistoryRepository
   async findByWiki(wikiId: string): Promise<WikiPageHistory[]> {
     const docs = await this.collection
       .find({ wikiId })
-      .sort({ timestamp: -1 })
+      .sort({ timestamp: -1, sequenceNumber: -1 })
       .toArray();
     return toEntities<WikiPageHistory>(docs);
   }
@@ -34,7 +34,7 @@ export class MongoWikiPageHistoryRepository implements WikiPageHistoryRepository
   async findByAgentRun(agentRunId: string): Promise<WikiPageHistory[]> {
     const docs = await this.collection
       .find({ agentRunId })
-      .sort({ timestamp: -1 })
+      .sort({ timestamp: -1, sequenceNumber: -1 })
       .toArray();
     return toEntities<WikiPageHistory>(docs);
   }
@@ -45,7 +45,7 @@ export class MongoWikiPageHistoryRepository implements WikiPageHistoryRepository
         wikiId,
         timestamp: { $gte: start, $lte: end },
       })
-      .sort({ timestamp: -1 })
+      .sort({ timestamp: -1, sequenceNumber: -1 })
       .toArray();
     return toEntities<WikiPageHistory>(docs);
   }
@@ -53,19 +53,28 @@ export class MongoWikiPageHistoryRepository implements WikiPageHistoryRepository
   async findByPagePath(wikiId: string, pagePath: string): Promise<WikiPageHistory[]> {
     const docs = await this.collection
       .find({ wikiId, pagePath })
-      .sort({ timestamp: -1 })
+      .sort({ timestamp: -1, sequenceNumber: -1 })
       .toArray();
     return toEntities<WikiPageHistory>(docs);
   }
 
   async getLatestByPage(pageId: string): Promise<WikiPageHistory | null> {
     const doc = await this.collection
-      .findOne({ pageId }, { sort: { timestamp: -1 } });
+      .findOne({ pageId }, { sort: { timestamp: -1, sequenceNumber: -1 } });
     return toEntity<WikiPageHistory>(doc);
   }
 
   async countByWiki(wikiId: string): Promise<number> {
     return await this.collection.countDocuments({ wikiId });
+  }
+
+  async getNextSequenceNumber(wikiId: string): Promise<number> {
+    const doc = await this.collection
+      .findOne({ wikiId }, { sort: { sequenceNumber: -1 }, projection: { sequenceNumber: 1 } });
+    if (!doc || doc.sequenceNumber === undefined) {
+      return 1;
+    }
+    return (doc.sequenceNumber as number) + 1;
   }
 
   async save(history: WikiPageHistory): Promise<void> {

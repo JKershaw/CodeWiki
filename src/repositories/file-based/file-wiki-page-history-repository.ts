@@ -8,6 +8,19 @@ const hydrateDates = createDateNormalizer<WikiPageHistory>({
   optional: [],
 });
 
+/**
+ * Sort history records by timestamp descending, with sequenceNumber as tiebreaker.
+ * When timestamps are equal (same millisecond), higher sequence numbers come first.
+ */
+function sortByTimestampAndSequence(a: WikiPageHistory, b: WikiPageHistory): number {
+  const timeDiff = b.timestamp.getTime() - a.timestamp.getTime();
+  if (timeDiff !== 0) {
+    return timeDiff;
+  }
+  // When timestamps are equal, use sequence number (higher = more recent)
+  return (b.sequenceNumber ?? 0) - (a.sequenceNumber ?? 0);
+}
+
 export class FileWikiPageHistoryRepository implements WikiPageHistoryRepository {
   private store: FileStore<WikiPageHistory>;
 
@@ -24,21 +37,21 @@ export class FileWikiPageHistoryRepository implements WikiPageHistoryRepository 
     const results = await this.store.find(h => h.pageId === pageId);
     return results
       .map(hydrateDates)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      .sort(sortByTimestampAndSequence);
   }
 
   async findByWiki(wikiId: string): Promise<WikiPageHistory[]> {
     const results = await this.store.find(h => h.wikiId === wikiId);
     return results
       .map(hydrateDates)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      .sort(sortByTimestampAndSequence);
   }
 
   async findByAgentRun(agentRunId: string): Promise<WikiPageHistory[]> {
     const results = await this.store.find(h => h.agentRunId === agentRunId);
     return results
       .map(hydrateDates)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      .sort(sortByTimestampAndSequence);
   }
 
   async findByTimeRange(wikiId: string, start: Date, end: Date): Promise<WikiPageHistory[]> {
@@ -49,7 +62,7 @@ export class FileWikiPageHistoryRepository implements WikiPageHistoryRepository 
     });
     return results
       .map(hydrateDates)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      .sort(sortByTimestampAndSequence);
   }
 
   async findByPagePath(wikiId: string, pagePath: string): Promise<WikiPageHistory[]> {
@@ -58,7 +71,7 @@ export class FileWikiPageHistoryRepository implements WikiPageHistoryRepository 
     );
     return results
       .map(hydrateDates)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      .sort(sortByTimestampAndSequence);
   }
 
   async getLatestByPage(pageId: string): Promise<WikiPageHistory | null> {
@@ -69,6 +82,15 @@ export class FileWikiPageHistoryRepository implements WikiPageHistoryRepository 
   async countByWiki(wikiId: string): Promise<number> {
     const results = await this.store.find(h => h.wikiId === wikiId);
     return results.length;
+  }
+
+  async getNextSequenceNumber(wikiId: string): Promise<number> {
+    const results = await this.store.find(h => h.wikiId === wikiId);
+    if (results.length === 0) {
+      return 1;
+    }
+    const maxSeq = Math.max(...results.map(h => h.sequenceNumber ?? 0));
+    return maxSeq + 1;
   }
 
   async save(history: WikiPageHistory): Promise<void> {

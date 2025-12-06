@@ -24,6 +24,7 @@ describe('WikiPageHistory Domain', () => {
         contentAfter: '# API Documentation\n\nNew content here.',
         agentRunId: 'run-1',
         agentType: 'bootstrap',
+        sequenceNumber: 1,
       });
 
       assert.strictEqual(history.id, 'history-1');
@@ -51,6 +52,7 @@ describe('WikiPageHistory Domain', () => {
         workItemId: 'work-1',
         editRequestId: 'edit-1',
         agentType: 'wiki-editor',
+        sequenceNumber: 2,
       });
 
       assert.strictEqual(history.operation, 'update');
@@ -72,6 +74,7 @@ describe('WikiPageHistory Domain', () => {
         contentAfter: null,
         agentRunId: 'run-3',
         agentType: 'wiki-editor',
+        sequenceNumber: 3,
       });
 
       assert.strictEqual(history.operation, 'delete');
@@ -90,6 +93,7 @@ describe('WikiPageHistory Domain', () => {
         contentBefore: null,
         contentAfter: 'content',
         agentType: 'bootstrap',
+        sequenceNumber: 4,
       });
       const after = new Date();
 
@@ -108,6 +112,7 @@ describe('WikiPageHistory Domain', () => {
         contentBefore: 'old',
         contentAfter: 'new',
         agentType: 'manual',
+        sequenceNumber: 5,
       });
 
       assert.strictEqual(history.agentRunId, undefined);
@@ -127,6 +132,7 @@ describe('WikiPageHistory Domain', () => {
         contentBefore: 'content',
         contentAfter: 'content v2',
         agentType: 'wiki-editor',
+        sequenceNumber: 6,
       });
 
       assert.strictEqual(history.pagePath, 'docs/old-name');
@@ -152,6 +158,7 @@ describe('WikiPageHistory Domain', () => {
           contentBefore: 'old',
           contentAfter: 'new',
           agentType,
+          sequenceNumber: 1,
         });
         assert.strictEqual(history.agentType, agentType);
       }
@@ -172,6 +179,7 @@ describe('WikiPageHistory Domain', () => {
           contentBefore: operation === 'create' ? null : 'old',
           contentAfter: operation === 'delete' ? null : 'new',
           agentType: 'wiki-editor',
+          sequenceNumber: 1,
         });
         assert.strictEqual(history.operation, operation);
       }
