@@ -1,8 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { Repositories } from '../../repositories/index.js';
-import type { GitService } from '../../services/git/git-service.js';
-import type { RepositoryServiceFactory, RepositoryService, FileEntry } from '../../services/repository/repository-service.js';
+import type { RepositoryServiceFactory, RepositoryService } from '../../services/repository/repository-service.js';
 import type { Repo } from '../../domain/repo.js';
 
 // Import agent type definitions from central registry
@@ -120,7 +117,6 @@ export interface OrchestratorContext {
 export class ContextGatherer {
   constructor(
     private readonly repos: Repositories,
-    private readonly git?: GitService,
     private readonly repoServiceFactory?: RepositoryServiceFactory
   ) {}
 
@@ -333,64 +329,52 @@ export class ContextGatherer {
    * Scans the repository's src/ directory and checks how well each
    * subdirectory is documented in the wiki.
    *
-   * Works with both local repositories (filesystem) and GitHub repositories (API).
+   * Uses RepositoryService abstraction to work uniformly with both
+   * local and GitHub repositories.
    */
   private async calculateDirectoryCoverage(
     repoId: string,
     wikiPages: Array<{ path: string; content: string }>
   ): Promise<DirectoryCoverage[]> {
-    // Look up the repository to determine if it's local or GitHub
+    // Look up the repository
     const repo = await this.repos.repos.findById(repoId);
-    if (!repo) {
-      return [];
-    }
-
-    // For GitHub repos, use API-based approach
-    if (repo.isGitHubRepo) {
-      return this.calculateDirectoryCoverageViaApi(repo, wikiPages);
-    }
-
-    // For local repos, use filesystem-based approach
-    return this.calculateDirectoryCoverageViaFilesystem(repoId, wikiPages);
-  }
-
-  /**
-   * Calculate directory coverage using GitHub API.
-   */
-  private async calculateDirectoryCoverageViaApi(
-    repo: Repo,
-    wikiPages: Array<{ path: string; content: string }>
-  ): Promise<DirectoryCoverage[]> {
-    if (!this.repoServiceFactory) {
+    if (!repo || !this.repoServiceFactory) {
       return [];
     }
 
     try {
       const repoService = this.repoServiceFactory.getService(repo);
 
-      // Check if src directory exists
-      let srcEntries: FileEntry[];
-      try {
-        srcEntries = await repoService.listDirectory(repo, 'src');
-      } catch {
-        // src directory doesn't exist - try root level instead
+      // Get all files via unified RepositoryService interface
+      const allFiles = await repoService.getFileTree(repo);
+
+      // Filter to src/ source files only
+      const srcFiles = allFiles.filter(f =>
+        f.startsWith('src/') && this.isSourceFile(f)
+      );
+
+      if (srcFiles.length === 0) {
         return [];
       }
 
+      // Extract first-level directories under src/ and count files
+      const dirCounts = new Map<string, number>();
+      for (const filePath of srcFiles) {
+        // Extract directory: src/agents/foo.ts -> src/agents
+        const parts = filePath.split('/');
+        if (parts.length >= 3) {
+          const dirPath = `${parts[0]}/${parts[1]}`;
+          dirCounts.set(dirPath, (dirCounts.get(dirPath) ?? 0) + 1);
+        }
+      }
+
+      // Build coverage array
       const coverage: DirectoryCoverage[] = [];
-
-      // Process directories under src/
-      for (const entry of srcEntries) {
-        if (entry.type !== 'dir') continue;
-
-        const relativePath = `src/${entry.name}`;
-
-        // Count source files in this directory via API
-        const fileCount = await this.countSourceFilesViaApi(repoService, repo, relativePath);
-        if (fileCount === 0) continue;
+      for (const [dirPath, fileCount] of dirCounts) {
+        const dirName = dirPath.split('/')[1]!;
 
         // Check for wiki mentions
-        const wikiMentions = this.countWikiMentions(entry.name, relativePath, wikiPages);
+        const wikiMentions = this.countWikiMentions(dirName, dirPath, wikiPages);
 
         // Calculate coverage percentage
         const coveragePercent = fileCount > 0
@@ -398,7 +382,7 @@ export class ContextGatherer {
           : 0;
 
         coverage.push({
-          path: relativePath,
+          path: dirPath,
           fileCount,
           wikiMentions,
           coveragePercent: Math.round(coveragePercent),
@@ -410,29 +394,8 @@ export class ContextGatherer {
 
       return coverage;
     } catch (error) {
-      console.warn(`Failed to calculate directory coverage via API: ${error}`);
+      console.warn(`Failed to calculate directory coverage: ${error}`);
       return [];
-    }
-  }
-
-  /**
-   * Count source files in a directory using repository API.
-   */
-  private async countSourceFilesViaApi(
-    repoService: RepositoryService,
-    repo: Repo,
-    dirPath: string
-  ): Promise<number> {
-    try {
-      // Get all files in repo and filter to this directory
-      const allFiles = await repoService.getFileTree(repo);
-      const filesInDir = allFiles.filter(f =>
-        f.startsWith(dirPath + '/') &&
-        this.isSourceFile(f)
-      );
-      return filesInDir.length;
-    } catch {
-      return 0;
     }
   }
 
@@ -484,103 +447,11 @@ export class ContextGatherer {
   }
 
   /**
-   * Calculate directory coverage using filesystem (for local repos).
-   */
-  private async calculateDirectoryCoverageViaFilesystem(
-    repoId: string,
-    wikiPages: Array<{ path: string; content: string }>
-  ): Promise<DirectoryCoverage[]> {
-    if (!this.git) {
-      return [];
-    }
-
-    // For local repos, get the filesystem path
-    let repoPath: string;
-    try {
-      repoPath = this.git.getRepoPath(repoId);
-    } catch {
-      return [];
-    }
-
-    const srcPath = path.join(repoPath, 'src');
-
-    // Check if src directory exists
-    if (!fs.existsSync(srcPath)) {
-      return [];
-    }
-
-    const coverage: DirectoryCoverage[] = [];
-
-    // Scan first-level directories under src/
-    const srcEntries = fs.readdirSync(srcPath, { withFileTypes: true });
-
-    for (const entry of srcEntries) {
-      if (!entry.isDirectory()) continue;
-
-      const dirPath = path.join(srcPath, entry.name);
-      const relativePath = `src/${entry.name}`;
-
-      // Count source files recursively
-      const fileCount = this.countSourceFiles(dirPath);
-      if (fileCount === 0) continue;
-
-      // Check for wiki mentions
-      const wikiMentions = this.countWikiMentions(entry.name, relativePath, wikiPages);
-
-      // Calculate coverage percentage
-      const coveragePercent = fileCount > 0
-        ? Math.min(100, (wikiMentions / fileCount) * 100)
-        : 0;
-
-      coverage.push({
-        path: relativePath,
-        fileCount,
-        wikiMentions,
-        coveragePercent: Math.round(coveragePercent),
-      });
-    }
-
-    // Sort by coverage (lowest first to highlight gaps)
-    coverage.sort((a, b) => a.coveragePercent - b.coveragePercent);
-
-    return coverage;
-  }
-
-  /**
-   * Count source files in a directory recursively.
-   */
-  private countSourceFiles(dirPath: string): number {
-    let count = 0;
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-
-      if (entry.isDirectory()) {
-        // Skip node_modules and common non-source directories
-        if (['node_modules', 'dist', 'build', '.git', '__pycache__'].includes(entry.name)) {
-          continue;
-        }
-        count += this.countSourceFiles(fullPath);
-      } else if (entry.isFile()) {
-        // Count TypeScript and JavaScript files
-        if (entry.name.endsWith('.ts') || entry.name.endsWith('.js')) {
-          // Skip test files and declaration files
-          if (!entry.name.includes('.test.') &&
-              !entry.name.includes('.spec.') &&
-              !entry.name.endsWith('.d.ts')) {
-            count++;
-          }
-        }
-      }
-    }
-
-    return count;
-  }
-
-  /**
    * Build a deep coverage tree for LLM visualization.
    * Returns a hierarchical view of all directories with coverage data.
+   *
+   * Uses RepositoryService abstraction to work uniformly with both
+   * local and GitHub repositories.
    */
   private async buildCoverageTree(
     repoId: string,
@@ -588,127 +459,17 @@ export class ContextGatherer {
   ): Promise<DirectoryNode | null> {
     // Look up the repository
     const repo = await this.repos.repos.findById(repoId);
-    if (!repo) {
-      return null;
-    }
-
-    // For GitHub repos, use API-based approach
-    if (repo.isGitHubRepo) {
-      return this.buildCoverageTreeViaApi(repo, wikiPages);
-    }
-
-    // For local repos, use filesystem-based approach
-    return this.buildCoverageTreeViaFilesystem(repoId, wikiPages);
-  }
-
-  /**
-   * Build coverage tree using filesystem (for local repos).
-   */
-  private buildCoverageTreeViaFilesystem(
-    repoId: string,
-    wikiPages: Array<{ path: string; content: string }>
-  ): DirectoryNode | null {
-    if (!this.git) {
-      return null;
-    }
-
-    let repoPath: string;
-    try {
-      repoPath = this.git.getRepoPath(repoId);
-    } catch {
-      return null;
-    }
-
-    const srcPath = path.join(repoPath, 'src');
-    if (!fs.existsSync(srcPath)) {
-      return null;
-    }
-
-    // Build the tree recursively starting from src/
-    return this.buildDirectoryNode(srcPath, 'src', wikiPages);
-  }
-
-  /**
-   * Recursively build a DirectoryNode for a directory.
-   */
-  private buildDirectoryNode(
-    fullPath: string,
-    relativePath: string,
-    wikiPages: Array<{ path: string; content: string }>
-  ): DirectoryNode {
-    const name = path.basename(relativePath);
-    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
-
-    // Count direct source files in this directory
-    let fileCount = 0;
-    const children: DirectoryNode[] = [];
-
-    for (const entry of entries) {
-      const entryFullPath = path.join(fullPath, entry.name);
-      const entryRelativePath = `${relativePath}/${entry.name}`;
-
-      if (entry.isDirectory()) {
-        // Skip non-source directories
-        if (['node_modules', 'dist', 'build', '.git', '__pycache__', '__tests__', '__mocks__'].includes(entry.name)) {
-          continue;
-        }
-        // Recursively build child node
-        const childNode = this.buildDirectoryNode(entryFullPath, entryRelativePath, wikiPages);
-        // Only include directories that have source files
-        if (childNode.totalFileCount > 0) {
-          children.push(childNode);
-        }
-      } else if (entry.isFile()) {
-        // Count source files
-        if ((entry.name.endsWith('.ts') || entry.name.endsWith('.js')) &&
-            !entry.name.includes('.test.') &&
-            !entry.name.includes('.spec.') &&
-            !entry.name.endsWith('.d.ts')) {
-          fileCount++;
-        }
-      }
-    }
-
-    // Sort children by total file count (largest first for truncation priority)
-    children.sort((a, b) => b.totalFileCount - a.totalFileCount);
-
-    // Calculate total file count including children
-    const totalFileCount = fileCount + children.reduce((sum, c) => sum + c.totalFileCount, 0);
-
-    // Calculate coverage
-    const wikiMentions = this.countWikiMentions(name, relativePath, wikiPages);
-    const coveragePercent = totalFileCount > 0
-      ? Math.min(100, Math.round((wikiMentions / totalFileCount) * 100))
-      : 0;
-
-    return {
-      name,
-      path: relativePath,
-      fileCount,
-      totalFileCount,
-      coveragePercent,
-      children,
-    };
-  }
-
-  /**
-   * Build coverage tree using repository API (for GitHub repos).
-   */
-  private async buildCoverageTreeViaApi(
-    repo: Repo,
-    wikiPages: Array<{ path: string; content: string }>
-  ): Promise<DirectoryNode | null> {
-    if (!this.repoServiceFactory) {
+    if (!repo || !this.repoServiceFactory) {
       return null;
     }
 
     try {
       const repoService = this.repoServiceFactory.getService(repo);
 
-      // Get full file tree
+      // Get all files via unified RepositoryService interface
       const allFiles = await repoService.getFileTree(repo);
 
-      // Filter to src/ files only
+      // Filter to src/ source files only
       const srcFiles = allFiles.filter(f =>
         f.startsWith('src/') && this.isSourceFile(f)
       );
@@ -920,8 +681,7 @@ export class ContextGatherer {
  */
 export function createContextGatherer(
   repos: Repositories,
-  git?: GitService,
   repoServiceFactory?: RepositoryServiceFactory
 ): ContextGatherer {
-  return new ContextGatherer(repos, git, repoServiceFactory);
+  return new ContextGatherer(repos, repoServiceFactory);
 }
