@@ -76,13 +76,15 @@ async function loadVersionInfo() {
       parts.push(info.commit);
     }
 
-    // Show release date if available (from Heroku dyno metadata)
+    // Show release date/time if available (from Heroku dyno metadata)
     if (info.releasedAt) {
       const date = new Date(info.releasedAt);
-      const formatted = date.toLocaleDateString('en-US', {
+      const formatted = date.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
       });
       parts.push(formatted);
     }
