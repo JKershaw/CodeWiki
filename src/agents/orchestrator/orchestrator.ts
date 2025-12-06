@@ -196,10 +196,12 @@ export class Orchestrator {
   /**
    * Generate work list using LLM reasoning with tool-calling capability.
    *
-   * Hybrid approach:
-   * - Codebase exploration runs DETERMINISTICALLY (reliable, no format issues)
-   * - LLM decides on commit analysis, synthesis, and meta work
-   * - LLM sees wiki state (page count, key pages) for phase-based decisions
+   * The LLM now has full control over work scheduling including:
+   * - Codebase exploration (targeting specific directories from coverage tree)
+   * - Commit analysis
+   * - Synthesis and meta work
+   *
+   * If the LLM doesn't schedule any exploration, fallback adds it automatically.
    */
   private async generateWithLLM(
     repoId: string,
@@ -213,35 +215,15 @@ export class Orchestrator {
     const keysResult = await handleGetPendingWorkKeys(keysQuery, this.repos);
     const existingWorkKeys = keysResult.data || new Set<string>();
 
-    // Run codebase exploration DETERMINISTICALLY first
-    // This avoids LLM format issues while still prioritizing exploration
-    const explorationWork: WorkItem[] = [];
-    if (this.git && this.contextGatherer) {
-      const explorationCtx: StrategyContext = {
-        repos: this.repos,
-        repoId,
-        wikiId,
-        existingWorkKeys,
-        git: this.git,
-        contextGatherer: this.contextGatherer,
-      };
-      const explorationResult = await codebaseExplorationStrategy(explorationCtx, maxItems);
-      explorationWork.push(...explorationResult.workItems);
-    }
-
-    // Calculate remaining slots for LLM
-    const remainingSlots = maxItems - explorationWork.length;
-    if (remainingSlots <= 0) {
-      // Exploration filled all slots
-      return explorationWork;
-    }
-
-    // Gather context for LLM (wiki state, commits, key pages - no directory coverage)
+    // Gather context for LLM (wiki state, commits, key pages, coverage tree, overview)
     const context = await this.contextGatherer.gather(repoId, wikiId);
     const contextString = this.contextGatherer.formatForPrompt(context);
 
-    // Build prompt - LLM only needs to fill remaining slots
-    const userPrompt = buildUserPrompt(context, contextString, remainingSlots);
+    // Build valid paths set from coverage tree for validation
+    const validPaths = this.extractPathsFromTree(context.coverageTree);
+
+    // Build prompt
+    const userPrompt = buildUserPrompt(context, contextString, maxItems);
 
     // Create tracking record
     const runId = uuid();
@@ -255,7 +237,7 @@ export class Orchestrator {
     // Create tool executor for codebase exploration
     const toolExecutor = this.createToolExecutor(repoId);
 
-    // Call LLM with tools - orchestrator can now explore before deciding
+    // Call LLM with tools - orchestrator can explore before deciding
     const completion = await this.llm!.completeWithTools({
       system: ORCHESTRATOR_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
@@ -276,8 +258,8 @@ export class Orchestrator {
     const commits = commitsResult.data || [];
     const validCommitIds = new Set(commits.map(c => c.sha));
 
-    // Parse response
-    const decision = parseOrchestratorResponse(completion.content, validCommitIds);
+    // Parse response with path validation
+    const decision = parseOrchestratorResponse(completion.content, validCommitIds, validPaths);
 
     // Update tracking record
     orchestratorRun.rawResponse = completion.content;
@@ -291,15 +273,24 @@ export class Orchestrator {
     (orchestratorRun as { toolRounds?: number }).toolRounds = completion.toolRounds;
 
     // Convert LLM decisions to work items
-    // Note: codebase-explorer is handled deterministically, so skip any LLM attempts
     const llmWorkItems: WorkItem[] = [];
+    let llmScheduledExploration = false;
+
     for (const item of decision.workItems) {
-      if (llmWorkItems.length >= remainingSlots) break;
+      if (llmWorkItems.length >= maxItems) break;
 
-      // LLM only outputs commit-based and wiki-based work (no codebase-explorer)
-      const key = `${item.agentType}:${item.targetCommitId ?? 'wiki'}`;
+      // Build deduplication key based on target type
+      let key: string;
+      if (item.targetPath) {
+        key = `codebase-explorer:path:${item.targetPath}`;
+        llmScheduledExploration = true;
+      } else if (item.targetCommitId) {
+        key = `${item.agentType}:commit:${item.targetCommitId}`;
+      } else {
+        key = `${item.agentType}:wiki`;
+      }
+
       if (existingWorkKeys.has(key)) continue;
-
       existingWorkKeys.add(key);
 
       const workItem = createWorkItem({
@@ -308,26 +299,63 @@ export class Orchestrator {
         agentType: item.agentType as AgentType,
         priority: this.getPriority(item.agentType),
         ...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
+        ...(item.targetPath ? { targetPath: item.targetPath } : {}),
         orchestratorRunId: runId,
       });
 
       llmWorkItems.push(workItem);
     }
 
-    // Combine exploration work (deterministic) with LLM work
-    const allWorkItems = [...explorationWork, ...llmWorkItems];
+    // Fallback: If LLM didn't schedule any exploration, add deterministic exploration
+    let fallbackExplorationWork: WorkItem[] = [];
+    if (!llmScheduledExploration && this.git && this.contextGatherer) {
+      const remainingSlots = maxItems - llmWorkItems.length;
+      if (remainingSlots > 0) {
+        const explorationCtx: StrategyContext = {
+          repos: this.repos,
+          repoId,
+          wikiId,
+          existingWorkKeys,
+          git: this.git,
+          contextGatherer: this.contextGatherer,
+        };
+        const explorationResult = await codebaseExplorationStrategy(explorationCtx, remainingSlots);
+        fallbackExplorationWork = explorationResult.workItems;
+      }
+    }
+
+    // Combine LLM work with fallback exploration
+    const allWorkItems = [...llmWorkItems, ...fallbackExplorationWork];
 
     // Save tracking record
     orchestratorRun.workItemsCreated = allWorkItems.map(w => w.id);
     await this.repos.orchestratorRuns.save(orchestratorRun);
 
     const toolInfo = completion.toolRounds > 0 ? `, ${completion.toolRounds} tool rounds` : '';
-    const explorationInfo = explorationWork.length > 0 ? ` (${explorationWork.length} exploration + ${llmWorkItems.length} LLM)` : '';
+    const fallbackInfo = fallbackExplorationWork.length > 0 ? ` (+${fallbackExplorationWork.length} fallback exploration)` : '';
     console.log(
-      `🤖 LLM Orchestrator: "${decision.reasoning}" (${allWorkItems.length} items${explorationInfo}${toolInfo}, $${completion.costUsd.toFixed(4)})`
+      `🤖 LLM Orchestrator: "${decision.reasoning}" (${allWorkItems.length} items${fallbackInfo}${toolInfo}, $${completion.costUsd.toFixed(4)})`
     );
 
     return allWorkItems;
+  }
+
+  /**
+   * Extract all valid directory paths from a coverage tree.
+   */
+  private extractPathsFromTree(tree: import('./context-gatherer.js').DirectoryNode | null): Set<string> {
+    const paths = new Set<string>();
+    if (!tree) return paths;
+
+    const traverse = (node: import('./context-gatherer.js').DirectoryNode): void => {
+      paths.add(node.path);
+      for (const child of node.children) {
+        traverse(child);
+      }
+    };
+
+    traverse(tree);
+    return paths;
   }
 
   /**

@@ -356,4 +356,121 @@ ${synthesisAgents.map(agent => `${agent},,Testing ${agent}`).join('\n')}`;
       assert.strictEqual(result.workItems.length, synthesisAgents.length);
     });
   });
+
+  describe('codebase-explorer with targetPath', () => {
+    const validPaths = new Set(['src/agents', 'src/services', 'src/services/llm']);
+
+    it('should parse codebase-explorer with valid targetPath', () => {
+      const response = `# Reasoning
+Exploring low coverage directories
+
+# Work Items
+codebase-explorer,src/agents,Low coverage directory needs documentation`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, validPaths);
+
+      assert.strictEqual(result.workItems.length, 1);
+      assert.strictEqual(result.workItems[0].agentType, 'codebase-explorer');
+      assert.strictEqual(result.workItems[0].targetPath, 'src/agents');
+      assert.strictEqual(result.workItems[0].targetCommitId, undefined);
+      assert.strictEqual(result.workItems[0].reason, 'Low coverage directory needs documentation');
+    });
+
+    it('should parse multiple codebase-explorer work items', () => {
+      const response = `# Reasoning
+Multiple exploration targets
+
+# Work Items
+codebase-explorer,src/agents,First directory
+codebase-explorer,src/services/llm,Second directory`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, validPaths);
+
+      assert.strictEqual(result.workItems.length, 2);
+      assert.strictEqual(result.workItems[0].targetPath, 'src/agents');
+      assert.strictEqual(result.workItems[1].targetPath, 'src/services/llm');
+    });
+
+    it('should reject codebase-explorer without targetPath', () => {
+      const response = `# Reasoning
+Missing path
+
+# Work Items
+codebase-explorer,,No path provided`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, validPaths);
+
+      assert.strictEqual(result.workItems.length, 0);
+    });
+
+    it('should reject codebase-explorer with invalid path prefix', () => {
+      const response = `# Reasoning
+Invalid path
+
+# Work Items
+codebase-explorer,invalid/path,Not starting with src/`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, validPaths);
+
+      assert.strictEqual(result.workItems.length, 0);
+    });
+
+    it('should reject codebase-explorer with path not in validPaths', () => {
+      const response = `# Reasoning
+Unknown path
+
+# Work Items
+codebase-explorer,src/unknown/directory,Path not in coverage tree`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, validPaths);
+
+      assert.strictEqual(result.workItems.length, 0);
+    });
+
+    it('should allow codebase-explorer paths without validation when validPaths not provided', () => {
+      const response = `# Reasoning
+No validation
+
+# Work Items
+codebase-explorer,src/any/path,No path validation`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds);
+
+      assert.strictEqual(result.workItems.length, 1);
+      assert.strictEqual(result.workItems[0].targetPath, 'src/any/path');
+    });
+
+    it('should accept lib/ paths for exploration', () => {
+      const libPaths = new Set(['lib/utils']);
+      const response = `# Reasoning
+Exploring lib
+
+# Work Items
+codebase-explorer,lib/utils,Library utilities`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, libPaths);
+
+      assert.strictEqual(result.workItems.length, 1);
+      assert.strictEqual(result.workItems[0].targetPath, 'lib/utils');
+    });
+
+    it('should mix codebase-explorer with other agent types', () => {
+      const response = `# Reasoning
+Mixed work items
+
+# Work Items
+codebase-explorer,src/agents,Explore agents
+code-change,abc123,Analyze recent commit
+writer,,Improve page readability`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, validPaths);
+
+      assert.strictEqual(result.workItems.length, 3);
+      assert.strictEqual(result.workItems[0].agentType, 'codebase-explorer');
+      assert.strictEqual(result.workItems[0].targetPath, 'src/agents');
+      assert.strictEqual(result.workItems[1].agentType, 'code-change');
+      assert.strictEqual(result.workItems[1].targetCommitId, 'abc123');
+      assert.strictEqual(result.workItems[2].agentType, 'writer');
+    });
+  });
 });

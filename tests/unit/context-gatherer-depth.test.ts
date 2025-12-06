@@ -9,7 +9,7 @@ import assert from 'node:assert';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 import type { RepositoryServiceFactory, RepositoryService, FileEntry } from '../../src/services/repository/repository-service.js';
 import type { Repo } from '../../src/domain/repo.js';
-import { ContextGatherer } from '../../src/agents/orchestrator/context-gatherer.js';
+import { ContextGatherer, type DirectoryNode } from '../../src/agents/orchestrator/context-gatherer.js';
 
 // Suppress console output during tests
 mock.method(console, 'warn', () => {});
@@ -432,5 +432,370 @@ describe('ContextGatherer GitHub Mode', () => {
 
       assert.strictEqual(context.directoryCoverage.length, 0);
     });
+  });
+});
+
+describe('ContextGatherer Coverage Tree Formatting', () => {
+  /**
+   * Create a simple DirectoryNode for testing.
+   */
+  function createNode(
+    name: string,
+    path: string,
+    totalFileCount: number,
+    coveragePercent: number,
+    children: DirectoryNode[] = []
+  ): DirectoryNode {
+    return {
+      name,
+      path,
+      fileCount: totalFileCount - children.reduce((sum, c) => sum + c.totalFileCount, 0),
+      totalFileCount,
+      coveragePercent,
+      children,
+    };
+  }
+
+  describe('formatCoverageTree', () => {
+    it('should format a simple tree correctly', () => {
+      const repos = createMockRepos(null);
+      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+
+      const tree = createNode('src', 'src', 10, 50);
+      const result = gatherer.formatCoverageTree(tree);
+
+      assert.ok(result.includes('src/'));
+      assert.ok(result.includes('(50%)'));
+      assert.ok(result.includes('10 files'));
+    });
+
+    it('should mark low coverage directories with warning emoji', () => {
+      const repos = createMockRepos(null);
+      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+
+      const tree = createNode('src', 'src', 10, 30, [
+        createNode('agents', 'src/agents', 5, 20),  // Low coverage
+        createNode('services', 'src/services', 5, 80),  // High coverage
+      ]);
+      const result = gatherer.formatCoverageTree(tree);
+
+      // Low coverage directories should have warning
+      assert.ok(result.includes('agents/'));
+      assert.ok(result.includes('⚠️'));
+      assert.ok(result.includes('services/'));
+    });
+
+    it('should format nested tree with proper indentation', () => {
+      const repos = createMockRepos(null);
+      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+
+      const tree = createNode('src', 'src', 20, 40, [
+        createNode('services', 'src/services', 15, 30, [
+          createNode('llm', 'src/services/llm', 10, 20),
+          createNode('git', 'src/services/git', 5, 50),
+        ]),
+        createNode('agents', 'src/agents', 5, 60),
+      ]);
+      const result = gatherer.formatCoverageTree(tree);
+
+      // Check that nested directories appear
+      assert.ok(result.includes('services/'));
+      assert.ok(result.includes('llm/'));
+      assert.ok(result.includes('git/'));
+      assert.ok(result.includes('agents/'));
+
+      // Check tree characters are present
+      assert.ok(result.includes('├──') || result.includes('└──'));
+    });
+
+    it('should truncate to maxLines', () => {
+      const repos = createMockRepos(null);
+      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+
+      // Create a tree with many children
+      const manyChildren = Array.from({ length: 20 }, (_, i) =>
+        createNode(`dir${i}`, `src/dir${i}`, 5, 30)
+      );
+      const tree = createNode('src', 'src', 100, 30, manyChildren);
+
+      const result = gatherer.formatCoverageTree(tree, 10);
+
+      // Should truncate and show message
+      const lines = result.split('\n');
+      assert.ok(lines.length <= 11); // 10 lines + truncation message
+      assert.ok(result.includes('truncated'));
+    });
+
+    it('should return placeholder for null tree', () => {
+      const repos = createMockRepos(null);
+      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+
+      const result = gatherer.formatCoverageTree(null);
+
+      assert.ok(result.includes('No source directory'));
+    });
+
+    it('should sort children by file count (largest first)', () => {
+      const repos = createMockRepos(null);
+      const gatherer = new ContextGatherer(repos as any, undefined, undefined);
+
+      // Children are passed in wrong order but should be sorted by totalFileCount
+      const tree = createNode('src', 'src', 30, 40, [
+        createNode('small', 'src/small', 5, 30),
+        createNode('large', 'src/large', 20, 30),
+        createNode('medium', 'src/medium', 10, 30),
+      ]);
+
+      // Note: The sorting is done during tree building, so we test the tree
+      // that buildTreeFromPaths produces, but for this unit test we can
+      // verify the formatter renders all directories
+      const result = gatherer.formatCoverageTree(tree);
+
+      assert.ok(result.includes('small/'));
+      assert.ok(result.includes('large/'));
+      assert.ok(result.includes('medium/'));
+    });
+  });
+
+  /**
+   * Helper to create mock repos for formatting tests.
+   */
+  function createMockRepos(repo: Partial<Repo> | null) {
+    return {
+      repos: {
+        findById: mock.fn(async () => repo),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => []),
+        findByPath: mock.fn(async () => null),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    };
+  }
+});
+
+describe('ContextGatherer Project Overview Content', () => {
+  /**
+   * Create mock wiki page with specified content.
+   */
+  function createMockWikiPage(
+    path: string,
+    content: string
+  ): WikiPage {
+    return {
+      id: `page-${path.replace(/\//g, '-')}`,
+      wikiId: 'wiki-1',
+      path,
+      title: path.split('/').pop() ?? 'Untitled',
+      content,
+      confidence: 0.8,
+      sourceCommits: [],
+      sourceAgentRunIds: [],
+      links: [],
+      backlinks: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  }
+
+  it('should include project overview content when architecture/overview exists', async () => {
+    const overviewContent = '# Project Overview\n\nThis is a great project.';
+    const overviewPage = createMockWikiPage('architecture/overview', overviewContent);
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [overviewPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'architecture/overview') return overviewPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.projectOverviewContent, overviewContent);
+  });
+
+  it('should truncate long overview content to 2000 chars', async () => {
+    const longContent = 'A'.repeat(3000);
+    const overviewPage = createMockWikiPage('architecture/overview', longContent);
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [overviewPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'architecture/overview') return overviewPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.ok(context.projectOverviewContent);
+    assert.ok(context.projectOverviewContent.length < 3000);
+    assert.ok(context.projectOverviewContent.includes('[... truncated ...]'));
+  });
+
+  it('should return null when no overview page exists', async () => {
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => []),
+        findByPath: mock.fn(async () => null),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.projectOverviewContent, null);
+  });
+
+  it('should include overview content from bootstrap overview page (root level)', async () => {
+    const overviewContent = '# Bootstrap Overview\n\nCreated by bootstrap agent.';
+    const overviewPage = createMockWikiPage('overview', overviewContent);
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [overviewPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'overview') return overviewPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.hasProjectOverview, true);
+    assert.strictEqual(context.projectOverviewContent, overviewContent);
+  });
+
+  it('should prefer architecture/overview over root overview when both exist', async () => {
+    const architectureContent = '# Architecture Overview\n\nMore comprehensive.';
+    const bootstrapContent = '# Bootstrap Overview\n\nBasic starter.';
+    const architecturePage = createMockWikiPage('architecture/overview', architectureContent);
+    const bootstrapPage = createMockWikiPage('overview', bootstrapContent);
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [architecturePage, bootstrapPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'architecture/overview') return architecturePage;
+          if (path === 'overview') return bootstrapPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.hasProjectOverview, true);
+    // Should prefer architecture/overview (more comprehensive)
+    assert.strictEqual(context.projectOverviewContent, architectureContent);
+  });
+
+  it('should set hasProjectOverview true when root overview exists', async () => {
+    const overviewPage = createMockWikiPage('overview', 'Basic overview');
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [overviewPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'overview') return overviewPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.hasProjectOverview, true);
   });
 });

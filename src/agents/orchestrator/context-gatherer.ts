@@ -14,6 +14,8 @@ import {
   handleListCommits,
   createListWikiPagesQuery,
   handleListWikiPages,
+  createGetWikiPageQuery,
+  handleGetWikiPage,
   createListAgentRunsQuery,
   handleListAgentRuns,
   createCountPendingEditRequestsQuery,
@@ -21,7 +23,7 @@ import {
 } from '../../queries/index.js';
 
 /**
- * Directory coverage information for the orchestrator.
+ * Directory coverage information for the orchestrator (flat format for strategies).
  */
 export interface DirectoryCoverage {
   /** Relative path from repo root (e.g., "src/services/llm") */
@@ -32,6 +34,25 @@ export interface DirectoryCoverage {
   wikiMentions: number;
   /** Coverage percentage (wikiMentions / fileCount * 100) */
   coveragePercent: number;
+}
+
+/**
+ * Tree node for deep directory coverage visualization.
+ * Used to show the LLM a hierarchical view of coverage.
+ */
+export interface DirectoryNode {
+  /** Directory name (e.g., "llm") */
+  name: string;
+  /** Full path from repo root (e.g., "src/services/llm") */
+  path: string;
+  /** Number of source files directly in this directory (not recursive) */
+  fileCount: number;
+  /** Total source files including all subdirectories */
+  totalFileCount: number;
+  /** Coverage percentage for this directory and its contents */
+  coveragePercent: number;
+  /** Child directories */
+  children: DirectoryNode[];
 }
 
 /**
@@ -82,6 +103,12 @@ export interface OrchestratorContext {
 
   // Directory coverage - which parts of the codebase are documented
   directoryCoverage: DirectoryCoverage[];
+
+  // Directory coverage tree - deep hierarchical view for LLM prompt
+  coverageTree: DirectoryNode | null;
+
+  // Project overview content (truncated) for LLM context
+  projectOverviewContent: string | null;
 
   // Pending edit requests (from analysis agents, awaiting wiki-editor)
   pendingEditRequests: number;
@@ -220,7 +247,11 @@ export class ContextGatherer {
     }).length;
 
     // Key pages existence
+    // Check for project overview in either location:
+    // - 'overview' (created by bootstrap agent on empty wikis)
+    // - 'architecture/overview' (created by project-overview agent on 10+ page wikis)
     const hasProjectOverview = wikiPages.some(p =>
+      p.path === 'overview' ||
       p.path === 'architecture/overview' ||
       p.path === 'architecture/index'
     );
@@ -244,6 +275,33 @@ export class ContextGatherer {
     // Calculate directory coverage (which parts of the codebase are documented)
     const directoryCoverage = await this.calculateDirectoryCoverage(repoId, wikiPages);
 
+    // Build deep coverage tree for LLM prompt
+    const coverageTree = await this.buildCoverageTree(repoId, wikiPages);
+
+    // Fetch project overview content (if exists)
+    // Try multiple paths in order of preference:
+    // 1. 'architecture/overview' (project-overview agent, more comprehensive)
+    // 2. 'overview' (bootstrap agent, basic starter)
+    let projectOverviewContent: string | null = null;
+    if (hasProjectOverview) {
+      const overviewPaths = ['architecture/overview', 'overview'];
+      for (const overviewPath of overviewPaths) {
+        const overviewQuery = createGetWikiPageQuery(wikiId, overviewPath);
+        const overviewResult = await handleGetWikiPage(overviewQuery, this.repos);
+        if (overviewResult.success && overviewResult.data) {
+          const content = overviewResult.data.content;
+          // Truncate to ~2000 chars for LLM context
+          const maxOverviewLength = 2000;
+          if (content.length > maxOverviewLength) {
+            projectOverviewContent = content.slice(0, maxOverviewLength) + '\n\n[... truncated ...]';
+          } else {
+            projectOverviewContent = content;
+          }
+          break; // Found one, stop looking
+        }
+      }
+    }
+
     return {
       totalCommits: commits.length,
       commitsByAgent,
@@ -264,6 +322,8 @@ export class ContextGatherer {
       hasTestingGuide,
       hasExtensionGuide,
       directoryCoverage,
+      coverageTree,
+      projectOverviewContent,
       pendingEditRequests,
     };
   }
@@ -519,6 +579,267 @@ export class ContextGatherer {
   }
 
   /**
+   * Build a deep coverage tree for LLM visualization.
+   * Returns a hierarchical view of all directories with coverage data.
+   */
+  private async buildCoverageTree(
+    repoId: string,
+    wikiPages: Array<{ path: string; content: string }>
+  ): Promise<DirectoryNode | null> {
+    // Look up the repository
+    const repo = await this.repos.repos.findById(repoId);
+    if (!repo) {
+      return null;
+    }
+
+    // For GitHub repos, use API-based approach
+    if (repo.isGitHubRepo) {
+      return this.buildCoverageTreeViaApi(repo, wikiPages);
+    }
+
+    // For local repos, use filesystem-based approach
+    return this.buildCoverageTreeViaFilesystem(repoId, wikiPages);
+  }
+
+  /**
+   * Build coverage tree using filesystem (for local repos).
+   */
+  private buildCoverageTreeViaFilesystem(
+    repoId: string,
+    wikiPages: Array<{ path: string; content: string }>
+  ): DirectoryNode | null {
+    if (!this.git) {
+      return null;
+    }
+
+    let repoPath: string;
+    try {
+      repoPath = this.git.getRepoPath(repoId);
+    } catch {
+      return null;
+    }
+
+    const srcPath = path.join(repoPath, 'src');
+    if (!fs.existsSync(srcPath)) {
+      return null;
+    }
+
+    // Build the tree recursively starting from src/
+    return this.buildDirectoryNode(srcPath, 'src', wikiPages);
+  }
+
+  /**
+   * Recursively build a DirectoryNode for a directory.
+   */
+  private buildDirectoryNode(
+    fullPath: string,
+    relativePath: string,
+    wikiPages: Array<{ path: string; content: string }>
+  ): DirectoryNode {
+    const name = path.basename(relativePath);
+    const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+
+    // Count direct source files in this directory
+    let fileCount = 0;
+    const children: DirectoryNode[] = [];
+
+    for (const entry of entries) {
+      const entryFullPath = path.join(fullPath, entry.name);
+      const entryRelativePath = `${relativePath}/${entry.name}`;
+
+      if (entry.isDirectory()) {
+        // Skip non-source directories
+        if (['node_modules', 'dist', 'build', '.git', '__pycache__', '__tests__', '__mocks__'].includes(entry.name)) {
+          continue;
+        }
+        // Recursively build child node
+        const childNode = this.buildDirectoryNode(entryFullPath, entryRelativePath, wikiPages);
+        // Only include directories that have source files
+        if (childNode.totalFileCount > 0) {
+          children.push(childNode);
+        }
+      } else if (entry.isFile()) {
+        // Count source files
+        if ((entry.name.endsWith('.ts') || entry.name.endsWith('.js')) &&
+            !entry.name.includes('.test.') &&
+            !entry.name.includes('.spec.') &&
+            !entry.name.endsWith('.d.ts')) {
+          fileCount++;
+        }
+      }
+    }
+
+    // Sort children by total file count (largest first for truncation priority)
+    children.sort((a, b) => b.totalFileCount - a.totalFileCount);
+
+    // Calculate total file count including children
+    const totalFileCount = fileCount + children.reduce((sum, c) => sum + c.totalFileCount, 0);
+
+    // Calculate coverage
+    const wikiMentions = this.countWikiMentions(name, relativePath, wikiPages);
+    const coveragePercent = totalFileCount > 0
+      ? Math.min(100, Math.round((wikiMentions / totalFileCount) * 100))
+      : 0;
+
+    return {
+      name,
+      path: relativePath,
+      fileCount,
+      totalFileCount,
+      coveragePercent,
+      children,
+    };
+  }
+
+  /**
+   * Build coverage tree using repository API (for GitHub repos).
+   */
+  private async buildCoverageTreeViaApi(
+    repo: Repo,
+    wikiPages: Array<{ path: string; content: string }>
+  ): Promise<DirectoryNode | null> {
+    if (!this.repoServiceFactory) {
+      return null;
+    }
+
+    try {
+      const repoService = this.repoServiceFactory.getService(repo);
+
+      // Get full file tree
+      const allFiles = await repoService.getFileTree(repo);
+
+      // Filter to src/ files only
+      const srcFiles = allFiles.filter(f =>
+        f.startsWith('src/') && this.isSourceFile(f)
+      );
+
+      if (srcFiles.length === 0) {
+        return null;
+      }
+
+      // Build tree from file paths
+      return this.buildTreeFromPaths(srcFiles, wikiPages);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Build a directory tree from a list of file paths.
+   */
+  private buildTreeFromPaths(
+    filePaths: string[],
+    wikiPages: Array<{ path: string; content: string }>
+  ): DirectoryNode {
+    // Build intermediate structure
+    interface BuildNode {
+      name: string;
+      path: string;
+      fileCount: number;
+      children: Map<string, BuildNode>;
+    }
+
+    const root: BuildNode = { name: 'src', path: 'src', fileCount: 0, children: new Map() };
+
+    for (const filePath of filePaths) {
+      const parts = filePath.split('/');
+      let current = root;
+
+      // Navigate/create directories (skip last part which is the file)
+      for (let i = 1; i < parts.length - 1; i++) {
+        const part = parts[i]!;
+        const currentPath = parts.slice(0, i + 1).join('/');
+
+        if (!current.children.has(part)) {
+          current.children.set(part, {
+            name: part,
+            path: currentPath,
+            fileCount: 0,
+            children: new Map(),
+          });
+        }
+        current = current.children.get(part)!;
+      }
+
+      // Count file in its direct parent
+      current.fileCount++;
+    }
+
+    // Convert BuildNode to DirectoryNode with coverage
+    const convertNode = (node: BuildNode): DirectoryNode => {
+      const children = Array.from(node.children.values())
+        .map(convertNode)
+        .filter(c => c.totalFileCount > 0)
+        .sort((a, b) => b.totalFileCount - a.totalFileCount);
+
+      const totalFileCount = node.fileCount + children.reduce((sum, c) => sum + c.totalFileCount, 0);
+      const wikiMentions = this.countWikiMentions(node.name, node.path, wikiPages);
+      const coveragePercent = totalFileCount > 0
+        ? Math.min(100, Math.round((wikiMentions / totalFileCount) * 100))
+        : 0;
+
+      return {
+        name: node.name,
+        path: node.path,
+        fileCount: node.fileCount,
+        totalFileCount,
+        coveragePercent,
+        children,
+      };
+    };
+
+    return convertNode(root);
+  }
+
+  /**
+   * Format coverage tree as a visual tree string for LLM prompt.
+   * Truncates to maxLines, prioritizing larger directories.
+   */
+  formatCoverageTree(tree: DirectoryNode | null, maxLines: number = 100): string {
+    if (!tree) {
+      return '*No source directory found*';
+    }
+
+    const lines: string[] = [];
+    let truncatedCount = 0;
+
+    // Calculate adaptive coverage threshold based on what we'll show the LLM
+    // Use 50% as the threshold for marking directories as low coverage
+    const lowCoverageThreshold = 50;
+
+    const formatNode = (node: DirectoryNode, prefix: string, isLast: boolean, isRoot: boolean): void => {
+      // Check if we've hit the line limit
+      if (lines.length >= maxLines) {
+        truncatedCount++;
+        return;
+      }
+
+      const connector = isRoot ? '' : (isLast ? '└── ' : '├── ');
+      const coverageMarker = node.coveragePercent < lowCoverageThreshold ? ' ⚠️' : '';
+      const line = `${prefix}${connector}${node.name}/ (${node.coveragePercent}%) - ${node.totalFileCount} files${coverageMarker}`;
+      lines.push(line);
+
+      // Prepare prefix for children
+      const childPrefix = isRoot ? '' : (prefix + (isLast ? '    ' : '│   '));
+
+      // Process children
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i]!;
+        const childIsLast = i === node.children.length - 1;
+        formatNode(child, childPrefix, childIsLast, false);
+      }
+    };
+
+    formatNode(tree, '', true, true);
+
+    if (truncatedCount > 0) {
+      lines.push(`[... ${truncatedCount} more directories truncated ...]`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * Format context as a string for the LLM prompt.
    */
   formatForPrompt(ctx: OrchestratorContext): string {
@@ -576,10 +897,19 @@ export class ContextGatherer {
     }
     lines.push('');
 
-    // Note: Directory coverage is NOT sent to the LLM prompt.
-    // Codebase exploration is handled deterministically by codebaseExplorationStrategy,
-    // so including it in the LLM prompt would be noise (the LLM can't act on it).
-    // The directoryCoverage data is still gathered and used by the deterministic strategy.
+    // Directory coverage tree - helps LLM prioritize exploration
+    lines.push('## Directory Coverage (sorted by size)\n');
+    lines.push('Directories marked with ⚠️ have low coverage and may need exploration.');
+    lines.push('You can target specific directories with `codebase-explorer`.\n');
+    lines.push(this.formatCoverageTree(ctx.coverageTree, 100));
+    lines.push('');
+
+    // Project overview content (if exists) - gives LLM context about the project
+    if (ctx.projectOverviewContent) {
+      lines.push('## Project Overview (from wiki)\n');
+      lines.push(ctx.projectOverviewContent);
+      lines.push('');
+    }
 
     return lines.join('\n');
   }
