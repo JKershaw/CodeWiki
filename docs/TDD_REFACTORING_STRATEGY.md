@@ -7,35 +7,17 @@
 
 1. **Test first, always** - Write failing tests before any production code changes
 2. **Small steps** - Each change should be independently deployable
-3. **Backwards compatibility** - Never break existing consumers during migration
+3. **Clean as you go** - Delete duplicate code, don't preserve backwards compatibility
 4. **Green to green** - All tests must pass before and after each step
-5. **One thing at a time** - Fix one category of issues per phase
-
----
-
-## Dependency Risk Assessment
-
-Based on dependency analysis, refactoring risk levels:
-
-| Module | Risk | Reason |
-|--------|------|--------|
-| `tools.ts` | LOW | Pure types, easy to extend |
-| `wiki-tools.ts` | LOW | Only 1 consumer (research-agent) |
-| `analysis-tools/` | LOW | Modular, 2 consumers |
-| `codebase-tools.ts` | MEDIUM | Multiple direct consumers |
-| `agent-helpers.ts` | HIGH | 12+ agent dependencies |
-
-**Strategy:** Start with LOW risk modules, build confidence, then tackle higher risk.
+5. **Tidy up after** - Each phase ends with cleanup and verification
 
 ---
 
 ## Phase 1: Characterization Tests (Safety Net)
 
-**Goal:** Ensure existing behavior is captured in tests before any changes.
+**Goal:** Capture existing behavior in tests before any changes.
 
-**Risk:** None - only adding tests, no production changes.
-
-### Step 1.1: Test codebase-tools.ts (CRITICAL GAP)
+### Step 1.1: Test codebase-tools.ts
 
 ```typescript
 // tests/unit/codebase-tools.test.ts
@@ -45,337 +27,198 @@ describe('codebase-tools', () => {
     it('returns error string for files outside repo');
     it('returns error string for files exceeding size limit');
     it('returns error string for non-existent files');
-    it('uses context.maxFileSize when provided');
-    it('uses DEFAULT_MAX_FILE_SIZE when not provided');
   });
 
   describe('searchFilesTool', () => {
     it('finds files matching glob pattern');
     it('returns "No files found" for no matches');
     it('respects .cwignore patterns');
-    it('returns error string on glob errors');
   });
 
   describe('listDirectoryTool', () => {
     it('lists directory contents with / suffix for dirs');
     it('filters out ignored entries');
     it('returns error for paths outside repo');
-    it('returns error for non-existent directories');
-  });
-
-  describe('validatePath', () => {
-    it('allows paths within repo root');
-    it('throws for paths outside repo root');
-    it('handles relative path traversal attempts');
   });
 });
 ```
 
-**Test doubles needed:**
-- Mock filesystem (use memfs or mock fs/promises)
-- Mock .cwignore file
-
-### Step 1.2: Test source-tools.ts (Verify duplication)
-
-```typescript
-// tests/unit/source-tools.test.ts
-describe('source-tools', () => {
-  describe('readSourceFileTool', () => {
-    // Same tests as codebase-tools BUT:
-    it('falls back to GitHub API when repoPath not available');
-    it('formats output with markdown headers');
-    it('handles ENOENT with specific message');
-    it('handles EACCES with specific message');
-  });
-
-  describe('searchSourceFilesTool', () => {
-    it('limits results to 50 files');
-    it('shows truncation message when over limit');
-    // ... similar to codebase-tools
-  });
-});
-```
-
-### Step 1.3: Test agent tool integration patterns
-
-```typescript
-// tests/integration/agent-tool-integration.test.ts
-describe('agent tool integration', () => {
-  describe('CodeChangeAgent', () => {
-    it('calls createCodebaseToolExecutor');
-    it('passes tools to completeWithTools');
-    it('includes tool calls in findings');
-  });
-
-  describe('SecurityAgent', () => {
-    it('does NOT use tools (current behavior)');
-    it('uses complete() not completeWithTools()');
-  });
-});
-```
-
-### Step 1.4: Verify test coverage
+### Step 1.2: Verify all tests pass
 
 ```bash
-npm run test -- --coverage
+npm run typecheck && npm run test
 ```
-
-**Exit criteria:** All new tests pass, coverage increased for tool modules.
 
 ---
 
 ## Phase 2: Unify Type Definitions
 
-**Goal:** Single source of truth for tool types with backwards compatibility.
+**Goal:** Single `ToolDefinition` type used everywhere.
 
-**Risk:** LOW - type changes are compile-time only.
-
-### Step 2.1: Write tests for unified types
-
-```typescript
-// tests/unit/tool-types.test.ts
-describe('unified tool types', () => {
-  it('ToolDefinition is compatible with existing codebase-tools');
-  it('ToolDefinition is compatible with existing wiki-tools');
-  it('ToolDefinition is compatible with existing analysis-tools');
-  it('ToolContext can be extended for specialized contexts');
-});
-```
-
-### Step 2.2: Extend tools.ts (additive only)
+### Step 2.1: Update tools.ts with unified types
 
 ```typescript
 // src/services/llm/tools.ts
 
-// EXISTING (unchanged)
 export interface ToolContext {
   repoPath: string;
   maxFileSize?: number;
 }
 
-// NEW: Extended context for wiki tools
-export interface WikiToolContext extends ToolContext {
+export interface WikiToolContext {
   pages: WikiPage[];
   maxContentLength?: number;
 }
 
-// NEW: Extended context for analysis tools
-export interface AnalysisToolContext extends ToolContext {
+export interface AnalysisToolContext {
   repos: Repositories;
   repoId: string;
   wikiId: string;
-  // ... rest of analysis context
+  repoPath?: string;
+  repoService?: RepositoryService;
+  repo?: Repo;
+  benchmarkRuns: BenchmarkRun[];
+  qualityBenchmarkRuns: QualityBenchmarkRun[];
+  wikiPages: WikiPage[];
 }
 
-// EXISTING inputSchema (unchanged)
-// NEW: Allow enum in schema properties
-export interface ToolDefinition<TContext extends ToolContext = ToolContext> {
+export interface ToolDefinition<TContext = ToolContext> {
   name: string;
   description: string;
   inputSchema: {
     type: 'object';
-    properties: Record<string, {
-      type: string;
-      description: string;
-      enum?: string[];  // NEW: optional enum support
-    }>;
+    properties: Record<string, { type: string; description: string; enum?: string[] }>;
     required: string[];
   };
   execute: (input: Record<string, unknown>, context: TContext) => Promise<string>;
 }
 ```
 
-### Step 2.3: Add type aliases for backwards compatibility
+### Step 2.2: Update wiki-tools.ts - DELETE WikiToolDefinition
 
-```typescript
-// src/services/llm/wiki-tools.ts
-import { ToolDefinition, WikiToolContext } from './tools.js';
+- Remove `WikiToolDefinition` interface
+- Use `ToolDefinition<WikiToolContext>` directly
 
-// DEPRECATED: Use ToolDefinition<WikiToolContext> instead
-/** @deprecated Use ToolDefinition<WikiToolContext> */
-export type WikiToolDefinition = ToolDefinition<WikiToolContext>;
+### Step 2.3: Update analysis-tools/types.ts - DELETE AnalysisToolDefinition
 
-// Existing code continues to work
-```
+- Remove `AnalysisToolDefinition` interface
+- Use `ToolDefinition<AnalysisToolContext>` directly
+- Update all analysis tool files to import from `tools.ts`
 
-```typescript
-// src/services/llm/analysis-tools/types.ts
-import { ToolDefinition, AnalysisToolContext } from '../tools.js';
+### Step 2.4: Cleanup
 
-// DEPRECATED alias
-/** @deprecated Use ToolDefinition<AnalysisToolContext> */
-export type AnalysisToolDefinition = ToolDefinition<AnalysisToolContext>;
-```
-
-### Step 2.4: Run all tests
-
-```bash
-npm run typecheck && npm run test
-```
-
-**Exit criteria:** All existing tests pass, new type tests pass, no breaking changes.
+- Delete any unused type exports
+- Run `npm run typecheck && npm run test`
 
 ---
 
 ## Phase 3: Extract Shared Tool Functionality
 
-**Goal:** Single implementation of file reading, searching, directory listing.
+**Goal:** Single implementation, delete duplicates.
 
-**Risk:** MEDIUM - changes core functionality, but with tests as safety net.
-
-### Step 3.1: Create base tool module with tests first
+### Step 3.1: Write tests for base-tools.ts
 
 ```typescript
 // tests/unit/base-tools.test.ts
 describe('base-tools', () => {
+  describe('validatePath', () => {
+    it('allows paths within repo root');
+    it('throws for paths outside repo root');
+    it('handles path traversal attempts');
+  });
+
   describe('createReadFileTool', () => {
-    it('creates tool with configurable options');
-    it('respects maxFileSize option');
-    it('respects formatOutput option');
-    it('supports GitHub API fallback when configured');
+    it('reads files with size limit');
+    it('supports markdown formatting option');
+    it('supports GitHub API fallback');
   });
 
   describe('createSearchFilesTool', () => {
-    it('creates tool with configurable maxResults');
-    it('respects ignore patterns');
+    it('finds files matching glob');
+    it('respects maxResults option');
   });
 
   describe('createListDirectoryTool', () => {
-    it('creates tool with configurable formatting');
-  });
-
-  describe('validatePath (shared)', () => {
-    it('validates paths within repo boundary');
-    it('throws for path traversal');
+    it('lists directory contents');
+    it('supports markdown formatting option');
   });
 });
 ```
 
-### Step 3.2: Implement base-tools.ts
+### Step 3.2: Create base-tools.ts
 
 ```typescript
 // src/services/llm/base-tools.ts
 
 export interface BaseToolOptions {
-  /** Maximum file size in bytes */
   maxFileSize?: number;
-  /** Maximum search results */
   maxResults?: number;
-  /** Format output with markdown headers */
   formatOutput?: boolean;
-  /** GitHub API fallback support */
-  githubFallback?: {
-    repoService: RepositoryService;
-    repo: Repo;
-  };
 }
 
-/**
- * Shared path validation - single source of truth.
- */
 export function validatePath(requestedPath: string, repoRoot: string): string {
-  // Implementation (moved from codebase-tools.ts)
+  // Single implementation
 }
 
-/**
- * Factory to create a read_file tool with options.
- */
-export function createReadFileTool(options: BaseToolOptions = {}): ToolDefinition {
-  // Unified implementation
+export function createReadFileTool<T>(options?: BaseToolOptions): ToolDefinition<T> {
+  // Unified implementation with options
 }
 
-/**
- * Factory to create a search_files tool with options.
- */
-export function createSearchFilesTool(options: BaseToolOptions = {}): ToolDefinition {
-  // Unified implementation
+export function createSearchFilesTool<T>(options?: BaseToolOptions): ToolDefinition<T> {
+  // Unified implementation with options
 }
 
-/**
- * Factory to create a list_directory tool with options.
- */
-export function createListDirectoryTool(options: BaseToolOptions = {}): ToolDefinition {
-  // Unified implementation
+export function createListDirectoryTool<T>(options?: BaseToolOptions): ToolDefinition<T> {
+  // Unified implementation with options
 }
 ```
 
-### Step 3.3: Migrate codebase-tools.ts to use base-tools
+### Step 3.3: Simplify codebase-tools.ts
 
 ```typescript
 // src/services/llm/codebase-tools.ts
 import { createReadFileTool, createSearchFilesTool, createListDirectoryTool } from './base-tools.js';
 
-// Delegate to base tools with codebase-specific defaults
-export const readFileTool = createReadFileTool({
-  maxFileSize: 100_000,
-  formatOutput: false,
-});
-
-export const searchFilesTool = createSearchFilesTool({
-  formatOutput: false,
-});
-
-export const listDirectoryTool = createListDirectoryTool({
-  formatOutput: false,
-});
-
-// UNCHANGED: existing exports
+export const readFileTool = createReadFileTool({ maxFileSize: 100_000 });
+export const searchFilesTool = createSearchFilesTool();
+export const listDirectoryTool = createListDirectoryTool();
 export const codebaseTools = [readFileTool, searchFilesTool, listDirectoryTool];
 ```
 
-### Step 3.4: Migrate source-tools.ts to use base-tools
+### Step 3.4: DELETE source-tools.ts duplication
 
-```typescript
-// src/services/llm/analysis-tools/source-tools.ts
-import { createReadFileTool, createSearchFilesTool, createListDirectoryTool } from '../base-tools.js';
+- Update `analysis-tools/source-tools.ts` to use base-tools
+- Or DELETE it entirely if codebase-tools can be reused with options
 
-export const readSourceFileTool = createReadFileTool({
-  maxFileSize: 100_000,
-  maxResults: 50,
-  formatOutput: true,  // Markdown headers
-  // githubFallback configured at runtime via context
-});
+### Step 3.5: Cleanup agent-helpers.ts
 
-// ... similar for other tools
-```
+- Remove inline tool definitions in `createApiCodebaseTools()`
+- Remove duplicate `filterByGlob()` function
+- Use base-tools directly
 
-### Step 3.5: Run all tests
+### Step 3.6: Verify and tidy
 
 ```bash
-npm run lint && npm run typecheck && npm run test
+npm run typecheck && npm run test
 ```
 
-**Exit criteria:** All tests pass, code duplication eliminated.
+- Delete any dead code
+- Remove unused imports
 
 ---
 
 ## Phase 4: Add Tool Support to More Agents
 
-**Goal:** Security, pattern, technical-debt agents can explore codebase.
+**Goal:** Security, pattern, technical-debt agents use tools.
 
-**Risk:** MEDIUM - changes agent behavior, but additive.
-
-### Step 4.1: Write integration tests first
-
-```typescript
-// tests/integration/security-agent-tools.test.ts
-describe('SecurityAgent with tools', () => {
-  it('can read full file contents for security analysis');
-  it('can search for related security files');
-  it('includes tool usage in findings');
-  it('falls back gracefully if tools unavailable');
-});
-```
-
-### Step 4.2: Add tool support to SecurityAgent
+### Step 4.1: Add tools to SecurityAgent
 
 ```typescript
 // src/agents/analysis/security-agent.ts
 
-// BEFORE (line 44):
-const completion = await context.llm.complete({...});
+import { createCodebaseToolExecutor } from '../agent-helpers.js';
 
-// AFTER:
+// In runOnCommit():
 const toolExecutor = createCodebaseToolExecutor(context);
 
 const completion = await context.llm.completeWithTools({
@@ -387,66 +230,35 @@ const completion = await context.llm.completeWithTools({
     inputSchema: t.inputSchema,
   })) ?? [],
   executeTools: toolExecutor?.executeTools ?? (async () => []),
-  maxToolRounds: 3,  // Security analysis needs fewer rounds
+  maxToolRounds: 3,
   maxTokens: 2500,
   temperature: 0.2,
 });
 ```
 
-### Step 4.3: Update security agent prompt
+Update SYSTEM_PROMPT to include tool usage instructions.
 
-Add tool usage instructions to SYSTEM_PROMPT:
+### Step 4.2: Add tools to PatternAgent
 
-```typescript
-const SYSTEM_PROMPT = `You are a security audit agent...
+Same pattern as SecurityAgent.
 
-You have access to tools to explore the codebase:
-- read_file: Read complete file contents (not just diff lines)
-- search_files: Find related security files (e.g., auth, crypto, config)
-- list_directory: Understand project structure
+### Step 4.3: Add tools to TechnicalDebtAgent
 
-WORKFLOW:
-1. Review the diff for security-relevant changes
-2. Use read_file to see full context of security-sensitive code
-3. Use search_files to find related auth/crypto/config files
-4. Provide comprehensive security analysis
+Same pattern as SecurityAgent.
 
-...rest of existing prompt...`;
-```
-
-### Step 4.4: Repeat for pattern-agent and technical-debt-agent
-
-Same pattern: tests first, then add tool support, update prompt.
-
-### Step 4.5: Run full test suite
+### Step 4.4: Verify
 
 ```bash
-npm run test && npm run test:e2e
+npm run typecheck && npm run test
 ```
-
-**Exit criteria:** Agents use tools, all tests pass.
 
 ---
 
-## Phase 5: Standardize Configurations
+## Phase 5: Standardize Configurations and Final Cleanup
 
-**Goal:** Centralized configuration for limits and defaults.
+**Goal:** Centralize all config, final tidy up.
 
-**Risk:** LOW - configuration changes are straightforward.
-
-### Step 5.1: Write configuration tests
-
-```typescript
-// tests/unit/tool-config.test.ts
-describe('tool configuration', () => {
-  it('provides default file size limit');
-  it('provides default max results');
-  it('provides default token limits per agent type');
-  it('allows environment variable overrides');
-});
-```
-
-### Step 5.2: Create centralized config
+### Step 5.1: Create tool-config.ts
 
 ```typescript
 // src/config/tool-config.ts
@@ -458,113 +270,70 @@ export const TOOL_DEFAULTS = {
   diffTruncationLimit: 10_000,
 } as const;
 
-export const AGENT_TOKEN_LIMITS = {
-  'code-change': { maxTokens: 3000, temperature: 0.3 },
-  'security': { maxTokens: 2500, temperature: 0.2 },
-  'pattern': { maxTokens: 3500, temperature: 0.3 },
-  // ... etc
+export const AGENT_DEFAULTS = {
+  'code-change': { maxTokens: 3000, temperature: 0.3, maxToolRounds: 5 },
+  'security': { maxTokens: 2500, temperature: 0.2, maxToolRounds: 3 },
+  'pattern': { maxTokens: 3500, temperature: 0.3, maxToolRounds: 3 },
+  'technical-debt': { maxTokens: 2500, temperature: 0.3, maxToolRounds: 3 },
 } as const;
 ```
 
-### Step 5.3: Migrate hardcoded values
+### Step 5.2: Update all files to use config
 
-Update each file to import from config:
+Replace all hardcoded values with config imports.
 
-```typescript
-// src/services/llm/codebase-tools.ts
-import { TOOL_DEFAULTS } from '../../config/tool-config.js';
+### Step 5.3: Final cleanup checklist
 
-const DEFAULT_MAX_FILE_SIZE = TOOL_DEFAULTS.maxFileSize;
-```
+- [ ] Delete `analysis-tools/source-tools.ts` if fully replaced
+- [ ] Delete `WikiToolDefinition` type alias
+- [ ] Delete `AnalysisToolDefinition` type alias
+- [ ] Remove `validateSourcePath` (use `validatePath`)
+- [ ] Remove duplicate `filterByGlob` from agent-helpers
+- [ ] Remove inline API tools from agent-helpers
+- [ ] Update all imports to use unified locations
+- [ ] Remove any unused exports from index files
 
-### Step 5.4: Run all tests
+### Step 5.4: Final verification
 
 ```bash
-npm run lint && npm run typecheck && npm run test
-```
-
-**Exit criteria:** All magic numbers centralized, tests pass.
-
----
-
-## Implementation Order Summary
-
-```
-Week 1: Phase 1 (Characterization Tests)
-├── Step 1.1: codebase-tools tests
-├── Step 1.2: source-tools tests
-├── Step 1.3: agent integration tests
-└── Step 1.4: coverage verification
-
-Week 2: Phase 2 (Type Unification)
-├── Step 2.1: unified type tests
-├── Step 2.2: extend tools.ts
-├── Step 2.3: backwards-compat aliases
-└── Step 2.4: verify all tests pass
-
-Week 3: Phase 3 (Extract Shared Functionality)
-├── Step 3.1: base-tools tests
-├── Step 3.2: implement base-tools
-├── Step 3.3: migrate codebase-tools
-├── Step 3.4: migrate source-tools
-└── Step 3.5: verify all tests pass
-
-Week 4: Phase 4 (Agent Tool Support)
-├── Step 4.1: security-agent tool tests
-├── Step 4.2: add tools to security-agent
-├── Step 4.3: update security prompt
-├── Step 4.4: repeat for pattern, technical-debt
-└── Step 4.5: full test suite
-
-Week 5: Phase 5 (Configuration)
-├── Step 5.1: config tests
-├── Step 5.2: centralized config
-├── Step 5.3: migrate hardcoded values
-└── Step 5.4: final verification
+npm run typecheck && npm run test && npm run test:e2e
 ```
 
 ---
 
-## Rollback Strategy
+## Files to Delete
 
-Each phase is independently deployable. If issues arise:
+After refactoring:
+- `src/services/llm/analysis-tools/source-tools.ts` (if fully replaced by base-tools)
+- Duplicate type definitions
+- Unused helper functions
 
-1. **Phase fails tests:** Don't merge, fix or revert
-2. **Production issue after merge:** Revert entire phase PR
-3. **Partial phase issue:** Feature flags for new behavior
+## Files to Create
+
+- `tests/unit/codebase-tools.test.ts`
+- `tests/unit/base-tools.test.ts`
+- `src/services/llm/base-tools.ts`
+- `src/config/tool-config.ts`
+
+## Files to Modify
+
+- `src/services/llm/tools.ts` - Add unified context types
+- `src/services/llm/codebase-tools.ts` - Simplify to use base-tools
+- `src/services/llm/wiki-tools.ts` - Remove duplicate type
+- `src/services/llm/analysis-tools/types.ts` - Remove duplicate type
+- `src/agents/agent-helpers.ts` - Remove duplicates, use base-tools
+- `src/agents/analysis/security-agent.ts` - Add tool support
+- `src/agents/analysis/pattern-agent.ts` - Add tool support
+- `src/agents/analysis/technical-debt-agent.ts` - Add tool support
 
 ---
 
 ## Success Metrics
 
-| Metric | Before | Target |
-|--------|--------|--------|
+| Metric | Before | After |
+|--------|--------|-------|
+| Duplicate tool implementations | 3 | 0 |
+| Duplicate type definitions | 3 | 1 |
+| Agents with tool support | 1 | 4 |
+| Files with hardcoded limits | 8+ | 0 |
 | Tool test coverage | ~30% | >80% |
-| Code duplication | 3 major | 0 |
-| Type definitions | 3 incompatible | 1 unified |
-| Agents with tools | 1 | 4+ |
-| Hardcoded configs | 15+ | 0 |
-
----
-
-## Files to Create/Modify
-
-### New Files
-- `tests/unit/codebase-tools.test.ts`
-- `tests/unit/base-tools.test.ts`
-- `tests/unit/tool-types.test.ts`
-- `tests/unit/tool-config.test.ts`
-- `tests/integration/agent-tool-integration.test.ts`
-- `tests/integration/security-agent-tools.test.ts`
-- `src/services/llm/base-tools.ts`
-- `src/config/tool-config.ts`
-
-### Modified Files
-- `src/services/llm/tools.ts` (extend types)
-- `src/services/llm/codebase-tools.ts` (delegate to base)
-- `src/services/llm/wiki-tools.ts` (add deprecation alias)
-- `src/services/llm/analysis-tools/types.ts` (add deprecation alias)
-- `src/services/llm/analysis-tools/source-tools.ts` (delegate to base)
-- `src/agents/analysis/security-agent.ts` (add tools)
-- `src/agents/analysis/pattern-agent.ts` (add tools)
-- `src/agents/analysis/technical-debt-agent.ts` (add tools)
