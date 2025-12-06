@@ -247,7 +247,11 @@ export class ContextGatherer {
     }).length;
 
     // Key pages existence
+    // Check for project overview in either location:
+    // - 'overview' (created by bootstrap agent on empty wikis)
+    // - 'architecture/overview' (created by project-overview agent on 10+ page wikis)
     const hasProjectOverview = wikiPages.some(p =>
+      p.path === 'overview' ||
       p.path === 'architecture/overview' ||
       p.path === 'architecture/index'
     );
@@ -275,18 +279,25 @@ export class ContextGatherer {
     const coverageTree = await this.buildCoverageTree(repoId, wikiPages);
 
     // Fetch project overview content (if exists)
+    // Try multiple paths in order of preference:
+    // 1. 'architecture/overview' (project-overview agent, more comprehensive)
+    // 2. 'overview' (bootstrap agent, basic starter)
     let projectOverviewContent: string | null = null;
     if (hasProjectOverview) {
-      const overviewQuery = createGetWikiPageQuery(wikiId, 'architecture/overview');
-      const overviewResult = await handleGetWikiPage(overviewQuery, this.repos);
-      if (overviewResult.success && overviewResult.data) {
-        const content = overviewResult.data.content;
-        // Truncate to ~2000 chars for LLM context
-        const maxOverviewLength = 2000;
-        if (content.length > maxOverviewLength) {
-          projectOverviewContent = content.slice(0, maxOverviewLength) + '\n\n[... truncated ...]';
-        } else {
-          projectOverviewContent = content;
+      const overviewPaths = ['architecture/overview', 'overview'];
+      for (const overviewPath of overviewPaths) {
+        const overviewQuery = createGetWikiPageQuery(wikiId, overviewPath);
+        const overviewResult = await handleGetWikiPage(overviewQuery, this.repos);
+        if (overviewResult.success && overviewResult.data) {
+          const content = overviewResult.data.content;
+          // Truncate to ~2000 chars for LLM context
+          const maxOverviewLength = 2000;
+          if (content.length > maxOverviewLength) {
+            projectOverviewContent = content.slice(0, maxOverviewLength) + '\n\n[... truncated ...]';
+          } else {
+            projectOverviewContent = content;
+          }
+          break; // Found one, stop looking
         }
       }
     }

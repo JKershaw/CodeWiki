@@ -697,4 +697,105 @@ describe('ContextGatherer Project Overview Content', () => {
 
     assert.strictEqual(context.projectOverviewContent, null);
   });
+
+  it('should include overview content from bootstrap overview page (root level)', async () => {
+    const overviewContent = '# Bootstrap Overview\n\nCreated by bootstrap agent.';
+    const overviewPage = createMockWikiPage('overview', overviewContent);
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [overviewPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'overview') return overviewPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.hasProjectOverview, true);
+    assert.strictEqual(context.projectOverviewContent, overviewContent);
+  });
+
+  it('should prefer architecture/overview over root overview when both exist', async () => {
+    const architectureContent = '# Architecture Overview\n\nMore comprehensive.';
+    const bootstrapContent = '# Bootstrap Overview\n\nBasic starter.';
+    const architecturePage = createMockWikiPage('architecture/overview', architectureContent);
+    const bootstrapPage = createMockWikiPage('overview', bootstrapContent);
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [architecturePage, bootstrapPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'architecture/overview') return architecturePage;
+          if (path === 'overview') return bootstrapPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.hasProjectOverview, true);
+    // Should prefer architecture/overview (more comprehensive)
+    assert.strictEqual(context.projectOverviewContent, architectureContent);
+  });
+
+  it('should set hasProjectOverview true when root overview exists', async () => {
+    const overviewPage = createMockWikiPage('overview', 'Basic overview');
+
+    const repos = {
+      repos: {
+        findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
+      },
+      commits: {
+        findByRepo: mock.fn(async () => []),
+      },
+      wikiPages: {
+        findByWiki: mock.fn(async () => [overviewPage]),
+        findByPath: mock.fn(async (_wikiId: string, path: string) => {
+          if (path === 'overview') return overviewPage;
+          return null;
+        }),
+      },
+      agentRuns: {
+        findByRepo: mock.fn(async () => []),
+      },
+      editRequests: {
+        countPending: mock.fn(async () => 0),
+      },
+    } as any;
+
+    const gatherer = new ContextGatherer(repos, undefined, undefined);
+    const context = await gatherer.gather('repo-1', 'wiki-1');
+
+    assert.strictEqual(context.hasProjectOverview, true);
+  });
 });
