@@ -46,6 +46,12 @@ export interface WikiPageHistoryRepository {
   countByWiki(wikiId: string): Promise<number>;
 
   /**
+   * Get the next sequence number for a wiki.
+   * Used to ensure deterministic ordering when timestamps collide.
+   */
+  getNextSequenceNumber(wikiId: string): Promise<number>;
+
+  /**
    * Save a history record.
    */
   save(history: WikiPageHistory): Promise<void>;

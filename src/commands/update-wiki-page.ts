@@ -271,6 +271,9 @@ async function recordHistory(
     ? 'wiki-editor' // Default to wiki-editor when we have an agent run
     : 'unknown';
 
+  // Get the next sequence number for deterministic ordering
+  const sequenceNumber = await repos.wikiPageHistory.getNextSequenceNumber(params.wikiId);
+
   const history = createWikiPageHistory({
     id: uuid(),
     wikiId: params.wikiId,
@@ -280,6 +283,7 @@ async function recordHistory(
     contentBefore: params.contentBefore,
     contentAfter: params.contentAfter,
     agentType,
+    sequenceNumber,
     // Only include optional properties if defined (exactOptionalPropertyTypes)
     ...(params.agentRunId !== undefined && { agentRunId: params.agentRunId }),
     ...(params.workItemId !== undefined && { workItemId: params.workItemId }),

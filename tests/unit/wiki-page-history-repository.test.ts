@@ -19,9 +19,12 @@ describe('WikiPageHistoryRepository', () => {
   let repo: FileWikiPageHistoryRepository;
   let tempDir: string;
 
+  let sequenceCounter = 0;
+
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'wiki-page-history-test-'));
     repo = new FileWikiPageHistoryRepository(tempDir);
+    sequenceCounter = 0;
   });
 
   /**
@@ -40,7 +43,9 @@ describe('WikiPageHistoryRepository', () => {
     editRequestId: string;
     agentType: WikiPageHistory['agentType'];
     timestamp: Date;
+    sequenceNumber: number;
   }> = {}): WikiPageHistory {
+    sequenceCounter++;
     return createWikiPageHistory({
       id: overrides.id ?? uuid(),
       wikiId: overrides.wikiId ?? 'wiki-1',
@@ -54,6 +59,7 @@ describe('WikiPageHistoryRepository', () => {
       editRequestId: overrides.editRequestId,
       agentType: overrides.agentType ?? 'wiki-editor',
       timestamp: overrides.timestamp,
+      sequenceNumber: overrides.sequenceNumber ?? sequenceCounter,
     });
   }
 

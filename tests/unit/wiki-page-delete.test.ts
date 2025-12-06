@@ -52,6 +52,7 @@ function createMockRepos(): Repositories {
     removeBacklink: async () => {},
   };
 
+  let sequenceCounter = 0;
   const mockWikiPageHistory: Repositories['wikiPageHistory'] = {
     findById: async (id) => wikiPageHistory.get(id) ?? null,
     findByPage: async () => [],
@@ -61,6 +62,7 @@ function createMockRepos(): Repositories {
     findByPagePath: async () => [],
     getLatestByPage: async () => null,
     countByWiki: async () => 0,
+    getNextSequenceNumber: async () => ++sequenceCounter,
     save: async (history) => { wikiPageHistory.set(history.id, history); },
     delete: async (id) => { wikiPageHistory.delete(id); },
     deleteByWiki: async () => {},
