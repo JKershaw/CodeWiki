@@ -1388,6 +1388,15 @@ footer .model-selector option {
 	color: var(--text-primary);
 }
 
+footer .version-info {
+	margin-top: 16px;
+	font-size: 0.75rem;
+	color: var(--text-secondary);
+	opacity: 0.6;
+	font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+	letter-spacing: 0.02em;
+}
+
 /* Job List */
 .job-list-container {
 	margin-bottom: 15px;

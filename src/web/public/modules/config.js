@@ -56,3 +56,40 @@ async function handleModelChange(event) {
     selector.disabled = false;
   }
 }
+
+/**
+ * Load and display version info in footer.
+ */
+async function loadVersionInfo() {
+  const versionText = document.getElementById('version-text');
+  if (!versionText) return;
+
+  try {
+    const info = await api('/config/version');
+    const parts = [];
+
+    // Always show version
+    parts.push(`v${info.version}`);
+
+    // Show commit hash if available
+    if (info.commit) {
+      parts.push(info.commit);
+    }
+
+    // Show release date if available (from Heroku dyno metadata)
+    if (info.releasedAt) {
+      const date = new Date(info.releasedAt);
+      const formatted = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+      parts.push(formatted);
+    }
+
+    versionText.textContent = parts.join(' • ');
+  } catch (error) {
+    console.error('Failed to load version info:', error);
+    versionText.textContent = 'Version unavailable';
+  }
+}
