@@ -18,5 +18,9 @@ async function api(path, options = {}) {
     const error = await response.json();
     throw new Error(error.error || 'API Error');
   }
+  // Handle 204 No Content responses (e.g., successful DELETE)
+  if (response.status === 204) {
+    return null;
+  }
   return response.json();
 }
