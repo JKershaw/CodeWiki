@@ -83,10 +83,10 @@ export const Priority = {
   EXPLORATION: 80,
   /** Recent commits (within last week) */
   RECENT_COMMIT: 75,
-  /** Historical commits (older than a week) */
-  HISTORICAL_COMMIT: 60,
   /** Meta work (structure, links, quality) */
-  META: 50,
+  META: 60,
+  /** Historical commits (older than a week) */
+  HISTORICAL_COMMIT: 50,
   /** Low-confidence pages needing improvement */
   LOW_CONFIDENCE: 45,
   /** Synthesis work (guides, overviews) */
