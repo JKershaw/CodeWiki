@@ -256,8 +256,10 @@ export function parseOrchestratorResponse(
           console.warn(`Invalid path for ${agentType}: ${normalizedPath} (must start with src/ or lib/)`);
           continue;
         }
-        // If validPaths provided, check against it
-        if (validPaths && !validPaths.has(normalizedPath)) {
+        // If validPaths has entries, check against it
+        // Note: We check size > 0 because an empty Set (from null tree) is truthy
+        // and would incorrectly reject all paths
+        if (validPaths && validPaths.size > 0 && !validPaths.has(normalizedPath)) {
           console.warn(`Path not found in coverage tree for ${agentType}: ${normalizedPath}`);
           continue;
         }
