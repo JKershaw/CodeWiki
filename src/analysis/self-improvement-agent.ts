@@ -225,7 +225,7 @@ export class SelfImprovementAgent {
     sections.push('3. Correlate changes with agent activity');
     sections.push('4. Produce a detailed analysis report with actionable recommendations');
     sections.push('');
-    sections.push('Start by using `get_question_trends` to see which questions improved or got stuck, then investigate the interesting cases.');
+    sections.push('Start by getting an overview of the trends to see which questions improved or got stuck, then investigate the interesting cases.');
 
     return sections.join('\n');
   }
