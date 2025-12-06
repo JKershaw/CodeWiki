@@ -139,3 +139,84 @@ function initModalListeners() {
     }
   });
 }
+
+// ============================================================================
+// Side Panel Utilities (for mobile-friendly detail panels)
+// ============================================================================
+
+const MOBILE_BREAKPOINT = 768;
+
+/**
+ * Check if we're on a mobile-sized viewport.
+ * @returns {boolean}
+ */
+function isMobileViewport() {
+  return window.innerWidth <= MOBILE_BREAKPOINT;
+}
+
+/**
+ * Open a side panel with backdrop on mobile.
+ * @param {HTMLElement|string} panel - The panel element or its ID
+ */
+function openSidePanel(panel) {
+  if (typeof panel === 'string') {
+    panel = document.getElementById(panel);
+  }
+  if (!panel) return;
+
+  panel.classList.remove('hidden');
+
+  // On mobile, show backdrop and lock body scroll
+  if (isMobileViewport()) {
+    const backdrop = document.getElementById('side-panel-backdrop');
+    if (backdrop) {
+      backdrop.classList.add('active');
+    }
+    document.body.classList.add('side-panel-open');
+  }
+}
+
+/**
+ * Close a side panel and remove backdrop.
+ * @param {HTMLElement|string} panel - The panel element or its ID
+ */
+function closeSidePanel(panel) {
+  if (typeof panel === 'string') {
+    panel = document.getElementById(panel);
+  }
+  if (!panel) return;
+
+  panel.classList.add('hidden');
+
+  // Remove backdrop and unlock body scroll
+  const backdrop = document.getElementById('side-panel-backdrop');
+  if (backdrop) {
+    backdrop.classList.remove('active');
+  }
+  document.body.classList.remove('side-panel-open');
+}
+
+/**
+ * Initialize side panel backdrop click handler.
+ * Call this once when the DOM is ready.
+ */
+function initSidePanelListeners() {
+  const backdrop = document.getElementById('side-panel-backdrop');
+  if (backdrop) {
+    backdrop.addEventListener('click', () => {
+      // Close any open side panels
+      document.querySelectorAll('.benchmark-detail:not(.hidden), .debug-detail-panel:not(.hidden)').forEach(panel => {
+        closeSidePanel(panel);
+      });
+    });
+  }
+
+  // Also close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.benchmark-detail:not(.hidden), .debug-detail-panel:not(.hidden)').forEach(panel => {
+        closeSidePanel(panel);
+      });
+    }
+  });
+}

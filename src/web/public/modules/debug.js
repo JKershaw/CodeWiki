@@ -36,7 +36,7 @@ function initDebugListeners() {
 
   // Close detail panel
   document.getElementById('debug-close-detail')?.addEventListener('click', () => {
-    document.getElementById('debug-detail-panel')?.classList.add('hidden');
+    closeSidePanel('debug-detail-panel');
   });
 }
 
@@ -248,7 +248,7 @@ async function showOrchestratorRunDetail(repoId, runId) {
 
   title.textContent = 'Orchestrator Decision Details';
   content.innerHTML = '<p class="loading">Loading...</p>';
-  panel.classList.remove('hidden');
+  openSidePanel(panel);
 
   try {
     const data = await api(`/repos/${repoId}/orchestrator-runs/${runId}`);
@@ -318,7 +318,7 @@ async function showAgentRunDetail(repoId, runId) {
 
   title.textContent = 'Agent Run Details';
   content.innerHTML = '<p class="loading">Loading...</p>';
-  panel.classList.remove('hidden');
+  openSidePanel(panel);
 
   try {
     const data = await api(`/repos/${repoId}/agent-runs/${runId}`);
