@@ -93,6 +93,49 @@ export function isValidToolCall(tc: unknown): tc is { id: string; function: { na
 }
 
 /**
+ * Attempt to extract a tool call from text content.
+ * Some models output tool calls as JSON text instead of using the tool_calls API.
+ * Returns the parsed tool call or null if not found.
+ * Exported for testing.
+ */
+export function extractToolCallFromText(content: string, toolNames: string[]): {
+  name: string;
+  input: Record<string, unknown>;
+  remainingContent: string;
+} | null {
+  if (!content || toolNames.length === 0) return null;
+
+  // Try to find JSON object in the content that looks like a tool call
+  // Pattern: {"type": "function", "name": "tool_name", "parameters": {...}}
+  // Or simpler: {"name": "tool_name", "parameters": {...}}
+  const jsonPattern = /\{[^{}]*"(?:type"\s*:\s*"function"\s*,\s*)?"name"\s*:\s*"([^"]+)"[^{}]*"parameters"\s*:\s*(\{[^{}]*\})[^{}]*\}/;
+  const match = content.match(jsonPattern);
+
+  if (match) {
+    const toolName = match[1];
+    const paramsJson = match[2];
+
+    // Verify this is a known tool
+    if (toolName && toolNames.includes(toolName)) {
+      try {
+        const params = JSON.parse(paramsJson);
+        const remainingContent = content.replace(match[0], '').trim();
+        console.log(`[LLM] Extracted text-based tool call: ${toolName}`);
+        return {
+          name: toolName,
+          input: typeof params === 'object' && params !== null ? params : {},
+          remainingContent,
+        };
+      } catch {
+        // JSON parse failed, ignore
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * OpenAI-compatible message format.
  */
 interface ChatMessage {
@@ -358,11 +401,56 @@ export class OpenRouterLLMService extends BaseLLMService {
         const textContent = assistantMessage?.content ?? '';
         const toolCallsInResponse = assistantMessage?.tool_calls ?? [];
 
-        // If no tool calls, we're done
+        // If no tool calls, check if model output a tool call as text (some models do this)
         // Note: Only check for absence of tool calls - some models incorrectly set
         // finish_reason='stop' even when they have tool_calls that need executing.
         // When tool_calls are present, we should always execute them.
         if (toolCallsInResponse.length === 0) {
+          // Check for text-based tool calls (models that don't support function calling properly)
+          const toolNames = options.tools.map(t => t.name);
+          const textToolCall = extractToolCallFromText(textContent, toolNames);
+
+          if (textToolCall) {
+            // Execute the text-based tool call
+            const syntheticId = `text-tool-${Date.now()}`;
+            const toolResults = await options.executeTools([{
+              id: syntheticId,
+              name: textToolCall.name,
+              input: textToolCall.input,
+            }]);
+
+            // Record the tool call
+            allToolCalls.push({
+              name: textToolCall.name,
+              input: textToolCall.input,
+              result: toolResults[0]!.result,
+            });
+
+            // Add assistant message (just the preamble text, not the JSON)
+            messages.push({
+              role: 'assistant',
+              content: textToolCall.remainingContent || `Calling ${textToolCall.name}...`,
+              tool_calls: [{
+                id: syntheticId,
+                type: 'function',
+                function: {
+                  name: textToolCall.name,
+                  arguments: JSON.stringify(textToolCall.input),
+                },
+              }],
+            });
+
+            // Add tool result
+            messages.push({
+              role: 'tool',
+              content: toolResults[0]!.result,
+              tool_call_id: syntheticId,
+            });
+
+            toolRounds++;
+            continue; // Continue the loop to get the model's response to the tool result
+          }
+
           finalContent = textContent;
           break;
         }
