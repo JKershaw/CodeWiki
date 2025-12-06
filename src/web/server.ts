@@ -102,8 +102,10 @@ export async function startServer(port = PORT) {
   const githubCache = createGitHubApiCache();
 
   // GitHub repo service (for API-based repository access)
-  // Will be configured with user's access token per-request
-  let githubRepoService: GitHubRepoService | undefined;
+  // Always create a base service for public repo access (no auth needed for public repos)
+  // This will be wrapped with user's access token per-request for private repos
+  const baseGithubRepoService = createGitHubRepoService();
+  const githubRepoService: GitHubRepoService = createCachedGitHubRepoService(baseGithubRepoService, githubCache);
 
   // JWT service for authenticated git operations (created even if GitHub auth not fully configured)
   let jwtService: ReturnType<typeof createJwtService> | undefined;
@@ -139,10 +141,6 @@ export async function startServer(port = PORT) {
       userRepository: repos.users,
       sessionSecret: SESSION_SECRET,
     }));
-
-    // Create a base GitHub repo service (without auth - will be wrapped per-request)
-    const baseGithubRepoService = createGitHubRepoService();
-    githubRepoService = createCachedGitHubRepoService(baseGithubRepoService, githubCache);
 
     console.log('GitHub OAuth authentication enabled');
   } else {

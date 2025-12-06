@@ -79,7 +79,8 @@ export async function processCommand(args: string[]): Promise<void> {
   });
 
   // Create orchestrator and executor (always uses LLM-powered orchestration)
-  const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, git);
+  // Pass repoServiceFactory to orchestrator so it can calculate directory coverage
+  const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, git, repoServiceFactory);
   const executor = createExecutor(repos, git, llm, orchestrator, repoServiceFactory);
 
   // Get or create the active wiki for this repo
