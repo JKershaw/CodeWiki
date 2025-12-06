@@ -6,34 +6,10 @@
  */
 
 import type { WikiPage } from '../../domain/wiki-page.js';
+import type { ToolDefinition, WikiToolContext } from './tools.js';
 
-/**
- * Context provided to wiki tools when they execute.
- */
-export interface WikiToolContext {
-  /** All wiki pages available for searching */
-  pages: WikiPage[];
-  /** Maximum content length to return per page */
-  maxContentLength?: number;
-}
-
-/**
- * Definition of a wiki tool.
- */
-export interface WikiToolDefinition {
-  /** Unique name for the tool */
-  name: string;
-  /** Description of what the tool does (shown to LLM) */
-  description: string;
-  /** JSON Schema for the input parameters */
-  inputSchema: {
-    type: 'object';
-    properties: Record<string, { type: string; description: string; enum?: string[] }>;
-    required: string[];
-  };
-  /** Execute the tool with given input */
-  execute: (input: Record<string, unknown>, context: WikiToolContext) => Promise<string>;
-}
+// Re-export WikiToolContext for backwards compatibility during migration
+export type { WikiToolContext } from './tools.js';
 
 const DEFAULT_MAX_CONTENT_LENGTH = 4000;
 const MAX_SEARCH_RESULTS = 10;
@@ -66,7 +42,7 @@ function extractSnippet(content: string, keyword: string, length: number = SNIPP
 /**
  * Tool to search wiki pages by keywords.
  */
-export const searchWikiTool: WikiToolDefinition = {
+export const searchWikiTool: ToolDefinition<WikiToolContext> = {
   name: 'search_wiki',
   description:
     'Search wiki pages by keywords. Returns matching pages with titles, paths, and relevant snippets. ' +
@@ -150,7 +126,7 @@ export const searchWikiTool: WikiToolDefinition = {
 /**
  * Tool to read the full content of a wiki page.
  */
-export const readPageTool: WikiToolDefinition = {
+export const readPageTool: ToolDefinition<WikiToolContext> = {
   name: 'read_page',
   description:
     'Read the full content of a wiki page by its path. Use this after searching to get complete information from a relevant page.',
@@ -216,7 +192,7 @@ export const readPageTool: WikiToolDefinition = {
 /**
  * Tool to list all wiki pages, optionally filtered by category.
  */
-export const listPagesTool: WikiToolDefinition = {
+export const listPagesTool: ToolDefinition<WikiToolContext> = {
   name: 'list_pages',
   description:
     'List all wiki pages, optionally filtered by category/path prefix. Use this to understand wiki structure or find pages in a specific area.',
@@ -278,7 +254,7 @@ export const listPagesTool: WikiToolDefinition = {
 /**
  * Tool to get pages related to a given page (via links).
  */
-export const getRelatedPagesTool: WikiToolDefinition = {
+export const getRelatedPagesTool: ToolDefinition<WikiToolContext> = {
   name: 'get_related_pages',
   description:
     'Get pages that are linked to or from a given page. Use this to explore related topics and follow connections between concepts.',
@@ -336,7 +312,7 @@ export const getRelatedPagesTool: WikiToolDefinition = {
 /**
  * All available wiki research tools.
  */
-export const wikiTools: WikiToolDefinition[] = [
+export const wikiTools: ToolDefinition<WikiToolContext>[] = [
   searchWikiTool,
   readPageTool,
   listPagesTool,

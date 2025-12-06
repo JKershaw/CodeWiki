@@ -8,32 +8,20 @@
  * (via repoService) for flexibility with different repository types.
  */
 
-import { readFile, readdir, stat } from 'fs/promises';
-import { join, resolve } from 'path';
-import fg from 'fast-glob';
 import { minimatch } from 'minimatch';
-import type { AnalysisToolDefinition } from './types.js';
-import { loadIgnorePatterns } from '../../cwignore.js';
-
-const DEFAULT_MAX_FILE_SIZE = 100_000; // 100KB
-
-/**
- * Validate that a path is within the repository root.
- */
-export function validateSourcePath(requestedPath: string, repoRoot: string): string {
-  const resolved = resolve(repoRoot, requestedPath);
-  const repoResolved = resolve(repoRoot);
-
-  if (!resolved.startsWith(repoResolved)) {
-    throw new Error(`Path "${requestedPath}" is outside repository`);
-  }
-  return resolved;
-}
+import type { ToolDefinition, AnalysisToolContext } from '../tools.js';
+import {
+  readFileContent,
+  searchFiles,
+  listDirectory,
+  DEFAULT_MAX_FILE_SIZE,
+  DEFAULT_MAX_SEARCH_RESULTS,
+} from '../base-tools.js';
 
 /**
  * Tool to read a source file from the repository.
  */
-export const readSourceFileTool: AnalysisToolDefinition = {
+export const readSourceFileTool: ToolDefinition<AnalysisToolContext> = {
   name: 'read_source_file',
   description:
     'Read the contents of a source file from the repository. Use this to understand what the source code ' +
@@ -53,28 +41,10 @@ export const readSourceFileTool: AnalysisToolDefinition = {
 
     // Prefer local filesystem when available
     if (context.repoPath) {
-      try {
-        const fullPath = validateSourcePath(path, context.repoPath);
-        const stats = await stat(fullPath);
-
-        if (stats.size > DEFAULT_MAX_FILE_SIZE) {
-          return `Error: File "${path}" is too large (${stats.size} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
-        }
-
-        const content = await readFile(fullPath, 'utf-8');
-        return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message.includes('ENOENT')) {
-            return `Error: File "${path}" not found in repository`;
-          }
-          if (error.message.includes('EACCES')) {
-            return `Error: Permission denied reading "${path}"`;
-          }
-          return `Error reading "${path}": ${error.message}`;
-        }
-        return `Error reading "${path}"`;
-      }
+      return readFileContent(path, context.repoPath, {
+        maxFileSize: DEFAULT_MAX_FILE_SIZE,
+        formatOutput: true, // Markdown headers for analysis context
+      });
     }
 
     // Fall back to GitHub API
@@ -82,7 +52,6 @@ export const readSourceFileTool: AnalysisToolDefinition = {
       try {
         const content = await context.repoService.getFileContent(context.repo, path);
 
-        // Check content size (approximate, since we already have the content)
         if (content.length > DEFAULT_MAX_FILE_SIZE) {
           return `Error: File "${path}" is too large (${content.length} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
         }
@@ -106,7 +75,7 @@ export const readSourceFileTool: AnalysisToolDefinition = {
 /**
  * Tool to search for source files matching a glob pattern.
  */
-export const searchSourceFilesTool: AnalysisToolDefinition = {
+export const searchSourceFilesTool: ToolDefinition<AnalysisToolContext> = {
   name: 'search_source_files',
   description:
     'Find source files matching a glob pattern. Use this to discover what files exist in the repository ' +
@@ -123,62 +92,32 @@ export const searchSourceFilesTool: AnalysisToolDefinition = {
   },
   execute: async (input, context) => {
     const pattern = input['pattern'] as string;
-    const maxResults = 50;
 
     // Prefer local filesystem when available
     if (context.repoPath) {
-      try {
-        const ignorePatterns = await loadIgnorePatterns(context.repoPath);
-        const files = await fg(pattern, {
-          cwd: context.repoPath,
-          onlyFiles: true,
-          ignore: ignorePatterns,
-        });
-
-        if (files.length === 0) {
-          return `No files found matching "${pattern}"`;
-        }
-
-        const truncated = files.length > maxResults;
-        const displayFiles = files.slice(0, maxResults);
-
-        let result = `## Files matching: ${pattern}\n\nFound ${files.length} files:\n\n`;
-        result += displayFiles.join('\n');
-        if (truncated) {
-          result += `\n\n... and ${files.length - maxResults} more files`;
-        }
-
-        return result;
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message.includes('ENOENT')) {
-            return `Error: Repository path not found or not accessible`;
-          }
-          return `Error searching for "${pattern}": ${error.message}`;
-        }
-        return `Error searching for "${pattern}"`;
-      }
+      return searchFiles(pattern, context.repoPath, {
+        maxSearchResults: DEFAULT_MAX_SEARCH_RESULTS,
+        formatOutput: true,
+      });
     }
 
     // Fall back to GitHub API
     if (context.repoService && context.repo) {
       try {
         const allFiles = await context.repoService.getFileTree(context.repo);
-
-        // Filter files matching the glob pattern
         const matchingFiles = allFiles.filter(filePath => minimatch(filePath, pattern));
 
         if (matchingFiles.length === 0) {
           return `No files found matching "${pattern}"`;
         }
 
-        const truncated = matchingFiles.length > maxResults;
-        const displayFiles = matchingFiles.slice(0, maxResults);
+        const truncated = matchingFiles.length > DEFAULT_MAX_SEARCH_RESULTS;
+        const displayFiles = matchingFiles.slice(0, DEFAULT_MAX_SEARCH_RESULTS);
 
         let result = `## Files matching: ${pattern}\n\nFound ${matchingFiles.length} files:\n\n`;
         result += displayFiles.join('\n');
         if (truncated) {
-          result += `\n\n... and ${matchingFiles.length - maxResults} more files`;
+          result += `\n\n... and ${matchingFiles.length - DEFAULT_MAX_SEARCH_RESULTS} more files`;
         }
 
         return result;
@@ -197,7 +136,7 @@ export const searchSourceFilesTool: AnalysisToolDefinition = {
 /**
  * Tool to list contents of a source directory.
  */
-export const listSourceDirectoryTool: AnalysisToolDefinition = {
+export const listSourceDirectoryTool: ToolDefinition<AnalysisToolContext> = {
   name: 'list_source_directory',
   description:
     'List contents of a source directory to understand project structure. Use this to explore ' +
@@ -217,43 +156,9 @@ export const listSourceDirectoryTool: AnalysisToolDefinition = {
 
     // Prefer local filesystem when available
     if (context.repoPath) {
-      try {
-        const fullPath = validateSourcePath(path, context.repoPath);
-        const entries = await readdir(fullPath, { withFileTypes: true });
-        const ignorePatterns = await loadIgnorePatterns(context.repoPath);
-
-        // Filter out ignored entries
-        const filteredEntries = entries.filter(entry => {
-          const entryPath = path === '.' ? entry.name : join(path, entry.name);
-          // Simple ignore check
-          return !ignorePatterns.some(p => entryPath.includes(p.replace('/**', '').replace('*', '')));
-        });
-
-        const dirs = filteredEntries.filter(e => e.isDirectory()).map(e => e.name + '/');
-        const files = filteredEntries.filter(e => !e.isDirectory()).map(e => e.name);
-
-        let result = `## Directory: ${path}\n\n`;
-
-        if (dirs.length > 0) {
-          result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
-        }
-        if (files.length > 0) {
-          result += '**Files:**\n' + files.sort().join('\n');
-        }
-
-        return result;
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message.includes('ENOENT')) {
-            return `Error: Directory "${path}" not found in repository`;
-          }
-          if (error.message.includes('ENOTDIR')) {
-            return `Error: "${path}" is not a directory`;
-          }
-          return `Error listing "${path}": ${error.message}`;
-        }
-        return `Error listing "${path}"`;
-      }
+      return listDirectory(path, context.repoPath, {
+        formatOutput: true,
+      });
     }
 
     // Fall back to GitHub API
@@ -265,7 +170,6 @@ export const listSourceDirectoryTool: AnalysisToolDefinition = {
         const files = entries.filter(e => e.type === 'file').map(e => e.name);
 
         let result = `## Directory: ${path}\n\n`;
-
         if (dirs.length > 0) {
           result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
         }
@@ -292,7 +196,7 @@ export const listSourceDirectoryTool: AnalysisToolDefinition = {
 /**
  * All source code exploration tools.
  */
-export const sourceTools: AnalysisToolDefinition[] = [
+export const sourceTools: ToolDefinition<AnalysisToolContext>[] = [
   readSourceFileTool,
   searchSourceFilesTool,
   listSourceDirectoryTool,
