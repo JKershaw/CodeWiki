@@ -841,74 +841,116 @@ export class ContextGatherer {
 
   /**
    * Format context as a string for the LLM prompt.
+   *
+   * Order prioritizes existing code understanding over historical commits:
+   * 1. Immediate actions (pending edits)
+   * 2. Project context (what are we documenting?)
+   * 3. Codebase structure (what code exists?)
+   * 4. Wiki state (what's documented?)
+   * 5. Quality gaps (what needs improvement?)
+   * 6. Recent activity (what work was done?)
+   * 7. Historical context (commits for enrichment)
    */
   formatForPrompt(ctx: OrchestratorContext): string {
     const lines: string[] = [];
 
-    lines.push('## Current Wiki State\n');
+    // 1. IMMEDIATE ACTIONS - must be addressed first
+    if (ctx.pendingEditRequests > 0) {
+      lines.push('## ⚠️ Immediate Action Required\n');
+      lines.push(`**Pending edit requests:** ${ctx.pendingEditRequests} - run wiki-editor agent FIRST!`);
+      lines.push('');
+    }
 
-    // Coverage
+    // 2. PROJECT CONTEXT - understand what we're documenting
+    if (ctx.projectOverviewContent) {
+      lines.push('## Project Overview\n');
+      lines.push(ctx.projectOverviewContent);
+      lines.push('');
+    }
+
+    // 3. CODEBASE STRUCTURE - what code exists and what's covered
+    lines.push('## Codebase Structure\n');
+    lines.push('Directories marked with ⚠️ have low coverage. Target these with `codebase-explorer`.\n');
+    lines.push(this.formatCoverageTree(ctx.coverageTree, 100));
+    lines.push('');
+
+    // 4. WIKI STATE - what's already documented
+    lines.push('## Wiki State\n');
+    lines.push(`**Pages:** ${ctx.wikiPages} total, avg confidence ${(ctx.avgConfidence * 100).toFixed(0)}%`);
+
+    // Categories with overview status inline
+    const categoryInfo = Object.entries(ctx.categoryCounts)
+      .map(([cat, count]) => `${cat}(${count})`)
+      .join(', ');
+    lines.push(`**Categories:** ${categoryInfo}`);
+    if (ctx.categoriesWithoutOverview.length > 0) {
+      lines.push(`**Categories needing overview:** ${ctx.categoriesWithoutOverview.join(', ')}`);
+    }
+
+    // Key pages consolidated into single line showing what's missing
+    const missingKeyPages: string[] = [];
+    if (!ctx.hasProjectOverview) missingKeyPages.push('project-overview');
+    if (!ctx.hasGettingStarted) missingKeyPages.push('getting-started');
+    if (!ctx.hasTestingGuide) missingKeyPages.push('testing-guide');
+    if (!ctx.hasExtensionGuide) missingKeyPages.push('extension-guide');
+    if (missingKeyPages.length > 0) {
+      lines.push(`**Missing key pages:** ${missingKeyPages.join(', ')}`);
+    } else {
+      lines.push('**Key pages:** all present ✓');
+    }
+    lines.push('');
+
+    // 5. QUALITY GAPS - grouped together for clear prioritization
+    lines.push('## Quality Gaps\n');
+    const qualityIssues: string[] = [];
+    if (ctx.shallowPages > 0) qualityIssues.push(`${ctx.shallowPages} shallow (< 500 chars)`);
+    if (ctx.pagesLackingExamples > 0) qualityIssues.push(`${ctx.pagesLackingExamples} without code examples`);
+    if (ctx.pagesWithoutLinks > 0) qualityIssues.push(`${ctx.pagesWithoutLinks} without links`);
+    if (ctx.lowConfidencePages > 0) qualityIssues.push(`${ctx.lowConfidencePages} low confidence`);
+    if (ctx.pagesNeedingRewrite > 0) qualityIssues.push(`${ctx.pagesNeedingRewrite} need rewrite (commit-style)`);
+
+    if (qualityIssues.length > 0) {
+      lines.push(`**Issues:** ${qualityIssues.join(', ')}`);
+    } else {
+      lines.push('**Issues:** none ✓');
+    }
+    lines.push('');
+
+    // 6. RECENT ACTIVITY - what work was done recently
+    lines.push('## Recent Activity\n');
+    if (ctx.recentRuns.length > 0) {
+      for (const run of ctx.recentRuns.slice(0, 5)) {
+        const status = run.success ? '✓' : '✗';
+        lines.push(`- ${run.agentType}: ${status} ${run.pagesAffected} pages`);
+      }
+    } else {
+      lines.push('No recent agent runs.');
+    }
+    lines.push('');
+
+    // 7. HISTORICAL CONTEXT - commits for enrichment (last priority)
+    lines.push('## Historical Context\n');
     lines.push(`**Commits:** ${ctx.totalCommits} total`);
     for (const [agent, counts] of Object.entries(ctx.commitsByAgent)) {
       const pct = ctx.totalCommits > 0
         ? ((counts.processed / ctx.totalCommits) * 100).toFixed(0)
         : '0';
-      lines.push(`- ${agent}: ${counts.processed}/${ctx.totalCommits} (${pct}%) processed, ${counts.pending} pending`);
-    }
-    lines.push('');
-
-    // Wiki pages
-    lines.push(`**Wiki Pages:** ${ctx.wikiPages} total, avg confidence ${(ctx.avgConfidence * 100).toFixed(0)}%`);
-    lines.push(`**Categories:** ${Object.entries(ctx.categoryCounts).map(([cat, count]) => `${cat}(${count})`).join(', ')}`);
-
-    if (ctx.categoriesWithoutOverview.length > 0) {
-      lines.push(`**Categories needing overview:** ${ctx.categoriesWithoutOverview.join(', ')}`);
-    }
-
-    lines.push(`**Pages needing rewrite:** ${ctx.pagesNeedingRewrite}`);
-    lines.push(`**Has project overview (architecture/overview):** ${ctx.hasProjectOverview ? 'YES' : 'NO'}`);
-    lines.push(`**Has getting started (guides/getting-started):** ${ctx.hasGettingStarted ? 'YES' : 'NO'}`);
-    lines.push(`**Has testing guide (guides/testing):** ${ctx.hasTestingGuide ? 'YES' : 'NO'}`);
-    lines.push(`**Has extension guide (guides/extension-patterns):** ${ctx.hasExtensionGuide ? 'YES' : 'NO'}`);
-    lines.push(`**Pages without links:** ${ctx.pagesWithoutLinks}`);
-    lines.push(`**Low confidence pages:** ${ctx.lowConfidencePages}`);
-    lines.push(`**Shallow pages (< 500 chars):** ${ctx.shallowPages}`);
-    lines.push(`**Pages without code examples:** ${ctx.pagesLackingExamples}`);
-    if (ctx.pendingEditRequests > 0) {
-      lines.push(`**⚠️ Pending edit requests:** ${ctx.pendingEditRequests} (run wiki-editor agent!)`);
+      lines.push(`- ${agent}: ${pct}% processed (${counts.pending} pending)`);
     }
     lines.push('');
 
     // Recent commits (show full ID so LLM can reference them exactly)
-    lines.push('**Recent commits (most recent first):**');
-    for (const commit of ctx.recentCommits.slice(0, 10)) {
-      const processed = commit.processedBy.length > 0
-        ? commit.processedBy.join(', ')
-        : 'none';
-      lines.push(`- ${commit.id}: "${commit.message.slice(0, 50)}${commit.message.length > 50 ? '...' : ''}" [processed by: ${processed}]`);
-    }
-    lines.push('');
-
-    // Recent agent runs
-    lines.push('**Last 5 agent runs:**');
-    for (const run of ctx.recentRuns.slice(0, 5)) {
-      const status = run.success ? 'success' : 'failed';
-      lines.push(`- ${run.agentType}: ${status}, ${run.pagesAffected} pages affected`);
-    }
-    lines.push('');
-
-    // Directory coverage tree - helps LLM prioritize exploration
-    lines.push('## Directory Coverage (sorted by size)\n');
-    lines.push('Directories marked with ⚠️ have low coverage and may need exploration.');
-    lines.push('You can target specific directories with `codebase-explorer`.\n');
-    lines.push(this.formatCoverageTree(ctx.coverageTree, 100));
-    lines.push('');
-
-    // Project overview content (if exists) - gives LLM context about the project
-    if (ctx.projectOverviewContent) {
-      lines.push('## Project Overview (from wiki)\n');
-      lines.push(ctx.projectOverviewContent);
-      lines.push('');
+    if (ctx.recentCommits.length > 0) {
+      lines.push('**Recent commits:**');
+      for (const commit of ctx.recentCommits.slice(0, 10)) {
+        const processed = commit.processedBy.length > 0
+          ? `[${commit.processedBy.join(', ')}]`
+          : '[unprocessed]';
+        const msg = commit.message.length > 50
+          ? commit.message.slice(0, 50) + '...'
+          : commit.message;
+        lines.push(`- ${commit.id}: "${msg}" ${processed}`);
+      }
     }
 
     return lines.join('\n');
