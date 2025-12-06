@@ -116,7 +116,7 @@ export function extractToolCallFromText(content: string, toolNames: string[]): {
     const paramsJson = match[2];
 
     // Verify this is a known tool
-    if (toolName && toolNames.includes(toolName)) {
+    if (toolName && paramsJson && toolNames.includes(toolName)) {
       try {
         const params = JSON.parse(paramsJson);
         const remainingContent = content.replace(match[0], '').trim();
