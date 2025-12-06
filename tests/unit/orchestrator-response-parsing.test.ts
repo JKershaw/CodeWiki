@@ -440,6 +440,25 @@ codebase-explorer,src/any/path,No path validation`;
       assert.strictEqual(result.workItems[0].targetPath, 'src/any/path');
     });
 
+    it('should allow codebase-explorer paths when validPaths is empty Set (null coverage tree)', () => {
+      // When coverage tree is null, extractPathsFromTree returns empty Set
+      // This should NOT reject all paths - empty Set means "no validation possible"
+      const emptyPaths = new Set<string>();
+      const response = `# Reasoning
+Coverage tree unavailable
+
+# Work Items
+codebase-explorer,src/agents,Explore agents directory
+codebase-explorer,src/services,Explore services directory`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, emptyPaths);
+
+      // Both paths should be accepted since we can't validate against empty set
+      assert.strictEqual(result.workItems.length, 2);
+      assert.strictEqual(result.workItems[0].targetPath, 'src/agents');
+      assert.strictEqual(result.workItems[1].targetPath, 'src/services');
+    });
+
     it('should accept lib/ paths for exploration', () => {
       const libPaths = new Set(['lib/utils']);
       const response = `# Reasoning
