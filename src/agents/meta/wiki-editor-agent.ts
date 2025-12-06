@@ -286,7 +286,7 @@ Respond with EXACTLY this format:
 
 DECISION: [SKIP|HISTORY|MERGE|CONFLICT]
 REASONING: [Your reasoning in 1-2 sentences]
-CONTENT: [If HISTORY or MERGE, provide the content to add. For HISTORY, provide a summary suitable for a historical context section. For MERGE, provide the merged content.]
+CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NOT a description of it. Write the content directly as it should appear on the page. Do not include meta-text like "The merged content could be:" - just write the wiki content itself.]
 `;
   }
 
