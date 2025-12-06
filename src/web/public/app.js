@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load initial data
   await Promise.all([
     loadConfig(),
+    loadVersionInfo(),
     loadCurrentUser(),
     loadRepos(),
   ]);
