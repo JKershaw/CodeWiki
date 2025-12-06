@@ -264,16 +264,40 @@ describe('ContextGatherer Unified Directory Coverage', () => {
       assert.ok(servicesCoverage.wikiMentions > 0, 'Services should have wiki mentions');
     });
 
-    it('returns empty coverage when no src directory exists', async () => {
+    it('calculates coverage for non-src directories like lib/', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
       } as Repo);
 
-      // No src/ files
+      // lib/ instead of src/
       const fileTree = [
-        'lib/utils.ts',
+        'lib/utils/helper.ts',
+        'lib/utils/formatter.ts',
+        'lib/core/engine.ts',
+      ];
+
+      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      // Should have coverage for lib/utils and lib/core
+      assert.strictEqual(context.directoryCoverage.length, 2);
+      assert.ok(context.directoryCoverage.find(d => d.path === 'lib/utils'));
+      assert.ok(context.directoryCoverage.find(d => d.path === 'lib/core'));
+    });
+
+    it('returns empty coverage when no directories with source files exist', async () => {
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: false,
+      } as Repo);
+
+      // Only root-level files (no directories)
+      const fileTree = [
         'index.ts',
+        'config.ts',
       ];
 
       const repoServiceFactory = createMockRepoServiceFactory(fileTree);
@@ -391,15 +415,37 @@ describe('ContextGatherer Unified Directory Coverage', () => {
       );
     });
 
-    it('returns null tree when no src files exist', async () => {
+    it('builds tree for non-src directories like lib/', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
       } as Repo);
 
       const fileTree = [
-        'lib/utils.ts',
+        'lib/utils/helper.ts',
+        'lib/core/engine.ts',
+      ];
+
+      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      assert.ok(context.coverageTree, 'Should have coverage tree for lib/');
+      assert.strictEqual(context.coverageTree.name, 'lib');
+      assert.strictEqual(context.coverageTree.totalFileCount, 2);
+    });
+
+    it('returns null tree when no source files in directories', async () => {
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: false,
+      } as Repo);
+
+      // Only root-level files
+      const fileTree = [
         'index.ts',
+        'config.ts',
       ];
 
       const repoServiceFactory = createMockRepoServiceFactory(fileTree);

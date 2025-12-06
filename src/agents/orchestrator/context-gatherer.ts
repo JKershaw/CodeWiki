@@ -326,8 +326,8 @@ export class ContextGatherer {
 
   /**
    * Calculate coverage of source directories in the wiki.
-   * Scans the repository's src/ directory and checks how well each
-   * subdirectory is documented in the wiki.
+   * Scans the repository for source files and checks how well each
+   * directory is documented in the wiki.
    *
    * Uses RepositoryService abstraction to work uniformly with both
    * local and GitHub repositories.
@@ -348,24 +348,27 @@ export class ContextGatherer {
       // Get all files via unified RepositoryService interface
       const allFiles = await repoService.getFileTree(repo);
 
-      // Filter to src/ source files only
-      const srcFiles = allFiles.filter(f =>
-        f.startsWith('src/') && this.isSourceFile(f)
-      );
+      // Filter to source files only (any directory)
+      const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
-      if (srcFiles.length === 0) {
+      if (sourceFiles.length === 0) {
         return [];
       }
 
-      // Extract first-level directories under src/ and count files
+      // Extract second-level directories and count files
+      // e.g., src/agents/foo.ts -> src/agents, lib/utils/bar.ts -> lib/utils
       const dirCounts = new Map<string, number>();
-      for (const filePath of srcFiles) {
-        // Extract directory: src/agents/foo.ts -> src/agents
+      for (const filePath of sourceFiles) {
         const parts = filePath.split('/');
+        // Only count files that are at least 2 levels deep (e.g., dir/subdir/file.ts)
         if (parts.length >= 3) {
           const dirPath = `${parts[0]}/${parts[1]}`;
           dirCounts.set(dirPath, (dirCounts.get(dirPath) ?? 0) + 1);
         }
+      }
+
+      if (dirCounts.size === 0) {
+        return [];
       }
 
       // Build coverage array
@@ -469,17 +472,36 @@ export class ContextGatherer {
       // Get all files via unified RepositoryService interface
       const allFiles = await repoService.getFileTree(repo);
 
-      // Filter to src/ source files only
-      const srcFiles = allFiles.filter(f =>
-        f.startsWith('src/') && this.isSourceFile(f)
-      );
+      // Filter to source files only (any directory, not just src/)
+      const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
-      if (srcFiles.length === 0) {
+      if (sourceFiles.length === 0) {
         return null;
       }
 
+      // Find the predominant top-level directory to use as root
+      const topLevelCounts = new Map<string, number>();
+      for (const filePath of sourceFiles) {
+        const parts = filePath.split('/');
+        if (parts.length >= 2) {
+          const topLevel = parts[0]!;
+          topLevelCounts.set(topLevel, (topLevelCounts.get(topLevel) ?? 0) + 1);
+        }
+      }
+
+      if (topLevelCounts.size === 0) {
+        return null;
+      }
+
+      // Use the top-level directory with the most files as root
+      const rootDir = Array.from(topLevelCounts.entries())
+        .sort((a, b) => b[1] - a[1])[0]![0];
+
+      // Filter to files in this root directory
+      const rootFiles = sourceFiles.filter(f => f.startsWith(`${rootDir}/`));
+
       // Build tree from file paths
-      return this.buildTreeFromPaths(srcFiles, wikiPages);
+      return this.buildTreeFromPaths(rootFiles, wikiPages, rootDir);
     } catch {
       return null;
     }
@@ -490,7 +512,8 @@ export class ContextGatherer {
    */
   private buildTreeFromPaths(
     filePaths: string[],
-    wikiPages: Array<{ path: string; content: string }>
+    wikiPages: Array<{ path: string; content: string }>,
+    rootDir: string = 'src'
   ): DirectoryNode {
     // Build intermediate structure
     interface BuildNode {
@@ -500,7 +523,7 @@ export class ContextGatherer {
       children: Map<string, BuildNode>;
     }
 
-    const root: BuildNode = { name: 'src', path: 'src', fileCount: 0, children: new Map() };
+    const root: BuildNode = { name: rootDir, path: rootDir, fileCount: 0, children: new Map() };
 
     for (const filePath of filePaths) {
       const parts = filePath.split('/');
