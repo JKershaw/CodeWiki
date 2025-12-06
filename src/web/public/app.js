@@ -25,6 +25,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
   // Initialize UI components
   initModalListeners();
+  initSidePanelListeners();
   initNavigation();
 
   // Initialize feature modules

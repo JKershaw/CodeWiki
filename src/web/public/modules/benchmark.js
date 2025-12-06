@@ -28,7 +28,7 @@ async function openBenchmark(repoId) {
   showView('benchmark');
 
   // Close detail panel if open
-  document.getElementById('benchmark-detail').classList.add('hidden');
+  closeSidePanel('benchmark-detail');
 
   // Load benchmark history
   await loadBenchmarkHistory(repoId);
@@ -606,7 +606,7 @@ async function showBenchmarkDetail(benchmarkId) {
   const detailPanel = document.getElementById('benchmark-detail');
   const contentDiv = document.getElementById('benchmark-detail-content');
 
-  detailPanel.classList.remove('hidden');
+  openSidePanel(detailPanel);
   contentDiv.innerHTML = '<p class="loading">Loading benchmark details...</p>';
 
   try {
@@ -838,7 +838,7 @@ async function showQualityBenchmarkDetail(benchmarkId) {
   const detailPanel = document.getElementById('benchmark-detail');
   const contentDiv = document.getElementById('benchmark-detail-content');
 
-  detailPanel.classList.remove('hidden');
+  openSidePanel(detailPanel);
   contentDiv.innerHTML = '<p class="loading">Loading quality benchmark details...</p>';
 
   try {
@@ -1452,7 +1452,7 @@ function initBenchmarkListeners() {
   document.getElementById('run-quality-benchmark-btn').addEventListener('click', runQualityBenchmark);
   document.getElementById('run-both-benchmarks-btn').addEventListener('click', runBothBenchmarks);
   document.getElementById('close-benchmark-detail').addEventListener('click', () => {
-    document.getElementById('benchmark-detail').classList.add('hidden');
+    closeSidePanel('benchmark-detail');
   });
   document.getElementById('back-to-repos-benchmark').addEventListener('click', () => {
     stopBenchmarkPolling();
