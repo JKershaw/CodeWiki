@@ -43,8 +43,12 @@ describe('BootstrapAgent', () => {
         'src/index.ts': 'export function main() { console.log("Hello"); }',
       });
 
-      // Mock LLM response - agent outputs markdown directly
-      ctx.llm.setDefaultResponse(`# My Awesome Project - Overview
+      // Mock LLM response - agent outputs structured pages
+      ctx.llm.setDefaultResponse(`---PAGE---
+PATH: architecture/overview
+TITLE: My Awesome Project - Overview
+CONTENT:
+# My Awesome Project - Overview
 
 A tool for doing awesome things.
 
@@ -57,17 +61,25 @@ This project provides utilities for doing awesome things. It is built with TypeS
 - \`src/index.ts\` - Main entry point
 - \`package.json\` - Project configuration
 
-## Getting Started
-
-1. Install dependencies: \`npm install\`
-2. Build the project: \`npm run build\`
-3. Run the project: \`npm start\`
-
 ## Key Commands
 
 - \`npm run build\` - Compile TypeScript
 - \`npm test\` - Run tests
-- \`npm start\` - Start the application`);
+- \`npm start\` - Start the application
+---END_PAGE---
+
+---PAGE---
+PATH: guides/getting-started
+TITLE: Getting Started
+CONTENT:
+# Getting Started
+
+## Installation
+
+1. Install dependencies: \`npm install\`
+2. Build the project: \`npm run build\`
+3. Run the project: \`npm start\`
+---END_PAGE---`);
 
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
@@ -76,15 +88,15 @@ This project provides utilities for doing awesome things. It is built with TypeS
       // Should create foundation pages
       assert.ok(result.updates.length > 0, 'Should create at least one foundation page');
 
-      // Should create an overview page
-      const overviewUpdate = result.updates.find(u => u.path === 'overview');
-      assert.ok(overviewUpdate, 'Should create overview page');
+      // Should create an architecture overview page (new structure)
+      const overviewUpdate = result.updates.find(u => u.path === 'architecture/overview');
+      assert.ok(overviewUpdate, 'Should create architecture/overview page');
       assert.strictEqual(overviewUpdate.type, 'create');
       assert.ok(overviewUpdate.content.includes('My Awesome Project'), 'Overview should include project name');
 
       // Should have moderate confidence (bootstrap is initial, not authoritative)
-      assert.ok(result.result.confidence >= 0.5 && result.result.confidence <= 0.7,
-        `Confidence should be moderate (0.5-0.7), got ${result.result.confidence}`);
+      assert.ok(result.result.confidence >= 0.4 && result.result.confidence <= 0.7,
+        `Confidence should be moderate (0.4-0.7), got ${result.result.confidence}`);
 
       // Should have findings
       assert.ok(result.result.findings.length > 0, 'Should have findings about what was bootstrapped');
@@ -174,7 +186,11 @@ This project uses npm. Check package.json for available scripts.`);
         'src/index.ts': 'export function main() {}',
       });
 
-      ctx.llm.setDefaultResponse(`# Project Plan - Overview
+      ctx.llm.setDefaultResponse(`---PAGE---
+PATH: architecture/overview
+TITLE: Project Plan - Overview
+CONTENT:
+# Project Plan - Overview
 
 ## Goals
 
@@ -188,7 +204,8 @@ Multi-agent system with orchestrator.
 ## Project Structure
 
 - \`src/index.ts\` - Main entry point
-- \`PLAN.md\` - Project planning document`);
+- \`PLAN.md\` - Project planning document
+---END_PAGE---`);
 
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
@@ -197,8 +214,11 @@ Multi-agent system with orchestrator.
       // Should create pages from PLAN.md
       assert.ok(result.updates.length > 0, 'Should create pages from PLAN.md');
 
-      const overviewUpdate = result.updates.find(u => u.path === 'overview');
-      assert.ok(overviewUpdate, 'Should create overview page');
+      // Find any architecture or overview page
+      const overviewUpdate = result.updates.find(u =>
+        u.path === 'architecture/overview' || u.path.includes('overview')
+      );
+      assert.ok(overviewUpdate, 'Should create an overview page');
       assert.ok(
         overviewUpdate.content.includes('Goals') || overviewUpdate.content.includes('Architecture'),
         'Overview should include content from PLAN.md'

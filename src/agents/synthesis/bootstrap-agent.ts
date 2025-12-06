@@ -132,72 +132,173 @@ export class BootstrapAgent implements Agent {
       c.name === 'read_file' &&
       (c.input['path'] as string)?.toLowerCase().includes('readme')
     );
-    const confidenceDelta = hasReadme ? 0.6 : 0.5;
+    const baseConfidence = hasReadme ? 0.5 : 0.4;
 
-    // Extract title from content or use default
-    const titleMatch = content.match(/^#\s+(.+?)(?:\s+-\s+Overview)?$/m);
-    const title = titleMatch ? titleMatch[1]!.trim() : 'Project Overview';
+    // Parse structured pages from response
+    const pages = this.parsePages(content);
 
-    // Create the main overview page
-    updates.push({
-      type: 'create',
-      path: 'overview',
-      title: `${title} - Overview`,
-      content: content,
-      sourceCommitId: '', // Bootstrap has no source commit
-      agentRunId: '',
-      confidenceDelta,
-    });
+    if (pages.length > 0) {
+      // Use structured pages from LLM
+      for (const page of pages) {
+        updates.push({
+          type: 'create',
+          path: page.path,
+          title: page.title,
+          content: page.content,
+          sourceCommitId: '', // Bootstrap has no source commit
+          agentRunId: '',
+          confidenceDelta: baseConfidence,
+        });
+      }
+    } else {
+      // Fallback: treat entire content as overview page
+      const titleMatch = content.match(/^#\s+(.+?)(?:\s+-\s+Overview)?$/m);
+      const title = titleMatch ? titleMatch[1]!.trim() : 'Project Overview';
+
+      updates.push({
+        type: 'create',
+        path: 'architecture/overview',
+        title: `${title} - Overview`,
+        content: content,
+        sourceCommitId: '',
+        agentRunId: '',
+        confidenceDelta: baseConfidence,
+      });
+    }
 
     return updates;
   }
+
+  /**
+   * Parse structured pages from LLM response.
+   * Expected format: multiple ---PAGE--- blocks with PATH, TITLE, CONTENT.
+   */
+  private parsePages(content: string): Array<{ path: string; title: string; content: string }> {
+    const pages: Array<{ path: string; title: string; content: string }> = [];
+
+    // Match blocks like: ---PAGE---\nPATH: ...\nTITLE: ...\nCONTENT:\n...\n---END_PAGE---
+    const pageBlocks = content.split(/---PAGE---/i).slice(1); // Skip content before first ---PAGE---
+
+    for (const block of pageBlocks) {
+      const cleanBlock = block.replace(/---END_PAGE---/gi, '').trim();
+      if (!cleanBlock) continue;
+
+      const pathMatch = cleanBlock.match(/PATH:\s*(.+?)(?:\n|$)/i);
+      const titleMatch = cleanBlock.match(/TITLE:\s*(.+?)(?:\n|$)/i);
+      const contentMatch = cleanBlock.match(/CONTENT:\s*([\s\S]*?)$/i);
+
+      if (pathMatch && contentMatch) {
+        const path = pathMatch[1]!.trim();
+        const pageContent = contentMatch[1]!.trim();
+
+        // Skip empty pages or commit-style paths
+        if (!pageContent || path.startsWith('commits/')) continue;
+
+        // Extract title from content heading if not explicitly provided
+        let title = titleMatch?.[1]?.trim() || '';
+        if (!title) {
+          const headingMatch = pageContent.match(/^#\s+(.+)$/m);
+          title = headingMatch ? headingMatch[1]!.trim() : this.pathToTitle(path);
+        }
+
+        pages.push({ path, title, content: pageContent });
+      }
+    }
+
+    return pages;
+  }
+
+  /**
+   * Convert a path to a title.
+   */
+  private pathToTitle(path: string): string {
+    const lastPart = path.split('/').pop() ?? path;
+    return lastPart
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
 }
 
-const SYSTEM_PROMPT = `You are a technical writer creating initial documentation for a software project wiki.
+const SYSTEM_PROMPT = `You are a technical writer creating FOUNDATION PAGES for a software project wiki.
 
-Your job is to bootstrap the wiki by scanning the current repository state and creating a comprehensive overview page.
+Your job is to bootstrap the wiki by scanning the repository and creating 3-5 initial concept pages.
+These pages form the foundation that other agents will build upon.
 
-You have access to tools to explore the codebase:
-- read_file: Read any file (README.md, PLAN.md, package.json, source files)
+## Tools Available
+
+- read_file: Read any file (README.md, package.json, source files)
 - search_files: Find files matching glob patterns
 - list_directory: See directory structure
 
-## Instructions
+## Exploration Strategy
 
-1. FIRST, try to read these files (they may not all exist):
-   - README.md (primary source of project info)
-   - PLAN.md (architecture/planning info)
-   - package.json (project metadata, scripts)
-
-2. THEN, list the src/ or main source directory to understand structure
-
-3. Based on what you find, write a comprehensive overview page in Markdown.
+1. Read README.md, PLAN.md, package.json (if they exist)
+2. List the main source directories (src/, lib/, etc.)
+3. Read 2-3 key source files to understand architecture
+4. Identify the main concepts, components, or modules
 
 ## Output Format
 
-Output ONLY the markdown content for the overview page. Start with:
-# [Project Name] - Overview
+Create 3-5 foundation pages using this EXACT format:
 
-Include sections for:
-- What the project does (from README or inferred)
-- Project structure (from directory listing)
-- Getting started / key commands (from package.json scripts if available)
-- Key files or entry points
+---PAGE---
+PATH: architecture/overview
+TITLE: Project Architecture Overview
+CONTENT:
+# Project Architecture Overview
 
-## Important Guidelines
+[2-4 paragraphs describing the overall architecture]
 
-- If README.md exists, extract its key information
-- If no README exists, infer purpose from code structure and package.json
+## Key Components
+- [Component 1]: [description]
+- [Component 2]: [description]
+
+## Technology Stack
+[List key technologies]
+---END_PAGE---
+
+---PAGE---
+PATH: components/[component-name]
+TITLE: [Component Name]
+CONTENT:
+# [Component Name]
+
+[Description of this component]
+
+## Purpose
+[Why this exists]
+
+## Key Files
+- [file1.ts]: [what it does]
+---END_PAGE---
+
+(Create 3-5 pages total)
+
+## Required Pages
+
+You MUST create at least:
+1. **architecture/overview** - High-level project overview and architecture
+2. **guides/getting-started** - How to set up and run the project
+3. **components/[main-component]** - Documentation for the main component/module
+
+You MAY also create (if relevant):
+4. **architecture/[pattern]** - Key architectural patterns used
+5. **components/[other]** - Other significant components
+
+## Guidelines
+
+- Use lowercase paths with hyphens (architecture/event-sourcing, NOT Architecture/EventSourcing)
+- Write as encyclopedia articles, not changelogs
 - Be factual - only document what you actually find
-- Don't make up features or functionality that isn't evident
-- Keep it concise but comprehensive
-- This page will be the starting point for new developers
+- Each page should have 2-4 paragraphs minimum
+- These pages will be enriched by later agents - focus on structure over completeness`;
 
-Do NOT include:
-- Explanations of what you're doing
-- Meta-commentary about the documentation
-- Apologies for missing information`;
+const USER_PROMPT = `Bootstrap this wiki by exploring the repository and creating 3-5 foundation pages.
 
-const USER_PROMPT = `Please bootstrap the wiki by exploring this repository and creating an overview page.
+1. First, read README.md and package.json to understand the project
+2. List the main source directories
+3. Read 2-3 key source files
+4. Create foundation pages following the ---PAGE--- format
 
-Start by reading README.md, PLAN.md, and package.json (if they exist), then list the source directory structure. Based on what you find, create a comprehensive overview page.`;
+Remember: Create architecture/overview, guides/getting-started, and at least one component page.`;

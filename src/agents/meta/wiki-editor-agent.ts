@@ -317,6 +317,9 @@ CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NO
 
   /**
    * Parse the LLM's decision response.
+   *
+   * IMPORTANT: When parsing fails or is ambiguous, we default to MERGE rather than SKIP.
+   * This follows the principle: "information is valuable, preserve it unless clearly obsolete."
    */
   private parseDecision(
     response: string,
@@ -327,10 +330,19 @@ CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NO
     const reasoningMatch = response.match(/REASONING:\s*([^\n]+)/i);
     const contentMatch = response.match(/CONTENT:\s*([\s\S]*?)(?=$)/i);
 
-    const llmDecision = decisionMatch?.[1]?.toLowerCase() ?? 'skip';
+    // Default to 'merge' when parsing fails - preserve information rather than losing it
+    const llmDecision = decisionMatch?.[1]?.toLowerCase() ?? 'merge';
     const reasoning =
       reasoningMatch?.[1]?.trim() ||
-      'Unable to parse reasoning from response';
+      'Unable to parse reasoning - defaulting to merge to preserve information';
+
+    // Handle SKIP decision - explicitly requested skip
+    if (llmDecision === 'skip') {
+      return {
+        action: 'skip',
+        reasoning,
+      };
+    }
 
     // Handle HISTORY decision
     if (llmDecision === 'history') {
@@ -361,16 +373,6 @@ CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NO
       };
     }
 
-    // Handle MERGE decision
-    if (llmDecision === 'merge') {
-      const content = contentMatch?.[1]?.trim() || editRequest.proposedContent;
-      return {
-        action: 'apply',
-        reasoning: `Merged historical content: ${reasoning}`,
-        content,
-      };
-    }
-
     // Handle CONFLICT decision
     if (llmDecision === 'conflict') {
       return {
@@ -379,10 +381,15 @@ CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NO
       };
     }
 
-    // Default to skip
+    // Handle MERGE decision (now the default)
+    // This includes explicit 'merge' and any unrecognized/missing decision
+    const content = contentMatch?.[1]?.trim() || editRequest.proposedContent;
     return {
-      action: 'skip',
-      reasoning,
+      action: 'apply',
+      reasoning: llmDecision === 'merge'
+        ? `Merged historical content: ${reasoning}`
+        : `Defaulted to merge (preserve information): ${reasoning}`,
+      content,
     };
   }
 

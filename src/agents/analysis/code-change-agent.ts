@@ -11,10 +11,15 @@ import {
 } from '../agent-helpers.js';
 
 /**
- * Code Change Agent - Standard analysis of what changed in a commit.
+ * Code Change Agent - Concept-focused analysis of code changes.
  *
- * This is the basic analysis agent that looks at commits and generates
- * wiki content describing what changed and why.
+ * This agent analyzes commits and updates CONCEPT pages (not commit pages).
+ * Instead of creating a page per commit, it identifies which concepts are
+ * affected and enriches those concept pages with information from the commit.
+ *
+ * This prevents wiki fragmentation where hundreds of commit pages make
+ * information hard to find. Instead, information accumulates on concept
+ * pages like "architecture/cqrs" or "components/auth-service".
  */
 export class CodeChangeAgent implements Agent {
   readonly type: AgentType = 'code-change';
@@ -123,14 +128,11 @@ export class CodeChangeAgent implements Agent {
   ): string {
     const truncatedDiff = diff.length > 10000 ? diff.slice(0, 10000) + '\n... (diff truncated)' : diff;
 
-    return `Analyze this git commit and write wiki articles about the changes.
+    return `Analyze this code change and update the relevant CONCEPT wiki pages.
 
-## Commit Information
+## Code Change Context
 
-**SHA:** ${commit.sha.slice(0, 8)}
 **Message:** ${commit.message}
-**Author:** ${commit.authorName}
-**Date:** ${commit.committedAt.toISOString()}
 **Files Changed:** ${commit.diffSummary.affectedFiles.length}
 **Lines:** +${commit.diffSummary.linesAdded} / -${commit.diffSummary.linesDeleted}
 
@@ -150,39 +152,51 @@ ${fileContents}
 ${truncatedDiff}
 \`\`\`
 
-Write documentation as wiki articles that a developer would find useful. Focus on:
-1. What capability or change was introduced (not "this commit adds...")
-2. Why it matters and how it fits into the system
-3. Key technical details and design decisions
-4. Any patterns, conventions, or gotchas
+## Your Task
 
-Format your response as follows:
+Identify what CONCEPTS this change affects and create/update wiki pages for those concepts.
 
-PAGE_TITLE:
-[Descriptive title like "Multi-Agent Processing Pipeline" or "CQRS Architecture Implementation" - NOT "Commit abc123"]
+**CRITICAL: Do NOT create a "commit page" or changelog entry.** Instead:
+1. Identify the component, pattern, or feature being modified
+2. Create or update a CONCEPT page (e.g., "architecture/cqrs", "components/auth-service")
+3. Write the page as if explaining the concept to someone who doesn't know about commits
 
-SUMMARY:
-[2-3 paragraph article written in encyclopedia style. Do NOT start with "This commit..." - write as if explaining the feature/change to someone who doesn't know it came from a commit. Focus on WHAT exists and WHY, not on the commit itself.]
+**Good paths:** architecture/event-sourcing, components/user-auth, patterns/repository, services/email-sender
+**Bad paths:** commits/abc123, changes/2024-01-15, updates/fix-auth-bug
+
+## Response Format
+
+CONCEPT:
+[What concept/component/feature does this change affect? 1-2 sentences.]
 
 FINDINGS:
 - [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths comma-separated]
 
-WIKI_UPDATES:
-For each additional wiki page that should be created or updated, provide FULL article content.
-Write each page as a complete, standalone article (2-4 paragraphs minimum).
+WIKI_PAGES:
+For each concept page that should be created or updated, provide FULL article content.
 
-=== [PAGE_PATH] [ACTION:create/update/merge] ===
-[Write the FULL markdown content for this wiki page here.
-Include:
-- A clear explanation of what this component/concept is
-- How it works (mechanism, key functions, data flow)
-- Usage examples or patterns if applicable
-- Any important caveats or edge cases
+=== [CONCEPT_PATH] [ACTION:create/update/merge] ===
+[Write the FULL markdown content for this concept page.
 
-Do NOT just write a brief description - write a complete article.]
+Start with: # [Concept Title]
+
+Include these sections:
+## Overview
+What is this? Why does it exist? (2-3 paragraphs)
+
+## How It Works
+Technical details, control flow, key functions (2-4 paragraphs)
+
+## Usage
+How to use/configure this. Code examples from tests if available.
+
+## Related
+Links to related concepts: [[other-concept]]
+
+Do NOT mention commits, dates, or changelogs. Write as encyclopedia content.]
 === END ===
 
-(Repeat for each page)
+(Include 1-3 concept pages. Most changes affect 1-2 concepts.)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -190,27 +204,21 @@ CONFIDENCE: [0-1 value]
 
   private parseResponse(response: string): ParsedAnalysis {
     const analysis: ParsedAnalysis = {
-      pageTitle: '',
+      concept: '',
       summary: '',
       findings: [],
       wikiUpdates: [],
       confidence: 0.5,
     };
 
-    // Parse page title
-    const titleMatch = response.match(/PAGE_TITLE:\s*(.+?)(?=\n|SUMMARY:|$)/i);
-    if (titleMatch) {
-      analysis.pageTitle = titleMatch[1]!.trim();
-    }
-
-    // Parse summary
-    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i);
-    if (summaryMatch) {
-      analysis.summary = summaryMatch[1]!.trim();
+    // Parse concept description
+    const conceptMatch = response.match(/CONCEPT:\s*(.+?)(?=\n|FINDINGS:|$)/is);
+    if (conceptMatch) {
+      analysis.concept = conceptMatch[1]!.trim();
     }
 
     // Parse findings
-    const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
+    const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
     if (findingsMatch) {
       const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
       for (const line of findingLines) {
@@ -226,16 +234,21 @@ CONFIDENCE: [0-1 value]
       }
     }
 
-    // Parse wiki updates - new format with full content blocks
-    const updatesSection = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesSection) {
+    // Parse wiki pages (concept pages) - supports both WIKI_PAGES and WIKI_UPDATES
+    const pagesSection = response.match(/WIKI_(?:PAGES|UPDATES):\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    if (pagesSection) {
       // Match blocks like: === [path] [action] ===\n[content]\n=== END ===
       const blockRegex = /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
       let blockMatch;
-      while ((blockMatch = blockRegex.exec(updatesSection[1]!)) !== null) {
+      while ((blockMatch = blockRegex.exec(pagesSection[1]!)) !== null) {
         const path = blockMatch[1]!.trim();
         const action = blockMatch[2]!.toLowerCase() as 'create' | 'update' | 'merge';
         const content = blockMatch[3]!.trim();
+
+        // Skip commit pages - enforce concept-only output
+        if (path.startsWith('commits/') || path.startsWith('changes/') || path.startsWith('updates/')) {
+          continue;
+        }
 
         if (content && content.length > 0) {
           analysis.wikiUpdates.push({
@@ -245,21 +258,11 @@ CONFIDENCE: [0-1 value]
           });
         }
       }
+    }
 
-      // Fallback: also try to parse old format for backward compatibility
-      if (analysis.wikiUpdates.length === 0) {
-        const updateLines = updatesSection[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-        for (const line of updateLines) {
-          const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*(.+)$/i);
-          if (match) {
-            analysis.wikiUpdates.push({
-              path: match[1]!.trim(),
-              action: match[2]!.toLowerCase() as 'create' | 'update' | 'merge',
-              content: match[3]!.trim(), // Use description as content for legacy format
-            });
-          }
-        }
-      }
+    // Use concept as summary if no explicit summary
+    if (!analysis.summary && analysis.concept) {
+      analysis.summary = analysis.concept;
     }
 
     // Parse confidence
@@ -278,53 +281,17 @@ CONFIDENCE: [0-1 value]
   ): WikiPageUpdate[] {
     const updates: WikiPageUpdate[] = [];
 
-    // Use descriptive title from LLM, fall back to commit message summary
-    const pageTitle = analysis.pageTitle || extractTitleFromMessage(commit.message);
-    const commitPagePath = `commits/${commit.sha.slice(0, 8)}`;
-
-    // Build findings section only if there are findings
-    const findingsSection = analysis.findings.length > 0
-      ? `## Key Findings
-
-${analysis.findings.map(f => `- **${f.type}** (${f.importance}): ${f.description}`).join('\n')}`
-      : '';
-
-    const commitPageContent = `# ${pageTitle}
-
-${analysis.summary}
-
-${findingsSection}
-
-## Source
-
-- **Commit:** ${commit.sha.slice(0, 8)}
-- **Files:** ${commit.diffSummary.affectedFiles.map(f => `\`${f}\``).join(', ')}
-`;
-
-    updates.push({
-      type: 'create',
-      path: commitPagePath,
-      title: pageTitle,  // Store title separately for wiki page
-      content: commitPageContent,
-      sourceCommitId: commit.sha,
-      agentRunId: '', // Will be set by the executor
-      confidenceDelta: 0.1,
-    });
-
-    // Generate updates for suggested wiki pages
+    // Generate updates for concept pages ONLY (no commit pages)
     for (const wikiUpdate of analysis.wikiUpdates) {
-      // Skip commit page as we already handle it
-      if (wikiUpdate.path.startsWith('commits/')) continue;
+      // Double-check: skip any commit-style pages that slipped through
+      if (wikiUpdate.path.startsWith('commits/') ||
+          wikiUpdate.path.startsWith('changes/') ||
+          wikiUpdate.path.startsWith('updates/')) {
+        continue;
+      }
 
       // Use the full content provided by the LLM
-      // Add a source footer if not already present
-      let content = wikiUpdate.content;
-      if (!content.includes('*Updated based on commit') && !content.includes('*Source:')) {
-        content = `${content}
-
----
-*Updated based on commit ${commit.sha.slice(0, 8)}*`;
-      }
+      const content = wikiUpdate.content;
 
       // Extract title from content if it starts with a heading, otherwise generate from path
       const titleMatch = content.match(/^#\s+(.+)$/m);
@@ -335,18 +302,110 @@ ${findingsSection}
         path: wikiUpdate.path,
         title,
         content,
+        sourceCommitId: commit.sha,  // Track provenance without creating commit page
+        agentRunId: '',
+        confidenceDelta: wikiUpdate.action === 'create' ? 0.4 : 0.2,
+      });
+    }
+
+    // If no concept pages were generated, create a fallback based on file paths
+    if (updates.length === 0 && analysis.summary) {
+      const fallbackPath = this.inferConceptPath(commit.diffSummary.affectedFiles);
+      const fallbackTitle = pathToTitle(fallbackPath);
+
+      updates.push({
+        type: 'update',  // Prefer update to accumulate on existing pages
+        path: fallbackPath,
+        title: fallbackTitle,
+        content: `# ${fallbackTitle}\n\n${analysis.summary}`,
         sourceCommitId: commit.sha,
         agentRunId: '',
-        confidenceDelta: wikiUpdate.action === 'create' ? 0.3 : 0.15,
+        confidenceDelta: 0.15,
       });
     }
 
     return updates;
   }
+
+  /**
+   * Infer a concept page path from affected file paths.
+   * This provides a fallback when the LLM doesn't output explicit concept pages.
+   */
+  private inferConceptPath(affectedFiles: string[]): string {
+    if (affectedFiles.length === 0) {
+      return 'components/general';
+    }
+
+    // Find common directory prefix
+    const dirs = affectedFiles
+      .map(f => f.split('/').slice(0, -1))  // Remove filename
+      .filter(parts => parts.length > 0);
+
+    if (dirs.length === 0) {
+      return 'components/root';
+    }
+
+    // Get the most common first directory
+    const firstDirs = dirs.map(d => d[0]).filter(Boolean);
+    const dirCounts = new Map<string, number>();
+    for (const dir of firstDirs) {
+      dirCounts.set(dir!, (dirCounts.get(dir!) || 0) + 1);
+    }
+
+    let maxDir = 'src';
+    let maxCount = 0;
+    for (const [dir, count] of dirCounts) {
+      if (count > maxCount) {
+        maxDir = dir;
+        maxCount = count;
+      }
+    }
+
+    // Map common source directories to wiki categories
+    const categoryMap: Record<string, string> = {
+      'src': 'components',
+      'lib': 'components',
+      'packages': 'packages',
+      'services': 'services',
+      'agents': 'agents',
+      'domain': 'domain',
+      'tests': 'testing',
+      'docs': 'documentation',
+    };
+
+    const category = categoryMap[maxDir] || 'components';
+
+    // Get second-level directory if available
+    const secondDirs = dirs
+      .filter(d => d[0] === maxDir && d.length > 1)
+      .map(d => d[1]);
+
+    if (secondDirs.length > 0) {
+      const secondCounts = new Map<string, number>();
+      for (const dir of secondDirs) {
+        secondCounts.set(dir!, (secondCounts.get(dir!) || 0) + 1);
+      }
+
+      let maxSecond = '';
+      let maxSecondCount = 0;
+      for (const [dir, count] of secondCounts) {
+        if (count > maxSecondCount) {
+          maxSecond = dir;
+          maxSecondCount = count;
+        }
+      }
+
+      if (maxSecond) {
+        return `${category}/${maxSecond}`;
+      }
+    }
+
+    return `${category}/${maxDir}`;
+  }
 }
 
 interface ParsedAnalysis {
-  pageTitle: string;
+  concept: string;  // Description of the concept(s) affected by this change
   summary: string;
   findings: Array<{
     type: string;
@@ -373,77 +432,59 @@ function pathToTitle(path: string): string {
     .join(' ');
 }
 
-/**
- * Extract a title from a commit message.
- * Takes the first line and cleans it up.
- */
-function extractTitleFromMessage(message: string): string {
-  const firstLine = message.split('\n')[0] ?? message;
-  // Remove common prefixes like "feat:", "fix:", etc.
-  const cleaned = firstLine.replace(/^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert)(\([^)]+\))?:\s*/i, '');
-  // Capitalize first letter
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-}
+const SYSTEM_PROMPT = `You are a technical writer maintaining a concept-focused wiki from code changes.
 
-const SYSTEM_PROMPT = `You are a technical writer creating wiki documentation from code changes.
+## Core Principle: CONCEPT PAGES, NOT COMMIT PAGES
 
-You have access to tools to explore the actual source code beyond just the diff:
-- read_file: Read the FULL contents of any file (not just the changed lines)
-- search_files: Find related files by glob pattern (e.g., find test files)
+Your job is to update CONCEPT pages (like "architecture/cqrs" or "services/auth") - NOT create commit summaries.
+When code changes, identify WHAT CONCEPT it affects and update that concept's wiki page.
+
+**DO NOT** create pages like:
+- commits/abc123
+- changes/fix-auth-bug
+- updates/2024-01-15
+
+**DO** create/update pages like:
+- architecture/event-sourcing
+- components/user-service
+- patterns/repository
+- services/email-sender
+
+## Tools Available
+
+You have access to tools to explore the source code:
+- read_file: Read the FULL contents of any file
+- search_files: Find related files by glob pattern
 - list_directory: Understand project structure
 
-WORKFLOW - Use tools to understand context:
-1. If the diff shows changes to a file, use read_file to see the COMPLETE file
-2. Search for related test files (e.g., "**/*.test.ts", "**/*-test.ts", "**/*.spec.ts")
-3. Read imports/dependencies to understand how the changed code fits in
-4. Only then write your analysis with full context
+## Workflow
 
-TEST-BASED USAGE EXAMPLES - Extract real code examples from tests:
-When documenting a component, function, or module, use search_files to find related test files and extract real usage examples from them. Test code demonstrates how the component is actually meant to be used with verified, working API calls.
+1. Read the changed files to understand WHAT concept is being modified
+2. Search for related test files to find usage examples
+3. Identify the 1-2 concepts this change affects
+4. Write/update those concept pages with the new information
 
-Why this matters:
-- Tests are verified working code - they pass CI and reflect actual usage patterns
-- Test examples show correct API signatures, avoiding invented or incorrect examples
-- Tests often cover edge cases and configuration options developers need to know about
+## Writing Style
 
-How to find and use test examples:
-1. Use search_files with patterns like "**/*.test.ts", "**/*-test.ts", "**/*.spec.ts"
-2. Look for tests related to the changed files (e.g., if analyzing "auth.ts", search for "auth.test.ts")
-3. Read the test file to find describe/it blocks showing how the component is called
-4. Include relevant test snippets as usage examples in your documentation
-5. Prioritize examples from tests over inventing your own - real test code is more trustworthy
+Write as encyclopedia articles:
+- BAD: "This commit adds authentication..."
+- GOOD: "The authentication system provides secure user login..."
 
-CRITICAL: Write as encyclopedia articles, NOT commit summaries.
+Every concept page should have:
+1. **Overview**: What is this? Why does it exist?
+2. **How It Works**: Technical details, control flow, key functions
+3. **Usage**: Code examples (preferably from tests)
+4. **Related**: Links to related concepts
 
-BAD: "This commit adds a new authentication system..."
-GOOD: "The authentication system provides secure user login using OAuth 2.0..."
+## Key Rules
 
-Your documentation should:
-- Describe WHAT EXISTS, not what was committed
-- Explain WHY the system works this way (use tools to find out!)
-- Help developers understand and use the code
-- Read like Wikipedia, not a changelog
+1. **Accumulate knowledge**: Update existing concept pages rather than creating new ones
+2. **No commit references**: Don't mention commits, dates, or changelogs in content
+3. **Use real examples**: Extract code examples from test files when available
+4. **Be specific**: Write about THIS code, not generic concepts
 
-## Required Content Depth
-
-Every wiki page you create should address:
-
-1. **Purpose**: What problem does this solve? Why does it exist?
-2. **Mechanism**: HOW does it work? Describe the control flow, key functions, and interactions.
-3. **Usage**: How would a developer use or configure this? Include examples from tests if you found them.
-4. **Boundaries**: What are the limitations, edge cases, or failure modes?
-
-If you cannot determine any of these from the code, state what's unclear rather than omitting the section.
-
-Give each page a descriptive title that captures the topic (e.g., "Multi-Agent Processing Pipeline", "OAuth Authentication Flow"), NOT "Commit abc123".
-
-When suggesting wiki pages:
-- Use lowercase paths with hyphens (e.g., "architecture/cqrs-pattern")
-- Group related content (e.g., "components/auth", "guides/testing")
-- Prefer updating existing pages over creating new ones for small changes
-
-Your confidence should reflect:
-- 0.9+: Clear implementation, well-documented code, verified with source
-- 0.7-0.9: Reasonable inference from code and context
-- 0.5-0.7: Some ambiguity, might need verification
-- <0.5: Significant uncertainty, needs review`;
+Your confidence should reflect documentation completeness:
+- 0.9+: Clear, complete documentation with examples
+- 0.7-0.9: Good coverage but some gaps
+- 0.5-0.7: Partial documentation, needs enrichment
+- <0.5: Minimal coverage, significant gaps`;

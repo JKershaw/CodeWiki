@@ -60,21 +60,32 @@ export function validateCredentials(user: string, pass: string) {
         createdAt: new Date(),
       });
 
-      // Configure mock LLM response
-      ctx.llm.setDefaultResponse(`PAGE_TITLE:
-User Authentication System
-
-SUMMARY:
-The authentication system provides secure user login functionality.
-It validates user credentials against stored values and returns
-authentication status.
+      // Configure mock LLM response - new concept-focused format
+      ctx.llm.setDefaultResponse(`CONCEPT:
+This change affects the user authentication system, adding login and credential validation functions.
 
 FINDINGS:
 - [SECURITY] [IMPORTANCE:high] Basic credential validation implemented [src/auth.ts]
 - [CODE_PATTERN] [IMPORTANCE:medium] Simple validation pattern used [src/auth.ts]
 
-WIKI_UPDATES:
-- [commits/${commitSha.slice(0, 8)}] [create] Authentication implementation
+WIKI_PAGES:
+=== [components/auth] [create] ===
+# User Authentication System
+
+The authentication system provides secure user login functionality.
+It validates user credentials against stored values and returns
+authentication status.
+
+## Overview
+
+This component handles user authentication for the application.
+
+## How It Works
+
+The system provides two main functions:
+- \`login()\` - Entry point for authentication
+- \`validateCredentials()\` - Performs actual credential checking
+=== END ===
 
 CONFIDENCE: 0.8`);
 
@@ -89,11 +100,15 @@ CONFIDENCE: 0.8`);
       assert.ok(result.result.findings.length > 0, 'Should have findings');
       assert.strictEqual(result.result.confidence, 0.8);
 
-      // Verify commit page was created
+      // Verify concept page was created (not commit page)
+      const conceptUpdate = result.updates.find(u => u.path === 'components/auth');
+      assert.ok(conceptUpdate, 'Should create a concept page');
+      assert.strictEqual(conceptUpdate.type, 'create');
+      assert.ok(conceptUpdate.content.includes('Authentication'), 'Page should mention authentication');
+
+      // Verify NO commit page was created
       const commitUpdate = result.updates.find(u => u.path.startsWith('commits/'));
-      assert.ok(commitUpdate, 'Should create a commit page');
-      assert.strictEqual(commitUpdate.type, 'create');
-      assert.ok(commitUpdate.content.includes('Authentication'), 'Page should mention authentication');
+      assert.ok(!commitUpdate, 'Should NOT create a commit page (concept-focused design)');
     });
 
     it('handles commits with multiple files', async () => {
@@ -128,17 +143,30 @@ CONFIDENCE: 0.8`);
         createdAt: new Date(),
       });
 
-      ctx.llm.setDefaultResponse(`PAGE_TITLE:
-Authentication Module
-
-SUMMARY:
-A complete authentication module with middleware support.
+      // Configure mock LLM response - new concept-focused format
+      ctx.llm.setDefaultResponse(`CONCEPT:
+This change introduces a complete authentication module with middleware support.
 
 FINDINGS:
 - [ARCHITECTURE] [IMPORTANCE:medium] Modular auth design [src/auth.ts, src/middleware.ts]
 
-WIKI_UPDATES:
-- [commits/${commitSha.slice(0, 8)}] [create] Auth module implementation
+WIKI_PAGES:
+=== [components/auth-module] [create] ===
+# Authentication Module
+
+A complete authentication module with middleware support.
+
+## Overview
+
+This module provides authentication functionality for the application,
+including middleware for protecting routes.
+
+## Key Components
+
+- \`auth.ts\` - Core authentication functions
+- \`middleware.ts\` - Express/route middleware
+- \`types.ts\` - TypeScript type definitions
+=== END ===
 
 CONFIDENCE: 0.75`);
 
@@ -146,8 +174,12 @@ CONFIDENCE: 0.75`);
       const agentCtx = await ctx.agentContext(repoId);
       const result = await agent.runOnCommit(commitSha, agentCtx);
 
-      assert.ok(result.updates.length > 0);
+      assert.ok(result.updates.length > 0, 'Should produce concept page updates');
       assert.strictEqual(result.result.confidence, 0.75);
+
+      // Verify concept page was created (not commit page)
+      const conceptUpdate = result.updates.find(u => !u.path.startsWith('commits/'));
+      assert.ok(conceptUpdate, 'Should create a concept page, not a commit page');
     });
   });
 });
