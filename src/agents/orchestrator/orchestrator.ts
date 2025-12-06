@@ -11,7 +11,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
-import { createWorkItem } from '../../domain/work-item.js';
+import { createWorkItem, Priority } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
@@ -28,7 +28,6 @@ import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 import {
   executeStrategies,
   codebaseExplorationStrategy,
-  Priority,
   type StrategyContext,
 } from './strategies.js';
 

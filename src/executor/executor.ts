@@ -4,7 +4,7 @@ import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { createWorkItem, getTargetCommitId, getTargetPath } from '../domain/work-item.js';
+import { createWorkItem, getTargetCommitId, getTargetPath, Priority } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -71,9 +71,6 @@ import { createEditRequest } from '../domain/edit-request.js';
 
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../agents/registry.js';
-
-// Import priority levels for work items
-import { Priority } from '../agents/orchestrator/strategies.js';
 
 /**
  * Queue water marks for proactive refill.

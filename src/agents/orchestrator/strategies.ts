@@ -8,7 +8,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { GitService } from '../../services/git/index.js';
-import { createWorkItem, type WorkItem } from '../../domain/work-item.js';
+import { createWorkItem, Priority, type WorkItem } from '../../domain/work-item.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import type { AgentRun } from '../../domain/agent-run.js';
 import type { OrchestratorContext } from './context-gatherer.js';
@@ -31,19 +31,6 @@ import {
 import {
   ANALYSIS_AGENTS,
 } from '../../agents/registry.js';
-
-/**
- * Priority levels for work items.
- */
-export const Priority = {
-  USER_REQUEST: 100,
-  EXPLORATION: 80,
-  RECENT_COMMIT: 75,
-  HISTORICAL_COMMIT: 60,
-  META: 50,
-  LOW_CONFIDENCE: 45,
-  SYNTHESIS: 40,
-};
 
 /**
  * Context passed to all strategies.

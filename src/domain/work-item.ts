@@ -79,18 +79,18 @@ export const Priority = {
   USER_REQUEST: 100,
   /** Conflicts that need resolution */
   CONFLICT_RESOLUTION: 90,
-  /** Low-confidence pages */
-  LOW_CONFIDENCE: 80,
-  /** Codebase exploration (documenting undocumented code) - runs before commit analysis to establish current state */
-  EXPLORATION: 75,
+  /** Codebase exploration (documenting undocumented code) - runs before commit analysis */
+  EXPLORATION: 80,
   /** Recent commits (within last week) */
-  RECENT_COMMIT: 70,
+  RECENT_COMMIT: 75,
+  /** Historical commits (older than a week) */
+  HISTORICAL_COMMIT: 60,
+  /** Meta work (structure, links, quality) */
+  META: 50,
+  /** Low-confidence pages needing improvement */
+  LOW_CONFIDENCE: 45,
   /** Synthesis work (guides, overviews) */
-  SYNTHESIS: 50,
-  /** Historical commits */
-  HISTORICAL_COMMIT: 30,
-  /** Meta work (structure, links) */
-  META: 20,
+  SYNTHESIS: 40,
   /** Background maintenance */
   BACKGROUND: 10,
 } as const;
