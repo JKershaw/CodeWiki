@@ -70,8 +70,9 @@ describe('codebase-tools', () => {
 
     it('returns error string for non-existent files', async () => {
       const result = await readFileTool.execute({ path: 'nonexistent.txt' }, context);
-      assert.ok(result.startsWith('Error reading'));
+      assert.ok(result.startsWith('Error'));
       assert.ok(result.includes('nonexistent.txt'));
+      assert.ok(result.includes('not found'));
     });
 
     it('returns error string for files exceeding size limit', async () => {
@@ -192,7 +193,9 @@ describe('codebase-tools', () => {
 
     it('returns error for non-existent directories', async () => {
       const result = await listDirectoryTool.execute({ path: 'nonexistent' }, context);
-      assert.ok(result.startsWith('Error listing'));
+      assert.ok(result.startsWith('Error'));
+      assert.ok(result.includes('nonexistent'));
+      assert.ok(result.includes('not found'));
     });
   });
 

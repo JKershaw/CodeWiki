@@ -41,9 +41,11 @@ export {
   readSourceFileTool,
   searchSourceFilesTool,
   listSourceDirectoryTool,
-  validateSourcePath,
   sourceTools,
 } from './source-tools.js';
+
+// Re-export validatePath from base-tools (replaces validateSourcePath)
+export { validatePath } from '../base-tools.js';
 
 export {
   getPageProvenanceTool,
