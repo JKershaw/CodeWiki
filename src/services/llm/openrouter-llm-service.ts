@@ -359,7 +359,10 @@ export class OpenRouterLLMService extends BaseLLMService {
         const toolCallsInResponse = assistantMessage?.tool_calls ?? [];
 
         // If no tool calls, we're done
-        if (toolCallsInResponse.length === 0 || choice?.finish_reason === 'stop') {
+        // Note: Only check for absence of tool calls - some models incorrectly set
+        // finish_reason='stop' even when they have tool_calls that need executing.
+        // When tool_calls are present, we should always execute them.
+        if (toolCallsInResponse.length === 0) {
           finalContent = textContent;
           break;
         }
