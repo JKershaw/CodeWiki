@@ -8,7 +8,7 @@
 
 import type { Commit } from '../../domain/commit.js';
 import type { Repo } from '../../domain/repo.js';
-import type { GitHubRepoService, DirectoryEntry, TreeEntry } from '../github/github-repo-service.js';
+import type { GitHubRepoService } from '../github/github-repo-service.js';
 import type { GitService } from '../git/git-service.js';
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, relative, sep } from 'path';
@@ -146,31 +146,26 @@ function createGitHubRepositoryService(
     },
 
     async getFileTree(_repo: Repo, ref?: string): Promise<string[]> {
-      try {
-        // Get the default branch (or use provided ref)
-        let treeRef = ref;
-        if (!treeRef) {
-          try {
-            treeRef = await githubService.getDefaultBranch(owner, repoName);
-          } catch (branchError) {
-            console.warn(`getFileTree: getDefaultBranch failed for ${owner}/${repoName}: ${branchError}`);
-            throw branchError;
-          }
-        }
-
-        // Get the tree
+      // Get the default branch (or use provided ref)
+      let treeRef = ref;
+      if (!treeRef) {
         try {
-          const tree = await githubService.getTree(owner, repoName, treeRef, true);
-          return tree
-            .filter(entry => entry.type === 'blob')
-            .map(entry => entry.path);
-        } catch (treeError) {
-          console.warn(`getFileTree: getTree failed for ${owner}/${repoName} at ref '${treeRef}': ${treeError}`);
-          throw treeError;
+          treeRef = await githubService.getDefaultBranch(owner, repoName);
+        } catch (branchError) {
+          console.warn(`getFileTree: getDefaultBranch failed for ${owner}/${repoName}: ${branchError}`);
+          throw branchError;
         }
-      } catch (error) {
-        // Re-throw - error already logged above
-        throw error;
+      }
+
+      // Get the tree
+      try {
+        const tree = await githubService.getTree(owner, repoName, treeRef, true);
+        return tree
+          .filter(entry => entry.type === 'blob')
+          .map(entry => entry.path);
+      } catch (treeError) {
+        console.warn(`getFileTree: getTree failed for ${owner}/${repoName} at ref '${treeRef}': ${treeError}`);
+        throw treeError;
       }
     },
 

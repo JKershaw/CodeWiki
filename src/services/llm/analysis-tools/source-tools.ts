@@ -12,17 +12,10 @@ import { readFile, readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import fg from 'fast-glob';
 import { minimatch } from 'minimatch';
-import type { AnalysisToolDefinition, AnalysisToolContext } from './types.js';
+import type { AnalysisToolDefinition } from './types.js';
 import { loadIgnorePatterns } from '../../cwignore.js';
 
 const DEFAULT_MAX_FILE_SIZE = 100_000; // 100KB
-
-/**
- * Check if source code access is available (either local or via API).
- */
-function hasSourceAccess(context: AnalysisToolContext): boolean {
-  return !!(context.repoPath || (context.repoService && context.repo));
-}
 
 /**
  * Validate that a path is within the repository root.

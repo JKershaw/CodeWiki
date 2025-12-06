@@ -100,10 +100,12 @@ export class MongoCommitRepository implements CommitRepository {
     // First remove any existing record for this agent type to avoid duplicates
     await this.collection.updateOne(
       byId(commitId),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       { $pull: { processedBy: { agentType: record.agentType } } } as any
     );
     await this.collection.updateOne(
       byId(commitId),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       { $push: { processedBy: record } } as any
     );
   }

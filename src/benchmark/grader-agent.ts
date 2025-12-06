@@ -10,7 +10,7 @@
 
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { ToolContext, ToolDefinition } from '../services/llm/tools.js';
-import { readFileTool, searchFilesTool, listDirectoryTool, codebaseTools } from '../services/llm/codebase-tools.js';
+import { readFileTool, searchFilesTool, listDirectoryTool } from '../services/llm/codebase-tools.js';
 import type { BenchmarkQuestion, BenchmarkGrade } from '../domain/benchmark.js';
 import type { RepositoryService } from '../services/repository/repository-service.js';
 import type { Repo } from '../domain/repo.js';
