@@ -462,7 +462,12 @@ export class ContextGatherer {
   ): Promise<DirectoryNode | null> {
     // Look up the repository
     const repo = await this.repos.repos.findById(repoId);
-    if (!repo || !this.repoServiceFactory) {
+    if (!repo) {
+      console.warn(`buildCoverageTree: repo not found for ${repoId}`);
+      return null;
+    }
+    if (!this.repoServiceFactory) {
+      console.warn(`buildCoverageTree: repoServiceFactory not available`);
       return null;
     }
 
@@ -472,10 +477,16 @@ export class ContextGatherer {
       // Get all files via unified RepositoryService interface
       const allFiles = await repoService.getFileTree(repo);
 
+      if (allFiles.length === 0) {
+        console.warn(`buildCoverageTree: getFileTree returned empty for ${repo.fullName}`);
+        return null;
+      }
+
       // Filter to source files only (any directory, not just src/)
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
+        console.warn(`buildCoverageTree: no source files found in ${allFiles.length} files for ${repo.fullName}`);
         return null;
       }
 
@@ -502,7 +513,8 @@ export class ContextGatherer {
 
       // Build tree from file paths
       return this.buildTreeFromPaths(rootFiles, wikiPages, rootDir);
-    } catch {
+    } catch (error) {
+      console.warn(`Failed to build coverage tree: ${error}`);
       return null;
     }
   }
