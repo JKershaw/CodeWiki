@@ -249,17 +249,19 @@ export function parseOrchestratorResponse(
           console.warn(`Exploration agent ${agentType} missing targetPath`);
           continue;
         }
+        // Normalize path: remove trailing slashes for consistent matching
+        const normalizedPath = target.replace(/\/+$/, '');
         // Validate path looks like a directory path (basic check)
-        if (!target.startsWith('src/') && !target.startsWith('lib/')) {
-          console.warn(`Invalid path for ${agentType}: ${target} (must start with src/ or lib/)`);
+        if (!normalizedPath.startsWith('src/') && !normalizedPath.startsWith('lib/')) {
+          console.warn(`Invalid path for ${agentType}: ${normalizedPath} (must start with src/ or lib/)`);
           continue;
         }
         // If validPaths provided, check against it
-        if (validPaths && !validPaths.has(target)) {
-          console.warn(`Path not found in coverage tree for ${agentType}: ${target}`);
+        if (validPaths && !validPaths.has(normalizedPath)) {
+          console.warn(`Path not found in coverage tree for ${agentType}: ${normalizedPath}`);
           continue;
         }
-        validWorkItems.push({ agentType, targetPath: target, reason });
+        validWorkItems.push({ agentType, targetPath: normalizedPath, reason });
         continue;
       }
 

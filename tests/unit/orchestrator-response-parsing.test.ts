@@ -454,6 +454,21 @@ codebase-explorer,lib/utils,Library utilities`;
       assert.strictEqual(result.workItems[0].targetPath, 'lib/utils');
     });
 
+    it('should normalize paths with trailing slashes', () => {
+      const response = `# Reasoning
+Paths with trailing slashes
+
+# Work Items
+codebase-explorer,src/agents/,First directory with trailing slash
+codebase-explorer,src/services/,Second directory with trailing slash`;
+
+      const result = parseOrchestratorResponse(response, validCommitIds, validPaths);
+
+      assert.strictEqual(result.workItems.length, 2);
+      assert.strictEqual(result.workItems[0].targetPath, 'src/agents');
+      assert.strictEqual(result.workItems[1].targetPath, 'src/services');
+    });
+
     it('should mix codebase-explorer with other agent types', () => {
       const response = `# Reasoning
 Mixed work items
