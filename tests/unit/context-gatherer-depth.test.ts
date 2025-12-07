@@ -640,8 +640,8 @@ describe('ContextGatherer Project Overview Content', () => {
     assert.strictEqual(context.projectOverviewContent, overviewContent);
   });
 
-  it('should truncate long overview content to 2000 chars', async () => {
-    const longContent = 'A'.repeat(3000);
+  it('should truncate long overview content to 4000 chars', async () => {
+    const longContent = 'A'.repeat(5000);
     const overviewPage = createMockWikiPage('architecture/overview', longContent);
 
     const repos = {
@@ -670,7 +670,9 @@ describe('ContextGatherer Project Overview Content', () => {
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.ok(context.projectOverviewContent);
-    assert.ok(context.projectOverviewContent.length < 3000);
+    // Should be truncated to ~4000 chars + truncation message
+    assert.ok(context.projectOverviewContent.length < 5000);
+    assert.ok(context.projectOverviewContent.length > 4000); // At least 4000 chars preserved
     assert.ok(context.projectOverviewContent.includes('[... truncated ...]'));
   });
 
