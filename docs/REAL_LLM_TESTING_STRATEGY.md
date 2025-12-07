@@ -32,34 +32,115 @@ tests/
 
 ## LLM-as-Judge Pattern
 
-For semantic assertions where exact string matching isn't possible, we use a simple LLM call to judge correctness:
+For semantic assertions where exact string matching isn't possible, we use an LLM call to evaluate correctness. Rather than simple YES/NO, we get rich diagnostic feedback.
+
+### Evaluation Result Structure
+
+```typescript
+interface EvaluationResult {
+  score: number;          // 0-10 scale
+  passed: boolean;        // score >= threshold
+  reasoning: string;      // Why this score was given
+  improvements: string[]; // What could make this better
+}
+```
+
+### Implementation
 
 ```typescript
 // tests/helpers/llm-assert.ts
-async function assertLLM(
-  claim: string,
-  evidence: string
-): Promise<void> {
+async function evaluateLLM(
+  criteria: string,
+  evidence: string,
+  threshold: number = 7
+): Promise<EvaluationResult> {
   const response = await llm.complete([{
     role: 'user',
-    content: `Based on this evidence, answer only YES or NO.
+    content: `Evaluate the following output against the given criteria.
+
+Criteria: ${criteria}
 
 Evidence:
 ${evidence}
 
-Claim: ${claim}
+Respond in this exact JSON format:
+{
+  "score": <0-10>,
+  "reasoning": "<why you gave this score>",
+  "improvements": ["<suggestion 1>", "<suggestion 2>"]
+}
 
-Answer:`
+Be specific in your reasoning. A score of 7+ means the criteria is met.`
   }]);
 
-  const answer = response.content.trim().toUpperCase();
-  if (!answer.startsWith('YES')) {
-    throw new AssertionError(`LLM assertion failed: ${claim}`);
+  const result = JSON.parse(response.content);
+  return {
+    ...result,
+    passed: result.score >= threshold
+  };
+}
+
+// Convenience wrapper that throws on failure
+async function assertLLM(
+  criteria: string,
+  evidence: string,
+  threshold: number = 7
+): Promise<EvaluationResult> {
+  const result = await evaluateLLM(criteria, evidence, threshold);
+
+  if (!result.passed) {
+    throw new AssertionError(
+      `LLM assertion failed (score: ${result.score}/10, threshold: ${threshold})\n` +
+      `Criteria: ${criteria}\n` +
+      `Reasoning: ${result.reasoning}\n` +
+      `Improvements: ${result.improvements.join(', ')}`
+    );
   }
+
+  return result; // Return for logging even on success
 }
 ```
 
-This keeps assertions simple (pass/fail) while handling the semantic nature of LLM outputs.
+### Benefits of Rich Evaluation
+
+| Aspect | Simple YES/NO | Scored Evaluation |
+|--------|---------------|-------------------|
+| **Debugging failures** | "It failed" | "Score 4/10 because X, Y, Z" |
+| **Near-misses** | Hidden | "Score 6/10 - almost passing" |
+| **Quality trends** | Not tracked | Can track score over time |
+| **Improvement hints** | None | Specific suggestions |
+| **Threshold tuning** | Binary | Adjust threshold per test |
+
+### Example Test Output
+
+```
+✓ SecurityAgent detects SQL injection
+  Score: 9/10
+  Reasoning: Correctly identified SQL injection vulnerability in db.ts:15.
+             Accurately described the concatenation-based query construction.
+             Severity rating of HIGH is appropriate.
+  Improvements:
+    - Could mention specific remediation (parameterized queries)
+    - Could reference OWASP SQL injection guidelines
+
+✗ SecurityAgent ignores safe code
+  Score: 4/10 (threshold: 7)
+  Reasoning: Flagged the parameterized query as potential SQL injection.
+             While it mentioned the query uses parameters, it still raised
+             a LOW severity finding.
+  Improvements:
+    - Should recognize parameterized queries as safe pattern
+    - Should not create findings for properly secured code
+```
+
+### Threshold Guidelines
+
+| Test Type | Suggested Threshold | Rationale |
+|-----------|---------------------|-----------|
+| Detection (must find) | 7 | Some flexibility in description |
+| False positive (must not find) | 8 | Higher bar for avoiding noise |
+| Content quality | 6 | More subjective, allow variation |
+| Format compliance | 9 | Should be nearly perfect |
 
 ## Test Categories Within LLM Suite
 
@@ -94,7 +175,38 @@ Test complete wiki generation:
 | Role | Model Choice | Rationale |
 |------|--------------|-----------|
 | Agent under test | Production model | Test real behavior |
-| LLM-as-judge | Cheaper model (e.g., Haiku) | Just yes/no判定 |
+| LLM-as-judge | Cheaper model (e.g., Haiku) | JSON eval is simple task |
+
+### Logging Evaluations
+
+Even passing tests produce valuable data. Consider logging all evaluations:
+
+```typescript
+// tests/llm/results/2024-01-15-run.json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "model": "claude-3-sonnet",
+  "tests": [
+    {
+      "name": "SecurityAgent detects SQL injection",
+      "passed": true,
+      "score": 9,
+      "reasoning": "...",
+      "improvements": ["..."]
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 11,
+    "avgScore": 8.2
+  }
+}
+```
+
+This enables:
+- Tracking quality trends over time
+- Comparing scores across model versions
+- Identifying consistently low-scoring tests for prompt improvement
 
 ---
 
