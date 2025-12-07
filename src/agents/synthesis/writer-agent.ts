@@ -3,6 +3,15 @@ import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseConfidence,
+  hasRequiredFailures,
+  getFailureSummary,
+  validateMinLength,
+} from '../parsing/index.js';
 
 /**
  * Writer Agent - Transforms raw analysis pages into polished wiki articles.
@@ -62,10 +71,20 @@ export class WriterAgent implements Agent {
     const page = pagesNeedingRewrite[0]!;
     const prompt = this.buildPrompt(page, pages);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for fact verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 3000,
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 3,
+      maxTokens: 3500,
       temperature: 0.3,
     });
 
@@ -220,6 +239,19 @@ export class WriterAgent implements Agent {
 ${page.content}
 ${relatedContext}
 
+## Available Tools
+
+You have access to tools to verify information in the source code:
+- **read_file**: Read source files to verify code examples and claims
+- **search_files**: Find files by pattern to locate implementations
+- **list_directory**: Explore project structure
+
+**Use these tools to**:
+- Verify any code examples mentioned in the content actually exist
+- Check that file paths and function names are accurate
+- Find real examples from tests when adding usage examples
+- Confirm technical claims before including them
+
 ## Your Task
 
 Transform this into a polished wiki article that:
@@ -227,8 +259,10 @@ Transform this into a polished wiki article that:
 2. Explains WHAT something is and WHY it matters
 3. Uses third-person, present tense ("The system uses..." not "This commit adds...")
 4. Preserves all factual information from the original
-5. Adds context and explanation where helpful
+5. Adds context and explanation where helpful - USE TOOLS TO VERIFY
 6. Links to related pages where relevant (use markdown: [Title](path.md))
+
+If you cannot verify a claim, either omit it or note the uncertainty.
 
 Format your response as:
 
@@ -243,27 +277,34 @@ CONFIDENCE: [0-1 based on how complete the rewrite is]
   }
 
   private parseResponse(response: string, originalPage: WikiPage): ParsedRewrite | null {
-    // Parse title
-    const titleMatch = response.match(/TITLE:\s*(.+?)(?=\n|CONTENT:|$)/i);
-    const title = titleMatch ? titleMatch[1]!.trim() : originalPage.title;
+    const ctx = createParseContext('writer', response);
 
-    // Parse content
-    const contentMatch = response.match(/CONTENT:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (!contentMatch) {
+    // Parse title (optional - falls back to original)
+    const title = parseSection(ctx, 'TITLE', /TITLE:\s*(.+?)(?=\n|CONTENT:|$)/i, {
+      required: false,
+      defaultValue: originalPage.title,
+    }) ?? originalPage.title;
+
+    // Parse content (required)
+    const content = parseSection(ctx, 'CONTENT', /CONTENT:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i, {
+      required: true,
+    });
+
+    // Check for required failures
+    if (hasRequiredFailures(ctx)) {
+      console.error(`[writer] Parse failed: ${getFailureSummary(ctx)}`);
       return null;
     }
-    const content = contentMatch[1]!.trim();
 
-    // Validate we got actual content
-    if (content.length < 100) {
+    // Validate content length
+    if (!validateMinLength(ctx, 'CONTENT', content, 100)) {
       return null;
     }
 
-    // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]!) : 0.7;
+    // Parse confidence (optional with default)
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return { title, content, confidence };
+    return { title, content: content!, confidence };
   }
 }
 
@@ -276,6 +317,21 @@ interface ParsedRewrite {
 const SYSTEM_PROMPT = `You are a technical writer transforming raw documentation into polished wiki articles.
 
 Your job is to take content that was generated from commit analysis and rewrite it as a proper encyclopedia article.
+
+## CRITICAL: Verify Before Writing
+
+You have access to tools (read_file, search_files, list_directory) to explore the source code. USE THEM to verify facts:
+
+1. **Before adding code examples**: Use read_file to get real code from the codebase
+2. **Before claiming how something works**: Read the actual implementation to verify
+3. **Before citing file paths**: Use search_files to confirm they exist
+4. **When adding context**: Base it on actual code, not assumptions
+
+If you cannot verify a claim with tools, either:
+- Omit the claim entirely, OR
+- Explicitly note it as unverified (e.g., "The implementation appears to...")
+
+Never invent code examples or technical details. Use the tools to find real examples.
 
 ## Writing Style
 

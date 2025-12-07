@@ -3,7 +3,15 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseSectionItems,
+  parseConfidence,
+  getParseStats,
+  type ParseContext,
+} from '../parsing/index.js';
 
 /**
  * Pattern Agent - Recognizes recurring patterns across commits.
@@ -47,10 +55,20 @@ export class PatternAgent implements Agent {
     const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 3500,
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 5,
+      maxTokens: 4000,
       temperature: 0.3,
     });
 
@@ -96,6 +114,18 @@ ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
+
+## Available Tools
+
+You have access to tools to explore the codebase:
+- **read_file**: Read full file contents to understand context beyond the diff
+- **search_files**: Find related files by pattern (e.g., "*.test.ts", "src/**/*.ts")
+- **list_directory**: Explore directory structure
+
+**IMPORTANT**: Use these tools to VERIFY your pattern claims:
+- Before documenting line ranges, use read_file to confirm the exact lines
+- Before claiming a pattern exists, read the full file to verify
+- Use search_files to find other examples of the pattern
 
 Look for:
 1. **Design Patterns**: Factory, Singleton, Observer, Strategy, Repository, etc.
@@ -146,6 +176,8 @@ CONFIDENCE: [0-1 value]
 /**
  * Parse the LLM response into a structured analysis object.
  * Exported for testing purposes.
+ *
+ * Uses the centralized parsing infrastructure for logging and error tracking.
  */
 export function parsePatternResponse(response: string): ParsedPatternAnalysis {
   const analysis: ParsedPatternAnalysis = {
@@ -163,159 +195,252 @@ export function parsePatternResponse(response: string): ParsedPatternAnalysis {
   };
 
   if (!response) {
+    console.warn('[pattern] Empty response received');
     return analysis;
   }
 
-  // Parse summary
-  const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=PATTERNS_FOUND:|KEY_FILES:|CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (summaryMatch) {
-    analysis.summary = summaryMatch[1]!.trim();
+  const ctx = createParseContext('pattern', response);
+
+  // Parse summary (important but not required - agent can still produce useful output without it)
+  const summary = parseSection(
+    ctx,
+    'SUMMARY',
+    /SUMMARY:\s*([\s\S]*?)(?=PATTERNS_FOUND:|KEY_FILES:|CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+  );
+  if (summary) {
+    analysis.summary = summary;
   }
 
-  // Parse patterns
-  const patternsMatch = response.match(/PATTERNS_FOUND:\s*([\s\S]*?)(?=KEY_FILES:|CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (patternsMatch) {
-    const patternLines = patternsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-    for (const line of patternLines) {
-      const match = line.match(/^-\s*\[([^\]]+)\]\s*\[CATEGORY:([^\]]+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
-      if (match) {
-        const pattern = {
-          name: match[1]!.trim(),
-          category: match[2]!.toLowerCase().trim() as PatternCategory,
-          description: match[3]!.trim(),
-          paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
-        };
-        analysis.patterns.push(pattern);
-
-        // Convert to finding
-        analysis.findings.push({
-          type: `${pattern.category}-pattern`,
-          importance: pattern.category === 'anti-pattern' ? 'high' : 'medium',
-          description: `${pattern.name}: ${pattern.description}`,
-          paths: pattern.paths,
-        });
-      }
+  // Parse patterns using structured item parsing
+  analysis.patterns = parseSectionItems(
+    ctx,
+    'PATTERNS_FOUND',
+    /PATTERNS_FOUND:\s*([\s\S]*?)(?=KEY_FILES:|CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+    /^-\s*\[([^\]]+)\]\s*\[CATEGORY:([^\]]+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+    (match) => {
+      const pattern: Pattern = {
+        name: match[1]!.trim(),
+        category: match[2]!.toLowerCase().trim() as PatternCategory,
+        description: match[3]!.trim(),
+        paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+      };
+      return pattern;
     }
+  );
+
+  // Convert patterns to findings
+  for (const pattern of analysis.patterns) {
+    analysis.findings.push({
+      type: `${pattern.category}-pattern`,
+      importance: pattern.category === 'anti-pattern' ? 'high' : 'medium',
+      description: `${pattern.name}: ${pattern.description}`,
+      paths: pattern.paths,
+    });
   }
 
-  // Parse key files
-  const keyFilesMatch = response.match(/KEY_FILES:\s*([\s\S]*?)(?=CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (keyFilesMatch) {
-    const keyFileLines = keyFilesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-    for (const line of keyFileLines) {
-      // Try to match with role: - [path] [ROLE] description
-      const matchWithRole = line.match(/^-\s*\[([^\]]+)\]\s*\[(PRIMARY|SUPPORTING|RELATED|EXAMPLE)\]\s*(.*)$/i);
-      if (matchWithRole) {
-        analysis.keyFiles.push({
-          path: matchWithRole[1]!.trim(),
-          role: matchWithRole[2]!.toUpperCase().trim() as KeyFileRole,
-          description: matchWithRole[3]!.trim(),
-        });
-      } else {
-        // Try to match without role: - [path] description
-        const matchWithoutRole = line.match(/^-\s*\[([^\]]+)\]\s*(.*)$/i);
-        if (matchWithoutRole) {
-          analysis.keyFiles.push({
-            path: matchWithoutRole[1]!.trim(),
-            role: 'RELATED',
-            description: matchWithoutRole[2]!.trim(),
-          });
-        }
-      }
-    }
-  }
+  // Parse key files with custom handling for role variants
+  analysis.keyFiles = parseKeyFiles(ctx, response);
 
-  // Parse code snippets
-  const codeSnippetsMatch = response.match(/CODE_SNIPPETS:\s*([\s\S]*?)(?=IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (codeSnippetsMatch) {
-    const snippetContent = codeSnippetsMatch[1]!.trim();
-    // Match snippet blocks: - [Name] [location]\n```lang\ncode\n```
-    const snippetRegex = /^-\s*\[([^\]]+)\](?:\s*\[([^\]]*)\])?\s*\n```(\w*)\n([\s\S]*?)```/gm;
-    let snippetMatch;
-    while ((snippetMatch = snippetRegex.exec(snippetContent)) !== null) {
-      analysis.codeSnippets.push({
-        name: snippetMatch[1]!.trim(),
-        location: snippetMatch[2]?.trim() ?? '',
-        code: snippetMatch[4]!.trim(),
-      });
-    }
-  }
+  // Parse code snippets (complex nested structure)
+  analysis.codeSnippets = parseCodeSnippets(ctx, response);
 
   // Parse implementation explanation
-  const implMatch = response.match(/IMPLEMENTATION_EXPLANATION:\s*([\s\S]*?)(?=TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (implMatch) {
-    analysis.implementationExplanation = implMatch[1]!.trim();
+  const impl = parseSection(
+    ctx,
+    'IMPLEMENTATION_EXPLANATION',
+    /IMPLEMENTATION_EXPLANATION:\s*([\s\S]*?)(?=TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+  );
+  if (impl) {
+    analysis.implementationExplanation = impl;
   }
 
-  // Parse trade-offs
-  const tradeOffsMatch = response.match(/TRADE_OFFS:\s*([\s\S]*?)(?=CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (tradeOffsMatch) {
-    const tradeOffLines = tradeOffsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-    for (const line of tradeOffLines) {
-      // Try to match with name: - [Name] description
-      const matchWithName = line.match(/^-\s*\[([^\]]+)\]\s*(.+)$/);
-      if (matchWithName) {
-        analysis.tradeOffs.push({
-          name: matchWithName[1]!.trim(),
-          description: matchWithName[2]!.trim(),
-        });
-      } else {
-        // Match without name
-        const desc = line.replace(/^-\s*/, '').trim();
-        if (desc) {
-          analysis.tradeOffs.push({
-            name: 'Trade-off',
-            description: desc,
-          });
-        }
-      }
-    }
-  }
+  // Parse trade-offs with custom handling
+  analysis.tradeOffs = parseTradeOffs(ctx, response);
 
-  // Parse conventions
-  const convMatch = response.match(/CONVENTIONS:\s*([\s\S]*?)(?=ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (convMatch) {
-    const convLines = convMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-    for (const line of convLines) {
-      analysis.conventions.push(line.replace(/^-\s*/, '').trim());
-    }
-  }
+  // Parse conventions (simple list extraction)
+  analysis.conventions = parseSimpleList(
+    ctx,
+    'CONVENTIONS',
+    /CONVENTIONS:\s*([\s\S]*?)(?=ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+    response
+  );
 
-  // Parse anti-patterns
-  const antiMatch = response.match(/ANTI_PATTERNS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
-  if (antiMatch) {
-    const antiLines = antiMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-    for (const line of antiLines) {
-      analysis.antiPatterns.push(line.replace(/^-\s*/, '').trim());
-    }
-  }
+  // Parse anti-patterns (simple list extraction)
+  analysis.antiPatterns = parseSimpleList(
+    ctx,
+    'ANTI_PATTERNS',
+    /ANTI_PATTERNS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i,
+    response
+  );
 
   // Parse wiki updates
-  const updatesMatch = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-  if (updatesMatch) {
-    const updateLines = updatesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-    for (const line of updateLines) {
-      const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
-      if (match) {
-        analysis.wikiUpdates.push({
-          path: match[1]!.trim(),
-          action: match[2]!.toLowerCase() as 'create' | 'update',
-          description: match[3]!.trim(),
-        });
-      }
-    }
-  }
+  analysis.wikiUpdates = parseSectionItems(
+    ctx,
+    'WIKI_UPDATES',
+    /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+    /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
+    (match) => ({
+      path: match[1]!.trim(),
+      action: match[2]!.toLowerCase() as 'create' | 'update',
+      description: match[3]!.trim(),
+    })
+  );
 
   // Parse confidence
-  const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-  if (confidenceMatch) {
-    const parsed = parseFloat(confidenceMatch[1]!);
-    if (!isNaN(parsed)) {
-      analysis.confidence = parsed;
-    }
+  analysis.confidence = parseConfidence(ctx, { defaultValue: 0.5 });
+
+  // Log parsing statistics
+  const stats = getParseStats(ctx);
+  if (stats.failedSections > 0) {
+    console.info(`[pattern] Parse stats: ${stats.successfulSections} ok, ${stats.failedSections} failed`, {
+      failed: stats.sections.failed,
+    });
   }
 
   return analysis;
+}
+
+/**
+ * Parse key files with handling for role variants.
+ */
+function parseKeyFiles(ctx: ParseContext, response: string): KeyFile[] {
+  const keyFiles: KeyFile[] = [];
+
+  const sectionMatch = response.match(
+    /KEY_FILES:\s*([\s\S]*?)(?=CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+  );
+
+  if (!sectionMatch) {
+    return keyFiles;
+  }
+
+  ctx.successfulSections.push('KEY_FILES');
+  const lines = sectionMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
+
+  for (const line of lines) {
+    // Try to match with role: - [path] [ROLE] description
+    const matchWithRole = line.match(/^-\s*\[([^\]]+)\]\s*\[(PRIMARY|SUPPORTING|RELATED|EXAMPLE)\]\s*(.*)$/i);
+    if (matchWithRole) {
+      keyFiles.push({
+        path: matchWithRole[1]!.trim(),
+        role: matchWithRole[2]!.toUpperCase().trim() as KeyFileRole,
+        description: matchWithRole[3]!.trim(),
+      });
+    } else {
+      // Try to match without role: - [path] description
+      const matchWithoutRole = line.match(/^-\s*\[([^\]]+)\]\s*(.*)$/i);
+      if (matchWithoutRole) {
+        keyFiles.push({
+          path: matchWithoutRole[1]!.trim(),
+          role: 'RELATED',
+          description: matchWithoutRole[2]!.trim(),
+        });
+      }
+    }
+  }
+
+  return keyFiles;
+}
+
+/**
+ * Parse code snippets with complex nested structure.
+ */
+function parseCodeSnippets(ctx: ParseContext, response: string): CodeSnippet[] {
+  const snippets: CodeSnippet[] = [];
+
+  const sectionMatch = response.match(
+    /CODE_SNIPPETS:\s*([\s\S]*?)(?=IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+  );
+
+  if (!sectionMatch) {
+    return snippets;
+  }
+
+  ctx.successfulSections.push('CODE_SNIPPETS');
+  const snippetContent = sectionMatch[1]!.trim();
+
+  // Match snippet blocks: - [Name] [location]\n```lang\ncode\n```
+  const snippetRegex = /^-\s*\[([^\]]+)\](?:\s*\[([^\]]*)\])?\s*\n```(\w*)\n([\s\S]*?)```/gm;
+  let snippetMatch;
+  while ((snippetMatch = snippetRegex.exec(snippetContent)) !== null) {
+    snippets.push({
+      name: snippetMatch[1]!.trim(),
+      location: snippetMatch[2]?.trim() ?? '',
+      code: snippetMatch[4]!.trim(),
+    });
+  }
+
+  return snippets;
+}
+
+/**
+ * Parse trade-offs with fallback for entries without names.
+ */
+function parseTradeOffs(ctx: ParseContext, response: string): TradeOff[] {
+  const tradeOffs: TradeOff[] = [];
+
+  const sectionMatch = response.match(
+    /TRADE_OFFS:\s*([\s\S]*?)(?=CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+  );
+
+  if (!sectionMatch) {
+    return tradeOffs;
+  }
+
+  ctx.successfulSections.push('TRADE_OFFS');
+  const lines = sectionMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
+
+  for (const line of lines) {
+    // Try to match with name: - [Name] description
+    const matchWithName = line.match(/^-\s*\[([^\]]+)\]\s*(.+)$/);
+    if (matchWithName) {
+      tradeOffs.push({
+        name: matchWithName[1]!.trim(),
+        description: matchWithName[2]!.trim(),
+      });
+    } else {
+      // Match without name
+      const desc = line.replace(/^-\s*/, '').trim();
+      if (desc) {
+        tradeOffs.push({
+          name: 'Trade-off',
+          description: desc,
+        });
+      }
+    }
+  }
+
+  return tradeOffs;
+}
+
+/**
+ * Parse a simple list section (just lines starting with -).
+ */
+function parseSimpleList(
+  ctx: ParseContext,
+  sectionName: string,
+  pattern: RegExp,
+  response: string
+): string[] {
+  const items: string[] = [];
+
+  const sectionMatch = response.match(pattern);
+
+  if (!sectionMatch) {
+    return items;
+  }
+
+  ctx.successfulSections.push(sectionName);
+  const lines = sectionMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
+
+  for (const line of lines) {
+    const item = line.replace(/^-\s*/, '').trim();
+    if (item) {
+      items.push(item);
+    }
+  }
+
+  return items;
 }
 
 /**
@@ -514,6 +639,17 @@ function slugify(text: string): string {
 const SYSTEM_PROMPT = `You are a pattern recognition agent for CodeWiki, a system that generates living documentation from Git repositories.
 
 Your job is to identify patterns in the code: both intentional design patterns and emergent conventions. Your documentation is intended for developers who may not have direct access to the source code, so be thorough and explicit.
+
+## CRITICAL: Verify Before Documenting
+
+You have access to tools (read_file, search_files, list_directory) to explore the codebase. USE THEM to verify your claims:
+
+1. **Before citing line numbers**: Use read_file to get the actual file content and verify exact line ranges
+2. **Before claiming a pattern**: Read the full file to confirm the pattern actually exists
+3. **Before extracting code snippets**: Use read_file to get the real code, don't reconstruct from diffs
+4. **When uncertain**: Search for similar patterns in other files to confirm conventions
+
+If you cannot verify a claim with the tools, explicitly note the uncertainty rather than guessing.
 
 ## What to Look For
 

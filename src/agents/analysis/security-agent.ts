@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Security Agent - Audits commits for security-relevant changes.
@@ -41,9 +41,19 @@ export class SecurityAgent implements Agent {
     const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 5,
       maxTokens: 2000,
       temperature: 0.2, // Lower temperature for security analysis
     });
@@ -90,6 +100,20 @@ ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
+
+## Available Tools
+
+You have access to tools to explore the source code:
+- **read_file**: Read source files to verify security implementations
+- **search_files**: Find files by pattern to locate security-related code
+- **list_directory**: Explore project structure
+
+**Use these tools to**:
+- Read the full file to understand the complete security context
+- Verify how authentication/authorization is implemented
+- Check for proper input validation patterns
+- Find related security configurations
+- Trace data flow for potential injection vectors
 
 Analyze for:
 1. Authentication/authorization changes
@@ -325,7 +349,20 @@ function mapSeverityToImportance(severity: string): 'low' | 'medium' | 'high' {
 
 const SYSTEM_PROMPT = `You are a security audit agent for CodeWiki, a system that generates living documentation from Git repositories.
 
-Your job is to analyze commits for security implications. Look for:
+Your job is to analyze commits for security implications.
+
+## CRITICAL: Verify Before Documenting
+
+You have access to tools (read_file, search_files, list_directory) to explore the source code. USE THEM:
+
+1. **Read the full file** to understand the complete security context, not just the diff
+2. **Trace data flow** by reading related files to identify actual injection vectors
+3. **Verify authentication/authorization** implementations by reading the full auth code
+4. **Check security configurations** in related config files
+
+If you cannot verify a security concern, note it as "potential" or "needs review" rather than definitive.
+
+Look for:
 
 1. **Authentication & Authorization**: Login flows, session management, role-based access
 2. **Cryptography**: Hashing algorithms, encryption, key management, secure random
