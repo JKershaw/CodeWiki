@@ -189,21 +189,22 @@ CONFIDENCE: [0-1 value]
       analysis.summary = summaryMatch[1]!.trim();
     }
 
-    // Parse debt trend
-    const trendMatch = response.match(/DEBT_TREND:\s*(\w+)/i);
+    // Parse debt trend - handle both underscore and hyphen formats
+    const trendMatch = response.match(/DEBT_TREND:\s*([\w-]+)/i);
     if (trendMatch) {
-      const trend = trendMatch[1]!.toLowerCase();
+      const trend = trendMatch[1]!.toLowerCase().replace(/-/g, '_');
       if (['adding_debt', 'reducing_debt', 'neutral', 'mixed'].includes(trend)) {
         analysis.debtTrend = trend as DebtTrend;
       }
     }
 
-    // Parse findings
+    // Parse findings - try multiple formats for flexibility
     const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=TODO_ITEMS:|SOLID_VIOLATIONS:|REMEDIATION:|HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
     if (findingsMatch) {
-      const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
       for (const line of findingLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
+        // Try strict format first: - [CATEGORY] [SEVERITY:level] Description [paths]
+        let match = line.match(/^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
         if (match) {
           analysis.findings.push({
             type: match[1]!.trim(),
@@ -211,63 +212,240 @@ CONFIDENCE: [0-1 value]
             description: match[3]!.trim(),
             paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
           });
+          continue;
+        }
+
+        // Try alternative format: - [CATEGORY] (severity) Description
+        match = line.match(/^-\s*\[([^\]]+)\]\s*\((\w+)\)\s*(.+)$/i);
+        if (match) {
+          analysis.findings.push({
+            type: match[1]!.trim(),
+            importance: mapSeverityToImportance(match[2]!.toLowerCase()),
+            description: match[3]!.trim(),
+            paths: [],
+          });
+          continue;
+        }
+
+        // Try format: - **CATEGORY** (severity): Description
+        match = line.match(/^-\s*\*\*([^*]+)\*\*\s*\((\w+)\)[:\s]*(.+)$/i);
+        if (match) {
+          analysis.findings.push({
+            type: match[1]!.trim(),
+            importance: mapSeverityToImportance(match[2]!.toLowerCase()),
+            description: match[3]!.trim(),
+            paths: [],
+          });
+          continue;
+        }
+
+        // Try simple format: - CATEGORY: Description (severity)
+        match = line.match(/^-\s*([^:]+):\s*(.+?)\s*\((\w+)\)\s*$/i);
+        if (match) {
+          analysis.findings.push({
+            type: match[1]!.trim(),
+            importance: mapSeverityToImportance(match[3]!.toLowerCase()),
+            description: match[2]!.trim(),
+            paths: [],
+          });
+          continue;
+        }
+
+        // Fallback: extract any meaningful content with severity detection
+        match = line.match(/^-\s*(.+)$/);
+        if (match && match[1]!.trim().length > 10) {
+          // Try to extract severity from the content
+          const severityMatch = match[1]!.match(/\b(critical|high|medium|low)\b/i);
+          const severity = severityMatch ? severityMatch[1]!.toLowerCase() : 'medium';
+          // Try to extract category from brackets or bold
+          const categoryMatch = match[1]!.match(/\[([^\]]+)\]|\*\*([^*]+)\*\*/);
+          const category = categoryMatch ? (categoryMatch[1] || categoryMatch[2])!.trim() : 'General';
+          // Remove the matched parts from description
+          const description = match[1]!
+            .replace(/\[([^\]]+)\]/g, '')
+            .replace(/\*\*([^*]+)\*\*/g, '')
+            .replace(/\b(critical|high|medium|low)\b/gi, '')
+            .replace(/SEVERITY:/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          if (description.length > 5) {
+            analysis.findings.push({
+              type: category,
+              importance: mapSeverityToImportance(severity),
+              description: description,
+              paths: [],
+            });
+          }
         }
       }
     }
 
-    // Parse TODO items
+    // Parse TODO items - try multiple formats
     const todoMatch = response.match(/TODO_ITEMS:\s*([\s\S]*?)(?=SOLID_VIOLATIONS:|REMEDIATION:|HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
     if (todoMatch) {
-      const todoLines = todoMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      const todoLines = todoMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
       for (const line of todoLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(TODO|FIXME|HACK)\]\s*(.+)$/i);
+        // Try strict format: - [FILE:line] [TODO/FIXME/HACK] Description
+        let match = line.match(/^-\s*\[([^\]]+)\]\s*\[(TODO|FIXME|HACK)\]\s*(.+)$/i);
         if (match) {
           analysis.todoItems.push({
             location: match[1]!.trim(),
             type: match[2]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK',
             description: match[3]!.trim(),
           });
+          continue;
+        }
+
+        // Try format: - **TODO/FIXME/HACK** at location: Description
+        match = line.match(/^-\s*\*\*(TODO|FIXME|HACK)\*\*\s*(?:at\s+)?([^:]+):\s*(.+)$/i);
+        if (match) {
+          analysis.todoItems.push({
+            location: match[2]!.trim(),
+            type: match[1]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK',
+            description: match[3]!.trim(),
+          });
+          continue;
+        }
+
+        // Try format: - TODO/FIXME/HACK: Description (location)
+        match = line.match(/^-\s*(TODO|FIXME|HACK)[:\s]+(.+?)\s*\(([^)]+)\)\s*$/i);
+        if (match) {
+          analysis.todoItems.push({
+            location: match[3]!.trim(),
+            type: match[1]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK',
+            description: match[2]!.trim(),
+          });
+          continue;
+        }
+
+        // Fallback: just look for TODO/FIXME/HACK anywhere in line
+        match = line.match(/^-\s*.*\b(TODO|FIXME|HACK)\b.*$/i);
+        if (match) {
+          const todoType = match[1]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK';
+          const description = line.replace(/^-\s*/, '').replace(/\b(TODO|FIXME|HACK)\b/i, '').trim();
+          analysis.todoItems.push({
+            location: 'unknown',
+            type: todoType,
+            description: description || `${todoType} item detected`,
+          });
         }
       }
     }
 
-    // Parse SOLID violations
+    // Parse SOLID violations - try multiple formats
     const solidMatch = response.match(/SOLID_VIOLATIONS:\s*([\s\S]*?)(?=REMEDIATION:|HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
     if (solidMatch) {
-      const solidLines = solidMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      const solidLines = solidMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
       for (const line of solidLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
+        // Try strict format: - [PRINCIPLE] Description [paths]
+        let match = line.match(/^-\s*\[([^\]]+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
         if (match) {
           analysis.solidViolations.push({
             principle: match[1]!.trim(),
             description: match[2]!.trim(),
             paths: match[3]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
           });
+          continue;
+        }
+
+        // Try format: - **Principle**: Description
+        match = line.match(/^-\s*\*\*([^*]+)\*\*[:\s]+(.+)$/i);
+        if (match) {
+          analysis.solidViolations.push({
+            principle: match[1]!.trim(),
+            description: match[2]!.trim(),
+            paths: [],
+          });
+          continue;
+        }
+
+        // Fallback: look for SOLID principle keywords
+        const principleKeywords = ['Single Responsibility', 'Open/Closed', 'Open-Closed', 'Liskov', 'Interface Segregation', 'Dependency Inversion', 'SRP', 'OCP', 'LSP', 'ISP', 'DIP'];
+        for (const keyword of principleKeywords) {
+          if (line.toLowerCase().includes(keyword.toLowerCase())) {
+            const description = line.replace(/^-\s*/, '').trim();
+            analysis.solidViolations.push({
+              principle: keyword,
+              description: description,
+              paths: [],
+            });
+            break;
+          }
         }
       }
     }
 
-    // Parse remediations
+    // Parse remediations - try multiple formats
     const remediationMatch = response.match(/REMEDIATION:\s*([\s\S]*?)(?=HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
     if (remediationMatch) {
-      const remLines = remediationMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      const remLines = remediationMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
       for (const line of remLines) {
-        const match = line.match(/^-\s*\[Priority:(\w+)\]\s*(.+)$/i);
+        // Try strict format: - [Priority:level] Recommendation
+        let match = line.match(/^-\s*\[Priority:(\w+)\]\s*(.+)$/i);
         if (match) {
           analysis.remediations.push({
-            priority: match[1]!.toLowerCase() as 'high' | 'medium' | 'low',
+            priority: mapPriority(match[1]!.toLowerCase()),
             recommendation: match[2]!.trim(),
           });
+          continue;
+        }
+
+        // Try format: - **Priority**: Recommendation or - (priority) Recommendation
+        match = line.match(/^-\s*(?:\*\*(\w+)\*\*|\((\w+)\))[:\s]+(.+)$/i);
+        if (match) {
+          const priority = (match[1] || match[2])!.toLowerCase();
+          analysis.remediations.push({
+            priority: mapPriority(priority),
+            recommendation: match[3]!.trim(),
+          });
+          continue;
+        }
+
+        // Fallback: any line, default to medium priority
+        match = line.match(/^-\s*(.+)$/);
+        if (match && match[1]!.trim().length > 10) {
+          // Try to extract priority from content
+          const priorityMatch = match[1]!.match(/\b(high|medium|low)\b/i);
+          const priority = priorityMatch ? priorityMatch[1]!.toLowerCase() : 'medium';
+          const recommendation = match[1]!.replace(/\b(high|medium|low)\b/gi, '').trim();
+          if (recommendation.length > 5) {
+            analysis.remediations.push({
+              priority: mapPriority(priority),
+              recommendation: recommendation,
+            });
+          }
         }
       }
     }
 
-    // Parse hotspots
+    // Parse hotspots - try multiple formats
     const hotspotMatch = response.match(/HOTSPOTS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
     if (hotspotMatch) {
-      const hotspotLines = hotspotMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
+      const hotspotLines = hotspotMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
       for (const line of hotspotLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*(.+)$/);
+        // Try strict format: - [path] Reason
+        let match = line.match(/^-\s*\[([^\]]+)\]\s*(.+)$/);
+        if (match) {
+          analysis.hotspots.push({
+            path: match[1]!.trim(),
+            reason: match[2]!.trim(),
+          });
+          continue;
+        }
+
+        // Try format: - `path`: Reason or - **path**: Reason
+        match = line.match(/^-\s*(?:`([^`]+)`|\*\*([^*]+)\*\*)[:\s]+(.+)$/);
+        if (match) {
+          analysis.hotspots.push({
+            path: (match[1] || match[2])!.trim(),
+            reason: match[3]!.trim(),
+          });
+          continue;
+        }
+
+        // Try format: - path - Reason
+        match = line.match(/^-\s*([^\s-]+(?:\.[^\s]+)?)\s*[-–:]\s*(.+)$/);
         if (match) {
           analysis.hotspots.push({
             path: match[1]!.trim(),
@@ -565,6 +743,12 @@ interface ParsedAnalysis {
 function mapSeverityToImportance(severity: string): 'low' | 'medium' | 'high' {
   if (severity === 'critical' || severity === 'high') return 'high';
   if (severity === 'medium') return 'medium';
+  return 'low';
+}
+
+function mapPriority(priority: string): 'high' | 'medium' | 'low' {
+  if (priority === 'critical' || priority === 'high' || priority === 'urgent') return 'high';
+  if (priority === 'medium' || priority === 'normal') return 'medium';
   return 'low';
 }
 
