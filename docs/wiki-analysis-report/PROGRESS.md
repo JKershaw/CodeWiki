@@ -16,7 +16,7 @@ This document tracks the progress of addressing issues identified in the CodeWik
 | 02 - Parsing Fragility | HIGH | 🔴 Open | Silent regex failures |
 | 03 - Context Insufficiency | HIGH | ✅ **Fixed** | All analysis agents now have tool access |
 | 04 - Verification Gaps | HIGH | 🔴 Open | No feedback loops |
-| 05 - Consolidation Blindspot | MEDIUM-HIGH | 🔴 Open | Zero integration tests |
+| 05 - Consolidation Blindspot | MEDIUM-HIGH | ✅ **Fixed** | Added integration tests |
 | 06 - Orchestrator Disconnect | MEDIUM | 🔴 Open | No benchmark → orchestrator feedback |
 | 07 - Questions for Self-Analysis | N/A | 📋 Reference | Questions to run after 100+ iterations |
 | 08 - Prompt-Strategy Misalignment | HIGH | ✅ **Fixed** | Prompt now aligned with "Useful Wiki First" |
@@ -156,6 +156,63 @@ This document tracks the progress of addressing issues identified in the CodeWik
 
 ---
 
+### Issue 05: Consolidation Pipeline Test Coverage ✅
+
+**Fixed:** 2025-12-07
+**Branch:** `claude/assess-orchestrator-misalignment-01FjqQdvGxJsMXHR72aZsPH5`
+
+**Problem:** The Consolidation Agent and its handlers (DuplicateHandler, BrokenLinkHandler) had zero integration tests, creating unknown failure modes in the self-healing pipeline.
+
+**Changes Made:**
+
+1. **Created `tests/integration/consolidation-agent.test.ts`**:
+   - ConsolidationAgent tests:
+     - No findings returns empty result
+     - Delegates to correct handler based on finding type
+     - Handles unsupported finding types gracefully
+     - Throws error when trying to run on commits
+     - Agent type and target handling tests
+   - Finding lifecycle tests:
+     - Marks findings as in_progress then addressed on success
+     - TODO: Error recovery path (needs mock enhancement)
+   - DuplicateHandler tests:
+     - Merges duplicate pages and generates delete update
+     - Keeps pages separate when LLM decides not to merge
+     - Handles single page case gracefully
+   - BrokenLinkHandler tests:
+     - Fixes broken link by finding similar valid path
+     - Removes link when no similar path exists
+   - FindingHandlerRegistry tests:
+     - Register and retrieve handlers correctly
+     - Returns undefined for unknown finding types
+     - Checks if handler exists
+     - Lists all supported types
+
+2. **Added consolidation fixtures to `tests/fixtures/agent-responses.ts`**:
+   - `duplicateMerge()`: Response for merging duplicate pages
+   - `duplicateKeepSeparate()`: Response for keeping pages separate
+
+**Test Coverage Added:**
+- ConsolidationAgent: 7 tests
+- Finding lifecycle: 1 test + TODO
+- DuplicateHandler: 3 tests
+- BrokenLinkHandler: 2 tests
+- FindingHandlerRegistry: 4 tests
+
+**Total new tests: 17**
+
+**Expected Outcomes:**
+- Unknown failure modes in consolidation pipeline now have test coverage
+- Duplicate handling logic (highest risk due to content loss potential) is verified
+- Handler registry pattern works correctly
+- Edge cases (single page, no similar path) are handled
+
+**Remaining Work:**
+- [ ] Add error simulation to MockLLMService to test finding rollback on failure
+- [ ] Add more edge case tests for complex merge scenarios
+
+---
+
 ## Remaining Issues (Priority Order)
 
 ### 🔴 HIGH: Issue 02 - Fragile Response Parsing
@@ -183,18 +240,6 @@ This document tracks the progress of addressing issues identified in the CodeWik
 
 ---
 
-### 🟡 MEDIUM-HIGH: Issue 05 - Untested Consolidation Pipeline
-
-**Impact:** Unknown failure modes in self-healing
-**Root Cause:** Zero integration tests for Consolidation Agent and handlers
-
-**Recommended Next Steps:**
-1. Add basic consolidation agent tests
-2. Add duplicate handler tests (highest risk)
-3. Add failure scenario tests
-
----
-
 ### 🟡 MEDIUM: Issue 06 - Orchestrator Cannot Learn from Results
 
 **Impact:** Repeated mistakes, ignored improvement opportunities
@@ -213,12 +258,12 @@ Based on impact and dependencies:
 
 1. **Issue 02 (Parsing)** - Affects all agents, relatively easy fix
 2. **Issue 04 (Verification)** - Enables closed-loop improvement
-3. **Issue 05 (Consolidation)** - Ensures self-healing works
-4. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
+3. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
 
 **Completed:**
 - ✅ Issue 01 (Hallucination) - Added verification tools to PatternAgent, WriterAgent, OverviewAgent
 - ✅ Issue 03 (Context) - Added verification tools to TechnicalDebtAgent, SecurityAgent, NarrativeAgent, DependencyAgent
+- ✅ Issue 05 (Consolidation) - Added integration tests for ConsolidationAgent and handlers
 - ✅ Issue 08 (Prompt-Strategy Misalignment) - Aligned orchestrator prompt with "Useful Wiki First"
 
 ---

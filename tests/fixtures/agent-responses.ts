@@ -595,3 +595,68 @@ npm run dev
 - Read the API documentation
 - Explore the architecture guide`,
 };
+
+/**
+ * Consolidation Agent response fixtures.
+ * Used for testing DuplicateHandler and other consolidation handlers.
+ */
+export const consolidationAgentResponses = {
+  /**
+   * Response for merging duplicate pages.
+   */
+  duplicateMerge: () => `DECISION: merge
+REASON: Both pages cover the same topic (project setup/installation) with significant overlap. The Setup Guide is more comprehensive and should be the primary page.
+PRIMARY_PAGE: guides/setup
+MERGED_CONTENT:
+# Setup Guide
+
+This guide covers how to set up and install the project.
+
+## Prerequisites
+
+- Node.js 18+
+- npm or yarn
+
+## Installation
+
+Clone the repository and install dependencies:
+
+\`\`\`bash
+git clone <repo-url>
+cd project
+npm install
+\`\`\`
+
+## Configuration
+
+Set up your environment variables by copying the example file:
+
+\`\`\`bash
+cp .env.example .env
+\`\`\`
+
+## Running the Application
+
+Start the development server:
+
+\`\`\`bash
+npm run dev
+\`\`\`
+
+## Next Steps
+
+- Read the [API documentation](../api/overview.md)
+- Explore the [architecture guide](../architecture/overview.md)
+DELETE_PAGES: guides/installation
+CONFIDENCE: 0.85`,
+
+  /**
+   * Response for keeping pages separate.
+   */
+  duplicateKeepSeparate: () => `DECISION: keep-separate
+REASON: While both pages cover setup topics, they serve different purposes. Frontend Setup is specific to the client-side application while Backend Setup covers server configuration. Merging would create an unfocused page.
+PRIMARY_PAGE:
+MERGED_CONTENT:
+DELETE_PAGES:
+CONFIDENCE: 0.9`,
+};
