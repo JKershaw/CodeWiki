@@ -18,6 +18,7 @@
     "mcp": "tsx src/mcp/server.ts",
     "web": "tsx src/web/server.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
+    "test:llm": "node --import tsx --test tests/llm/*.test.ts",
     "test:e2e": "playwright test",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"
