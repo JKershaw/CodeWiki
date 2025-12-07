@@ -7,6 +7,7 @@ import {
   handleListWikiPages,
 } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import { sortByPathRelevance } from '../../utils/path-relevance.js';
 
 /**
  * Codebase Explorer Agent - Documents undocumented parts of the codebase.
@@ -125,8 +126,11 @@ export class CodebaseExplorerAgent implements Agent {
     existingPagePaths: string[],
     _existingContent: string
   ): string {
-    const existingPagesInfo = existingPagePaths.length > 0
-      ? `\n\n## Existing Wiki Pages (avoid duplication)\n${existingPagePaths.slice(0, 20).map(p => `- ${p}`).join('\n')}`
+    // Sort existing pages by relevance to target path, so the most related pages are shown first
+    // This ensures we don't miss related pages when truncating to 20
+    const sortedPaths = sortByPathRelevance(existingPagePaths, targetPath);
+    const existingPagesInfo = sortedPaths.length > 0
+      ? `\n\n## Existing Wiki Pages (avoid duplication)\n${sortedPaths.slice(0, 20).map(p => `- ${p}`).join('\n')}`
       : '';
 
     return `Document the undocumented code in: ${targetPath}

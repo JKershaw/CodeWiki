@@ -312,8 +312,8 @@ export class ContextGatherer {
         const overviewResult = await handleGetWikiPage(overviewQuery, this.repos);
         if (overviewResult.success && overviewResult.data) {
           const content = overviewResult.data.content;
-          // Truncate to ~2000 chars for LLM context
-          const maxOverviewLength = 2000;
+          // Truncate to ~4000 chars for LLM context (increased from 2000 to preserve more architectural context)
+          const maxOverviewLength = 4000;
           if (content.length > maxOverviewLength) {
             projectOverviewContent = content.slice(0, maxOverviewLength) + '\n\n[... truncated ...]';
           } else {
