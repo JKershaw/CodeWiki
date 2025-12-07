@@ -346,34 +346,140 @@ Verify generated wiki content is useful and accurate.
 
 ---
 
-## Implementation Order
+## Implementation Guide
+
+Follow these steps in order. Each step validates the previous before moving on.
+
+### Step 1: Smoke Test the Assertion Infrastructure
+
+**Goal**: Confirm `evaluateLLM` and `assertLLM` work before writing any real tests.
 
 ```
-Phase 1: Foundation
-├── Test infrastructure (llm-assert helper, test config)
-├── Test 1.1: SecurityAgent format
-├── Test 1.2: PatternAgent format
-├── Test 1.3: NarrativeAgent format
-└── Test 1.4: BootstrapAgent format
-
-Phase 2: Core Detection
-├── Test 2.1: SQL injection detection
-├── Test 2.2: Safe code (no false positive)
-├── Test 2.3: Repository pattern detection
-└── Test 2.4: ADR detection
-
-Phase 3: Synthesis
-├── Test 3.1: Bootstrap overview quality
-└── Test 3.2: Writer relevance
-
-Phase 4: Integration
-├── Test 4.1: Analysis → Consolidation
-└── Test 4.2: Multi-agent consistency
-
-Phase 5: E2E
-├── Test 5.1: Fresh wiki bootstrap
-└── Test 5.2: Incremental updates
+tests/
+└── llm/
+    ├── helpers/
+    │   └── llm-assert.ts      ← Create this first
+    └── smoke.test.ts          ← Minimal test to validate helpers
 ```
+
+**Tasks**:
+1. Create `tests/llm/helpers/llm-assert.ts` with `evaluateLLM` and `assertLLM` functions
+2. Create `tests/llm/smoke.test.ts`:
+   ```typescript
+   it('evaluateLLM returns valid score structure', async () => {
+     const result = await evaluateLLM(
+       'The text mentions a greeting',
+       'Hello, world!'
+     );
+     assert.ok(typeof result.score === 'number');
+     assert.ok(result.score >= 0 && result.score <= 10);
+     assert.ok(typeof result.reasoning === 'string');
+     assert.ok(Array.isArray(result.improvements));
+   });
+
+   it('assertLLM passes for true claims', async () => {
+     await assertLLM('The text contains a greeting', 'Hello there!');
+   });
+
+   it('assertLLM fails for false claims', async () => {
+     await assert.rejects(
+       () => assertLLM('The text mentions elephants', 'Hello there!'),
+       /LLM assertion failed/
+     );
+   });
+   ```
+3. Run: `node --import tsx --test tests/llm/smoke.test.ts`
+4. **Must pass before proceeding**
+
+### Step 2: One Real Unit Test
+
+**Goal**: Validate the full flow with one actual agent test.
+
+**Tasks**:
+1. Create `tests/llm/security-agent.test.ts`
+2. Implement just Test 2.1 (SQL injection detection):
+   ```typescript
+   it('detects SQL injection in vulnerable code', async () => {
+     // Setup repo with vulnerable code
+     // Run SecurityAgent with real LLM
+     // Assert format (deterministic)
+     // Assert detection (LLM judge)
+   });
+   ```
+3. Run it, observe output
+4. **Validates**: Agent → LLM → Parse → Assert flow works end-to-end
+
+### Step 3: Test Output & Reporting
+
+**Goal**: Ensure test output is useful before scaling up.
+
+**Tasks**:
+1. Verify passing test shows: score, reasoning, improvements
+2. Verify failing test shows: why it failed, what threshold was missed
+3. Add result logging (optional but recommended):
+   ```typescript
+   // tests/llm/helpers/result-logger.ts
+   function logResult(testName: string, result: EvaluationResult) {
+     // Append to tests/llm/results/<date>.json
+   }
+   ```
+4. Run the security test a few times, check logs make sense
+5. **Must be debuggable before adding more tests**
+
+### Step 4: Add All Unit Tests
+
+Now confident the infrastructure works, add remaining tests:
+
+```
+tests/llm/
+├── helpers/
+│   ├── llm-assert.ts
+│   └── result-logger.ts
+├── smoke.test.ts              ✓ Done
+├── security-agent.test.ts     ✓ Done (one test)
+├── pattern-agent.test.ts      ← Add
+├── narrative-agent.test.ts    ← Add
+└── bootstrap-agent.test.ts    ← Add
+```
+
+**Order within each file**:
+1. Format compliance test first (no LLM judge needed)
+2. Detection/quality tests second (with LLM judge)
+3. False positive tests last
+
+**After completing unit tests**:
+- Run full suite: `npm run test:llm`
+- Review scores across all tests
+- Identify any agents consistently scoring low (prompt improvement candidates)
+
+### Step 5: Integration & E2E (Later)
+
+Only after unit tests are stable:
+- Add integration tests (multi-agent flows)
+- Add E2E tests (full wiki generation)
+
+---
+
+## Quick Reference: File Structure
+
+```
+tests/llm/
+├── helpers/
+│   ├── llm-assert.ts          # evaluateLLM, assertLLM
+│   ├── result-logger.ts       # Optional: log results to JSON
+│   └── test-repos.ts          # Helper to create test repositories
+├── results/                   # Gitignored, stores run logs
+│   └── 2024-01-15-run.json
+├── smoke.test.ts              # Infrastructure validation
+├── security-agent.test.ts     # SecurityAgent tests
+├── pattern-agent.test.ts      # PatternAgent tests
+├── narrative-agent.test.ts    # NarrativeAgent tests
+├── bootstrap-agent.test.ts    # BootstrapAgent tests
+└── integration/               # Later: multi-agent tests
+    └── analysis-flow.test.ts
+```
+
+---
 
 ## Success Criteria
 
