@@ -1,5 +1,39 @@
 # Issue 2: No Source Verification Meta Agent
 
+## Status: RESOLVED
+
+**Resolution Date:** 2025-12-07
+**Implementation Commit:** e88f08c
+
+### What Was Implemented
+
+1. **SourceVerificationAgent** (`src/agents/meta/source-verification-agent.ts`)
+   - Extracts verifiable claims from wiki pages (file paths, function signatures, behaviors)
+   - Uses tools (`read_file`) to read actual source code
+   - Compares claims to implementation via LLM
+   - Creates `'inaccurate'` findings for mismatches
+   - Prioritizes low-confidence pages and pages with code references
+
+2. **InaccuracyHandler** (`src/agents/consolidation/handlers/inaccuracy-handler.ts`)
+   - Handles `'inaccurate'` finding type in Consolidation
+   - Reads source file referenced in finding
+   - Generates corrected wiki content via LLM
+   - Returns page updates with confidence boost
+
+3. **Finding Type** (`src/domain/finding.ts`)
+   - Added `'inaccurate'` to FindingType with priority 95
+   - Added metadata fields: `claim`, `sourceFile`, `actualBehavior`, `codeSnippet`
+
+4. **Registry Updates**
+   - Registered SourceVerificationAgent in agent registry and META_AGENTS
+   - Registered InaccuracyHandler in finding handler registry
+
+5. **Tests**
+   - `tests/unit/source-verification-agent.test.ts`
+   - `tests/unit/inaccuracy-handler.test.ts`
+
+---
+
 ## Summary
 
 The meta agents review wiki quality but none verify that wiki content matches actual source code. They check wiki-internal consistency (page-to-page), not wiki-to-codebase accuracy (page-to-source).

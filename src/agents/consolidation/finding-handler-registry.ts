@@ -5,6 +5,7 @@ import {
   CategoryMismatchHandler,
   ContradictionHandler,
   DuplicateHandler,
+  InaccuracyHandler,
   OrphanedPageHandler,
   TerminologyHandler,
 } from './handlers/index.js';
@@ -74,6 +75,7 @@ export function createDefaultHandlerRegistry(): FindingHandlerRegistry {
   registry.register(new OrphanedPageHandler());
   registry.register(new CategoryMismatchHandler());
   registry.register(new ContradictionHandler());
+  registry.register(new InaccuracyHandler());
 
   return registry;
 }
