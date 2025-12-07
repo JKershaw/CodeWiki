@@ -30,4 +30,19 @@ All three checks must pass before committing. Fix any errors before proceeding w
 - TypeScript with strict type checking
 - ESLint for code style enforcement
 - Source code lives in `src/`
-- Tests are in `tests/unit/` and `tests/integration/`
+
+## Testing
+
+### Test Locations
+
+- Unit tests: `tests/unit/*.test.ts`
+- Integration tests: `tests/integration/*.test.ts`
+- E2E tests: `tests/e2e/*.spec.ts` (Playwright)
+- Test helpers: `tests/helpers/` (MockLLMService, createTestContext, etc.)
+- Test fixtures: `tests/fixtures/`
+
+### Running a Single Test File
+
+```bash
+node --import tsx --test tests/unit/specific-file.test.ts
+```
