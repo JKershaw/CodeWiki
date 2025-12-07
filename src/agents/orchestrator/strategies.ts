@@ -11,7 +11,7 @@ import type { GitService } from '../../services/git/index.js';
 import { createWorkItem, Priority, type WorkItem } from '../../domain/work-item.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import type { AgentRun } from '../../domain/agent-run.js';
-import type { OrchestratorContext } from './context-gatherer.js';
+import type { OrchestratorContext, IterationPhase } from './context-gatherer.js';
 
 // Import CQRS queries
 import {
@@ -42,6 +42,112 @@ export interface StrategyContext {
   existingWorkKeys: Set<string>;
   git?: GitService;
   contextGatherer?: { gather: (repoId: string, wikiId: string) => Promise<OrchestratorContext> };
+  /** Optional iteration phase for phase-aware prioritization */
+  iterationPhase?: IterationPhase;
+}
+
+/**
+ * Phase-adjusted thresholds for strategies.
+ * Allows strategies to adapt behavior based on iteration progress.
+ */
+export interface PhaseAdjustedThresholds {
+  /** Coverage threshold - directories below this are explored */
+  coverageThreshold: number;
+  /** Maximum directories to explore at once */
+  maxDirectories: number;
+  /** Priority boost for synthesis work (0-1) */
+  synthesisBoost: number;
+  /** Priority boost for quality/meta work (0-1) */
+  qualityBoost: number;
+}
+
+/**
+ * Get phase-adjusted thresholds for strategies.
+ *
+ * Combines wiki size with iteration phase to determine optimal thresholds:
+ * - Early phase (0-30%): Aggressive exploration, breadth-first coverage
+ * - Mid phase (30-70%): Balance exploration with synthesis
+ * - Late phase (70-100%): Focus on quality, polish, and gap-filling
+ *
+ * @param phase - Current iteration phase (undefined for backwards compatibility)
+ * @param wikiPageCount - Current number of wiki pages
+ * @returns Adjusted thresholds for strategies
+ */
+export function getPhaseAdjustedThresholds(
+  phase: IterationPhase | undefined,
+  wikiPageCount: number
+): PhaseAdjustedThresholds {
+  // Base thresholds from wiki size (existing logic)
+  // Small wiki (< 5 pages): Aggressive exploration
+  // Growing wiki (5-10 pages): Moderate exploration
+  // Established wiki (10-20 pages): Selective exploration
+  // Mature wiki (20+ pages): Only truly undocumented
+  const baseCoverageThreshold = wikiPageCount < 5 ? 60
+    : wikiPageCount < 10 ? 40
+    : wikiPageCount < 20 ? 30
+    : 20;
+
+  const baseMaxDirectories = wikiPageCount < 5 ? 5
+    : wikiPageCount < 10 ? 4
+    : wikiPageCount < 20 ? 3
+    : 2;
+
+  // Default boosts (no phase = balanced approach)
+  let synthesisBoost = 0.5;
+  let qualityBoost = 0.5;
+
+  // Adjust based on iteration phase
+  if (!phase) {
+    // No phase info - return base thresholds (backwards compatible)
+    return {
+      coverageThreshold: baseCoverageThreshold,
+      maxDirectories: baseMaxDirectories,
+      synthesisBoost,
+      qualityBoost,
+    };
+  }
+
+  // Phase adjustments
+  let coverageAdjustment = 0;
+  let directoryAdjustment = 0;
+
+  switch (phase) {
+    case 'early':
+      // Early phase: Be MORE aggressive with exploration
+      // Increase coverage threshold by 15% (explore more directories)
+      // Increase max directories by 2
+      coverageAdjustment = 15;
+      directoryAdjustment = 2;
+      synthesisBoost = 0.3; // Lower synthesis priority
+      qualityBoost = 0.2; // Lower quality priority
+      break;
+
+    case 'mid':
+      // Mid phase: Balance exploration and synthesis
+      // Keep base thresholds but boost synthesis
+      coverageAdjustment = 5;
+      directoryAdjustment = 1;
+      synthesisBoost = 0.8; // High synthesis priority
+      qualityBoost = 0.5; // Moderate quality priority
+      break;
+
+    case 'late':
+      // Late phase: Focus on quality, polish, gap-filling
+      // Reduce exploration (only truly undocumented)
+      // Decrease coverage threshold by 10% (explore fewer directories)
+      coverageAdjustment = -10;
+      directoryAdjustment = -1;
+      synthesisBoost = 0.6; // Moderate synthesis
+      qualityBoost = 0.9; // High quality priority
+      break;
+  }
+
+  return {
+    coverageThreshold: Math.max(10, baseCoverageThreshold + coverageAdjustment),
+    maxDirectories: Math.max(1, baseMaxDirectories + directoryAdjustment),
+    synthesisBoost,
+    qualityBoost,
+  };
 }
 
 /**
@@ -144,6 +250,11 @@ export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
  * - Higher coverage threshold = explore more directories
  * - More directories at once = faster foundation building
  * - As wiki grows, become more selective (only truly undocumented areas)
+ *
+ * Phase-aware adjustments:
+ * - Early phase: Even more aggressive exploration (breadth-first)
+ * - Mid phase: Balance exploration with other work
+ * - Late phase: Only explore truly undocumented areas
  */
 export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0 || !ctx.git || !ctx.contextGatherer) {
@@ -156,24 +267,12 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
   const context = await ctx.contextGatherer.gather(ctx.repoId, ctx.wikiId);
   const wikiPageCount = context.wikiPages;
 
-  // Adaptive thresholds based on wiki size:
-  // - Small wiki (< 5 pages): Aggressively explore anything < 60% covered, up to 5 dirs
-  // - Growing wiki (5-10 pages): Explore < 40% covered, up to 4 dirs
-  // - Established wiki (10-20 pages): Explore < 30% covered, up to 3 dirs
-  // - Mature wiki (20+ pages): Only truly undocumented < 20%, up to 2 dirs
-  const coverageThreshold = wikiPageCount < 5 ? 60
-    : wikiPageCount < 10 ? 40
-    : wikiPageCount < 20 ? 30
-    : 20;
-
-  const maxDirectories = wikiPageCount < 5 ? 5
-    : wikiPageCount < 10 ? 4
-    : wikiPageCount < 20 ? 3
-    : 2;
+  // Get phase-adjusted thresholds (combines wiki size with iteration phase)
+  const thresholds = getPhaseAdjustedThresholds(ctx.iterationPhase, wikiPageCount);
 
   const lowCoverageDirs = context.directoryCoverage
-    .filter(d => d.coveragePercent < coverageThreshold)
-    .slice(0, maxDirectories);
+    .filter(d => d.coveragePercent < thresholds.coverageThreshold)
+    .slice(0, thresholds.maxDirectories);
 
   for (const dir of lowCoverageDirs) {
     if (workItems.length >= remainingSlots) break;

@@ -23,6 +23,37 @@ import {
 } from '../../queries/index.js';
 
 /**
+ * Iteration progress information for the orchestrator.
+ * Enables phase-aware prioritization during a processing run.
+ */
+export interface IterationInfo {
+  /** Current iteration number (1-indexed) */
+  currentIteration: number;
+  /** Total iterations requested for this run */
+  totalIterations: number;
+  /** Remaining iterations in this run */
+  remainingIterations: number;
+  /** Progress percentage (0-100) */
+  progressPercent: number;
+}
+
+/**
+ * Phase of the processing run based on progress percentage.
+ * - early (0-30%): Focus on exploration, breadth-first coverage
+ * - mid (30-70%): Balance exploration with synthesis and linking
+ * - late (70-100%): Focus on quality, polish, and filling gaps
+ */
+export type IterationPhase = 'early' | 'mid' | 'late';
+
+/**
+ * Options for gathering orchestrator context.
+ */
+export interface GatherOptions {
+  /** Optional iteration info for phase-aware prioritization */
+  iterationInfo?: IterationInfo;
+}
+
+/**
  * Directory coverage information for the orchestrator (flat format for strategies).
  */
 export interface DirectoryCoverage {
@@ -112,6 +143,12 @@ export interface OrchestratorContext {
 
   // Pending edit requests (from analysis agents, awaiting wiki-editor)
   pendingEditRequests: number;
+
+  // Iteration progress (optional - only present during a processing run)
+  iterationInfo?: IterationInfo;
+
+  // Iteration phase derived from progressPercent (only present when iterationInfo is provided)
+  iterationPhase?: IterationPhase;
 }
 
 /**
@@ -147,9 +184,18 @@ export class ContextGatherer {
   }
 
   /**
+   * Derive iteration phase from progress percentage.
+   */
+  private getIterationPhase(progressPercent: number): IterationPhase {
+    if (progressPercent < 30) return 'early';
+    if (progressPercent < 70) return 'mid';
+    return 'late';
+  }
+
+  /**
    * Gather a complete snapshot of the wiki state.
    */
-  async gather(repoId: string, wikiId: string): Promise<OrchestratorContext> {
+  async gather(repoId: string, wikiId: string, options?: GatherOptions): Promise<OrchestratorContext> {
     // Fetch all the data we need via CQRS queries
     const commitsQuery = createListCommitsQuery(repoId, { limit: 100 });
     const pagesQuery = createListWikiPagesQuery(wikiId);
@@ -324,7 +370,8 @@ export class ContextGatherer {
       }
     }
 
-    return {
+    // Build result with optional iteration info
+    const result: OrchestratorContext = {
       totalCommits: commits.length,
       commitsByAgent,
       recentCommits,
@@ -348,6 +395,14 @@ export class ContextGatherer {
       projectOverviewContent,
       pendingEditRequests,
     };
+
+    // Add iteration info if provided
+    if (options?.iterationInfo) {
+      result.iterationInfo = options.iterationInfo;
+      result.iterationPhase = this.getIterationPhase(options.iterationInfo.progressPercent);
+    }
+
+    return result;
   }
 
   /**
@@ -712,6 +767,23 @@ export class ContextGatherer {
    */
   formatForPrompt(ctx: OrchestratorContext): string {
     const lines: string[] = [];
+
+    // 0. ITERATION PROGRESS - helps with phase-aware prioritization
+    if (ctx.iterationInfo) {
+      lines.push('## Iteration Progress\n');
+      lines.push(`**Progress:** ${ctx.iterationInfo.currentIteration} of ${ctx.iterationInfo.totalIterations} (${ctx.iterationInfo.progressPercent}%), ${ctx.iterationInfo.remainingIterations} remaining`);
+      lines.push(`**Phase:** ${ctx.iterationPhase}`);
+
+      // Phase-specific guidance
+      if (ctx.iterationPhase === 'early') {
+        lines.push('**Priority:** Focus on exploration and breadth-first coverage. Document undocumented areas aggressively.');
+      } else if (ctx.iterationPhase === 'mid') {
+        lines.push('**Priority:** Balance exploration with synthesis. Create overview pages and cross-references.');
+      } else {
+        lines.push('**Priority:** Focus on quality and polish. Fill gaps, improve low-confidence pages, ensure consistency.');
+      }
+      lines.push('');
+    }
 
     // 1. IMMEDIATE ACTIONS - must be addressed first
     if (ctx.pendingEditRequests > 0) {
