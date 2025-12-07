@@ -11,7 +11,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
-import { createWorkItem, Priority } from '../../domain/work-item.js';
+import { createWorkItem, Priority, getPriorityForPhase } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
@@ -60,7 +60,7 @@ import {
 } from '../../queries/index.js';
 
 // Import agent registry for type lists
-import { ANALYSIS_AGENTS, META_AGENTS } from '../../agents/registry.js';
+import { ANALYSIS_AGENTS } from '../../agents/registry.js';
 
 /**
  * Orchestrator configuration.
@@ -296,7 +296,7 @@ export class Orchestrator {
         id: uuid(),
         repoId,
         agentType: item.agentType as AgentType,
-        priority: this.getPriority(item.agentType),
+        priority: getPriorityForPhase(item.agentType, context.iterationPhase),
         ...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
         ...(item.targetPath ? { targetPath: item.targetPath } : {}),
         orchestratorRunId: runId,
@@ -389,28 +389,6 @@ export class Orchestrator {
         return results;
       },
     };
-  }
-
-  /**
-   * Get priority for an agent type.
-   */
-  private getPriority(agentType: string): number {
-    if (ANALYSIS_AGENTS.includes(agentType as AgentType)) {
-      return Priority.RECENT_COMMIT;
-    }
-    if (agentType === 'wiki-editor') {
-      return Priority.USER_REQUEST - 1;
-    }
-    if (agentType === 'codebase-explorer') {
-      return Priority.EXPLORATION;
-    }
-    if (META_AGENTS.includes(agentType as AgentType)) {
-      return Priority.META;
-    }
-    if (agentType === 'consolidation') {
-      return Priority.LOW_CONFIDENCE;
-    }
-    return Priority.SYNTHESIS;
   }
 
   /**
