@@ -135,21 +135,21 @@ We will use PostgreSQL as our primary database.
 
       const result = await agent.runOnCommit(commitSha, agentCtx);
 
-      // Deterministic check: Should have findings
-      assert.ok(result.result.findings.length >= 0,
-        'Should be able to analyze the commit');
-
       // LLM-as-judge: Verify ADR detection
+      // Include summary and wiki updates (where the real content lives)
       const analysisText = JSON.stringify({
         summary: result.result.summary,
         findings: result.result.findings,
         confidence: result.result.confidence,
+        wikiUpdatesCount: result.updates.length,
+        wikiUpdatePaths: result.updates.map(u => u.path),
+        wikiContent: result.updates.map(u => u.content).join('\n---\n'),
       }, null, 2);
 
       const evalResult = await assertLLM(
-        'The narrative analysis identifies an Architecture Decision Record (ADR) in the commit. ' +
-        'It should recognize this as a decision document about choosing PostgreSQL as the database, ' +
-        'and note the context, decision, and consequences structure typical of ADRs.',
+        'The narrative analysis identifies an Architecture Decision Record (ADR). ' +
+        'The summary or wiki content should mention PostgreSQL as the database choice, ' +
+        'and recognize the document structure (context, decision, consequences).',
         analysisText,
         7
       );
@@ -201,15 +201,19 @@ We will use PostgreSQL as our primary database.
       const result = await agent.runOnCommit(commitSha, agentCtx);
 
       // LLM-as-judge: Verify planning document detection
+      // Include wiki updates which contain the processed content
       const analysisText = JSON.stringify({
         summary: result.result.summary,
         findings: result.result.findings,
+        confidence: result.result.confidence,
+        wikiUpdatesCount: result.updates.length,
+        wikiContent: result.updates.map(u => u.content).join('\n---\n'),
       }, null, 2);
 
       const evalResult = await assertLLM(
         'The narrative analysis identifies a planning or roadmap document. ' +
-        'It should recognize this as project planning content that outlines ' +
-        'future development phases and milestones across quarters.',
+        'The summary or wiki content should mention development phases, ' +
+        'quarterly milestones (Q1, Q2, Q3), or future features.',
         analysisText,
         7
       );

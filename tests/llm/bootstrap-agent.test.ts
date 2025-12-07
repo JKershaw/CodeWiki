@@ -148,24 +148,17 @@ MIT License
       assert.ok(overviewPage.content.length > 100, 'Overview should have substantial content');
 
       // LLM-as-judge: Verify content quality
-      // Using evaluateLLM (not assertLLM) because cheaper models may not read README carefully
-      // This logs the result for tracking but doesn't fail the test suite
-      const evalResult = await evaluateLLM(
-        'The generated wiki overview accurately describes the TaskMaster Pro project. ' +
-        'It should mention that it is a task management application, built with TypeScript and React, ' +
-        'and describe key features like task creation, projects, and team collaboration.',
+      // Focus on essential characteristics rather than exact name matching
+      const evalResult = await assertLLM(
+        'The generated wiki overview describes a task management application. ' +
+        'It should mention key aspects such as: task management/creation, React as the frontend framework, ' +
+        'and/or features like organizing tasks, due dates, or team collaboration.',
         overviewPage.content,
         7
       );
 
       logTestResult('README-based overview quality', evalResult);
       console.log(formatEvaluationResult('README-based overview quality', evalResult));
-
-      // Note if the evaluation failed - this indicates a potential prompt improvement needed
-      if (!evalResult.passed) {
-        console.log('Note: Bootstrap agent did not accurately reflect README content.');
-        console.log('This may indicate the agent prompt needs tuning for this model.');
-      }
     });
 
     it('handles minimal README gracefully', async () => {
