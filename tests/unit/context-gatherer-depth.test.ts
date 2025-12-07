@@ -512,18 +512,18 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
       const repos = createMockRepos(null);
       const gatherer = new ContextGatherer(repos as any);
 
-      // Create a tree with many children
+      // Create a tree with many children with varying coverage
       const manyChildren = Array.from({ length: 20 }, (_, i) =>
-        createNode(`dir${i}`, `src/dir${i}`, 5, 30)
+        createNode(`dir${i}`, `src/dir${i}`, 5, i * 5) // 0%, 5%, 10%... coverage
       );
       const tree = createNode('src', 'src', 100, 30, manyChildren);
 
       const result = gatherer.formatCoverageTree(tree, 10);
 
-      // Should truncate and show message
+      // Should filter high-coverage dirs and show message about hidden dirs
       const lines = result.split('\n');
-      assert.ok(lines.length <= 11); // 10 lines + truncation message
-      assert.ok(result.includes('truncated'));
+      assert.ok(lines.length <= 11); // up to 10 dirs + info message
+      assert.ok(result.includes('hidden'), 'Should indicate directories were hidden');
     });
 
     it('should return placeholder for null tree', () => {
@@ -535,25 +535,27 @@ describe('ContextGatherer Coverage Tree Formatting', () => {
       assert.ok(result.includes('No source directory'));
     });
 
-    it('should sort children by file count (largest first)', () => {
+    it('should sort children by coverage ascending (lowest first)', () => {
       const repos = createMockRepos(null);
       const gatherer = new ContextGatherer(repos as any);
 
-      // Children are passed in wrong order but should be sorted by totalFileCount
+      // Children have different coverage percentages
       const tree = createNode('src', 'src', 30, 40, [
-        createNode('small', 'src/small', 5, 30),
-        createNode('large', 'src/large', 20, 30),
-        createNode('medium', 'src/medium', 10, 30),
+        createNode('high', 'src/high', 5, 80),
+        createNode('low', 'src/low', 20, 10),
+        createNode('medium', 'src/medium', 10, 50),
       ]);
 
-      // Note: The sorting is done during tree building, so we test the tree
-      // that buildTreeFromPaths produces, but for this unit test we can
-      // verify the formatter renders all directories
       const result = gatherer.formatCoverageTree(tree);
+      const lines = result.split('\n');
 
-      assert.ok(result.includes('small/'));
-      assert.ok(result.includes('large/'));
-      assert.ok(result.includes('medium/'));
+      // Find indices - low coverage should appear before medium, medium before high
+      const lowIndex = lines.findIndex(l => l.includes('low/'));
+      const mediumIndex = lines.findIndex(l => l.includes('medium/'));
+      const highIndex = lines.findIndex(l => l.includes('high/'));
+
+      assert.ok(lowIndex < mediumIndex, 'low coverage should appear before medium');
+      assert.ok(mediumIndex < highIndex, 'medium coverage should appear before high');
     });
   });
 

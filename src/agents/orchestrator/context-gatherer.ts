@@ -5,6 +5,9 @@ import type { Repo } from '../../domain/repo.js';
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 
+// Import smart coverage filtering
+import { filterCoverageItems } from './smart-coverage-filter.js';
+
 // Import CQRS queries
 import {
   createListCommitsQuery,
@@ -617,27 +620,53 @@ export class ContextGatherer {
 
   /**
    * Format coverage tree as a visual tree string for LLM prompt.
-   * Truncates to maxLines, prioritizing larger directories.
+   *
+   * Uses smart filtering to prioritize low-coverage directories:
+   * 1. Flattens tree to collect all directory nodes
+   * 2. Filters using coveragePercent (lowest first, up to maxLines)
+   * 3. Formats only filtered nodes while preserving tree structure
+   *
+   * This ensures undocumented areas are always visible regardless of repo size.
    */
   formatCoverageTree(tree: DirectoryNode | null, maxLines: number = 100): string {
     if (!tree) {
       return '*No source directory found*';
     }
 
-    const lines: string[] = [];
-    let truncatedCount = 0;
+    // Step 1: Flatten tree to get all nodes with their coverage
+    const allNodes: DirectoryNode[] = [];
+    const flattenTree = (node: DirectoryNode): void => {
+      allNodes.push(node);
+      for (const child of node.children) {
+        flattenTree(child);
+      }
+    };
+    flattenTree(tree);
 
-    // Calculate adaptive coverage threshold based on what we'll show the LLM
-    // Use 50% as the threshold for marking directories as low coverage
-    const lowCoverageThreshold = 50;
+    // Step 2: Apply smart filtering - prioritize lowest coverage
+    const filterResult = filterCoverageItems(allNodes, { targetCount: maxLines });
+
+    // Step 3: Build set of paths to include (filtered nodes + their ancestors)
+    const includedPaths = new Set<string>();
+    for (const node of filterResult.items) {
+      // Add the node's path
+      includedPaths.add(node.path);
+      // Add all ancestor paths to maintain tree structure
+      const parts = node.path.split('/');
+      for (let i = 1; i <= parts.length; i++) {
+        includedPaths.add(parts.slice(0, i).join('/'));
+      }
+    }
+
+    // Step 4: Format tree, only showing included paths
+    const lines: string[] = [];
+
+    // Use effective threshold for marking low coverage (or 50% if all included)
+    const lowCoverageThreshold = filterResult.truncated
+      ? filterResult.effectiveThreshold
+      : 50;
 
     const formatNode = (node: DirectoryNode, prefix: string, isLast: boolean, isRoot: boolean): void => {
-      // Check if we've hit the line limit
-      if (lines.length >= maxLines) {
-        truncatedCount++;
-        return;
-      }
-
       const connector = isRoot ? '' : (isLast ? '└── ' : '├── ');
       const coverageMarker = node.coveragePercent < lowCoverageThreshold ? ' ⚠️' : '';
       const line = `${prefix}${connector}${node.name}/ (${node.coveragePercent}%) - ${node.totalFileCount} files${coverageMarker}`;
@@ -646,18 +675,24 @@ export class ContextGatherer {
       // Prepare prefix for children
       const childPrefix = isRoot ? '' : (prefix + (isLast ? '    ' : '│   '));
 
+      // Filter children to only included paths, sort by coverage ascending
+      const includedChildren = node.children
+        .filter(child => includedPaths.has(child.path))
+        .sort((a, b) => a.coveragePercent - b.coveragePercent);
+
       // Process children
-      for (let i = 0; i < node.children.length; i++) {
-        const child = node.children[i]!;
-        const childIsLast = i === node.children.length - 1;
+      for (let i = 0; i < includedChildren.length; i++) {
+        const child = includedChildren[i]!;
+        const childIsLast = i === includedChildren.length - 1;
         formatNode(child, childPrefix, childIsLast, false);
       }
     };
 
     formatNode(tree, '', true, true);
 
-    if (truncatedCount > 0) {
-      lines.push(`[... ${truncatedCount} more directories truncated ...]`);
+    // Add summary line showing filtering info
+    if (filterResult.truncated) {
+      lines.push(`[Showing ${filterResult.items.length} directories with coverage ≤${filterResult.effectiveThreshold}% | ${filterResult.truncatedCount} higher-coverage directories hidden]`);
     }
 
     return lines.join('\n');
