@@ -23,6 +23,7 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+tests/llm/results/
 
 # Local data (file-based repository)
 .codewiki-data/
