@@ -62,7 +62,22 @@ export async function createLLMTestContext(): Promise<LLMTestContext> {
     llm,
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
-      return { repoId, wikiId: wiki.id, repos, git: gitService, llm };
+      const repoPath = join(reposDir, repoId);
+      return {
+        repoId,
+        wikiId: wiki.id,
+        repos,
+        git: gitService,
+        llm,
+        // Provide repo info so agents can use filesystem tools
+        repo: {
+          id: repoId,
+          fullName: `test/${repoId}`,
+          cloneUrl: repoPath,
+          defaultBranch: 'main',
+          isGitHubRepo: false,
+        },
+      };
     },
     async cleanup(): Promise<void> {
       clearIgnoreCache();

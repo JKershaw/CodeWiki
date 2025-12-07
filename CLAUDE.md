@@ -38,6 +38,7 @@ All three checks must pass before committing. Fix any errors before proceeding w
 - Unit tests: `tests/unit/*.test.ts`
 - Integration tests: `tests/integration/*.test.ts`
 - E2E tests: `tests/e2e/*.spec.ts` (Playwright)
+- LLM tests: `tests/llm/*.test.ts` (real LLM integration tests)
 - Test helpers: `tests/helpers/` (MockLLMService, createTestContext, etc.)
 - Test fixtures: `tests/fixtures/`
 
@@ -46,3 +47,28 @@ All three checks must pass before committing. Fix any errors before proceeding w
 ```bash
 node --import tsx --test tests/unit/specific-file.test.ts
 ```
+
+### LLM Tests
+
+LLM tests use real LLM calls via OpenRouter to verify agent semantic accuracy. They use the "LLM-as-judge" pattern where another LLM evaluates outputs on a 0-10 scale.
+
+**Requirements:**
+- Set `OPENROUTER_API_KEY` environment variable
+- Tests use `qwen/qwen-turbo` by default (cheap, fast)
+
+**Running LLM tests:**
+```bash
+# Run all LLM tests
+node --import tsx --test tests/llm/*.test.ts
+
+# Run specific agent test
+node --import tsx --test tests/llm/security-agent.test.ts
+```
+
+**Test structure:**
+- `tests/llm/helpers/` - Test utilities (context, assertions, result logging)
+- `tests/llm/results/` - JSON test results for analysis
+- `tests/llm/integration/` - Multi-agent consistency tests
+- `tests/llm/e2e/` - Full wiki generation pipeline tests
+
+See `docs/REAL_LLM_TESTING_STRATEGY.md` for the full testing strategy.

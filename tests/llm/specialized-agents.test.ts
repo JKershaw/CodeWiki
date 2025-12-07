@@ -140,9 +140,10 @@ For services, create unit tests with mocks.
       ]);
 
       const specAgent = createSpecAgent(ctx.repos, getLLMService());
+      // Use a task that matches keywords in the wiki content
       const result = await specAgent.generateSpec(
         agentCtx.wikiId,
-        'Add a new endpoint to create tasks with title and description'
+        'Add a new repository for managing user data with standard CRUD operations'
       );
 
       // LLM-as-judge: Verify spec quality
@@ -154,9 +155,9 @@ For services, create unit tests with mocks.
       }, null, 2);
 
       const evalResult = await evaluateLLM(
-        'The specification provides guidance for implementing a task creation endpoint. ' +
-        'It should mention patterns (repository, layered architecture), ' +
-        'naming conventions, or testing approaches from the wiki.',
+        'The specification provides guidance for implementing a user repository. ' +
+        'It should mention patterns (repository pattern, layered architecture), ' +
+        'naming conventions (kebab-case, PascalCase), or testing approaches from the wiki.',
         specText,
         6
       );
