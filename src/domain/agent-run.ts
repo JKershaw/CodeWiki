@@ -45,6 +45,7 @@ export type AgentType =
   | 'quality'
   | 'consistency'
   | 'wiki-editor'
+  | 'source-verification'
   // Synthesis agents - create higher-order content
   | 'guide'
   | 'overview'

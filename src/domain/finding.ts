@@ -42,7 +42,8 @@ export type FindingType =
   | 'terminology'          // Inconsistent terminology across pages
   | 'category_mismatch'    // Content in wrong category
   | 'contradiction'        // Contradictory information between pages
-  | 'low_quality';         // Page flagged as low quality
+  | 'low_quality'          // Page flagged as low quality
+  | 'inaccurate';          // Wiki content doesn't match source code
 
 /**
  * Status of a finding.
@@ -69,6 +70,14 @@ export interface FindingMetadata {
   keepPagePath?: string;
   /** For merge: which page should be removed */
   removePagePath?: string;
+  /** For inaccurate: the incorrect claim from the wiki */
+  claim?: string;
+  /** For inaccurate: the source file that contradicts the claim */
+  sourceFile?: string;
+  /** For inaccurate: what the code actually does */
+  actualBehavior?: string;
+  /** For inaccurate: relevant code snippet as evidence */
+  codeSnippet?: string;
 }
 
 /**
@@ -125,7 +134,8 @@ export function createFinding(params: {
  * Priority order for finding types (higher = more urgent).
  */
 export const FindingPriority: Record<FindingType, number> = {
-  contradiction: 100,     // Highest - factual errors
+  contradiction: 100,     // Highest - factual errors between pages
+  inaccurate: 95,         // Very high - wiki disagrees with source code
   broken_link: 90,        // High - user experience issue
   duplicate_title: 80,    // High - confusing
   similar_content: 60,    // Medium - maintenance issue
