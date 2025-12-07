@@ -6,6 +6,20 @@ This file provides guidance for Claude Code when working with the CodeWiki proje
 
 CodeWiki generates living wikis from Git repositories. It's a TypeScript/Node.js project using ESLint for linting and Node's built-in test runner for tests.
 
+## Setup
+
+Dependencies are not installed by default. Run the following before starting development:
+
+```bash
+npm install
+```
+
+To run end-to-end tests, you also need to install Playwright browsers:
+
+```bash
+npx playwright install
+```
+
 ## Development Commands
 
 - `npm run build` - Compile TypeScript and copy static assets
