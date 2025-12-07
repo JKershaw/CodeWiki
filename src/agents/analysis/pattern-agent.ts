@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Pattern Agent - Recognizes recurring patterns across commits.
@@ -47,10 +47,20 @@ export class PatternAgent implements Agent {
     const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 3500,
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 5,
+      maxTokens: 4000,
       temperature: 0.3,
     });
 
@@ -96,6 +106,18 @@ ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
+
+## Available Tools
+
+You have access to tools to explore the codebase:
+- **read_file**: Read full file contents to understand context beyond the diff
+- **search_files**: Find related files by pattern (e.g., "*.test.ts", "src/**/*.ts")
+- **list_directory**: Explore directory structure
+
+**IMPORTANT**: Use these tools to VERIFY your pattern claims:
+- Before documenting line ranges, use read_file to confirm the exact lines
+- Before claiming a pattern exists, read the full file to verify
+- Use search_files to find other examples of the pattern
 
 Look for:
 1. **Design Patterns**: Factory, Singleton, Observer, Strategy, Repository, etc.
@@ -514,6 +536,17 @@ function slugify(text: string): string {
 const SYSTEM_PROMPT = `You are a pattern recognition agent for CodeWiki, a system that generates living documentation from Git repositories.
 
 Your job is to identify patterns in the code: both intentional design patterns and emergent conventions. Your documentation is intended for developers who may not have direct access to the source code, so be thorough and explicit.
+
+## CRITICAL: Verify Before Documenting
+
+You have access to tools (read_file, search_files, list_directory) to explore the codebase. USE THEM to verify your claims:
+
+1. **Before citing line numbers**: Use read_file to get the actual file content and verify exact line ranges
+2. **Before claiming a pattern**: Read the full file to confirm the pattern actually exists
+3. **Before extracting code snippets**: Use read_file to get the real code, don't reconstruct from diffs
+4. **When uncertain**: Search for similar patterns in other files to confirm conventions
+
+If you cannot verify a claim with the tools, explicitly note the uncertainty rather than guessing.
 
 ## What to Look For
 

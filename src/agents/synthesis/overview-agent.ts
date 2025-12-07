@@ -3,6 +3,7 @@ import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import { createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Overview Agent - Creates category overview pages that synthesize all pages in a category.
@@ -63,10 +64,20 @@ export class OverviewAgent implements Agent {
     const [category, categoryPages] = categoriesNeedingOverview[0]!;
     const prompt = this.buildPrompt(category, categoryPages);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 2000,
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 3,
+      maxTokens: 2500,
       temperature: 0.4,
     });
 
@@ -113,10 +124,20 @@ export class OverviewAgent implements Agent {
 
     const prompt = this.buildPrompt(category, categoryPages);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 2000,
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 3,
+      maxTokens: 2500,
       temperature: 0.4,
     });
 
@@ -201,12 +222,21 @@ ${firstPara.slice(0, 500)}${firstPara.length > 500 ? '...' : ''}
 
 ${pagesSummary}
 
+## Available Tools
+
+You have access to tools to verify information:
+- **read_file**: Read source files to verify technical claims
+- **search_files**: Find files by pattern
+- **list_directory**: Explore project structure
+
+Use these tools if you need to verify any technical claims or relationships mentioned in the page summaries.
+
 ## Your Task
 
 Write a comprehensive overview page that:
 1. Introduces what this category covers
 2. Explains how the pages relate to each other
-3. Highlights the most important concepts
+3. Highlights the most important concepts (verify they exist in code if technical)
 4. Provides a reading order or navigation guide
 5. Links to the individual pages
 
@@ -370,16 +400,28 @@ const SYSTEM_PROMPT = `You are a technical writer creating overview pages for a 
 
 Your job is to synthesize multiple wiki pages into a cohesive introduction that helps readers understand a topic area.
 
-Good overview pages:
+## Tool Usage for Verification
+
+You have access to tools (read_file, search_files, list_directory) to explore the source code. Use them when:
+- You need to verify technical relationships between components
+- You want to confirm that a concept mentioned in page summaries is accurate
+- You need to understand how different parts connect
+
+If a technical claim seems uncertain, use the tools to verify before including it.
+
+## Good Overview Pages
+
 - Start with a clear explanation of what the topic covers
 - Explain how individual pages relate to each other
-- Highlight the most important concepts
+- Highlight the most important concepts (verified against code when possible)
 - Provide a logical reading path
 - Link to detailed pages for deeper information
 
 Write in an encyclopedic style - informative, neutral, and helpful. The overview should help a new developer understand this area of the codebase quickly.
 
-Do NOT:
+## Do NOT
+
 - Repeat detailed content from individual pages
 - Write about commits or git history
-- Include implementation details (that's what the linked pages are for)`;
+- Include implementation details (that's what the linked pages are for)
+- Make claims about code relationships without verification`;
