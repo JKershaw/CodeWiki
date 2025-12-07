@@ -6,8 +6,6 @@ import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 import {
   getCommitDiff,
   createCodebaseToolExecutor,
-  fetchAffectedFileContents,
-  formatFileContentsForPrompt,
 } from '../agent-helpers.js';
 
 /**
@@ -50,15 +48,11 @@ export class CodeChangeAgent implements Agent {
     // Get the diff for this commit (uses repoService if available, falls back to git)
     const diff = await getCommitDiff(context, commit.sha);
 
-    // Pre-fetch full contents of affected files for richer context
-    const fileContents = await fetchAffectedFileContents(
-      context,
-      commit.diffSummary.affectedFiles
-    );
-    const formattedFileContents = formatFileContentsForPrompt(fileContents);
-
     // Build the prompt for the LLM
-    const prompt = this.buildPrompt(commit, diff, formattedFileContents);
+    // Note: We intentionally do NOT pre-fetch file contents. The LLM must use
+    // tools (read_file) to access full file contents. This ensures proper
+    // verification and avoids bloating the prompt with potentially large files.
+    const prompt = this.buildPrompt(commit, diff);
 
     // Set up codebase exploration tools (works with both local and GitHub repos)
     const toolExecutor = createCodebaseToolExecutor(context);
@@ -119,8 +113,7 @@ export class CodeChangeAgent implements Agent {
 
   private buildPrompt(
     commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
-    diff: string,
-    fileContents: string
+    diff: string
   ): string {
     const truncatedDiff = diff.length > 10000 ? diff.slice(0, 10000) + '\n... (diff truncated)' : diff;
 
@@ -139,17 +132,18 @@ export class CodeChangeAgent implements Agent {
 
 ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 
-## Full File Contents
-
-These are the complete source files (not just diffs) so you can understand the full context:
-
-${fileContents}
-
 ## Diff
 
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
+
+## IMPORTANT: Use Tools to Read Full File Contents
+
+The diff above shows only the changed lines. To write accurate documentation, you MUST:
+1. Use \`read_file\` to read the COMPLETE contents of affected files
+2. Understand the full context, not just the changed lines
+3. Verify your documentation against the actual source code
 
 Write documentation as wiki articles that a developer would find useful. Focus on:
 1. What capability or change was introduced (not "this commit adds...")
