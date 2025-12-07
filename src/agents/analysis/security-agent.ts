@@ -1,5 +1,5 @@
 import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
-import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isCommitTarget, extractToolMetrics } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
@@ -74,6 +74,7 @@ export class SecurityAgent implements Agent {
       }),
       updates,
       costUsd: completion.costUsd,
+      toolMetrics: extractToolMetrics(completion),
     };
   }
 

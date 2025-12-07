@@ -1,6 +1,6 @@
 import type { AgentType, AgentResult, AgentFinding } from '../domain/agent-run.js';
 import type { WikiPageUpdate } from '../domain/wiki-page.js';
-import type { LLMService } from '../services/llm/llm-service.js';
+import type { LLMService, ToolUseResult } from '../services/llm/llm-service.js';
 import type { Repositories } from '../repositories/index.js';
 import type { GitService } from '../services/git/git-service.js';
 import type { RepositoryService } from '../services/repository/repository-service.js';
@@ -42,6 +42,19 @@ export interface AgentContext {
 }
 
 /**
+ * Metrics about tool usage during an agent run.
+ * Used to validate that agents properly verify claims against source code.
+ */
+export interface ToolMetrics {
+  /** Total number of tool calls made */
+  toolCallCount: number;
+  /** Map of tool name to usage count */
+  toolsUsed: Record<string, number>;
+  /** List of files read (for read_file calls) */
+  filesRead: string[];
+}
+
+/**
  * Result of running an agent.
  */
 export interface AgentRunResult {
@@ -51,6 +64,31 @@ export interface AgentRunResult {
   updates: WikiPageUpdate[];
   /** Cost of this run in USD */
   costUsd: number;
+  /** Tool usage metrics (optional, for enforcement validation) */
+  toolMetrics?: ToolMetrics;
+}
+
+/**
+ * Extract tool metrics from a ToolUseResult.
+ * Agents should call this to populate toolMetrics in their result.
+ */
+export function extractToolMetrics(completion: ToolUseResult): ToolMetrics {
+  const toolsUsed: Record<string, number> = {};
+  const filesRead: string[] = [];
+
+  for (const call of completion.toolCalls) {
+    toolsUsed[call.name] = (toolsUsed[call.name] ?? 0) + 1;
+
+    if (call.name === 'read_file' && typeof call.input['path'] === 'string') {
+      filesRead.push(call.input['path']);
+    }
+  }
+
+  return {
+    toolCallCount: completion.toolCalls.length,
+    toolsUsed,
+    filesRead,
+  };
 }
 
 /**

@@ -72,6 +72,15 @@ import { createEditRequest } from '../domain/edit-request.js';
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../agents/registry.js';
 
+// Import tool enforcement for verification
+import {
+  validateToolUsage,
+  isWarnOnly,
+  hasToolRequirements,
+  formatToolMetricsForLog,
+  ToolEnforcementError,
+} from './tool-enforcement.js';
+
 /**
  * Queue water marks for proactive refill.
  * Low water mark: trigger refill when queue drops to this level
@@ -652,6 +661,28 @@ export class Executor {
       const result = await agent.run(agentTarget, context);
 
       const durationMs = Date.now() - startTime;
+
+      // Validate tool usage if agent has requirements and provided metrics
+      if (result.toolMetrics && hasToolRequirements(agent.type as AgentType)) {
+        const validation = validateToolUsage(agent.type as AgentType, result.toolMetrics);
+
+        // Log tool usage for monitoring
+        console.log(`  🔧 ${formatToolMetricsForLog(agent.type as AgentType, result.toolMetrics)}`);
+
+        if (!validation.valid) {
+          if (isWarnOnly(agent.type as AgentType)) {
+            // Log warning but continue
+            console.warn(`  ⚠️  Tool verification warning: ${validation.message}`);
+          } else {
+            // Throw error to fail the agent run
+            throw new ToolEnforcementError(agent.type as AgentType, validation);
+          }
+        }
+      } else if (hasToolRequirements(agent.type as AgentType) && !result.toolMetrics) {
+        // Agent has requirements but didn't provide metrics - warn for now
+        // This allows gradual migration as agents are updated
+        console.warn(`  ⚠️  Agent '${agent.type}' has tool requirements but didn't report metrics`);
+      }
 
       // Complete the agent run via CQRS command
       await handleCompleteAgentRun(
