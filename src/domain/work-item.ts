@@ -95,6 +95,107 @@ export const Priority = {
   BACKGROUND: 10,
 } as const;
 
+/**
+ * Phase-based priority values.
+ * Adjusts priorities based on iteration progress to ensure:
+ * - Early phase: Build foundation (exploration leads, synthesis follows closely)
+ * - Mid phase: Balanced interleaving of all work types
+ * - Late phase: Polish and complete (synthesis and meta lead, analysis backfills)
+ */
+export const PRIORITY_BY_PHASE = {
+  early: {
+    exploration: 80,  // Highest - establish baseline content
+    synthesis: 65,    // Elevated - create useful structure early
+    analysis: 50,     // Lower - historical context can wait
+    meta: 45,         // Lowest - quality polish comes later
+  },
+  mid: {
+    exploration: 65,  // Reduced - most areas explored
+    synthesis: 60,    // Balanced with analysis
+    analysis: 55,     // Raised - catch up on commits
+    meta: 50,         // Raised - start improving quality
+  },
+  late: {
+    exploration: 50,  // Low - only fill gaps
+    synthesis: 75,    // Highest - complete guides/overviews
+    analysis: 40,     // Lowest - backfill only
+    meta: 70,         // High - polish and consistency
+  },
+} as const;
+
+/**
+ * Agent type categories for priority assignment.
+ */
+const ANALYSIS_AGENT_TYPES = new Set([
+  'code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency',
+]);
+
+const META_AGENT_TYPES = new Set([
+  'link', 'structure', 'quality', 'consistency', 'source-verification',
+]);
+
+const SYNTHESIS_AGENT_TYPES = new Set([
+  'overview', 'project-overview', 'getting-started', 'testing-guide',
+  'extension-guide', 'writer', 'wiki-index', 'toc',
+]);
+
+/**
+ * Iteration phase type (matches context-gatherer.ts).
+ */
+export type IterationPhase = 'early' | 'mid' | 'late';
+
+/**
+ * Get priority for an agent type based on iteration phase.
+ *
+ * This enables dynamic prioritization:
+ * - Early phase: exploration and synthesis lead, analysis deferred
+ * - Mid phase: balanced interleaving
+ * - Late phase: synthesis and meta lead, analysis backfills
+ *
+ * Special agents (bootstrap, wiki-editor, consolidation) have fixed priorities
+ * regardless of phase.
+ *
+ * @param agentType - The agent type
+ * @param phase - Current iteration phase (undefined = balanced defaults)
+ * @returns Priority value (1-100)
+ */
+export function getPriorityForPhase(
+  agentType: string,
+  phase: IterationPhase | undefined
+): number {
+  // Special agents always get fixed priority
+  if (agentType === 'bootstrap') {
+    return Priority.USER_REQUEST;
+  }
+  if (agentType === 'wiki-editor') {
+    return Priority.USER_REQUEST - 1;
+  }
+  if (agentType === 'consolidation') {
+    return Priority.LOW_CONFIDENCE;
+  }
+
+  // Default to mid phase for backwards compatibility
+  const effectivePhase = phase ?? 'mid';
+  const phasePriorities = PRIORITY_BY_PHASE[effectivePhase];
+
+  // Categorize agent and return phase-appropriate priority
+  if (agentType === 'codebase-explorer') {
+    return phasePriorities.exploration;
+  }
+  if (ANALYSIS_AGENT_TYPES.has(agentType)) {
+    return phasePriorities.analysis;
+  }
+  if (META_AGENT_TYPES.has(agentType)) {
+    return phasePriorities.meta;
+  }
+  if (SYNTHESIS_AGENT_TYPES.has(agentType)) {
+    return phasePriorities.synthesis;
+  }
+
+  // Unknown agent type - return synthesis priority as reasonable default
+  return phasePriorities.synthesis;
+}
+
 export function createWorkItem(params: {
   id: string;
   repoId: string;

@@ -8,7 +8,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { GitService } from '../../services/git/index.js';
-import { createWorkItem, Priority, type WorkItem } from '../../domain/work-item.js';
+import { createWorkItem, getPriorityForPhase, type WorkItem } from '../../domain/work-item.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import type { AgentRun } from '../../domain/agent-run.js';
 import type { OrchestratorContext, IterationPhase } from './context-gatherer.js';
@@ -234,7 +234,7 @@ export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
         id: uuid(),
         repoId: ctx.repoId,
         agentType: 'bootstrap',
-        priority: Priority.USER_REQUEST,
+        priority: getPriorityForPhase('bootstrap', ctx.iterationPhase),
       }),
     ],
     stopProcessing: true,  // Bootstrap must complete before other work
@@ -286,7 +286,7 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
         id: uuid(),
         repoId: ctx.repoId,
         agentType: 'codebase-explorer',
-        priority: Priority.EXPLORATION,
+        priority: getPriorityForPhase('codebase-explorer', ctx.iterationPhase),
         targetPath: dir.path,
       })
     );
@@ -323,8 +323,10 @@ export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
 
       ctx.existingWorkKeys.add(key);
 
+      // Use phase-based priority with a small boost for recent commits
+      const basePriority = getPriorityForPhase(agentType, ctx.iterationPhase);
       const isRecent = commit.committedAt > oneWeekAgo;
-      const priority = isRecent ? Priority.RECENT_COMMIT : Priority.HISTORICAL_COMMIT;
+      const priority = isRecent ? basePriority + 5 : basePriority;
 
       workItems.push(
         createWorkItem({
@@ -342,7 +344,12 @@ export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
 };
 
 /**
- * Strategy 3: Meta agents (run on wiki after analysis is complete).
+ * Strategy 3: Meta agents (quality, linking, structure).
+ *
+ * Previously gated to run only after analysis complete, but now uses
+ * phase-based prioritization instead. Meta agents get lower priority
+ * in early phases (so analysis naturally runs first) and higher priority
+ * in late phases (when polish is needed).
  */
 export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0) return { workItems: [] };
@@ -356,14 +363,9 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     return { workItems: [] };
   }
 
-  // Check if analysis is mostly complete
-  const unprocessedQuery = createListUnprocessedCommitsQuery(ctx.repoId, 'code-change');
-  const unprocessedResult = await handleListUnprocessedCommits(unprocessedQuery, ctx.repos);
-  const unprocessedByCodeChange = unprocessedResult.data || [];
-
-  if (unprocessedByCodeChange.length > 0) {
-    return { workItems: [] };  // Wait for analysis to complete
-  }
+  // Note: Removed gating on unprocessed commits. Meta agents now use
+  // phase-based priorities instead - they'll naturally have lower priority
+  // in early phases and higher priority in late phases.
 
   const workItems: WorkItem[] = [];
 
@@ -384,7 +386,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'link',
-            priority: Priority.META,
+            priority: getPriorityForPhase('link', ctx.iterationPhase),
           })
         );
       }
@@ -405,7 +407,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
           id: uuid(),
           repoId: ctx.repoId,
           agentType: 'structure',
-          priority: Priority.META,
+          priority: getPriorityForPhase('structure', ctx.iterationPhase),
         })
       );
     }
@@ -427,7 +429,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'quality',
-            priority: Priority.META,
+            priority: getPriorityForPhase('quality', ctx.iterationPhase),
           })
         );
       }
@@ -448,7 +450,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
           id: uuid(),
           repoId: ctx.repoId,
           agentType: 'consistency',
-          priority: Priority.META,
+          priority: getPriorityForPhase('consistency', ctx.iterationPhase),
         })
       );
     }
@@ -473,7 +475,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'consolidation',
-            priority: Priority.LOW_CONFIDENCE,
+            priority: getPriorityForPhase('consolidation', ctx.iterationPhase),
           })
         );
       }
@@ -548,7 +550,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'overview',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('overview', ctx.iterationPhase),
           })
         );
         break;
@@ -576,7 +578,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'project-overview',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('project-overview', ctx.iterationPhase),
           })
         );
       }
@@ -606,7 +608,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'getting-started',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('getting-started', ctx.iterationPhase),
           })
         );
       }
@@ -635,7 +637,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'testing-guide',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('testing-guide', ctx.iterationPhase),
           })
         );
       }
@@ -666,7 +668,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'extension-guide',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('extension-guide', ctx.iterationPhase),
           })
         );
       }
@@ -701,7 +703,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'writer',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('writer', ctx.iterationPhase),
           })
         );
       }
@@ -736,7 +738,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'wiki-index',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('wiki-index', ctx.iterationPhase),
           })
         );
       }
@@ -777,7 +779,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'toc',
-            priority: Priority.SYNTHESIS,
+            priority: getPriorityForPhase('toc', ctx.iterationPhase),
           })
         );
       }
