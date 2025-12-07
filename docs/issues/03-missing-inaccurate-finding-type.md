@@ -1,5 +1,28 @@
 # Issue 3: Missing INACCURATE Finding Type
 
+## Status: RESOLVED
+
+**Resolution Date:** 2025-12-07
+**Implementation Commit:** e88f08c
+
+### What Was Implemented
+
+1. **Added `'inaccurate'` FindingType** (`src/domain/finding.ts`)
+   - Priority 95 (second highest after `contradiction` at 100)
+   - New metadata fields: `claim`, `sourceFile`, `actualBehavior`, `codeSnippet`
+
+2. **Created InaccuracyHandler** (`src/agents/consolidation/handlers/inaccuracy-handler.ts`)
+   - Reads source file via codebase tools
+   - Generates corrected content via LLM
+   - Produces WikiPageUpdate with confidence boost
+
+3. **Registered Handler** (`src/agents/consolidation/finding-handler-registry.ts`)
+   - Added to `createDefaultHandlerRegistry()`
+
+This was implemented together with Issue 2 (SourceVerificationAgent) as they are interdependent.
+
+---
+
 ## Summary
 
 The Consolidation Agent handles findings from meta agents, but there's no finding type for "content doesn't match source code." Even if a SourceVerificationAgent detected inaccuracies, Consolidation couldn't process them.
