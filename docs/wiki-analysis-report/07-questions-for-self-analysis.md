@@ -149,6 +149,30 @@ These questions are designed to be asked of the self-analysis agent running in p
 
 ---
 
+## Category 8: Orchestrator Prompt-Strategy Alignment
+
+### Q24: Commit-Style vs Encyclopedic Content
+> "What percentage of wiki pages contain commit-style language ('this commit', 'this change', 'this patch') versus encyclopedic language ('this component does', 'to use this')? Has this ratio improved over iterations?"
+
+**Why this matters:** Measures the impact of building from commits vs current-state exploration.
+
+### Q25: Exploration Fallback Frequency
+> "How often does the fallback exploration mechanism trigger in LLM orchestrator mode? What percentage of exploration work comes from fallback vs. LLM decision?"
+
+**Why this matters:** If fallback triggers often, the LLM prompt isn't prioritizing exploration correctly.
+
+### Q26: Exploration vs Commit Page Quality
+> "For pages created from codebase exploration vs. pages created from commit analysis, which have higher benchmark accuracy and quality scores?"
+
+**Why this matters:** Tests whether current-state-first approach produces better content.
+
+### Q27: Writer Agent Load by Origin
+> "Does the Writer Agent run more frequently on pages that originated from commit analysis vs. exploration? What's the rewrite rate for each origin type?"
+
+**Why this matters:** If commit-origin pages need more rewriting, the commit-first approach creates technical debt.
+
+---
+
 ## How to Use These Questions
 
 ### Running the Self-Analysis
