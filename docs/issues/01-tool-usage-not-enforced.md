@@ -1,10 +1,113 @@
 # Issue 1: Tool Usage Not Enforced
 
+## Status: RESOLVED
+
+**Resolved in:** Commit `c0943a4` on branch `claude/review-docs-issue-01ByzJJuVr4ZghLHQoGVp6uS`
+
 ## Summary
 
 All analysis and synthesis agents have access to codebase tools (`read_file`, `search_files`, `list_directory`). Prompts instruct agents to "verify before writing." However, there's no mechanism ensuring agents actually use these tools effectively.
 
-## Severity: HIGH
+## Severity: HIGH (was)
+
+---
+
+## Resolution
+
+### What Was Implemented
+
+The fix implements **Option 1 (Minimum Tool Usage Requirement)** from the proposed solutions, with a layered approach:
+
+#### 1. Tool Enforcement Module (`src/executor/tool-enforcement.ts`)
+
+New module providing:
+- `ToolEnforcementConfig` - Per-agent requirements configuration
+- `validateToolUsage()` - Validates tool calls against requirements
+- `isWarnOnly()` / `hasToolRequirements()` - Helper functions
+- `ToolEnforcementError` - Error class for failed validations
+- `formatToolMetricsForLog()` - Formatted logging output
+
+#### 2. Tool Metrics Tracking (`src/agents/base-agent.ts`)
+
+Added to `AgentRunResult`:
+```typescript
+interface ToolMetrics {
+  toolCallCount: number;
+  toolsUsed: Record<string, number>;
+  filesRead: string[];
+}
+
+interface AgentRunResult {
+  // ... existing fields
+  toolMetrics?: ToolMetrics;  // NEW
+}
+```
+
+Added `extractToolMetrics(completion)` helper function.
+
+#### 3. Agent Updates
+
+All analysis agents now report tool metrics:
+- `code-change-agent.ts`
+- `pattern-agent.ts`
+- `security-agent.ts`
+- `technical-debt-agent.ts`
+- `narrative-agent.ts`
+- `dependency-agent.ts`
+- `codebase-explorer-agent.ts`
+
+#### 4. Executor Integration (`src/executor/executor.ts`)
+
+After `agent.run()` returns:
+1. Checks if agent has tool requirements via `hasToolRequirements()`
+2. Validates tool usage via `validateToolUsage()`
+3. Logs tool metrics: `🔧 ✓ code-change: 3 tool call(s) [read_file(2), search_files(1)]`
+4. For strict agents: throws `ToolEnforcementError` if requirements not met
+5. For warnOnly agents: logs warning but continues
+
+### Enforcement Configuration
+
+| Agent Type | Min Calls | Required Tools | Mode |
+|------------|-----------|----------------|------|
+| code-change | 1 | read_file | **Strict** |
+| pattern | 1 | read_file | **Strict** |
+| security | 1 | read_file | **Strict** |
+| technical-debt | 1 | read_file | **Strict** |
+| narrative | 1 | - | Warn only |
+| dependency | 1 | - | Warn only |
+| bootstrap | 1 | - | Warn only |
+| project-overview | 1 | - | Warn only |
+| getting-started | 1 | - | Warn only |
+| testing-guide | 1 | - | Warn only |
+| extension-guide | 1 | - | Warn only |
+| writer | 0 | - | Warn only |
+| overview | 0 | - | Warn only |
+| quality | 0 | - | None |
+| link | 0 | - | None |
+| wiki-editor | 0 | - | None |
+| structure | 0 | - | None |
+| consistency | 0 | - | None |
+
+### Verification
+
+- All 1299 tests pass
+- TypeScript compiles cleanly
+- Test output shows enforcement working:
+  ```
+  # ✗ AGENT FAILURE: code-change
+  # Error: Agent 'code-change' made 0 tool call(s), but 1 required
+  ```
+
+### Future Enhancements
+
+The following from the original proposal remain as future work:
+- **Attestation format**: Agent explicitly states what it verified
+- **Tool-call-to-claim ratio**: Track claims vs. tool calls
+- **Retry mechanism**: Re-prompt if no tools used
+
+---
+
+## Original Analysis
 
 ## Current State
 
@@ -337,7 +440,9 @@ After implementing enforcement:
 
 ## Related Files
 
+- `src/executor/tool-enforcement.ts` - **NEW** Tool enforcement module
+- `src/agents/base-agent.ts` - ToolMetrics interface and extractToolMetrics()
 - `src/agents/agent-helpers.ts` - Tool executor creation
-- `src/executor/executor.ts` - Agent execution
+- `src/executor/executor.ts` - Agent execution with enforcement integration
 - `src/services/llm/codebase-tools.ts` - Tool definitions
 - `src/services/llm/llm-service.ts` - Tool calling interface

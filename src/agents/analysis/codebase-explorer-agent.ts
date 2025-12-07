@@ -1,5 +1,5 @@
 import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
-import { createAgentResult, createFinding, isPathTarget } from '../base-agent.js';
+import { createAgentResult, createFinding, isPathTarget, extractToolMetrics } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import {
@@ -116,6 +116,7 @@ export class CodebaseExplorerAgent implements Agent {
       }),
       updates,
       costUsd: completion.costUsd,
+      toolMetrics: extractToolMetrics(completion),
     };
   }
 
