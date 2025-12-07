@@ -84,7 +84,9 @@ export function selectItemsForBatch(
     ANALYSIS_AGENTS.includes(w.agentType as AgentType)
   );
 
-  const claimedCommitsInBatch = new Set<string>();
+  // Track (commit, agentType) pairs to prevent duplicate work, but allow
+  // different agents to process the same commit in parallel
+  const claimedCommitAgentPairs = new Set<string>();
 
   for (const item of pendingItems) {
     if (itemsToClaim.length >= maxItems) break;
@@ -112,14 +114,16 @@ export function selectItemsForBatch(
       }
     }
 
-    // Rule 4: Don't claim the same commit twice in one batch
-    // (prevents race conditions on same commit)
+    // Rule 4: Don't claim the same (commit, agentType) pair twice in one batch
+    // This prevents duplicate work while allowing different agents to process
+    // the same commit in parallel for increased throughput
     if (targetCommitId) {
-      if (claimedCommitsInBatch.has(targetCommitId)) {
-        skippedReasons.set(item.id, 'commit_already_claimed_in_batch');
+      const pairKey = `${targetCommitId}:${item.agentType}`;
+      if (claimedCommitAgentPairs.has(pairKey)) {
+        skippedReasons.set(item.id, 'commit_agent_pair_already_claimed_in_batch');
         continue;
       }
-      claimedCommitsInBatch.add(targetCommitId);
+      claimedCommitAgentPairs.add(pairKey);
     }
 
     // This item passes all checks
