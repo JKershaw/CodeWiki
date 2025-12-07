@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Narrative Agent - Detects meta-documents and captures project storytelling.
@@ -42,9 +42,19 @@ export class NarrativeAgent implements Agent {
     const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 3,
       maxTokens: 2000,
       temperature: 0.3,
     });
@@ -90,6 +100,19 @@ ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
+
+## Available Tools
+
+You have access to tools to explore the source code:
+- **read_file**: Read the full content of documentation files
+- **search_files**: Find related planning or decision documents
+- **list_directory**: Explore docs/ or other documentation directories
+
+**Use these tools to**:
+- Read the complete document being referenced, not just the diff
+- Find related ADRs or planning documents for context
+- Verify cross-references to other documentation
+- Understand how this narrative fits with existing documentation
 
 Look for:
 1. Planning documents (PLAN.md, roadmap, project plans)
@@ -369,6 +392,17 @@ function pathToTitle(path: string): string {
 const SYSTEM_PROMPT = `You are a technical writer extracting project knowledge from meta-documentation.
 
 CRITICAL: Write as encyclopedia articles, NOT commit summaries.
+
+## CRITICAL: Verify Before Documenting
+
+You have access to tools (read_file, search_files, list_directory) to explore documentation. USE THEM:
+
+1. **Read the complete document** rather than relying only on the diff
+2. **Find related documents** to understand how this narrative fits with existing documentation
+3. **Verify cross-references** by checking that linked documents exist
+4. **Search for existing coverage** to avoid duplicating existing documentation
+
+If you reference claims from a document, read the full document first to ensure accurate representation.
 
 BAD: "This commit adds a planning document that describes..."
 GOOD: "The project follows a CQRS architecture pattern, chosen because..."

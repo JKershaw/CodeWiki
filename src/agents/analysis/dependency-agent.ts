@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Dependency Agent - Tracks external dependency changes and their implications.
@@ -57,9 +57,19 @@ export class DependencyAgent implements Agent {
     const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 3,
       maxTokens: 2000,
       temperature: 0.2,
     });
@@ -129,6 +139,19 @@ ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
+
+## Available Tools
+
+You have access to tools to explore the source code:
+- **read_file**: Read package.json, lock files, or import statements
+- **search_files**: Find where dependencies are actually used
+- **list_directory**: Explore the project structure
+
+**Use these tools to**:
+- Read the full package.json to understand the dependency context
+- Search for imports of new dependencies to understand how they're used
+- Find configuration files related to dependencies
+- Verify what the dependency is actually used for in the codebase
 
 Analyze for:
 1. New dependencies added (name, version, purpose)
@@ -522,6 +545,17 @@ function slugify(text: string): string {
 const SYSTEM_PROMPT = `You are a dependency analysis agent for CodeWiki, a system that generates living documentation from Git repositories.
 
 Your job is to analyze dependency changes and their implications for the project.
+
+## CRITICAL: Verify Before Documenting
+
+You have access to tools (read_file, search_files, list_directory) to explore the source code. USE THEM:
+
+1. **Search for imports** of new dependencies to understand actual usage patterns
+2. **Read configuration files** to understand how dependencies are configured
+3. **Find usage examples** in the codebase before documenting how something is used
+4. **Verify the dependency's purpose** by reading where it's actually imported
+
+If you cannot verify how a dependency is used, note it as "appears to be used for" rather than stating definitively.
 
 ## What to Analyze
 

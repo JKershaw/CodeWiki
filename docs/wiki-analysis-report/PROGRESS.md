@@ -14,7 +14,7 @@ This document tracks the progress of addressing issues identified in the CodeWik
 |-------|----------|--------|-------|
 | 01 - Hallucination Issues | CRITICAL | ✅ **Fixed** | Added verification tools to agents |
 | 02 - Parsing Fragility | HIGH | 🔴 Open | Silent regex failures |
-| 03 - Context Insufficiency | HIGH | 🟡 Partial | PatternAgent now has tools; others pending |
+| 03 - Context Insufficiency | HIGH | ✅ **Fixed** | All analysis agents now have tool access |
 | 04 - Verification Gaps | HIGH | 🔴 Open | No feedback loops |
 | 05 - Consolidation Blindspot | MEDIUM-HIGH | 🔴 Open | Zero integration tests |
 | 06 - Orchestrator Disconnect | MEDIUM | 🔴 Open | No benchmark → orchestrator feedback |
@@ -109,6 +109,53 @@ This document tracks the progress of addressing issues identified in the CodeWik
 
 ---
 
+### Issue 03: Insufficient Context for Analysis ✅
+
+**Fixed:** 2025-12-07
+**Branch:** `claude/assess-orchestrator-misalignment-01FjqQdvGxJsMXHR72aZsPH5`
+
+**Problem:** Analysis agents (TechnicalDebtAgent, SecurityAgent, NarrativeAgent, DependencyAgent) only received diff context, making it impossible to verify claims, understand full file structure, or find related code.
+
+**Changes Made:**
+
+1. **TechnicalDebtAgent** (`src/agents/analysis/technical-debt-agent.ts`):
+   - Added `createCodebaseToolExecutor` import
+   - Changed `complete()` → `completeWithTools()` with maxToolRounds: 5
+   - Added tool instructions to user prompt (read full file for context, verify TODO relevance, check for systemic debt patterns)
+   - Added "CRITICAL: Verify Before Documenting" section to system prompt
+
+2. **SecurityAgent** (`src/agents/analysis/security-agent.ts`):
+   - Added `createCodebaseToolExecutor` import
+   - Changed `complete()` → `completeWithTools()` with maxToolRounds: 5
+   - Added tool instructions to user prompt (trace data flow, verify auth implementations, check security configs)
+   - Added verification section to system prompt
+
+3. **NarrativeAgent** (`src/agents/analysis/narrative-agent.ts`):
+   - Added `createCodebaseToolExecutor` import
+   - Changed `complete()` → `completeWithTools()` with maxToolRounds: 3
+   - Added tool instructions to user prompt (read complete documents, find related docs, verify cross-references)
+   - Added verification section to system prompt
+
+4. **DependencyAgent** (`src/agents/analysis/dependency-agent.ts`):
+   - Added `createCodebaseToolExecutor` import
+   - Changed `complete()` → `completeWithTools()` with maxToolRounds: 3
+   - Added tool instructions to user prompt (search for imports, read configs, verify dependency usage)
+   - Added verification section to system prompt
+
+**Expected Outcomes:**
+- Agents can read full files instead of relying only on diffs
+- Technical debt analysis can verify complexity metrics and TODO context
+- Security analysis can trace data flow and verify auth implementations
+- Narrative agent can read complete documents for accurate representation
+- Dependency agent can search for actual import usage
+
+**Validation Metrics to Monitor:**
+- [ ] Tool usage rate in analysis agent runs
+- [ ] Reduction in false positive findings
+- [ ] Improved context in generated wiki pages
+
+---
+
 ## Remaining Issues (Priority Order)
 
 ### 🔴 HIGH: Issue 02 - Fragile Response Parsing
@@ -121,19 +168,6 @@ This document tracks the progress of addressing issues identified in the CodeWik
 1. Add parsing failure logging with context
 2. Reject malformed responses instead of defaulting
 3. Switch to structured output (JSON schema) where possible
-
----
-
-### 🔴 HIGH: Issue 03 - Insufficient Context for Analysis
-
-**Impact:** False positives/negatives, decontextualized analysis
-**Affected Agents:** Technical-Debt, Pattern, Narrative, Security
-**Root Cause:** Agents receive only diffs, not full file context
-
-**Recommended Next Steps:**
-1. Add tool access to analysis agents (like CodeChangeAgent has)
-2. Pre-fetch full file contents before analysis
-3. Add cross-reference context (imports, tests)
 
 ---
 
@@ -178,13 +212,13 @@ This document tracks the progress of addressing issues identified in the CodeWik
 Based on impact and dependencies:
 
 1. **Issue 02 (Parsing)** - Affects all agents, relatively easy fix
-2. **Issue 03 (Context)** - Partially addressed; remaining analysis agents need tools
-3. **Issue 04 (Verification)** - Enables closed-loop improvement
-4. **Issue 05 (Consolidation)** - Ensures self-healing works
-5. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
+2. **Issue 04 (Verification)** - Enables closed-loop improvement
+3. **Issue 05 (Consolidation)** - Ensures self-healing works
+4. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
 
 **Completed:**
 - ✅ Issue 01 (Hallucination) - Added verification tools to PatternAgent, WriterAgent, OverviewAgent
+- ✅ Issue 03 (Context) - Added verification tools to TechnicalDebtAgent, SecurityAgent, NarrativeAgent, DependencyAgent
 - ✅ Issue 08 (Prompt-Strategy Misalignment) - Aligned orchestrator prompt with "Useful Wiki First"
 
 ---

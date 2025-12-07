@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget } from '../base-agent.
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
 
 /**
  * Technical Debt Analysis Agent - Identifies and tracks technical debt in commits.
@@ -42,9 +42,19 @@ export class TechnicalDebtAgent implements Agent {
     const diff = await getCommitDiff(context, commit.sha);
     const prompt = this.buildPrompt(commit, diff);
 
-    const completion = await context.llm.complete({
+    // Set up codebase exploration tools for verification
+    const toolExecutor = createCodebaseToolExecutor(context);
+
+    const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
+      tools: toolExecutor?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: 5,
       maxTokens: 2500,
       temperature: 0.2, // Lower temperature for analytical precision
     });
@@ -97,6 +107,19 @@ ${commit.diffSummary.affectedFiles.map(f => `- ${f}`).join('\n')}
 \`\`\`diff
 ${truncatedDiff}
 \`\`\`
+
+## Available Tools
+
+You have access to tools to explore the source code:
+- **read_file**: Read source files to verify the full context around code changes
+- **search_files**: Find files by pattern to locate related code
+- **list_directory**: Explore project structure
+
+**Use these tools to**:
+- Read the full file (not just the diff) to understand the context around technical debt
+- Verify if TODO/FIXME comments are still relevant
+- Check if similar patterns exist elsewhere (indicating systemic debt)
+- Understand dependencies and coupling between modules
 
 Analyze for:
 
@@ -561,6 +584,17 @@ function formatDebtTrend(trend: DebtTrend): string {
 const SYSTEM_PROMPT = `You are a technical debt analysis agent for CodeWiki, a system that generates living documentation from Git repositories.
 
 Your job is to identify and document technical debt in code changes. This helps developers understand where the problems are, not just what exists. You provide the "local's guide" to the codebase - the warnings and context that help AI coding agents and humans work more effectively.
+
+## CRITICAL: Verify Before Documenting
+
+You have access to tools (read_file, search_files, list_directory) to explore the source code. USE THEM:
+
+1. **Read the full file** before citing line counts or complexity metrics - diffs don't show full context
+2. **Search for similar patterns** before claiming something is unique or systemic debt
+3. **Verify TODO/FIXME context** by reading surrounding code to understand priority and relevance
+4. **Check dependencies** between modules before claiming coupling issues
+
+If you cannot verify a claim with tools, note it as "apparent" or "potential" rather than definitive.
 
 ## What to Look For
 
