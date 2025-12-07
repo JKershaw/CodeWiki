@@ -246,7 +246,7 @@ TITLE:
 [A descriptive title for this overview page]
 
 INTRODUCTION:
-[2-3 paragraphs introducing this topic area. What is it? Why does it matter? What will readers learn?]
+[2-3 paragraphs that directly explain this topic area. Write the actual content - what it IS, how it works, why it matters. Do NOT write meta-commentary like "This category covers..." or "Readers will learn..." - instead, write the explanation itself as encyclopedia content.]
 
 KEY_CONCEPTS:
 - [Concept 1]: [Brief explanation]
@@ -409,9 +409,24 @@ You have access to tools (read_file, search_files, list_directory) to explore th
 
 If a technical claim seems uncertain, use the tools to verify before including it.
 
+## Writing Style
+
+Write as if you ARE the encyclopedia article, not as if you're describing what the article contains.
+
+Great overview openings directly explain the topic:
+- "The architecture layer handles request routing, response parsing, and data consolidation across the system."
+- "Testing infrastructure in CodeWiki spans unit tests, integration tests, and end-to-end validation."
+- "Agent coordination uses a pipeline model where specialized agents process different aspects of changes."
+- "Response parsing transforms raw LLM output into structured data that other components can consume."
+
+Notice how each example states what something IS or DOES - not what the page will teach. Write explanatory content, not previews of content.
+
+Avoid meta-commentary that describes the page rather than explaining the topic:
+- Phrases like "This category encompasses...", "Readers will gain insights into...", "This overview provides..."
+
 ## Good Overview Pages
 
-- Start with a clear explanation of what the topic covers
+- Start with a clear explanation of what the topic covers (not what the PAGE covers)
 - Explain how individual pages relate to each other
 - Highlight the most important concepts (verified against code when possible)
 - Provide a logical reading path
