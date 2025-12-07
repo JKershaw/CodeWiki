@@ -26,6 +26,11 @@ import {
   formatEvaluationResult,
   getLLMService,
 } from './helpers/llm-assert.js';
+import {
+  startTestRun,
+  logTestResult,
+  saveTestRun,
+} from './helpers/result-logger.js';
 
 describe('SecurityAgent with Real LLM', { timeout: 120000 }, () => {
   let ctx: LLMTestContext;
@@ -35,7 +40,9 @@ describe('SecurityAgent with Real LLM', { timeout: 120000 }, () => {
     if (!apiKey) {
       throw new Error('OPENROUTER_API_KEY environment variable is required for LLM tests');
     }
-    console.log(`Using model: ${getLLMService().getModel()}`);
+    const model = getLLMService().getModel();
+    console.log(`Using model: ${model}`);
+    startTestRun(model);
     ctx = await createLLMTestContext();
   });
 
@@ -43,6 +50,7 @@ describe('SecurityAgent with Real LLM', { timeout: 120000 }, () => {
     if (ctx) {
       await ctx.cleanup();
     }
+    await saveTestRun();
   });
 
   describe('Format Compliance', () => {
@@ -136,6 +144,7 @@ export async function searchUsers(db: Database, searchTerm: string) {
         7 // threshold
       );
 
+      logTestResult('SQL injection detection', evalResult);
       console.log(formatEvaluationResult('SQL injection detection', evalResult));
 
       // Should have high confidence for obvious vulnerability
@@ -198,6 +207,7 @@ export async function insertUser(db: Database, name: string, email: string) {
         8
       );
 
+      logTestResult('Safe code recognition', evalResult);
       console.log(formatEvaluationResult('Safe code recognition', evalResult));
 
       // We evaluate but don't assert-fail here since LLMs can be conservative
@@ -252,6 +262,7 @@ export const config = {
         7
       );
 
+      logTestResult('Hardcoded secrets detection', evalResult);
       console.log(formatEvaluationResult('Hardcoded secrets detection', evalResult));
     });
   });
