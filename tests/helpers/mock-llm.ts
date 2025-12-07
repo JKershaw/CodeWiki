@@ -13,7 +13,17 @@ import type {
 } from '../../src/services/llm/llm-service.js';
 
 /**
+ * Mock tool call configuration.
+ */
+export interface MockToolCall {
+  name: string;
+  input: Record<string, unknown>;
+}
+
+/**
  * A mock LLM service that returns predictable responses.
+ *
+ * Supports configurable tool calls for testing tool enforcement.
  */
 export class MockLLMService implements LLMService {
   private responses: Map<string, string> = new Map();
@@ -25,8 +35,17 @@ export class MockLLMService implements LLMService {
     requestCount: 0,
   };
 
+  /** Mock tool calls to simulate LLM tool usage */
+  private mockToolCalls: MockToolCall[] = [];
+
+  /** Whether to auto-execute tools (simulates real LLM behavior) */
+  private autoExecuteTools = false;
+
   /** Record of all completion calls for assertions */
   public calls: CompletionOptions[] = [];
+
+  /** Record of all tool calls for assertions */
+  public toolCallHistory: Array<{ name: string; input: Record<string, unknown>; result: string }> = [];
 
   /**
    * Set the default response for all completions.
@@ -40,6 +59,26 @@ export class MockLLMService implements LLMService {
    */
   onPromptContaining(substring: string, response: string): void {
     this.responses.set(substring, response);
+  }
+
+  /**
+   * Configure tool calls that the mock will simulate making.
+   * These will be executed via executeTools and included in the result.
+   *
+   * @param calls - Array of tool calls to simulate
+   * @param autoExecute - If true, executes the tools via the provided executor
+   */
+  setMockToolCalls(calls: MockToolCall[], autoExecute = true): void {
+    this.mockToolCalls = calls;
+    this.autoExecuteTools = autoExecute;
+  }
+
+  /**
+   * Convenience method to simulate a read_file tool call.
+   */
+  simulateReadFile(path: string): void {
+    this.mockToolCalls.push({ name: 'read_file', input: { path } });
+    this.autoExecuteTools = true;
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResult> {
@@ -74,10 +113,47 @@ export class MockLLMService implements LLMService {
   async completeWithTools(options: ToolUseOptions): Promise<ToolUseResult> {
     const baseResult = await this.complete(options);
 
+    const toolCalls: ToolUseResult['toolCalls'] = [];
+
+    // Execute mock tool calls if configured
+    if (this.mockToolCalls.length > 0 && this.autoExecuteTools) {
+      const callsToExecute = this.mockToolCalls.map((tc, i) => ({
+        id: `mock-tool-call-${i}`,
+        name: tc.name,
+        input: tc.input,
+      }));
+
+      const results = await options.executeTools(callsToExecute);
+
+      for (let i = 0; i < this.mockToolCalls.length; i++) {
+        const tc = this.mockToolCalls[i]!;
+        const result = results[i]?.result ?? 'No result';
+        toolCalls.push({
+          name: tc.name,
+          input: tc.input,
+          result,
+        });
+        this.toolCallHistory.push({
+          name: tc.name,
+          input: tc.input,
+          result,
+        });
+      }
+    } else if (this.mockToolCalls.length > 0) {
+      // Just record the tool calls without executing
+      for (const tc of this.mockToolCalls) {
+        toolCalls.push({
+          name: tc.name,
+          input: tc.input,
+          result: 'mock result',
+        });
+      }
+    }
+
     return {
       ...baseResult,
-      toolCalls: [],
-      toolRounds: 0,
+      toolCalls,
+      toolRounds: toolCalls.length > 0 ? 1 : 0,
     };
   }
 
@@ -109,6 +185,9 @@ export class MockLLMService implements LLMService {
     this.responses.clear();
     this.defaultResponse = 'Default mock response';
     this.calls = [];
+    this.mockToolCalls = [];
+    this.autoExecuteTools = false;
+    this.toolCallHistory = [];
     this.resetUsageStats();
   }
 }
