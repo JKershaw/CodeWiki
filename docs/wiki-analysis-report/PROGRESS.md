@@ -12,9 +12,9 @@ This document tracks the progress of addressing issues identified in the CodeWik
 
 | Issue | Severity | Status | Notes |
 |-------|----------|--------|-------|
-| 01 - Hallucination Issues | CRITICAL | 🔴 Open | Writer, Pattern agents lack verification |
+| 01 - Hallucination Issues | CRITICAL | ✅ **Fixed** | Added verification tools to agents |
 | 02 - Parsing Fragility | HIGH | 🔴 Open | Silent regex failures |
-| 03 - Context Insufficiency | HIGH | 🔴 Open | Agents work from diffs only |
+| 03 - Context Insufficiency | HIGH | 🟡 Partial | PatternAgent now has tools; others pending |
 | 04 - Verification Gaps | HIGH | 🔴 Open | No feedback loops |
 | 05 - Consolidation Blindspot | MEDIUM-HIGH | 🔴 Open | Zero integration tests |
 | 06 - Orchestrator Disconnect | MEDIUM | 🔴 Open | No benchmark → orchestrator feedback |
@@ -24,6 +24,53 @@ This document tracks the progress of addressing issues identified in the CodeWik
 ---
 
 ## Completed Work
+
+### Issue 01: Hallucination in Content Generation ✅
+
+**Fixed:** 2025-12-07
+**Commit:** `06ae6da`
+**Branch:** `claude/assess-orchestrator-misalignment-01FjqQdvGxJsMXHR72aZsPH5`
+
+**Problem:** PatternAgent, WriterAgent, and OverviewAgent generated content without verifying claims against source code, leading to fabricated code examples, incorrect line numbers, and invented technical details.
+
+**Analysis Findings:**
+- The original issue document was partially incorrect - GettingStartedAgent, TestingGuideAgent, and ExtensionGuideAgent already had tool access
+- Only 3 agents actually lacked tools: PatternAgent, WriterAgent, OverviewAgent
+- Existing tool infrastructure (`codebaseTools`, `createCodebaseToolExecutor`) was fully reusable
+
+**Changes Made:**
+
+1. **PatternAgent** (`src/agents/analysis/pattern-agent.ts`):
+   - Added `createCodebaseToolExecutor` import
+   - Changed `complete()` → `completeWithTools()` with maxToolRounds: 5
+   - Updated system prompt with "CRITICAL: Verify Before Documenting" section
+   - Updated user prompt to list available tools and verification requirements
+   - Instructions to read full files before citing line numbers
+
+2. **WriterAgent** (`src/agents/synthesis/writer-agent.ts`):
+   - Added `createCodebaseToolExecutor` import
+   - Changed `complete()` → `completeWithTools()` with maxToolRounds: 3
+   - Updated system prompt with verification instructions
+   - Instructions to use read_file before adding code examples
+   - Guidance: "Never invent code examples or technical details"
+
+3. **OverviewAgent** (`src/agents/synthesis/overview-agent.ts`):
+   - Added `createCodebaseToolExecutor` import
+   - Updated both `runOnWiki` and `runOnCategory` to use `completeWithTools()`
+   - Updated prompts to suggest verification when synthesizing technical claims
+
+**Expected Outcomes:**
+- Agents verify claims before documenting them
+- Code examples come from actual source files, not hallucination
+- Line number references are verified against real files
+- Uncertain claims are noted as such rather than stated as fact
+
+**Validation Metrics to Monitor:**
+- [ ] Reduction in fabricated code examples (manual audit)
+- [ ] Accuracy of line number references (spot check)
+- [ ] Tool usage rate in agent runs (should see tool calls in logs)
+
+---
 
 ### Issue 08: Orchestrator Prompt-Strategy Misalignment ✅
 
@@ -63,19 +110,6 @@ This document tracks the progress of addressing issues identified in the CodeWik
 ---
 
 ## Remaining Issues (Priority Order)
-
-### 🔴 CRITICAL: Issue 01 - Hallucination in Content Generation
-
-**Impact:** Fabricated code examples, incorrect claims enter wiki
-**Affected Agents:** Writer, Pattern, Technical-Debt, Overview, Getting-Started
-**Root Cause:** Synthesis agents have no tool access to verify facts
-
-**Recommended Next Steps:**
-1. Add read-only tools to Writer Agent (readFile, searchFiles, listDirectory)
-2. Remove line number requirements from Pattern Agent OR add verification
-3. Implement verification pass after synthesis agents run
-
----
 
 ### 🔴 HIGH: Issue 02 - Fragile Response Parsing
 
@@ -143,12 +177,15 @@ This document tracks the progress of addressing issues identified in the CodeWik
 
 Based on impact and dependencies:
 
-1. **Issue 01 (Hallucination)** - Most impactful on content quality
-2. **Issue 02 (Parsing)** - Affects all agents, relatively easy fix
-3. **Issue 03 (Context)** - Improves accuracy of analysis agents
-4. **Issue 04 (Verification)** - Enables closed-loop improvement
-5. **Issue 05 (Consolidation)** - Ensures self-healing works
-6. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
+1. **Issue 02 (Parsing)** - Affects all agents, relatively easy fix
+2. **Issue 03 (Context)** - Partially addressed; remaining analysis agents need tools
+3. **Issue 04 (Verification)** - Enables closed-loop improvement
+4. **Issue 05 (Consolidation)** - Ensures self-healing works
+5. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
+
+**Completed:**
+- ✅ Issue 01 (Hallucination) - Added verification tools to PatternAgent, WriterAgent, OverviewAgent
+- ✅ Issue 08 (Prompt-Strategy Misalignment) - Aligned orchestrator prompt with "Useful Wiki First"
 
 ---
 
