@@ -13,7 +13,7 @@ This document tracks the progress of addressing issues identified in the CodeWik
 | Issue | Severity | Status | Notes |
 |-------|----------|--------|-------|
 | 01 - Hallucination Issues | CRITICAL | ✅ **Fixed** | Added verification tools to agents |
-| 02 - Parsing Fragility | HIGH | 🔴 Open | Silent regex failures |
+| 02 - Parsing Fragility | HIGH | ✅ **Fixed** | Added parsing infrastructure with logging |
 | 03 - Context Insufficiency | HIGH | ✅ **Fixed** | All analysis agents now have tool access |
 | 04 - Verification Gaps | HIGH | 🔴 Open | No feedback loops |
 | 05 - Consolidation Blindspot | MEDIUM-HIGH | ✅ **Fixed** | Added integration tests |
@@ -213,20 +213,73 @@ This document tracks the progress of addressing issues identified in the CodeWik
 
 ---
 
-## Remaining Issues (Priority Order)
+### Issue 02: Parsing Fragility ✅
 
-### 🔴 HIGH: Issue 02 - Fragile Response Parsing
+**Fixed:** 2025-12-07
+**Branch:** `claude/assess-orchestrator-misalignment-01FjqQdvGxJsMXHR72aZsPH5`
 
-**Impact:** Silent content loss, placeholder defaults
-**Affected Agents:** All agents
-**Root Cause:** Regex parsing with silent fallbacks
+**Problem:** All agents parsed LLM responses using regex patterns with silent fallbacks. When parsing failed, content was lost silently or replaced with default values (e.g., 0.7 confidence). No logging indicated failures.
 
-**Recommended Next Steps:**
-1. Add parsing failure logging with context
-2. Reject malformed responses instead of defaulting
-3. Switch to structured output (JSON schema) where possible
+**Changes Made:**
+
+1. **Created `src/agents/parsing/response-parser.ts`**:
+   - `createParseContext()` - Creates tracking context for parse operations
+   - `parseSection()` - Extracts sections with logging on failure
+   - `parseSectionItems()` - Parses list items from sections
+   - `parseConfidence()` - Specialized confidence parsing
+   - `hasRequiredFailures()` - Checks if required sections failed
+   - `getFailureSummary()` - Human-readable failure description
+   - `getParseStats()` - Statistics for monitoring
+   - `validateMinLength()` - Content length validation
+
+2. **Created `src/agents/parsing/index.ts`**:
+   - Exports all parsing utilities for agent consumption
+
+3. **Migrated WriterAgent** (`src/agents/synthesis/writer-agent.ts`):
+   - Uses `createParseContext('writer', response)`
+   - TITLE is optional (falls back to original)
+   - CONTENT is required (returns error if missing)
+   - Validates content length (min 100 chars)
+   - Logs parse failures with context
+
+4. **Migrated PatternAgent** (`src/agents/analysis/pattern-agent.ts`):
+   - Uses new parsing infrastructure for all 10+ sections
+   - Tracks successful vs failed sections
+   - Logs parse statistics when failures occur
+   - Helper functions for complex nested parsing
+
+5. **Added unit tests** (`tests/unit/response-parser.test.ts`):
+   - createParseContext tests
+   - parseSection tests (success, required failure, optional failure, multiline)
+   - parseSectionItems tests (multiple items, missing section, non-matching items)
+   - parseConfidence tests (valid, missing, various formats, invalid)
+   - hasRequiredFailures and getFailureSummary tests
+   - getParseStats tests
+   - validateMinLength tests
+   - Real-world scenario tests (complete response, malformed, wrong casing)
+
+**Key Features:**
+- **Visible failures**: All parse failures are logged with context (agent type, section name, response preview)
+- **Required vs optional**: Agents can mark sections as required - failures return errors instead of defaults
+- **Statistics tracking**: Parse stats available for monitoring (successful/failed sections)
+- **Gradual migration**: Agents can adopt incrementally - infrastructure is backward compatible
+
+**Total new tests: 28**
+
+**Expected Outcomes:**
+- Parse failures are visible in logs (no more silent defaults)
+- Required sections that fail to parse return explicit errors
+- Parsing behavior is testable and documented
+- Foundation for future structured output migration
+
+**Remaining Work:**
+- [ ] Migrate remaining high-complexity agents (TechnicalDebtAgent, DependencyAgent, etc.)
+- [ ] Add parse failure metrics/dashboard
+- [ ] Consider JSON schema output for new agents
 
 ---
+
+## Remaining Issues (Priority Order)
 
 ### 🔴 HIGH: Issue 04 - Missing Verification Loops
 
@@ -256,12 +309,12 @@ This document tracks the progress of addressing issues identified in the CodeWik
 
 Based on impact and dependencies:
 
-1. **Issue 02 (Parsing)** - Affects all agents, relatively easy fix
-2. **Issue 04 (Verification)** - Enables closed-loop improvement
-3. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
+1. **Issue 04 (Verification)** - Enables closed-loop improvement
+2. **Issue 06 (Orchestrator Learning)** - Optimization after foundation is solid
 
 **Completed:**
 - ✅ Issue 01 (Hallucination) - Added verification tools to PatternAgent, WriterAgent, OverviewAgent
+- ✅ Issue 02 (Parsing) - Created parsing infrastructure with logging, migrated WriterAgent and PatternAgent
 - ✅ Issue 03 (Context) - Added verification tools to TechnicalDebtAgent, SecurityAgent, NarrativeAgent, DependencyAgent
 - ✅ Issue 05 (Consolidation) - Added integration tests for ConsolidationAgent and handlers
 - ✅ Issue 08 (Prompt-Strategy Misalignment) - Aligned orchestrator prompt with "Useful Wiki First"

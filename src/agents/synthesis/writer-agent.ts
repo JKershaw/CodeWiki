@@ -4,6 +4,14 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseConfidence,
+  hasRequiredFailures,
+  getFailureSummary,
+  validateMinLength,
+} from '../parsing/index.js';
 
 /**
  * Writer Agent - Transforms raw analysis pages into polished wiki articles.
@@ -269,27 +277,34 @@ CONFIDENCE: [0-1 based on how complete the rewrite is]
   }
 
   private parseResponse(response: string, originalPage: WikiPage): ParsedRewrite | null {
-    // Parse title
-    const titleMatch = response.match(/TITLE:\s*(.+?)(?=\n|CONTENT:|$)/i);
-    const title = titleMatch ? titleMatch[1]!.trim() : originalPage.title;
+    const ctx = createParseContext('writer', response);
 
-    // Parse content
-    const contentMatch = response.match(/CONTENT:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (!contentMatch) {
+    // Parse title (optional - falls back to original)
+    const title = parseSection(ctx, 'TITLE', /TITLE:\s*(.+?)(?=\n|CONTENT:|$)/i, {
+      required: false,
+      defaultValue: originalPage.title,
+    }) ?? originalPage.title;
+
+    // Parse content (required)
+    const content = parseSection(ctx, 'CONTENT', /CONTENT:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i, {
+      required: true,
+    });
+
+    // Check for required failures
+    if (hasRequiredFailures(ctx)) {
+      console.error(`[writer] Parse failed: ${getFailureSummary(ctx)}`);
       return null;
     }
-    const content = contentMatch[1]!.trim();
 
-    // Validate we got actual content
-    if (content.length < 100) {
+    // Validate content length
+    if (!validateMinLength(ctx, 'CONTENT', content, 100)) {
       return null;
     }
 
-    // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]!) : 0.7;
+    // Parse confidence (optional with default)
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return { title, content, confidence };
+    return { title, content: content!, confidence };
   }
 }
 
