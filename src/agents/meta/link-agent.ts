@@ -4,6 +4,12 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import {
+  createParseContext,
+  parseListItemsWithFallback,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Link Agent - Manages cross-references between wiki pages.
@@ -164,35 +170,34 @@ Now analyze the pages above and provide your link suggestions:
   }
 
   private parseResponse(response: string): ParsedAnalysis {
-    const analysis: ParsedAnalysis = {
-      linkSuggestions: [],
-      confidence: 0.7,
+    const ctx = createParseContext('link', response);
+
+    // Define patterns for link suggestions
+    const linkPatterns: ItemPattern<ParsedAnalysis['linkSuggestions'][0]>[] = [
+      {
+        pattern: /^-\s*\[([^\]]+)\]\s*->\s*\[([^\]]+)\]\s*\|\s*\[STRENGTH:(\w+)\]\s*\|\s*(.+)$/i,
+        mapper: (m) => ({
+          sourcePath: m[1]!.trim(),
+          targetPath: m[2]!.trim(),
+          strength: m[3]!.toLowerCase() as 'strong' | 'medium' | 'weak',
+          reason: m[4]!.trim(),
+        }),
+      },
+    ];
+
+    const linkSuggestions = parseListItemsWithFallback(
+      ctx,
+      'LINK_SUGGESTIONS',
+      /LINK_SUGGESTIONS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      linkPatterns
+    );
+
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
+
+    return {
+      linkSuggestions,
+      confidence,
     };
-
-    // Parse link suggestions
-    const linksMatch = response.match(/LINK_SUGGESTIONS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (linksMatch) {
-      const lines = linksMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*->\s*\[([^\]]+)\]\s*\|\s*\[STRENGTH:(\w+)\]\s*\|\s*(.+)$/i);
-        if (match) {
-          analysis.linkSuggestions.push({
-            sourcePath: match[1]!.trim(),
-            targetPath: match[2]!.trim(),
-            strength: match[3]!.toLowerCase() as 'strong' | 'medium' | 'weak',
-            reason: match[4]!.trim(),
-          });
-        }
-      }
-    }
-
-    // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
-
-    return analysis;
   }
 
   private generateUpdates(

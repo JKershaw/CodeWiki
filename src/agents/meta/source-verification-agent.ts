@@ -6,6 +6,10 @@ import { createFinding as createDomainFinding } from '../../domain/finding.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
 import { randomUUID } from 'crypto';
+import {
+  createParseContext,
+  parseSection,
+} from '../parsing/index.js';
 
 /**
  * Source Verification Agent - Verifies wiki content matches actual source code.
@@ -322,14 +326,16 @@ Does the source code support this claim?`,
   }
 
   private parseVerification(response: string): { accurate: boolean; reason: string; evidence: string } {
+    const ctx = createParseContext('source-verification', response);
+
     const accurateMatch = response.match(/ACCURATE:\s*(true|false)/i);
-    const reasonMatch = response.match(/REASON:\s*(.+?)(?=EVIDENCE:|$)/is);
-    const evidenceMatch = response.match(/EVIDENCE:\s*(.+?)$/is);
+    const reason = parseSection(ctx, 'REASON', /REASON:\s*(.+?)(?=EVIDENCE:|$)/is) || 'Unable to verify claim';
+    const evidence = parseSection(ctx, 'EVIDENCE', /EVIDENCE:\s*(.+?)$/is) || '';
 
     return {
       accurate: accurateMatch?.[1]?.toLowerCase() === 'true',
-      reason: reasonMatch?.[1]?.trim() || 'Unable to verify claim',
-      evidence: evidenceMatch?.[1]?.trim() || '',
+      reason,
+      evidence,
     };
   }
 

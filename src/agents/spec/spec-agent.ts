@@ -2,6 +2,11 @@ import type { Repositories } from '../../repositories/index.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import {
+  createParseContext,
+  parseSection,
+  parseConfidence,
+} from '../parsing/index.js';
 
 /**
  * Spec Agent - Generates context specifications for coding agents.
@@ -224,21 +229,27 @@ export class SpecAgent {
     response: string,
     originalTask: string
   ): { interpretation: string; spec: SpecResult['spec']; confidence: number } {
-    // Extract sections using markers
-    const interpretation = this.extractSection(response, 'INTERPRETATION') ||
+    const ctx = createParseContext('spec', response);
+
+    // Helper to create dynamic regex for each section
+    const makeSectionRegex = (marker: string) =>
+      new RegExp(`${marker}:\\s*([\\s\\S]*?)(?=(?:[A-Z_]+:|CONFIDENCE:|$))`, 'i');
+
+    // Extract sections using centralized parser
+    const interpretation = parseSection(ctx, 'INTERPRETATION', makeSectionRegex('INTERPRETATION')) ||
       `Implement: ${originalTask}`;
-    const context = this.extractSection(response, 'CONTEXT') ||
+    const context = parseSection(ctx, 'CONTEXT', makeSectionRegex('CONTEXT')) ||
       'No specific context found.';
-    const keyFilesRaw = this.extractSection(response, 'KEY_FILES') || '';
-    const patterns = this.extractSection(response, 'PATTERNS') ||
+    const keyFilesRaw = parseSection(ctx, 'KEY_FILES', makeSectionRegex('KEY_FILES')) || '';
+    const patterns = parseSection(ctx, 'PATTERNS', makeSectionRegex('PATTERNS')) ||
       'Follow existing patterns in the codebase.';
-    const conventions = this.extractSection(response, 'CONVENTIONS') ||
+    const conventions = parseSection(ctx, 'CONVENTIONS', makeSectionRegex('CONVENTIONS')) ||
       'Follow existing code style and conventions.';
-    const dependencies = this.extractSection(response, 'DEPENDENCIES') ||
+    const dependencies = parseSection(ctx, 'DEPENDENCIES', makeSectionRegex('DEPENDENCIES')) ||
       'No specific dependencies identified.';
-    const testing = this.extractSection(response, 'TESTING') ||
+    const testing = parseSection(ctx, 'TESTING', makeSectionRegex('TESTING')) ||
       'Add appropriate tests for new functionality.';
-    const pitfalls = this.extractSection(response, 'PITFALLS') ||
+    const pitfalls = parseSection(ctx, 'PITFALLS', makeSectionRegex('PITFALLS')) ||
       'No specific pitfalls identified.';
 
     // Parse key files as a list
@@ -247,9 +258,8 @@ export class SpecAgent {
       .map(line => line.replace(/^[-*]\s*/, '').trim())
       .filter(line => line.length > 0 && !line.toLowerCase().startsWith('none'));
 
-    // Extract confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]!) : 0.7;
+    // Extract confidence using centralized parser
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
     return {
       interpretation,
@@ -264,19 +274,6 @@ export class SpecAgent {
       },
       confidence,
     };
-  }
-
-  /**
-   * Extract a section from the response by its marker.
-   */
-  private extractSection(response: string, marker: string): string | null {
-    // Look for MARKER: content pattern
-    const regex = new RegExp(`${marker}:\\s*([\\s\\S]*?)(?=(?:[A-Z_]+:|CONFIDENCE:|$))`, 'i');
-    const match = response.match(regex);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-    return null;
   }
 
   /**

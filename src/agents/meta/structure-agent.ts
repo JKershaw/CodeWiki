@@ -3,6 +3,11 @@ import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import {
+  createParseContext,
+  parseListItemsWithFallback,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Structure Agent - Analyzes and improves wiki organization.
@@ -270,24 +275,25 @@ OVERALL_ASSESSMENT: Brief assessment of wiki organization quality
   }
 
   private parseResponse(response: string): StructureSuggestion[] {
-    const suggestions: StructureSuggestion[] = [];
+    const ctx = createParseContext('structure', response);
 
-    const suggestionsMatch = response.match(/SUGGESTIONS:\s*([\s\S]*?)(?=OVERALL_ASSESSMENT:|$)/i);
-    if (suggestionsMatch) {
-      const lines = suggestionsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[PRIORITY:(\w+)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*(.+)$/i);
-        if (match) {
-          suggestions.push({
-            priority: match[1]!.toLowerCase() as 'high' | 'medium' | 'low',
-            affectedPages: match[2]!.split(',').map(p => p.trim()).filter(Boolean),
-            suggestion: match[3]!.trim(),
-          });
-        }
-      }
-    }
+    const suggestionPatterns: ItemPattern<StructureSuggestion>[] = [
+      {
+        pattern: /^-\s*\[PRIORITY:(\w+)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*(.+)$/i,
+        mapper: (m) => ({
+          priority: m[1]!.toLowerCase() as 'high' | 'medium' | 'low',
+          affectedPages: m[2]!.split(',').map(p => p.trim()).filter(Boolean),
+          suggestion: m[3]!.trim(),
+        }),
+      },
+    ];
 
-    return suggestions;
+    return parseListItemsWithFallback(
+      ctx,
+      'SUGGESTIONS',
+      /SUGGESTIONS:\s*([\s\S]*?)(?=OVERALL_ASSESSMENT:|$)/i,
+      suggestionPatterns
+    );
   }
 }
 

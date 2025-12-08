@@ -6,6 +6,10 @@ import {
   wikiTools,
   type WikiToolContext,
 } from '../../services/llm/wiki-tools.js';
+import {
+  createParseContext,
+  parseConfidence,
+} from '../parsing/index.js';
 
 /**
  * Research Agent - An agentic service for querying the wiki.
@@ -318,9 +322,10 @@ export class ResearchAgent {
    * Parse the LLM response.
    */
   private parseResponse(response: string): { answer: string; confidence: number } {
-    // Look for structured confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]!) : 0.7;
+    const ctx = createParseContext('research', response);
+
+    // Parse confidence using centralized parser
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
     // Remove confidence line from answer
     let answer = response.replace(/CONFIDENCE:\s*[\d.]+/i, '').trim();

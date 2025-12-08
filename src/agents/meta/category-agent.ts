@@ -4,6 +4,10 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import {
+  createParseContext,
+  parseConfidence as parseConfidenceCentral,
+} from '../parsing/index.js';
 
 /**
  * Represents a categorization suggestion from the LLM.
@@ -99,15 +103,8 @@ export function parseCategoryFindings(response: string): CategoryFinding[] {
  * Parse overall confidence from LLM response.
  */
 export function parseConfidence(response: string): number {
-  // Match CONFIDENCE: at the start of a line (not inside brackets like [confidence:0.85])
-  const match = response.match(/^CONFIDENCE:\s*([\d.]+)/im);
-  if (match) {
-    const value = parseFloat(match[1]!);
-    if (!isNaN(value)) {
-      return value;
-    }
-  }
-  return 0.7; // default
+  const ctx = createParseContext('category', response);
+  return parseConfidenceCentral(ctx, { defaultValue: 0.7 });
 }
 
 /**

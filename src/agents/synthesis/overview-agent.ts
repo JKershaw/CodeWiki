@@ -4,6 +4,13 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseListItemsWithFallback,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Overview Agent - Creates category overview pages that synthesize all pages in a category.
@@ -263,70 +270,62 @@ CONFIDENCE: [0-1]
   }
 
   private parseResponse(response: string): ParsedOverview {
-    const overview: ParsedOverview = {
-      title: '',
-      introduction: '',
-      keyConcepts: [],
-      pageDescriptions: [],
-      readingOrder: '',
-      confidence: 0.7,
-    };
+    const ctx = createParseContext('overview', response);
 
     // Parse title
-    const titleMatch = response.match(/TITLE:\s*(.+?)(?=\n|INTRODUCTION:|$)/i);
-    if (titleMatch) {
-      overview.title = titleMatch[1]!.trim();
-    }
+    const title = parseSection(ctx, 'TITLE', /TITLE:\s*(.+?)(?=\n|INTRODUCTION:|$)/i) || '';
 
     // Parse introduction
-    const introMatch = response.match(/INTRODUCTION:\s*([\s\S]*?)(?=KEY_CONCEPTS:|PAGES:|$)/i);
-    if (introMatch) {
-      overview.introduction = introMatch[1]!.trim();
-    }
+    const introduction = parseSection(ctx, 'INTRODUCTION', /INTRODUCTION:\s*([\s\S]*?)(?=KEY_CONCEPTS:|PAGES:|$)/i) || '';
 
     // Parse key concepts
-    const conceptsMatch = response.match(/KEY_CONCEPTS:\s*([\s\S]*?)(?=PAGES:|READING_ORDER:|CONFIDENCE:|$)/i);
-    if (conceptsMatch) {
-      const lines = conceptsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[?([^\]:]+)\]?:\s*(.+)$/);
-        if (match) {
-          overview.keyConcepts.push({
-            name: match[1]!.trim(),
-            description: match[2]!.trim(),
-          });
-        }
-      }
-    }
+    const conceptPatterns: ItemPattern<{ name: string; description: string }>[] = [
+      {
+        pattern: /^-\s*\[?([^\]:]+)\]?:\s*(.+)$/,
+        mapper: (m) => ({
+          name: m[1]!.trim(),
+          description: m[2]!.trim(),
+        }),
+      },
+    ];
+    const keyConcepts = parseListItemsWithFallback(
+      ctx,
+      'KEY_CONCEPTS',
+      /KEY_CONCEPTS:\s*([\s\S]*?)(?=PAGES:|READING_ORDER:|CONFIDENCE:|$)/i,
+      conceptPatterns
+    );
 
     // Parse page descriptions
-    const pagesMatch = response.match(/PAGES:\s*([\s\S]*?)(?=READING_ORDER:|CONFIDENCE:|$)/i);
-    if (pagesMatch) {
-      const lines = pagesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[?([^\]:]+)\]?:\s*(.+)$/);
-        if (match) {
-          overview.pageDescriptions.push({
-            path: match[1]!.trim(),
-            description: match[2]!.trim(),
-          });
-        }
-      }
-    }
+    const pagePatterns: ItemPattern<{ path: string; description: string }>[] = [
+      {
+        pattern: /^-\s*\[?([^\]:]+)\]?:\s*(.+)$/,
+        mapper: (m) => ({
+          path: m[1]!.trim(),
+          description: m[2]!.trim(),
+        }),
+      },
+    ];
+    const pageDescriptions = parseListItemsWithFallback(
+      ctx,
+      'PAGES',
+      /PAGES:\s*([\s\S]*?)(?=READING_ORDER:|CONFIDENCE:|$)/i,
+      pagePatterns
+    );
 
     // Parse reading order
-    const readingMatch = response.match(/READING_ORDER:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (readingMatch) {
-      overview.readingOrder = readingMatch[1]!.trim();
-    }
+    const readingOrder = parseSection(ctx, 'READING_ORDER', /READING_ORDER:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i) || '';
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      overview.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return overview;
+    return {
+      title,
+      introduction,
+      keyConcepts,
+      pageDescriptions,
+      readingOrder,
+      confidence,
+    };
   }
 
   private generateUpdate(
