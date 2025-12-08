@@ -12,9 +12,10 @@ export interface WorkQueueRepository {
   findById(id: string): Promise<WorkItem | null>;
 
   /**
-   * Find pending work items for a repo, ordered by priority (highest first).
+   * Find pending work items for a repo, ordered by creation time (FIFO).
+   * If limit is omitted, returns all pending items.
    */
-  findPending(repoId: string, limit: number): Promise<WorkItem[]>;
+  findPending(repoId: string, limit?: number): Promise<WorkItem[]>;
 
   /**
    * Find all work items for a repo.
