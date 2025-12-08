@@ -1,6 +1,6 @@
 import type { WorkQueueRepository } from '../interfaces/work-queue-repository.js';
 import type { WorkItem, WorkItemStatus } from '../../domain/work-item.js';
-import { getTargetCommitId, getWorkTargetKey, legacyToWorkTarget } from '../../domain/work-item.js';
+import { getWorkTargetKey, isCommitTarget } from '../../domain/work-item.js';
 import { normalizeDate, normalizeDateOrNull } from '../../domain/date-utils.js';
 import { selectItemsForBatch } from '../../domain/work-queue-logic.js';
 import { FileStore } from './file-store.js';
@@ -10,18 +10,11 @@ import { type AgentType } from '../../agents/registry.js';
 
 /**
  * Normalize work item from JSON storage.
- * Handles date conversion and legacy targetCommitId/targetPath migration.
+ * Handles date conversion.
  */
-function normalizeWorkItem(item: WorkItem & { targetCommitId?: string | null; targetPath?: string | null }): WorkItem {
-  // Handle legacy items that have targetCommitId/targetPath instead of target
-  const target = item.target ?? legacyToWorkTarget(
-    item.targetCommitId ?? null,
-    item.targetPath ?? null
-  );
-
+function normalizeWorkItem(item: WorkItem): WorkItem {
   return {
     ...item,
-    target,
     createdAt: normalizeDate(item.createdAt),
     claimedAt: normalizeDateOrNull(item.claimedAt),
     completedAt: normalizeDateOrNull(item.completedAt),
@@ -157,7 +150,7 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
       (w.status === 'pending' || w.status === 'claimed')
     )).map(normalizeWorkItem);
 
-    return items.some(item => getTargetCommitId(item) === targetCommitId);
+    return items.some(item => isCommitTarget(item.target) && item.target.commitId === targetCommitId);
   }
 
   async getPendingKeys(repoId: string): Promise<Set<string>> {

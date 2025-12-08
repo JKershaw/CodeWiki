@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { SecurityAgent } from '../../src/agents/analysis/security-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -72,7 +73,7 @@ export function greet(name: string): string {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Verify structure - these are deterministic checks
       assert.ok(result.result, 'result.result should exist');
@@ -123,7 +124,7 @@ export async function searchUsers(db: Database, searchTerm: string) {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Deterministic check: Should have at least one finding
       assert.ok(result.result.findings.length > 0,
@@ -188,7 +189,7 @@ export async function insertUser(db: Database, name: string, email: string) {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify the analysis does NOT flag parameterized queries as SQL injection
       const analysisText = JSON.stringify({
@@ -242,7 +243,7 @@ export const config = {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Deterministic: Should have findings
       assert.ok(result.result.findings.length > 0,

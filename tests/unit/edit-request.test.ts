@@ -8,8 +8,6 @@ import assert from 'node:assert';
 import {
   createEditRequest,
   wikiPageUpdateToEditRequest,
-  getSourceCommitSha,
-  getSourceCommitTimestamp,
   createCommitEditSource,
   createStoryEditSource,
   createManualEditSource,
@@ -39,35 +37,16 @@ describe('EditRequest', () => {
       assert.strictEqual(editRequest.repoId, 'repo-1');
       assert.strictEqual(editRequest.wikiId, 'wiki-1');
       assert.ok(isCommitEditSource(editRequest.source));
-      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
-      assert.strictEqual(getSourceCommitTimestamp(editRequest)?.getTime(), timestamp.getTime());
+      if (isCommitEditSource(editRequest.source)) {
+        assert.strictEqual(editRequest.source.commitSha, 'abc123');
+        assert.strictEqual(editRequest.source.commitTimestamp.getTime(), timestamp.getTime());
+      }
       assert.strictEqual(editRequest.sourceAgentType, 'code-change');
       assert.strictEqual(editRequest.sourceAgentRunId, 'run-1');
       assert.strictEqual(editRequest.targetPagePath, 'docs/api');
       assert.strictEqual(editRequest.proposedUpdateType, 'update');
       assert.strictEqual(editRequest.proposedContent, '# API Documentation');
       assert.strictEqual(editRequest.confidenceDelta, 0.1);
-    });
-
-    it('creates an edit request with legacy fields (backward compat)', () => {
-      const timestamp = new Date('2024-01-15T10:00:00Z');
-      const editRequest = createEditRequest({
-        id: 'edit-1',
-        repoId: 'repo-1',
-        wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: timestamp,
-        sourceAgentType: 'code-change',
-        sourceAgentRunId: 'run-1',
-        targetPagePath: 'docs/api',
-        proposedUpdateType: 'update',
-        proposedContent: '# API Documentation',
-        confidenceDelta: 0.1,
-      });
-
-      assert.ok(isCommitEditSource(editRequest.source));
-      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
-      assert.strictEqual(getSourceCommitTimestamp(editRequest)?.getTime(), timestamp.getTime());
     });
 
     it('creates an edit request with story source', () => {
@@ -86,8 +65,7 @@ describe('EditRequest', () => {
       });
 
       assert.strictEqual(editRequest.source.type, 'story');
-      assert.strictEqual(getSourceCommitSha(editRequest), null);
-      assert.strictEqual(getSourceCommitTimestamp(editRequest), null);
+      assert.ok(!isCommitEditSource(editRequest.source));
     });
 
     it('creates an edit request with manual source', () => {
@@ -106,7 +84,7 @@ describe('EditRequest', () => {
       });
 
       assert.strictEqual(editRequest.source.type, 'manual');
-      assert.strictEqual(getSourceCommitSha(editRequest), null);
+      assert.ok(!isCommitEditSource(editRequest.source));
     });
 
     it('sets default status to pending', () => {
@@ -325,31 +303,9 @@ describe('EditRequest', () => {
       assert.strictEqual(editRequest.confidenceDelta, 0.1);
       assert.strictEqual(editRequest.status, 'pending');
       assert.ok(isCommitEditSource(editRequest.source));
-      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
-    });
-
-    it('converts with legacy fields (backward compat)', () => {
-      const timestamp = new Date('2024-01-15T10:00:00Z');
-      const editRequest = wikiPageUpdateToEditRequest({
-        id: 'edit-1',
-        repoId: 'repo-1',
-        wikiId: 'wiki-1',
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: timestamp,
-        sourceAgentType: 'code-change',
-        sourceAgentRunId: 'run-1',
-        update: {
-          type: 'update',
-          path: 'docs/api',
-          title: 'API Docs',
-          content: '# API Documentation',
-          confidenceDelta: 0.1,
-        },
-      });
-
-      assert.ok(isCommitEditSource(editRequest.source));
-      assert.strictEqual(getSourceCommitSha(editRequest), 'abc123');
-      assert.strictEqual(getSourceCommitTimestamp(editRequest)?.getTime(), timestamp.getTime());
+      if (isCommitEditSource(editRequest.source)) {
+        assert.strictEqual(editRequest.source.commitSha, 'abc123');
+      }
     });
 
     it('handles updates without optional fields', () => {
@@ -432,7 +388,7 @@ describe('EditRequest', () => {
       });
 
       assert.strictEqual(editRequest.source.type, 'story');
-      assert.strictEqual(getSourceCommitSha(editRequest), null);
+      assert.ok(!isCommitEditSource(editRequest.source));
     });
   });
 });

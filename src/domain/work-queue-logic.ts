@@ -7,7 +7,7 @@
  */
 
 import type { WorkItem } from './work-item.js';
-import { getTargetCommitId } from './work-item.js';
+import { isCommitTarget } from './work-item.js';
 import type { AgentType } from './agent-run.js';
 
 /**
@@ -91,7 +91,7 @@ export function selectItemsForBatch(
   for (const item of pendingItems) {
     if (itemsToClaim.length >= maxItems) break;
 
-    const targetCommitId = getTargetCommitId(item);
+    const targetCommitId = isCommitTarget(item.target) ? item.target.commitId : null;
 
     // Rule 2: For commit-targeted non-code-change analysis agents,
     // verify code-change has already processed this commit

@@ -4,7 +4,7 @@ import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { createWorkItem, getTargetCommitId, getTargetPath } from '../domain/work-item.js';
+import { createWorkItem, isCommitTarget, isPathTarget } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -71,7 +71,7 @@ import {
 } from '../queries/index.js';
 
 // Import EditRequest for routing analysis agent output
-import { createEditRequest } from '../domain/edit-request.js';
+import { createEditRequest, createCommitEditSource } from '../domain/edit-request.js';
 
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../agents/registry.js';
@@ -203,6 +203,7 @@ export class Executor {
             id: uuid(),
             repoId,
             agentType: 'wiki-editor',
+            target: { type: 'wiki' },
           });
 
           // Save and immediately claim it
@@ -564,9 +565,9 @@ export class Executor {
       return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
     }
 
-    // Extract target info using helpers
-    const targetCommitId = getTargetCommitId(workItem);
-    const targetPath = getTargetPath(workItem);
+    // Extract target info using type guards
+    const targetCommitId = isCommitTarget(workItem.target) ? workItem.target.commitId : null;
+    const targetPath = isPathTarget(workItem.target) ? workItem.target.path : null;
 
     // Translate SHA to internal commit ID if we have a target commit
     // The orchestrator returns Git SHAs, but agents expect internal UUIDs
@@ -712,8 +713,7 @@ export class Executor {
             id: uuid(),
             repoId,
             wikiId,
-            sourceCommitSha: commitData!.sha,
-            sourceCommitTimestamp: commitData!.committedAt,
+            source: createCommitEditSource(commitData!.sha, commitData!.committedAt),
             sourceAgentType: agent.type as AgentType,
             sourceAgentRunId: agentRunId,
             workItemId: workItem.id, // Link to originating work item for provenance

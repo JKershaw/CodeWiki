@@ -14,6 +14,7 @@ import 'dotenv/config';
 import { SecurityAgent } from '../../../src/agents/analysis/security-agent.js';
 import { PatternAgent } from '../../../src/agents/analysis/pattern-agent.js';
 import { CodeChangeAgent } from '../../../src/agents/analysis/code-change-agent.js';
+import { createCommitTarget } from '../../../src/domain/work-target.js';
 import { NarrativeAgent } from '../../../src/agents/analysis/narrative-agent.js';
 import {
   createLLMTestContext,
@@ -134,15 +135,15 @@ export class AuthService {
       // Run multiple agents on the same commit
       console.log('Running SecurityAgent...');
       const securityAgent = new SecurityAgent();
-      const securityResult = await securityAgent.runOnCommit(commitSha, agentCtx);
+      const securityResult = await securityAgent.run(createCommitTarget(commitSha), agentCtx);
 
       console.log('Running PatternAgent...');
       const patternAgent = new PatternAgent();
-      const patternResult = await patternAgent.runOnCommit(commitSha, agentCtx);
+      const patternResult = await patternAgent.run(createCommitTarget(commitSha), agentCtx);
 
       console.log('Running CodeChangeAgent...');
       const codeChangeAgent = new CodeChangeAgent();
-      const codeChangeResult = await codeChangeAgent.runOnCommit(commitSha, agentCtx);
+      const codeChangeResult = await codeChangeAgent.run(createCommitTarget(commitSha), agentCtx);
 
       // Combine all results for consistency check
       const combinedAnalysis = JSON.stringify({
@@ -216,12 +217,12 @@ We will use TypeScript for type safety and better developer experience.
       // Run narrative agent (should detect ADR)
       console.log('Running NarrativeAgent...');
       const narrativeAgent = new NarrativeAgent();
-      const narrativeResult = await narrativeAgent.runOnCommit(commitSha, agentCtx);
+      const narrativeResult = await narrativeAgent.run(createCommitTarget(commitSha), agentCtx);
 
       // Run code change agent (should handle docs gracefully)
       console.log('Running CodeChangeAgent...');
       const codeChangeAgent = new CodeChangeAgent();
-      const codeChangeResult = await codeChangeAgent.runOnCommit(commitSha, agentCtx);
+      const codeChangeResult = await codeChangeAgent.run(createCommitTarget(commitSha), agentCtx);
 
       const combinedAnalysis = JSON.stringify({
         narrative: {

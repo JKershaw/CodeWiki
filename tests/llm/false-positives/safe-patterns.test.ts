@@ -12,6 +12,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { SecurityAgent } from '../../../src/agents/analysis/security-agent.js';
+import { createCommitTarget } from '../../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -92,7 +93,7 @@ export class UserRepository {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -165,7 +166,7 @@ export async function createUser(name: string, email: string) {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -217,7 +218,7 @@ const EXAMPLE_KEY = 'YOUR_API_KEY_HERE';  // This is a placeholder, not a real k
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -276,7 +277,7 @@ export function generateSecureToken(): string {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -356,7 +357,7 @@ export function escapeHtml(text: string): string {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -428,7 +429,7 @@ export async function listFiles(subdir: string): Promise<string[]> {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -496,7 +497,7 @@ describe('SecurityScanner', () => {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,

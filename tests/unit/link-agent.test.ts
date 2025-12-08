@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createTestContext, createTestRepo, type TestContext } from '../helpers/index.js';
 import { LinkAgent } from '../../src/agents/meta/link-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
+import { createWikiTarget } from '../../src/domain/work-target.js';
 
 describe('LinkAgent', () => {
   let ctx: TestContext;
@@ -102,7 +103,7 @@ CONFIDENCE: 0.85`;
       const agent = new LinkAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should have updates with links populated
       assert.ok(result.updates.length > 0, 'Should generate updates');
@@ -147,7 +148,7 @@ CONFIDENCE: 0.85`;
       const agent = new LinkAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Find update for main page
       const mainUpdate = result.updates.find(u => u.path === 'main');
@@ -201,7 +202,7 @@ CONFIDENCE: 0.85`;
       const agent = new LinkAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should not have update for page that already has links
       const hasLinksUpdate = result.updates.find(u => u.path === 'has-links');
@@ -229,7 +230,7 @@ CONFIDENCE: 0.85`;
       const agent = new LinkAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should skip analysis
       assert.strictEqual(result.updates.length, 0, 'Should not generate updates with too few pages');

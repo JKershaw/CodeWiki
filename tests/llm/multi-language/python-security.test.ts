@@ -12,6 +12,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { SecurityAgent } from '../../../src/agents/analysis/security-agent.js';
+import { createCommitTarget } from '../../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -91,7 +92,7 @@ def get_order(conn, order_id):
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       assert.ok(result.result.findings.length > 0,
         'Should detect SQL injection in Python code');
@@ -157,7 +158,7 @@ def raw_query_sqlalchemy(session: Session, email: str):
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -216,7 +217,7 @@ def check_dns(domain: str):
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       assert.ok(result.result.findings.length > 0,
         'Should detect command injection in Python code');
@@ -277,7 +278,7 @@ def process_request(request):
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -331,7 +332,7 @@ def get_user_file(user_id: str, filename: str) -> bytes:
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,

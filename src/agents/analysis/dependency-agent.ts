@@ -36,10 +36,8 @@ export class DependencyAgent implements Agent {
     if (!isCommitTarget(target)) {
       throw new Error(`DependencyAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnCommit(target.commitId, context);
-  }
+    const commitId = target.commitId;
 
-  async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
     // Get commit via CQRS query
     const query = createGetCommitQuery(commitId);
     const result = await handleGetCommit(query, context.repos);
@@ -342,28 +340,6 @@ CONFIDENCE: [0-1 value]
       }
     );
 
-    // Fallback: try legacy line format if no blocks found
-    let finalWikiUpdates = wikiUpdates;
-    if (wikiUpdates.length === 0) {
-      const legacyPatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
-        {
-          pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
-          mapper: (m) => ({
-            path: m[1]!.trim(),
-            action: m[2]!.toLowerCase() as 'create' | 'update',
-            content: m[3]!.trim(),
-          }),
-        },
-      ];
-
-      finalWikiUpdates = parseListItemsWithFallback(
-        ctx,
-        'WIKI_UPDATES_LEGACY',
-        /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-        legacyPatterns
-      );
-    }
-
     // Parse confidence
     const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
 
@@ -375,7 +351,7 @@ CONFIDENCE: [0-1 value]
       impact,
       dependencyDetails,
       findings,
-      wikiUpdates: finalWikiUpdates,
+      wikiUpdates,
       confidence,
     };
   }

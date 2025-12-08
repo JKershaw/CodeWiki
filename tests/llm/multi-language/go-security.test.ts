@@ -12,6 +12,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { SecurityAgent } from '../../../src/agents/analysis/security-agent.js';
+import { createCommitTarget } from '../../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -109,7 +110,7 @@ func GetSortedUsers(db *sql.DB, sortField string) ([]User, error) {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       assert.ok(result.result.findings.length > 0,
         'Should detect SQL injection in Go code');
@@ -199,7 +200,7 @@ func CreateUser(db *sql.DB, name, email string) error {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -269,7 +270,7 @@ func ProcessFiles(files []string) error {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       assert.ok(result.result.findings.length > 0,
         'Should detect command injection in Go code');
@@ -350,7 +351,7 @@ func isValidHostname(h string) bool {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -433,7 +434,7 @@ func UserFileHandler(w http.ResponseWriter, r *http.Request) {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,
@@ -516,7 +517,7 @@ func ImageProxy(w http.ResponseWriter, r *http.Request) {
 
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       const analysisText = JSON.stringify({
         summary: result.result.summary,

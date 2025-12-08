@@ -86,8 +86,6 @@ export function extractToolMetrics(completion: ToolUseResult): ToolMetrics {
  * Agents implement a polymorphic interface using WorkTarget:
  * - canHandle(target) - returns true if agent can process this target type
  * - run(target, context) - unified entry point for all target types
- *
- * Legacy methods (runOnCommit, runOnWiki, runOnPath) are deprecated.
  */
 export interface Agent {
   /** The type of this agent */
@@ -114,24 +112,6 @@ export interface Agent {
    * @throws Error if the agent cannot handle the target type
    */
   run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult>;
-
-  /**
-   * @deprecated Use run() with CommitTarget instead
-   * Run the agent on a specific commit.
-   */
-  runOnCommit?(commitId: string, context: AgentContext): Promise<AgentRunResult>;
-
-  /**
-   * @deprecated Use run() with WikiTarget instead
-   * Run the agent on the wiki (for meta/synthesis agents).
-   */
-  runOnWiki?(context: AgentContext): Promise<AgentRunResult>;
-
-  /**
-   * @deprecated Use run() with PathTarget instead
-   * Run the agent on a specific path (directory or file) for exploration.
-   */
-  runOnPath?(targetPath: string, context: AgentContext): Promise<AgentRunResult>;
 }
 
 /**

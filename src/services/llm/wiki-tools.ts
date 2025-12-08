@@ -15,7 +15,7 @@ import {
   DEFAULT_MAX_CONTENT_LENGTH,
 } from './wiki-page-helpers.js';
 
-// Re-export WikiToolContext for backwards compatibility during migration
+// Export WikiToolContext for consumers
 export type { WikiToolContext } from './tools.js';
 
 const MAX_SEARCH_RESULTS = 10;

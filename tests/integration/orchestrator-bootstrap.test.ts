@@ -8,7 +8,7 @@ import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
-import { createWorkItem } from '../../src/domain/work-item.js';
+import { createWorkItem, createWikiTarget } from '../../src/domain/work-item.js';
 import { createAgentRun } from '../../src/domain/agent-run.js';
 
 describe('Orchestrator Bootstrap Behavior', () => {
@@ -203,7 +203,7 @@ code-change,${sha},Analyze new commit`);
         id: 'existing-bootstrap-work',
         repoId,
         agentType: 'bootstrap',
-        priority: 100,
+        target: createWikiTarget(),
       }));
 
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);

@@ -9,9 +9,10 @@ import { v4 as uuid } from 'uuid';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { WikiEditorAgent } from '../../src/agents/meta/wiki-editor-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
-import { createEditRequest } from '../../src/domain/edit-request.js';
+import { createEditRequest, createCommitEditSource } from '../../src/domain/edit-request.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 import type { Commit } from '../../src/domain/commit.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('WikiEditorAgent', () => {
   let ctx: TestContext;
@@ -94,8 +95,7 @@ describe('WikiEditorAgent', () => {
       id: uuid(),
       repoId,
       wikiId,
-      sourceCommitSha: commitSha,
-      sourceCommitTimestamp: commitTimestamp,
+      source: createCommitEditSource(commitSha, commitTimestamp),
       sourceAgentType: 'code-change',
       sourceAgentRunId: uuid(),
       targetPagePath: pagePath,
@@ -114,7 +114,7 @@ describe('WikiEditorAgent', () => {
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.updates.length, 0);
       assert.ok(result.result.summary.includes('No pending'));
@@ -140,7 +140,7 @@ describe('WikiEditorAgent', () => {
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.updates.length, 1);
       assert.strictEqual(result.updates[0]!.path, 'docs/new-page');
@@ -182,7 +182,7 @@ describe('WikiEditorAgent', () => {
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.updates.length, 1);
       assert.strictEqual(result.updates[0]!.path, 'docs/api');
@@ -229,7 +229,7 @@ CONTENT: `);
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should have called LLM
       assert.ok(result.costUsd > 0, 'Should have called LLM');
@@ -275,7 +275,7 @@ CONTENT: Originally used session-based authentication before migrating to JWT.`)
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.updates.length, 1);
       const update = result.updates[0]!;
@@ -328,7 +328,7 @@ Endpoint information.
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.updates.length, 1);
       const update = result.updates[0]!;
@@ -352,7 +352,7 @@ Endpoint information.
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.updates.length, 2);
       // Should process in timestamp order (oldest first)
@@ -374,7 +374,7 @@ Endpoint information.
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should be limited to 10 edits per run
       assert.ok(result.updates.length <= 10, `Should limit to 10 edits, got ${result.updates.length}`);
@@ -392,8 +392,7 @@ Endpoint information.
         id: 'edit-to-process',
         repoId,
         wikiId: wiki.id,
-        sourceCommitSha: 'abc123',
-        sourceCommitTimestamp: timestamp,
+        source: createCommitEditSource('abc123', timestamp),
         sourceAgentType: 'code-change',
         sourceAgentRunId: uuid(),
         targetPagePath: 'docs/new-page',
@@ -405,7 +404,7 @@ Endpoint information.
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      await agent.runOnWiki(agentCtx);
+      await agent.run(createWikiTarget(), agentCtx);
 
       // Check that edit request was marked as processed
       const processed = await ctx.repos.editRequests.findById('edit-to-process');
@@ -422,9 +421,9 @@ Endpoint information.
       const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit-id', agentCtx),
-        /does not run on commits/,
-        'Should throw error explaining agent does not run on commits'
+        async () => agent.run(createCommitTarget('any-commit-id'), agentCtx),
+        /cannot handle target type/i,
+        'Should throw error when called with commit target'
       );
     });
   });
@@ -475,7 +474,7 @@ CONTENT: Prototype implementation during early development.`);
 
       const agent = new WikiEditorAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.updates.length, 1);
       const update = result.updates[0]!;

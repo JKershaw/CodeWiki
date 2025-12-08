@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createTestContext, createTestRepo, type TestContext } from '../helpers/index.js';
 import { BootstrapAgent } from '../../src/agents/synthesis/bootstrap-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('BootstrapAgent', () => {
   let ctx: TestContext;
@@ -24,7 +25,7 @@ describe('BootstrapAgent', () => {
     ctx.llm.reset();
   });
 
-  describe('runOnWiki', () => {
+  describe('run (wiki target)', () => {
     it('creates foundation pages on empty wiki', async () => {
       const repoId = 'bootstrap-empty-wiki';
 
@@ -71,7 +72,7 @@ This project provides utilities for doing awesome things. It is built with TypeS
 
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should create foundation pages
       assert.ok(result.updates.length > 0, 'Should create at least one foundation page');
@@ -120,7 +121,7 @@ This project provides utilities for doing awesome things. It is built with TypeS
 
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should skip - no updates, no LLM cost
       assert.strictEqual(result.updates.length, 0, 'Should not create any pages');
@@ -156,7 +157,7 @@ This project uses npm. Check package.json for available scripts.`);
 
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should still create pages, even without README
       assert.ok(result.updates.length > 0, 'Should create pages even without README');
@@ -192,7 +193,7 @@ Multi-agent system with orchestrator.
 
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should create pages from PLAN.md
       assert.ok(result.updates.length > 0, 'Should create pages from PLAN.md');
@@ -216,7 +217,7 @@ Multi-agent system with orchestrator.
 
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // All bootstrap pages should have moderate confidence delta
       for (const update of result.updates) {
@@ -228,15 +229,15 @@ Multi-agent system with orchestrator.
     });
   });
 
-  describe('runOnCommit', () => {
+  describe('run (commit target)', () => {
     it('throws error when called (bootstrap does not process commits)', async () => {
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit-id', agentCtx),
-        /does not run on commits/,
-        'Should throw error explaining bootstrap does not run on commits'
+        async () => agent.run(createCommitTarget('any-commit-id'), agentCtx),
+        /cannot handle target type/,
+        'Should throw error explaining bootstrap does not handle commits'
       );
     });
   });

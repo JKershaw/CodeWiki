@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { CodeChangeAgent } from '../../src/agents/analysis/code-change-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -71,7 +72,7 @@ export function add(a: number, b: number): number {
       const agent = new CodeChangeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Verify structure
       assert.ok(result.result, 'result.result should exist');
@@ -130,7 +131,7 @@ export class UserService {
       const agent = new CodeChangeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify the analysis describes the feature
       const analysisText = JSON.stringify({
@@ -177,7 +178,7 @@ export function divide(a: number, b: number): number {
       const agent = new CodeChangeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify the analysis describes the bug fix
       const analysisText = JSON.stringify({

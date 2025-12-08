@@ -37,14 +37,8 @@ export class CodeChangeAgent implements Agent {
     if (!isCommitTarget(target)) {
       throw new Error(`CodeChangeAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnCommitImpl(target.commitId, context);
-  }
+    const commitId = target.commitId;
 
-  async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
-    return this.runOnCommitImpl(commitId, context);
-  }
-
-  private async runOnCommitImpl(commitId: string, context: AgentContext): Promise<AgentRunResult> {
     // Get the commit via CQRS query
     const commitQuery = createGetCommitQuery(commitId);
     const commitResult = await handleGetCommit(commitQuery, context.repos);
@@ -239,28 +233,6 @@ CONFIDENCE: [0-1 value]
       }
     );
 
-    // Fallback: try legacy line format if no blocks found
-    let finalWikiUpdates = wikiUpdates;
-    if (wikiUpdates.length === 0) {
-      const legacyPatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
-        {
-          pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*(.+)$/i,
-          mapper: (m) => ({
-            path: m[1]!.trim(),
-            action: m[2]!.toLowerCase() as 'create' | 'update' | 'merge',
-            content: m[3]!.trim(),
-          }),
-        },
-      ];
-
-      finalWikiUpdates = parseListItemsWithFallback(
-        ctx,
-        'WIKI_UPDATES_LEGACY',
-        /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-        legacyPatterns
-      );
-    }
-
     // Parse confidence
     const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
 
@@ -268,7 +240,7 @@ CONFIDENCE: [0-1 value]
       pageTitle,
       summary,
       findings,
-      wikiUpdates: finalWikiUpdates,
+      wikiUpdates,
       confidence,
     };
   }

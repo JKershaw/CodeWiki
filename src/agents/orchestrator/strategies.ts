@@ -232,6 +232,7 @@ export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
         id: uuid(),
         repoId: ctx.repoId,
         agentType: 'bootstrap',
+        target: { type: 'wiki' },
       }),
     ],
     stopProcessing: true,  // Bootstrap must complete before other work
@@ -283,7 +284,7 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
         id: uuid(),
         repoId: ctx.repoId,
         agentType: 'codebase-explorer',
-        targetPath: dir.path,
+        target: { type: 'path', path: dir.path },
       })
     );
   }
@@ -325,7 +326,7 @@ export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
           id: uuid(),
           repoId: ctx.repoId,
           agentType,
-          targetCommitId: commit.sha,
+          target: { type: 'commit', commitId: commit.sha },
         })
       );
     }
@@ -393,6 +394,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'link',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -413,6 +415,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
           id: uuid(),
           repoId: ctx.repoId,
           agentType: 'structure',
+          target: { type: 'wiki' },
         })
       );
     }
@@ -434,6 +437,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'quality',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -454,6 +458,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
           id: uuid(),
           repoId: ctx.repoId,
           agentType: 'consistency',
+          target: { type: 'wiki' },
         })
       );
     }
@@ -478,6 +483,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'consolidation',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -552,6 +558,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'overview',
+            target: { type: 'wiki' },
           })
         );
         break;
@@ -579,6 +586,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'project-overview',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -608,6 +616,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'getting-started',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -636,6 +645,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'testing-guide',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -666,6 +676,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'extension-guide',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -700,6 +711,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'writer',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -734,6 +746,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'wiki-index',
+            target: { type: 'wiki' },
           })
         );
       }
@@ -774,6 +787,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
             id: uuid(),
             repoId: ctx.repoId,
             agentType: 'toc',
+            target: { type: 'wiki' },
           })
         );
       }

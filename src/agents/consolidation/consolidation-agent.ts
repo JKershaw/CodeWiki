@@ -49,14 +49,7 @@ export class ConsolidationAgent implements Agent {
     if (!isWikiTarget(target)) {
       throw new Error(`ConsolidationAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnWiki(context);
-  }
 
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('ConsolidationAgent does not run on commits. Use runOnWiki instead.');
-  }
-
-  async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
     // Get open findings grouped for consolidation via CQRS query
     const findingsQuery = createGroupOpenFindingsQuery(context.wikiId);
     const findingsResult = await handleGroupOpenFindings(findingsQuery, context.repos);

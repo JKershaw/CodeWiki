@@ -9,6 +9,7 @@ import { createTestContext, createTestRepo, type TestContext } from '../helpers/
 import { LinkAgent } from '../../src/agents/meta/link-agent.js';
 import { QualityAgent } from '../../src/agents/meta/quality-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
+import { createWikiTarget } from '../../src/domain/work-target.js';
 
 describe('Wiki Analysis', () => {
   let ctx: TestContext;
@@ -84,7 +85,7 @@ CONFIDENCE: 0.85`);
 
       const agent = new LinkAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Verify link suggestions were found
       assert.ok(result.result.findings.length > 0, 'Should find link suggestions');
@@ -136,7 +137,7 @@ CONFIDENCE: 0.85`);
 
       const agent = new LinkAgent();
       const agentCtx = await ctx.agentContext(repoWithLinks);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.strictEqual(result.result.summary, 'All pages already have links analyzed');
       assert.strictEqual(result.updates.length, 0);
@@ -221,7 +222,7 @@ CONFIDENCE: 0.8`);
 
       const agent = new QualityAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should identify issues
       assert.ok(result.result.findings.length > 0, 'Should find quality issues');
@@ -256,7 +257,7 @@ comprehensive documentation that helps developers understand the system.`,
 
       const agent = new QualityAgent();
       const agentCtx = await ctx.agentContext(healthyRepoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // For healthy pages, QualityAgent returns without LLM call
       assert.ok(result.result.summary.includes('meet quality standards'));

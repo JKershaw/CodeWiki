@@ -7,11 +7,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   createWorkItem,
-  getTargetCommitId,
-  getTargetPath,
   createCommitTarget,
   createPathTarget,
   createWikiTarget,
+  isCommitTarget,
+  isPathTarget,
+  isWikiTarget,
   type WorkItem,
 } from '../../src/domain/work-item.js';
 
@@ -22,12 +23,12 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
+        target: createWikiTarget(),
       });
 
       assert.strictEqual(workItem.id, 'work-1');
       assert.strictEqual(workItem.repoId, 'repo-1');
       assert.strictEqual(workItem.agentType, 'code-change');
-      assert.strictEqual(workItem.priority, 0);
       assert.strictEqual(workItem.status, 'pending');
     });
 
@@ -36,76 +37,56 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
+        target: createWikiTarget(),
       });
 
       assert.strictEqual(workItem.status, 'pending');
     });
 
-    it('sets wiki target when no target specified', () => {
+    it('creates work item with wiki target', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
+        target: createWikiTarget(),
       });
 
       assert.strictEqual(workItem.target.type, 'wiki');
-      assert.strictEqual(getTargetCommitId(workItem), null);
-      assert.strictEqual(getTargetPath(workItem), null);
+      assert.strictEqual(isWikiTarget(workItem.target), true);
       assert.strictEqual(workItem.claimedAt, null);
       assert.strictEqual(workItem.completedAt, null);
       assert.strictEqual(workItem.agentRunId, null);
       assert.strictEqual(workItem.orchestratorRunId, null);
     });
 
-    it('creates commit target from targetCommitId (legacy)', () => {
+    it('creates work item with commit target', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        targetCommitId: 'abc123def',
+        target: createCommitTarget('abc123def'),
       });
 
       assert.strictEqual(workItem.target.type, 'commit');
-      assert.strictEqual(getTargetCommitId(workItem), 'abc123def');
+      assert.strictEqual(isCommitTarget(workItem.target), true);
+      if (isCommitTarget(workItem.target)) {
+        assert.strictEqual(workItem.target.commitId, 'abc123def');
+      }
     });
 
-    it('creates path target from targetPath (legacy)', () => {
+    it('creates work item with path target', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'codebase-explorer',
-        targetPath: 'src/services/llm',
+        target: createPathTarget('src/services/llm'),
       });
 
       assert.strictEqual(workItem.target.type, 'path');
-      assert.strictEqual(getTargetPath(workItem), 'src/services/llm');
-    });
-
-    it('accepts explicit WorkTarget', () => {
-      const target = createCommitTarget('explicit-sha');
-      const workItem = createWorkItem({
-        id: 'work-1',
-        repoId: 'repo-1',
-        agentType: 'code-change',
-        target,
-      });
-
-      assert.strictEqual(workItem.target.type, 'commit');
-      assert.strictEqual(getTargetCommitId(workItem), 'explicit-sha');
-    });
-
-    it('explicit target takes precedence over legacy fields', () => {
-      const target = createPathTarget('explicit/path');
-      const workItem = createWorkItem({
-        id: 'work-1',
-        repoId: 'repo-1',
-        agentType: 'code-change',
-        target,
-        targetCommitId: 'should-be-ignored',
-      });
-
-      assert.strictEqual(workItem.target.type, 'path');
-      assert.strictEqual(getTargetPath(workItem), 'explicit/path');
+      assert.strictEqual(isPathTarget(workItem.target), true);
+      if (isPathTarget(workItem.target)) {
+        assert.strictEqual(workItem.target.path, 'src/services/llm');
+      }
     });
 
     it('includes orchestratorRunId when provided for provenance tracking', () => {
@@ -113,7 +94,7 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        targetCommitId: 'abc123def',
+        target: createCommitTarget('abc123def'),
         orchestratorRunId: 'orch-run-456',
       });
 
@@ -125,6 +106,7 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
+        target: createWikiTarget(),
       });
 
       assert.strictEqual(workItem.orchestratorRunId, null);
@@ -136,6 +118,7 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
+        target: createWikiTarget(),
       });
       const after = Date.now();
 
@@ -145,61 +128,49 @@ describe('WorkItem', () => {
     });
   });
 
-  describe('helper functions', () => {
-    it('getTargetCommitId returns commitId for commit targets', () => {
+  describe('type guards', () => {
+    it('isCommitTarget identifies commit targets', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
         target: createCommitTarget('sha123'),
       });
-      assert.strictEqual(getTargetCommitId(workItem), 'sha123');
+      assert.strictEqual(isCommitTarget(workItem.target), true);
+      assert.strictEqual(isPathTarget(workItem.target), false);
+      assert.strictEqual(isWikiTarget(workItem.target), false);
+
+      if (isCommitTarget(workItem.target)) {
+        assert.strictEqual(workItem.target.commitId, 'sha123');
+      }
     });
 
-    it('getTargetCommitId returns null for non-commit targets', () => {
-      const pathItem = createWorkItem({
-        id: 'work-1',
-        repoId: 'repo-1',
-        agentType: 'codebase-explorer',
-        target: createPathTarget('src/foo'),
-      });
-      assert.strictEqual(getTargetCommitId(pathItem), null);
-
-      const wikiItem = createWorkItem({
-        id: 'work-2',
-        repoId: 'repo-1',
-        agentType: 'link',
-        target: createWikiTarget(),
-      });
-      assert.strictEqual(getTargetCommitId(wikiItem), null);
-    });
-
-    it('getTargetPath returns path for path targets', () => {
+    it('isPathTarget identifies path targets', () => {
       const workItem = createWorkItem({
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'codebase-explorer',
         target: createPathTarget('src/services'),
       });
-      assert.strictEqual(getTargetPath(workItem), 'src/services');
+      assert.strictEqual(isCommitTarget(workItem.target), false);
+      assert.strictEqual(isPathTarget(workItem.target), true);
+      assert.strictEqual(isWikiTarget(workItem.target), false);
+
+      if (isPathTarget(workItem.target)) {
+        assert.strictEqual(workItem.target.path, 'src/services');
+      }
     });
 
-    it('getTargetPath returns null for non-path targets', () => {
-      const commitItem = createWorkItem({
+    it('isWikiTarget identifies wiki targets', () => {
+      const workItem = createWorkItem({
         id: 'work-1',
-        repoId: 'repo-1',
-        agentType: 'code-change',
-        target: createCommitTarget('sha123'),
-      });
-      assert.strictEqual(getTargetPath(commitItem), null);
-
-      const wikiItem = createWorkItem({
-        id: 'work-2',
         repoId: 'repo-1',
         agentType: 'link',
         target: createWikiTarget(),
       });
-      assert.strictEqual(getTargetPath(wikiItem), null);
+      assert.strictEqual(isCommitTarget(workItem.target), false);
+      assert.strictEqual(isPathTarget(workItem.target), false);
+      assert.strictEqual(isWikiTarget(workItem.target), true);
     });
   });
 });

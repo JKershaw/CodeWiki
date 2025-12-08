@@ -7,6 +7,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { DependencyAgent } from '../../src/agents/analysis/dependency-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import { dependencyAgentResponses } from '../fixtures/agent-responses.js';
 
 describe('DependencyAgent', () => {
@@ -24,7 +25,7 @@ describe('DependencyAgent', () => {
     ctx.llm.reset();
   });
 
-  describe('runOnCommit', () => {
+  describe('run', () => {
     it('detects added dependencies from package.json', async () => {
       const repoId = 'dependency-added';
 
@@ -77,7 +78,7 @@ describe('DependencyAgent', () => {
       const agent = new DependencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should have findings about added dependencies
       assert.ok(result.result.findings.length > 0, 'Should have findings for added dependencies');
@@ -155,7 +156,7 @@ describe('DependencyAgent', () => {
       const agent = new DependencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify breaking changes as high importance
       const breakingFinding = result.result.findings.find(f =>
@@ -216,7 +217,7 @@ export function main() {
       const agent = new DependencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should return with no dependency changes message
       assert.ok(
@@ -286,7 +287,7 @@ CONFIDENCE: 0.85`);
       const agent = new DependencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should detect dependency changes from requirements.txt
       assert.ok(result.result.findings.length > 0, 'Should detect dependencies from requirements.txt');
@@ -304,7 +305,7 @@ CONFIDENCE: 0.85`);
       const agentCtx = await ctx.agentContext(repoId);
 
       await assert.rejects(
-        async () => agent.runOnCommit('nonexistent-commit-id', agentCtx),
+        async () => agent.run(createCommitTarget('nonexistent-commit-id'), agentCtx),
         /not found/i,
         'Should throw error for non-existent commit'
       );

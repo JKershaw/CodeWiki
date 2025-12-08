@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { SecurityAgent } from '../../src/agents/analysis/security-agent.js';
 import { securityAgentResponses } from '../fixtures/agent-responses.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('SecurityAgent', () => {
   let ctx: TestContext;
@@ -24,7 +25,7 @@ describe('SecurityAgent', () => {
     ctx.llm.reset();
   });
 
-  describe('runOnCommit', () => {
+  describe('run', () => {
     it('detects security-relevant authentication changes', async () => {
       const repoId = 'security-auth-changes';
 
@@ -87,7 +88,7 @@ export function validateToken(token: string): boolean {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should have findings about auth changes
       assert.ok(result.result.findings.length > 0, 'Should have security findings');
@@ -159,7 +160,7 @@ export async function searchUsers(db: any, searchTerm: string) {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify critical security issue
       const criticalFinding = result.result.findings.find(f =>
@@ -233,7 +234,7 @@ export function CommentDisplay({ comment }: { comment: string }) {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify XSS vulnerability
       const xssFinding = result.result.findings.find(f =>
@@ -291,7 +292,7 @@ export function CommentDisplay({ comment }: { comment: string }) {
       const agent = new SecurityAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should have minimal findings for non-security commit
       assert.strictEqual(result.updates.length, 0, 'Should not create wiki pages for non-security commits');
@@ -311,7 +312,7 @@ export function CommentDisplay({ comment }: { comment: string }) {
       const agentCtx = await ctx.agentContext(repoId);
 
       await assert.rejects(
-        async () => agent.runOnCommit('nonexistent-commit-id', agentCtx),
+        async () => agent.run(createCommitTarget('nonexistent-commit-id'), agentCtx),
         /not found/i,
         'Should throw error for non-existent commit'
       );

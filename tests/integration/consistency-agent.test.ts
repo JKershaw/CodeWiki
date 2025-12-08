@@ -9,6 +9,7 @@ import { createTestContext, createTestRepo, type TestContext } from '../helpers/
 import { ConsistencyAgent } from '../../src/agents/meta/consistency-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { consistencyAgentResponses } from '../fixtures/agent-responses.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('ConsistencyAgent', () => {
   let ctx: TestContext;
@@ -69,7 +70,7 @@ describe('ConsistencyAgent', () => {
       const agent = new ConsistencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should indicate not enough pages
       assert.ok(
@@ -105,7 +106,7 @@ describe('ConsistencyAgent', () => {
       const agent = new ConsistencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should find broken link issues
       const brokenLinkFinding = result.result.findings.find(f =>
@@ -162,7 +163,7 @@ describe('ConsistencyAgent', () => {
       const agent = new ConsistencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should find terminology issues
       const terminologyFinding = result.result.findings.find(f =>
@@ -216,7 +217,7 @@ describe('ConsistencyAgent', () => {
       const agent = new ConsistencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should find contradiction
       const contradictionFinding = result.result.findings.find(f =>
@@ -278,7 +279,7 @@ describe('ConsistencyAgent', () => {
       const agent = new ConsistencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should detect similar content (quick check without LLM)
       const duplicateFinding = result.result.findings.find(f =>
@@ -339,7 +340,7 @@ describe('ConsistencyAgent', () => {
       const agent = new ConsistencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Summary should indicate consistency
       assert.ok(
@@ -358,9 +359,9 @@ describe('ConsistencyAgent', () => {
       const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit', agentCtx),
-        /does not run on commits/i,
-        'Should throw error when called with commit'
+        async () => agent.run(createCommitTarget('any-commit'), agentCtx),
+        /cannot handle target type/i,
+        'Should throw error when called with commit target'
       );
     });
   });

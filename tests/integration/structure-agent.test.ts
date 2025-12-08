@@ -9,6 +9,7 @@ import { createTestContext, createTestRepo, type TestContext } from '../helpers/
 import { StructureAgent } from '../../src/agents/meta/structure-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { structureAgentResponses } from '../fixtures/agent-responses.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('StructureAgent', () => {
   let ctx: TestContext;
@@ -68,7 +69,7 @@ describe('StructureAgent', () => {
       const agent = new StructureAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should indicate not enough pages
       assert.ok(
@@ -108,7 +109,7 @@ describe('StructureAgent', () => {
       const agent = new StructureAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should find structural issues
       assert.ok(result.result.findings.length > 0, 'Should identify structural issues');
@@ -149,7 +150,7 @@ describe('StructureAgent', () => {
       const agent = new StructureAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should identify orphaned pages
       const orphanFinding = result.result.findings.find(f =>
@@ -197,7 +198,7 @@ describe('StructureAgent', () => {
       const agent = new StructureAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Summary should indicate healthy structure - check that no structural issues were found
       // Note: The agent may still report a count but with 0 issues
@@ -235,7 +236,7 @@ describe('StructureAgent', () => {
       const agent = new StructureAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should identify lonely category
       const lonelyFinding = result.result.findings.find(f =>
@@ -251,9 +252,9 @@ describe('StructureAgent', () => {
       const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit', agentCtx),
-        /does not run on commits/i,
-        'Should throw error when called with commit'
+        async () => agent.run(createCommitTarget('any-commit'), agentCtx),
+        /cannot handle target type/i,
+        'Should throw error when called with commit target'
       );
     });
   });

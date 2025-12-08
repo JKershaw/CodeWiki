@@ -9,6 +9,7 @@ import { createTestContext, createTestRepo, type TestContext } from '../helpers/
 import { TableOfContentsAgent } from '../../src/agents/synthesis/toc-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('TableOfContentsAgent', () => {
   let ctx: TestContext;
@@ -53,7 +54,7 @@ describe('TableOfContentsAgent', () => {
     return page;
   }
 
-  describe('runOnWiki', () => {
+  describe('run (wiki target)', () => {
     it('adds TOC to pages with 3+ headings', async () => {
       const repoId = 'toc-multiple-headings';
 
@@ -103,7 +104,7 @@ This covers the basics.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should add TOC to the architecture guide
       assert.ok(result.updates.length > 0, 'Should update at least one page');
@@ -153,7 +154,7 @@ Content for section one.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should not update the simple page
       const simpleUpdate = result.updates.find(u => u.path === 'docs/simple');
@@ -205,7 +206,7 @@ Content three.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should not update the page with existing TOC
       const tocUpdate = result.updates.find(u => u.path === 'docs/with-toc');
@@ -252,7 +253,7 @@ Even more.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should not update navigation or index pages
       const navUpdate = result.updates.find(u => u.path === 'navigation/main');
@@ -300,7 +301,7 @@ Even more.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should not update low-confidence page
       const lowConfUpdate = result.updates.find(u => u.path === 'docs/uncertain');
@@ -356,7 +357,7 @@ How to authenticate.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       const apiUpdate = result.updates.find(u => u.path === 'api/reference');
       assert.ok(apiUpdate, 'Should update API reference');
@@ -403,7 +404,7 @@ Content C.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should limit updates to 5 per run
       assert.ok(result.updates.length <= 5, `Should limit to 5 updates per run, got ${result.updates.length}`);
@@ -440,7 +441,7 @@ Even more.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should not process when wiki is too small
       assert.strictEqual(result.updates.length, 0, 'Should not process small wikis');
@@ -486,7 +487,7 @@ Examples.`;
 
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       const guideUpdate = result.updates.find(u => u.path === 'docs/guide');
       assert.ok(guideUpdate, 'Should update guide');
@@ -498,15 +499,15 @@ Examples.`;
     });
   });
 
-  describe('runOnCommit', () => {
+  describe('run (commit target)', () => {
     it('throws error when called', async () => {
       const agent = new TableOfContentsAgent();
       const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit-id', agentCtx),
-        /does not run on commits/,
-        'Should throw error explaining agent does not run on commits'
+        async () => agent.run(createCommitTarget('any-commit-id'), agentCtx),
+        /cannot handle target type/,
+        'Should throw error explaining agent does not handle commits'
       );
     });
   });

@@ -36,14 +36,7 @@ export class OverviewAgent implements Agent {
     if (!isWikiTarget(target)) {
       throw new Error(`OverviewAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnWiki(context);
-  }
 
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('OverviewAgent does not run on commits. Use runOnCategory instead.');
-  }
-
-  async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
     // Get wiki pages via CQRS query
     const pagesQuery = createListWikiPagesQuery(context.wikiId);
     const pagesResult = await handleListWikiPages(pagesQuery, context.repos);

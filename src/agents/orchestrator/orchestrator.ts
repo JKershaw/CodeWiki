@@ -12,6 +12,7 @@ import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
 import { createWorkItem } from '../../domain/work-item.js';
+import type { WorkTarget } from '../../domain/work-target.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
 import type { UnifiedRepoAccessFactory, UnifiedRepoAccess } from '../../services/repository/unified-repo-access.js';
@@ -186,6 +187,7 @@ export class Orchestrator {
       id: uuid(),
       repoId,
       agentType: 'bootstrap',
+      target: { type: 'wiki' },
     });
   }
 
@@ -289,12 +291,18 @@ export class Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
+      // Construct target based on what the LLM specified
+      const target: WorkTarget = item.targetCommitId
+        ? { type: 'commit', commitId: item.targetCommitId }
+        : item.targetPath
+          ? { type: 'path', path: item.targetPath }
+          : { type: 'wiki' };
+
       const workItem = createWorkItem({
         id: uuid(),
         repoId,
         agentType: item.agentType as AgentType,
-        ...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
-        ...(item.targetPath ? { targetPath: item.targetPath } : {}),
+        target,
         orchestratorRunId: runId,
       });
 
