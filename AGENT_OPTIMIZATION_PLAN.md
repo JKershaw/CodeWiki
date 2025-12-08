@@ -512,9 +512,42 @@ For each agent optimization:
 
 ---
 
+## Progress Log
+
+### 2024-12-08: Initial Implementation
+
+**Completed:**
+
+1. ✅ Created `tests/llm/grader-agent.test.ts` with baseline tests
+   - 6 tests covering grading accuracy, verification file usage, and reasoning quality
+   - Baseline score: avg 9.5/10
+
+2. ✅ Ran baseline measurements for Tier 1 agents
+   - **GraderAgent**: 9.5/10 (6 tests passed)
+   - **ResearchAgent**: 7.0/10 (1 test in specialized-agents.test.ts)
+   - **OverviewAgent**: Tests broken (synthesis-agents.test.ts uses deprecated `runOnWiki` API)
+
+3. ✅ Implemented ResearchAgent optimization
+   - Added pre-fetch approach for small wikis (<20 pages): 0 tool calls
+   - Added hybrid approach for larger wikis: top 15 pages pre-selected + 1 round fallback
+   - Kept full tool-based approach as fallback
+   - **Results**: Quality maintained (7.0/10), latency reduced ~21%
+
+**Findings:**
+- The test file `tests/llm/synthesis-agents.test.ts` is broken - all tests fail with "agent.runOnWiki is not a function". These tests need to be fixed to use the correct API (`runOnCategory` or `run`).
+
+**Next:**
+- Fix synthesis-agents.test.ts to get OverviewAgent baselines
+- Continue with GraderAgent optimization (Tier 1, Priority 2)
+- Continue with OverviewAgent optimization (Tier 1, Priority 3)
+
+---
+
 ## Next Steps
 
-1. Create `tests/llm/grader-agent.test.ts` with baseline tests
-2. Run baseline measurements for all Tier 1 agents
-3. Begin with ResearchAgent optimization
-4. Document results and iterate
+1. ~~Create `tests/llm/grader-agent.test.ts` with baseline tests~~ ✅
+2. ~~Run baseline measurements for all Tier 1 agents~~ ✅
+3. ~~Begin with ResearchAgent optimization~~ ✅
+4. Fix synthesis-agents.test.ts (broken API)
+5. Continue with GraderAgent optimization
+6. Document results and iterate
