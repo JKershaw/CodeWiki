@@ -2,10 +2,7 @@ import type { AgentType, AgentResult, AgentFinding } from '../domain/agent-run.j
 import type { WikiPageUpdate } from '../domain/wiki-page.js';
 import type { LLMService, ToolUseResult } from '../services/llm/llm-service.js';
 import type { Repositories } from '../repositories/index.js';
-import type { GitService } from '../services/git/git-service.js';
-import type { RepositoryService } from '../services/repository/repository-service.js';
 import type { UnifiedRepoAccess } from '../services/repository/unified-repo-access.js';
-import type { Repo } from '../domain/repo.js';
 import type { WorkTarget, CommitTarget, PathTarget, WikiTarget } from '../domain/work-target.js';
 import { isCommitTarget, isPathTarget, isWikiTarget } from '../domain/work-target.js';
 
@@ -27,27 +24,10 @@ export interface AgentContext {
   llm: LLMService;
 
   /**
-   * Unified repository access - the preferred way to access repository files and commits.
+   * Unified repository access for file and commit operations.
    * Works with both local filesystem and GitHub API repositories.
-   * Use this instead of git, repoService, or repo.
    */
   repoAccess?: UnifiedRepoAccess;
-
-  /**
-   * Git service for local repository access.
-   * @deprecated Use repoAccess instead - it works with both GitHub and local repos.
-   */
-  git: GitService;
-  /**
-   * Unified repository service for file/commit access.
-   * @deprecated Use repoAccess instead - it provides the same functionality with a simpler API.
-   */
-  repoService?: RepositoryService;
-  /**
-   * The repository entity with metadata (owner, repoName, isGitHubRepo).
-   * @deprecated Use repoAccess.isLocal() and repoAccess.getLocalPath() instead.
-   */
-  repo?: Repo;
 }
 
 /**

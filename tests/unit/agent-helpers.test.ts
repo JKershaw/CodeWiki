@@ -30,7 +30,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -46,7 +45,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         // No repoAccess
       };
@@ -69,7 +67,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -87,7 +84,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -100,7 +96,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         // No repoAccess
       };
@@ -123,7 +118,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -142,7 +136,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -156,7 +149,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         // No repoAccess
       };
@@ -174,7 +166,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         // No repoAccess
       };
@@ -193,7 +184,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -225,7 +215,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -259,7 +248,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -301,7 +289,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -332,7 +319,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -361,7 +347,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -380,7 +365,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         // No repoAccess
       };
@@ -402,7 +386,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -430,7 +413,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -455,7 +437,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
@@ -479,7 +460,6 @@ describe('agent-helpers', () => {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
         repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };

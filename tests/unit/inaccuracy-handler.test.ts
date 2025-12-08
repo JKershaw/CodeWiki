@@ -54,7 +54,7 @@ describe('InaccuracyHandler', () => {
         severity: 'high',
       };
 
-      // Create mock context with empty repos
+      // Create mock context with empty repos (no repoAccess = no tool executor)
       const context = {
         repoId: 'repo1',
         wikiId: 'wiki1',
@@ -63,7 +63,6 @@ describe('InaccuracyHandler', () => {
             findByPath: async () => null,
           },
         },
-        git: {},
         llm: mockLLM,
       } as any;
 
@@ -100,7 +99,7 @@ describe('InaccuracyHandler', () => {
         severity: 'high',
       };
 
-      // Mock context with page but no tool executor (GitHub repo scenario)
+      // Mock context with page but no repoAccess (no tool executor available)
       const context = {
         repoId: 'repo1',
         wikiId: 'wiki1',
@@ -120,11 +119,8 @@ describe('InaccuracyHandler', () => {
             }),
           },
         },
-        git: {
-          getRepoPath: () => { throw new Error('Not a local repo'); },
-        },
         llm: mockLLM,
-        repo: { isGitHubRepo: true }, // GitHub repo - no tool executor
+        // No repoAccess = no tool executor
       } as any;
 
       const result = await handler.handle(group, context);

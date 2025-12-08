@@ -72,7 +72,6 @@ export async function createLLMTestContext(): Promise<LLMTestContext> {
     llm,
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
-      const repoPath = join(reposDir, repoId);
 
       // Create unified repo access for this repo
       let repoAccess;
@@ -86,17 +85,8 @@ export async function createLLMTestContext(): Promise<LLMTestContext> {
         repoId,
         wikiId: wiki.id,
         repos,
-        git: gitService,
         llm,
-        repoAccess,
-        // Provide repo info so agents can use filesystem tools
-        repo: {
-          id: repoId,
-          fullName: `test/${repoId}`,
-          cloneUrl: repoPath,
-          defaultBranch: 'main',
-          isGitHubRepo: false,
-        },
+        ...(repoAccess && { repoAccess }),
       };
     },
     async cleanup(): Promise<void> {
@@ -142,6 +132,9 @@ export async function createTestRepo(
     message: 'Initial commit',
     author: { name: 'Test User', email: 'test@example.com' },
   });
+
+  // Register repo with git service for local access
+  ctx.git.registerLocalRepo(repoId, repoPath);
 
   await ctx.repos.repos.save({
     id: repoId,

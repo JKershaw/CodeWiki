@@ -98,7 +98,6 @@ export async function createTestContext(): Promise<TestContext> {
         repoId,
         wikiId: wiki.id,
         repos,
-        git: gitService,
         llm,
         ...(repoAccess && { repoAccess }),
       };
