@@ -10,6 +10,7 @@ import type {
   ToolUseOptions,
   ToolUseResult,
   UsageStats,
+  RateLimitStatus,
 } from '../../src/services/llm/llm-service.js';
 
 /**
@@ -172,6 +173,18 @@ export class MockLLMService implements LLMService {
 
   isRateLimited(): boolean {
     return false;
+  }
+
+  getRateLimitStatus(): RateLimitStatus {
+    return {
+      isLimited: false,
+      reason: null,
+      clearsInSeconds: null,
+      currentRequests: 0,
+      maxRequests: 60,
+      currentHourlyCost: 0,
+      maxHourlyCost: 5,
+    };
   }
 
   getModel(): string {
