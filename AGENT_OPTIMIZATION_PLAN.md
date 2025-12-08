@@ -15,6 +15,10 @@ CodeWiki uses LLM-powered agents to analyze code and generate documentation. Man
 
 An audit of all 18 tool-using agents found that **13-15 can be optimized** to single-call or pre-fetch patterns. This document covers the TDD process and implementation plan for the highest-value agents.
 
+### Related Documentation
+
+- **[LLM_USAGE_AUDIT_REPORT.md](./LLM_USAGE_AUDIT_REPORT.md)** - Complete audit of all 29 LLM-using components with detailed analysis of each agent's data flow, tool usage patterns, and optimization potential. Includes code examples and specific file locations.
+
 ---
 
 ## TDD Process for Agent Refactoring
