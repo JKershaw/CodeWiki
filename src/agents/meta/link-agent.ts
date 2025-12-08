@@ -232,6 +232,9 @@ Now analyze the pages above and provide your link suggestions:
         continue; // Skip if already has related pages
       }
 
+      // Extract link target paths for the structured links array
+      const linkPaths = newLinks.map(l => l.target);
+
       updates.push({
         type: 'merge',
         path: page.path,
@@ -239,6 +242,7 @@ Now analyze the pages above and provide your link suggestions:
         sourceCommitId: page.sourceCommits[0] ?? '',
         agentRunId: '',
         confidenceDelta: 0.05,
+        links: linkPaths,
       });
     }
 

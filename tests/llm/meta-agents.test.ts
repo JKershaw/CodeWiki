@@ -70,6 +70,7 @@ describe('Meta Agents with Real LLM', { timeout: 180000 }, () => {
         content: page.content,
         confidence: 0.7,
         sourceCommits: ['abc123'],
+        sourceAgentRunIds: [],
         links: [],
         backlinks: [],
         createdAt: new Date(),
@@ -260,6 +261,78 @@ example.run();
 
       logTestResult('Link suggestions', evalResult);
       console.log(formatEvaluationResult('Link suggestions', evalResult));
+    });
+
+    it('populates links array in WikiPageUpdate (fix verification)', async () => {
+      const repoId = 'llm-link-array-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Links Array Test',
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create pages that should be linked
+      await createWikiPages(agentCtx.wikiId, [
+        {
+          path: 'database/overview',
+          title: 'Database Overview',
+          content: '# Database\n\nThe database layer handles data persistence using PostgreSQL.',
+        },
+        {
+          path: 'database/migrations',
+          title: 'Database Migrations',
+          content: '# Migrations\n\nDatabase migrations manage schema changes over time.',
+        },
+        {
+          path: 'database/models',
+          title: 'Data Models',
+          content: '# Models\n\nData models define the structure of database tables.',
+        },
+        {
+          path: 'api/crud',
+          title: 'CRUD Operations',
+          content: '# CRUD\n\nCreate, Read, Update, Delete operations interact with the database.',
+        },
+      ]);
+
+      const agent = new LinkAgent();
+      const result = await agent.runOnWiki(agentCtx);
+
+      // Structural assertion: updates should have links array populated
+      assert.ok(result.updates.length > 0, 'Should generate link updates');
+
+      // Verify each update has a populated links array
+      let updatesWithLinks = 0;
+      for (const update of result.updates) {
+        if (update.links && update.links.length > 0) {
+          updatesWithLinks++;
+          // Verify links are valid page paths (not empty strings)
+          for (const link of update.links) {
+            assert.ok(link.length > 0, 'Link path should not be empty');
+            assert.ok(!link.includes('['), 'Link should be a path, not markdown');
+          }
+        }
+      }
+
+      assert.ok(
+        updatesWithLinks > 0,
+        `Expected at least one update with links array populated, got ${updatesWithLinks} of ${result.updates.length}`
+      );
+
+      // Log for visibility
+      console.log(`\n✓ LinkAgent populated links array in ${updatesWithLinks}/${result.updates.length} updates`);
+      for (const update of result.updates) {
+        if (update.links && update.links.length > 0) {
+          console.log(`  - ${update.path}: links to [${update.links.join(', ')}]`);
+        }
+      }
+
+      logTestResult('Links array population', {
+        score: updatesWithLinks > 0 ? 10 : 0,
+        reasoning: `${updatesWithLinks} updates have links array populated`,
+        passed: updatesWithLinks > 0,
+      });
     });
   });
 
