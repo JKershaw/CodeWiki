@@ -3,7 +3,11 @@ import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
-import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createCodebaseToolExecutor,
+  fetchAffectedFileContents,
+  formatFetchedFilesForContext,
+} from '../agent-helpers.js';
 import {
   createParseContext,
   parseSection,
@@ -16,6 +20,10 @@ import {
 /**
  * Writer Agent - Transforms raw analysis pages into polished wiki articles.
  *
+ * OPTIMIZATION: Pre-fetches source files referenced in wiki content and includes
+ * them directly in the prompt, reducing tool calls. Falls back to tool-based
+ * approach only if needed.
+ *
  * This synthesis agent identifies pages with raw "commit-style" content and
  * rewrites them as encyclopedia-style articles suitable for a wiki.
  *
@@ -26,6 +34,11 @@ import {
  */
 export class WriterAgent implements Agent {
   readonly type: AgentType = 'writer';
+
+  // Max file size for pre-fetch
+  private readonly MAX_FILE_SIZE = 15000;
+  // Max total context for pre-fetched files
+  private readonly MAX_TOTAL_SIZE = 40000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -62,7 +75,115 @@ export class WriterAgent implements Agent {
 
     // Rewrite the first page that needs work
     const page = pagesNeedingRewrite[0]!;
-    const prompt = this.buildPrompt(page, pages);
+
+    // Try pre-fetch approach first
+    if (context.repoAccess) {
+      const prefetchResult = await this.runWithPrefetch(page, pages, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    // Fall back to tool-based approach
+    return this.runWithTools(page, pages, context);
+  }
+
+  /**
+   * Optimized run using pre-fetched file contents.
+   */
+  private async runWithPrefetch(
+    page: WikiPage,
+    allPages: WikiPage[],
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    // Extract file paths mentioned in the wiki content
+    const referencedFiles = this.extractFileReferences(page.content);
+
+    if (referencedFiles.length === 0) {
+      return null; // Fall back to tools
+    }
+
+    // Pre-fetch referenced files
+    const fetchedFiles = await fetchAffectedFileContents(
+      context,
+      referencedFiles,
+      this.MAX_FILE_SIZE,
+      this.MAX_TOTAL_SIZE
+    );
+
+    // Check if we got any content
+    const filesWithContent = fetchedFiles.filter(f => f.content !== null);
+    if (filesWithContent.length === 0) {
+      return null; // Fall back to tools
+    }
+
+    // Build prompt with pre-fetched content
+    const fileContext = formatFetchedFilesForContext(fetchedFiles, '## Source Files (for verification)');
+    const prompt = this.buildPrefetchPrompt(page, allPages, fileContext);
+
+    // Use single LLM call
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_PREFETCH,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 3500,
+      temperature: 0.3,
+    });
+
+    const rewritten = this.parseResponse(completion.content, page);
+
+    if (!rewritten) {
+      return {
+        result: createAgentResult({
+          summary: `Failed to rewrite ${page.path}`,
+          findings: [createFinding({
+            type: 'ISSUE',
+            description: `Could not parse rewrite for ${page.path}`,
+            relatedPaths: [page.path],
+            importance: 'low',
+          })],
+          confidence: 0.5,
+        }),
+        updates: [],
+        costUsd: completion.costUsd,
+      };
+    }
+
+    const update: WikiPageUpdate = {
+      type: 'update',
+      path: page.path,
+      title: rewritten.title,
+      content: rewritten.content,
+      sourceCommitId: page.sourceCommits[0] ?? '',
+      agentRunId: '',
+      confidenceDelta: 0.2,
+    };
+
+    return {
+      result: createAgentResult({
+        summary: `Rewrote ${page.path} as encyclopedia article`,
+        findings: [createFinding({
+          type: 'SYNTHESIS',
+          description: `Transformed raw analysis into article: ${page.title}`,
+          relatedPaths: [page.path],
+          importance: 'medium',
+        })],
+        confidence: rewritten.confidence,
+      }),
+      updates: [update],
+      costUsd: completion.costUsd,
+      toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: referencedFiles },
+    };
+  }
+
+  /**
+   * Tool-based run for complex cases or fallback.
+   */
+  private async runWithTools(
+    page: WikiPage,
+    allPages: WikiPage[],
+    context: AgentContext
+  ): Promise<AgentRunResult> {
+    const prompt = this.buildPrompt(page, allPages);
 
     // Set up codebase exploration tools for fact verification
     const toolExecutor = createCodebaseToolExecutor(context);
@@ -107,7 +228,7 @@ export class WriterAgent implements Agent {
       content: rewritten.content,
       sourceCommitId: page.sourceCommits[0] ?? '',
       agentRunId: '',
-      confidenceDelta: 0.2, // Boost confidence after rewrite
+      confidenceDelta: 0.2,
     };
 
     return {
@@ -124,6 +245,32 @@ export class WriterAgent implements Agent {
       updates: [update],
       costUsd: completion.costUsd,
     };
+  }
+
+  /**
+   * Extract file paths mentioned in wiki content.
+   */
+  private extractFileReferences(content: string): string[] {
+    const paths = new Set<string>();
+
+    // Match common file path patterns
+    // e.g., src/auth/login.ts, ./components/Button.tsx, lib/utils.js
+    const pathPatterns = [
+      /(?:^|[\s`'"])((?:src|lib|app|components|pages|utils|services|api|tests?)\/[\w\-./]+\.\w+)/gim,
+      /`([\w\-./]+\.(?:ts|tsx|js|jsx|json|yaml|yml|md))`/gi,
+    ];
+
+    for (const pattern of pathPatterns) {
+      const matches = content.matchAll(pattern);
+      for (const match of matches) {
+        const path = match[1]?.trim();
+        if (path && !path.includes('*') && path.length < 100) {
+          paths.add(path);
+        }
+      }
+    }
+
+    return Array.from(paths).slice(0, 10); // Limit to 10 files
   }
 
   /**
@@ -269,6 +416,62 @@ CONFIDENCE: [0-1 based on how complete the rewrite is]
 `;
   }
 
+  /**
+   * Build prompt with pre-fetched file contents (optimized approach).
+   */
+  private buildPrefetchPrompt(page: WikiPage, allPages: WikiPage[], fileContext: string): string {
+    // Find related pages for context
+    const category = page.path.split('/')[0] ?? '';
+    const relatedPages = allPages
+      .filter(p => p.path !== page.path && p.path.startsWith(category + '/'))
+      .slice(0, 5);
+
+    const relatedContext = relatedPages.length > 0
+      ? `\n## Related Pages in ${category}/\n${relatedPages.map(p => `- ${p.title}: ${p.path}`).join('\n')}`
+      : '';
+
+    return `Rewrite the following wiki page as a proper encyclopedia article.
+
+## Current Page
+
+**Title:** ${page.title}
+**Path:** ${page.path}
+**Current Content:**
+
+${page.content}
+${relatedContext}
+
+${fileContext}
+
+## Your Task
+
+The source files mentioned in the content are provided above for verification. Use them to:
+- Verify any code examples mentioned in the content actually exist
+- Check that file paths and function names are accurate
+- Ensure technical claims match the actual code
+
+Transform this into a polished wiki article that:
+1. Reads like an encyclopedia entry, NOT a commit summary
+2. Explains WHAT something is and WHY it matters
+3. Uses third-person, present tense ("The system uses..." not "This commit adds...")
+4. Preserves all factual information from the original
+5. Adds context and explanation based on the provided source files
+6. Links to related pages where relevant (use markdown: [Title](path.md))
+
+If information is not verifiable from the provided files, either omit it or note the uncertainty.
+
+Format your response as:
+
+TITLE:
+[A clear, descriptive title - not ALL_CAPS, not referencing commits]
+
+CONTENT:
+[The full rewritten article in markdown]
+
+CONFIDENCE: [0-1 based on how complete the rewrite is]
+`;
+  }
+
   private parseResponse(response: string, originalPage: WikiPage): ParsedRewrite | null {
     const ctx = createParseContext('writer', response);
 
@@ -365,5 +568,61 @@ A good wiki article MUST have:
 5. **Related concepts** - Links to other wiki pages
 
 If the source content doesn't provide enough detail for sections 2-4, note what's unclear rather than making things up.
+
+Transform commit-focused content into timeless documentation that explains the codebase as it exists today.`;
+
+/**
+ * System prompt for pre-fetch approach (file contents already provided, no tools needed).
+ */
+const SYSTEM_PROMPT_PREFETCH = `You are a technical writer transforming raw documentation into polished wiki articles.
+
+Your job is to take content that was generated from commit analysis and rewrite it as a proper encyclopedia article.
+
+## Context Provided
+
+The source files mentioned in the wiki content are provided directly in the prompt. You do not need to use any tools - all the code you need to verify is already available.
+
+Use the provided source files to:
+- Verify any code examples mentioned in the content
+- Check that file paths and function names are accurate
+- Base explanations on actual code, not assumptions
+
+If a claim cannot be verified from the provided files, either:
+- Omit the claim entirely, OR
+- Explicitly note it as unverified (e.g., "The implementation appears to...")
+
+## Writing Style
+
+GOOD article openings:
+- "The Repository Pattern provides an abstraction layer between business logic and data persistence."
+- "CodeWiki uses a multi-agent architecture where specialized agents analyze different aspects of code changes."
+- "Dependency injection in this codebase follows the constructor injection pattern."
+
+BAD article openings (NEVER write these):
+- "This commit adds..."
+- "This change introduces..."
+- "This PR implements..."
+- "In this update..."
+
+## Guidelines
+
+1. **Present tense, third person**: "The system uses" not "We added"
+2. **Focus on WHAT and WHY**: Explain the concept, not the change history
+3. **Preserve facts**: Don't lose information, just reframe it
+4. **Add context**: Help readers understand why this matters
+5. **Link related pages**: Use [Title](path.md) format for internal links
+6. **Structure clearly**: Use headers, lists, and code blocks appropriately
+
+## Content Structure
+
+A good wiki article MUST have:
+
+1. **Opening paragraph** - What this is and why it matters (not "this commit adds...")
+2. **How it works** - Explain the mechanism based on the provided source files
+3. **Usage/Configuration** - Practical details from the code
+4. **Edge cases/Limitations** - What developers should watch out for
+5. **Related concepts** - Links to other wiki pages
+
+If the provided files don't have enough detail for sections 2-4, note what's unclear rather than making things up.
 
 Transform commit-focused content into timeless documentation that explains the codebase as it exists today.`;

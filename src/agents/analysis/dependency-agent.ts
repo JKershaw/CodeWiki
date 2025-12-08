@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget, extractToolMetrics } 
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor, fetchAffectedFileContents, formatFetchedFilesForContext } from '../agent-helpers.js';
 import {
   createParseContext,
   parseSection,
@@ -18,11 +18,18 @@ import {
 /**
  * Dependency Agent - Tracks external dependency changes and their implications.
  *
+ * OPTIMIZATION: Pre-fetches affected file contents and includes them directly in
+ * the prompt, reducing tool calls. Falls back to tool-based approach only if
+ * context would exceed limits.
+ *
  * This agent analyzes package.json, lock files, and import statements
  * to understand dependency changes, version updates, and their impact.
  */
 export class DependencyAgent implements Agent {
   readonly type: AgentType = 'dependency';
+
+  private readonly MAX_FILE_SIZE = 30000;
+  private readonly MAX_TOTAL_SIZE = 80000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -63,9 +70,71 @@ export class DependencyAgent implements Agent {
     }
 
     const diff = await getCommitDiff(context, commit.sha);
-    const prompt = this.buildPrompt(commit, diff);
 
-    // Set up codebase exploration tools for verification
+    // Try pre-fetch approach first
+    if (context.repoAccess && commit.diffSummary.affectedFiles.length > 0) {
+      const prefetchResult = await this.runWithPrefetch(commit, diff, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    return this.runWithTools(commit, diff, context);
+  }
+
+  private async runWithPrefetch(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    const fetchedFiles = await fetchAffectedFileContents(
+      context,
+      commit.diffSummary.affectedFiles,
+      this.MAX_FILE_SIZE,
+      this.MAX_TOTAL_SIZE
+    );
+
+    const filesWithContent = fetchedFiles.filter(f => f.content !== null);
+    if (filesWithContent.length === 0) {
+      return null;
+    }
+
+    const fileContext = formatFetchedFilesForContext(fetchedFiles, '## Full File Contents');
+    const prompt = this.buildPrefetchPrompt(commit, diff, fileContext);
+
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_PREFETCH,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 2000,
+      temperature: 0.2,
+    });
+
+    const analysis = this.parseResponse(completion.content);
+    const updates = this.generateUpdates(commit, analysis);
+
+    return {
+      result: createAgentResult({
+        summary: analysis.summary,
+        findings: analysis.findings.map(f => createFinding({
+          type: f.type,
+          description: f.description,
+          relatedPaths: f.paths,
+          importance: f.importance,
+        })),
+        confidence: analysis.confidence,
+      }),
+      updates,
+      costUsd: completion.costUsd,
+      toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: commit.diffSummary.affectedFiles },
+    };
+  }
+
+  private async runWithTools(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult> {
+    const prompt = this.buildPrompt(commit, diff);
     const toolExecutor = createCodebaseToolExecutor(context);
 
     const completion = await context.llm.completeWithTools({
@@ -213,6 +282,82 @@ For each additional wiki page that should be created or updated, provide FULL ar
 === END ===
 
 (Repeat for each page)
+
+CONFIDENCE: [0-1 value]
+`;
+  }
+
+  private buildPrefetchPrompt(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    fileContext: string
+  ): string {
+    const truncatedDiff = diff.length > 12000 ? diff.slice(0, 12000) + '\n... (diff truncated)' : diff;
+
+    return `Analyze this commit for dependency changes and their implications.
+
+## Commit Information
+
+**SHA:** ${commit.sha.slice(0, 8)}
+**Message:** ${commit.message}
+**Author:** ${commit.authorName}
+**Date:** ${commit.committedAt.toISOString()}
+**Files Changed:** ${commit.diffSummary.affectedFiles.length}
+
+## Diff
+
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+
+${fileContext}
+
+## Analysis Instructions
+
+The full contents of dependency files (package.json, lock files, etc.) are provided above. Use them to:
+- Identify added, removed, and updated dependencies
+- Understand version changes and their implications
+- Assess security and breaking change potential
+
+Analyze for:
+1. New dependencies added (name, version, purpose)
+2. Dependencies removed
+3. Version updates (major, minor, patch)
+4. Breaking change potential
+5. Security implications
+6. License considerations
+
+Format your response as:
+
+SUMMARY:
+[Brief summary of dependency changes]
+
+CHANGES:
+- [ADDED/REMOVED/UPDATED] [package-name] [old-version -> new-version if applicable] [Purpose/reason]
+
+BREAKING_CHANGES:
+- [Description of potential breaking changes]
+
+SECURITY_NOTES:
+- [Security considerations]
+
+IMPACT:
+[Overall impact: minimal/moderate/significant]
+
+DEPENDENCY_DETAILS:
+=== [PACKAGE_NAME] ===
+PURPOSE:
+[What this dependency does]
+USAGE:
+[How it's used]
+CONSIDERATIONS:
+[Important notes]
+=== END ===
+
+WIKI_UPDATES:
+=== [PAGE_PATH] [ACTION:create/update] ===
+[Full markdown content]
+=== END ===
 
 CONFIDENCE: [0-1 value]
 `;
@@ -593,4 +738,43 @@ Your confidence should reflect:
 - 0.9+: Clear dependency change with obvious purpose
 - 0.7-0.9: Dependency change with reasonable inference of purpose
 - 0.5-0.7: Dependency change with unclear purpose
+- <0.5: Unable to determine significance`;
+
+const SYSTEM_PROMPT_PREFETCH = `You are a dependency analysis agent for CodeWiki.
+
+The full contents of dependency files (package.json, lock files, etc.) are provided in the prompt - you do not need to use any tools.
+
+## Analysis Focus
+
+Analyze the provided files to:
+1. Identify added, removed, and updated dependencies
+2. Understand version changes and their implications
+3. Assess security and breaking change potential
+
+## What to Analyze
+
+**For Added Dependencies:**
+- What problem does this dependency solve?
+- Why was this particular package chosen?
+
+**For Removed Dependencies:**
+- Why was it removed?
+- What replaced it?
+
+**For Updated Dependencies:**
+- Major/minor/patch update?
+- Breaking changes?
+- Security fixes?
+
+## Impact Levels
+
+- **minimal**: Patch updates, dev dependencies, no breaking changes
+- **moderate**: Minor updates, new runtime dependencies, potential minor breaks
+- **significant**: Major updates, core dependency changes, likely breaking changes
+
+## Confidence Scoring
+
+- 0.9+: Clear dependency change with obvious purpose from provided code
+- 0.7-0.9: Reasonable inference of purpose
+- 0.5-0.7: Unclear purpose
 - <0.5: Unable to determine significance`;

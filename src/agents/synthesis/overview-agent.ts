@@ -3,7 +3,6 @@ import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
-import { createCodebaseToolExecutor } from '../agent-helpers.js';
 import {
   createParseContext,
   parseSection,
@@ -15,6 +14,10 @@ import {
 /**
  * Overview Agent - Creates category overview pages that synthesize all pages in a category.
  *
+ * OPTIMIZATION: Uses single LLM call with all page summaries provided in prompt.
+ * The wiki pages already contain the synthesized information needed - tool calls
+ * for "verification" provide minimal value for synthesis tasks.
+ *
  * This synthesis agent runs on a category (not a commit) and produces a Wikipedia-style
  * overview page that introduces the topic and links to detailed pages.
  */
@@ -23,6 +26,8 @@ export class OverviewAgent implements Agent {
 
   // Minimum pages needed before creating an overview
   private readonly MIN_PAGES_FOR_OVERVIEW = 3;
+  // Max content length per page in prompt
+  private readonly MAX_PAGE_CONTENT_LENGTH = 1000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -64,19 +69,10 @@ export class OverviewAgent implements Agent {
     const [category, categoryPages] = categoriesNeedingOverview[0]!;
     const prompt = this.buildPrompt(category, categoryPages);
 
-    // Set up codebase exploration tools for verification
-    const toolExecutor = createCodebaseToolExecutor(context);
-
-    const completion = await context.llm.completeWithTools({
-      system: SYSTEM_PROMPT,
+    // Use single LLM call - page summaries already contain synthesized info
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_OPTIMIZED,
       messages: [{ role: 'user', content: prompt }],
-      tools: toolExecutor?.tools.map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      })) ?? [],
-      executeTools: toolExecutor?.executeTools ?? (async () => []),
-      maxToolRounds: 3,
       maxTokens: 2500,
       temperature: 0.4,
     });
@@ -124,19 +120,10 @@ export class OverviewAgent implements Agent {
 
     const prompt = this.buildPrompt(category, categoryPages);
 
-    // Set up codebase exploration tools for verification
-    const toolExecutor = createCodebaseToolExecutor(context);
-
-    const completion = await context.llm.completeWithTools({
-      system: SYSTEM_PROMPT,
+    // Use single LLM call - page summaries already contain synthesized info
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_OPTIMIZED,
       messages: [{ role: 'user', content: prompt }],
-      tools: toolExecutor?.tools.map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      })) ?? [],
-      executeTools: toolExecutor?.executeTools ?? (async () => []),
-      maxToolRounds: 3,
       maxTokens: 2500,
       temperature: 0.4,
     });
@@ -206,13 +193,13 @@ export class OverviewAgent implements Agent {
 
   private buildPrompt(category: string, pages: WikiPage[]): string {
     const pagesSummary = pages.map(p => {
-      // Extract first paragraph as summary
-      const firstPara = p.content.split('\n\n').slice(0, 2).join('\n\n');
+      // Extract more content for better synthesis
+      const contentPreview = p.content.slice(0, this.MAX_PAGE_CONTENT_LENGTH);
       return `### ${p.title}
 Path: ${p.path}
 Confidence: ${(p.confidence * 100).toFixed(0)}%
 
-${firstPara.slice(0, 500)}${firstPara.length > 500 ? '...' : ''}
+${contentPreview}${p.content.length > this.MAX_PAGE_CONTENT_LENGTH ? '...' : ''}
 `;
     }).join('\n---\n');
 
@@ -222,21 +209,12 @@ ${firstPara.slice(0, 500)}${firstPara.length > 500 ? '...' : ''}
 
 ${pagesSummary}
 
-## Available Tools
-
-You have access to tools to verify information:
-- **read_file**: Read source files to verify technical claims
-- **search_files**: Find files by pattern
-- **list_directory**: Explore project structure
-
-Use these tools if you need to verify any technical claims or relationships mentioned in the page summaries.
-
 ## Your Task
 
 Write a comprehensive overview page that:
 1. Introduces what this category covers
 2. Explains how the pages relate to each other
-3. Highlights the most important concepts (verify they exist in code if technical)
+3. Highlights the most important concepts
 4. Provides a reading order or navigation guide
 5. Links to the individual pages
 
@@ -432,3 +410,43 @@ Write in an encyclopedic style - informative, neutral, and helpful. The overview
 - Write about commits or git history
 - Include implementation details (that's what the linked pages are for)
 - Make claims about code relationships without verification`;
+
+/**
+ * Optimized system prompt for single LLM call (no tools).
+ * Page summaries already contain the synthesized information needed.
+ */
+const SYSTEM_PROMPT_OPTIMIZED = `You are a technical writer creating overview pages for a project wiki.
+
+Your job is to synthesize multiple wiki pages into a cohesive introduction that helps readers understand a topic area. The wiki page content is provided to you - use it to create the overview.
+
+## Writing Style
+
+Write as if you ARE the encyclopedia article, not as if you're describing what the article contains.
+
+Great overview openings directly explain the topic:
+- "The architecture layer handles request routing, response parsing, and data consolidation across the system."
+- "Testing infrastructure in CodeWiki spans unit tests, integration tests, and end-to-end validation."
+- "Agent coordination uses a pipeline model where specialized agents process different aspects of changes."
+- "Response parsing transforms raw LLM output into structured data that other components can consume."
+
+Notice how each example states what something IS or DOES - not what the page will teach. Write explanatory content, not previews of content.
+
+Avoid meta-commentary that describes the page rather than explaining the topic:
+- Phrases like "This category encompasses...", "Readers will gain insights into...", "This overview provides..."
+
+## Good Overview Pages
+
+- Start with a clear explanation of what the topic covers (not what the PAGE covers)
+- Explain how individual pages relate to each other
+- Highlight the most important concepts based on the page summaries
+- Provide a logical reading path
+- Link to detailed pages for deeper information
+
+Write in an encyclopedic style - informative, neutral, and helpful. The overview should help a new developer understand this area of the codebase quickly.
+
+## Do NOT
+
+- Repeat detailed content from individual pages
+- Write about commits or git history
+- Include implementation details (that's what the linked pages are for)
+- Invent information not present in the page summaries`;

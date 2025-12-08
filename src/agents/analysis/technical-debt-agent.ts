@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget, extractToolMetrics } 
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor, fetchAffectedFileContents, formatFetchedFilesForContext } from '../agent-helpers.js';
 import {
   createParseContext,
   parseSection,
@@ -18,12 +18,21 @@ import {
 /**
  * Technical Debt Analysis Agent - Identifies and tracks technical debt in commits.
  *
+ * OPTIMIZATION: Pre-fetches affected file contents and includes them directly in
+ * the prompt, reducing tool calls. Falls back to tool-based approach only if
+ * context would exceed limits.
+ *
  * This agent looks for code smells, TODO/FIXME comments, SOLID principle violations,
  * complexity issues, and other indicators of technical debt. It provides specific
  * remediation recommendations and tracks debt over time.
  */
 export class TechnicalDebtAgent implements Agent {
   readonly type: AgentType = 'technical-debt';
+
+  // Max file size for pre-fetch
+  private readonly MAX_FILE_SIZE = 20000;
+  // Max total context for pre-fetched files
+  private readonly MAX_TOTAL_SIZE = 60000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -48,6 +57,81 @@ export class TechnicalDebtAgent implements Agent {
     const commit = commitResult.data;
 
     const diff = await getCommitDiff(context, commit.sha);
+
+    // Try pre-fetch approach first
+    if (context.repoAccess && commit.diffSummary.affectedFiles.length > 0) {
+      const prefetchResult = await this.runWithPrefetch(commit, diff, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    // Fall back to tool-based approach
+    return this.runWithTools(commit, diff, context);
+  }
+
+  /**
+   * Optimized run using pre-fetched file contents.
+   */
+  private async runWithPrefetch(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    // Pre-fetch affected files
+    const fetchedFiles = await fetchAffectedFileContents(
+      context,
+      commit.diffSummary.affectedFiles,
+      this.MAX_FILE_SIZE,
+      this.MAX_TOTAL_SIZE
+    );
+
+    // Check if we got any content
+    const filesWithContent = fetchedFiles.filter(f => f.content !== null);
+    if (filesWithContent.length === 0) {
+      return null; // Fall back to tools
+    }
+
+    // Build prompt with pre-fetched content
+    const fileContext = formatFetchedFilesForContext(fetchedFiles, '## Full File Contents');
+    const prompt = this.buildPrefetchPrompt(commit, diff, fileContext);
+
+    // Use single LLM call
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_PREFETCH,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 2500,
+      temperature: 0.2,
+    });
+
+    const analysis = this.parseResponse(completion.content);
+    const updates = this.generateUpdates(commit, analysis);
+
+    return {
+      result: createAgentResult({
+        summary: analysis.summary,
+        findings: analysis.findings.map(f => createFinding({
+          type: f.type,
+          description: f.description,
+          relatedPaths: f.paths,
+          importance: f.importance,
+        })),
+        confidence: analysis.confidence,
+      }),
+      updates,
+      costUsd: completion.costUsd,
+      toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: commit.diffSummary.affectedFiles },
+    };
+  }
+
+  /**
+   * Tool-based run for complex cases or fallback.
+   */
+  private async runWithTools(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult> {
     const prompt = this.buildPrompt(commit, diff);
 
     // Set up codebase exploration tools for verification
@@ -64,7 +148,7 @@ export class TechnicalDebtAgent implements Agent {
       executeTools: toolExecutor?.executeTools ?? (async () => []),
       maxToolRounds: 5,
       maxTokens: 2500,
-      temperature: 0.2, // Lower temperature for analytical precision
+      temperature: 0.2,
     });
 
     const analysis = this.parseResponse(completion.content);
@@ -147,6 +231,86 @@ Analyze for:
 8. **Error Handling**: Swallowed exceptions, missing error handling, overly broad catches
 9. **Performance Concerns**: N+1 queries, inefficient algorithms, unnecessary allocations
 10. **Testing Gaps**: Missing tests for complex logic, untestable code
+
+Format your response as:
+
+SUMMARY:
+[Brief assessment of technical debt in this commit - is it adding, reducing, or neutral?]
+
+DEBT_TREND:
+[One of: adding_debt, reducing_debt, neutral, mixed]
+
+FINDINGS:
+- [CATEGORY] [SEVERITY:critical/high/medium/low] [Description] [Affected paths]
+
+TODO_ITEMS:
+- [FILE:line] [TODO/FIXME/HACK] [Description of what needs to be done]
+
+SOLID_VIOLATIONS:
+- [PRINCIPLE] [Description] [Affected paths]
+
+REMEDIATION:
+- [Priority:high/medium/low] [Specific actionable recommendation]
+
+HOTSPOTS:
+- [File path] [Reason it's a hotspot - e.g., "frequently modified, high complexity"]
+
+WIKI_UPDATES:
+- [PAGE_PATH] [ACTION:create/update] [Content description]
+
+CONFIDENCE: [0-1 value]
+`;
+  }
+
+  /**
+   * Build prompt with pre-fetched file contents (optimized approach).
+   */
+  private buildPrefetchPrompt(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    fileContext: string
+  ): string {
+    const truncatedDiff = diff.length > 8000 ? diff.slice(0, 8000) + '\n... (diff truncated)' : diff;
+
+    return `Analyze this commit for technical debt indicators.
+
+## Commit Information
+
+**SHA:** ${commit.sha.slice(0, 8)}
+**Message:** ${commit.message}
+**Author:** ${commit.authorName}
+**Date:** ${commit.committedAt.toISOString()}
+**Files Changed:** ${commit.diffSummary.affectedFiles.length}
+**Lines:** +${commit.diffSummary.linesAdded} / -${commit.diffSummary.linesDeleted}
+
+## Diff
+
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+
+${fileContext}
+
+## Analysis Instructions
+
+The full contents of affected files are provided above. Use them to:
+- Understand the complete file context, not just the changed lines
+- Verify if TODO/FIXME comments are still relevant
+- Check for code smells, complexity issues, and SOLID violations
+- Identify hotspots and patterns that indicate technical debt
+
+Analyze for:
+
+1. **Code Smells**: God classes, long methods (>50 lines), feature envy, data clumps
+2. **TODO/FIXME/HACK Comments**: Track with context about what needs to be done
+3. **Complexity Issues**: Deeply nested conditionals, high cyclomatic complexity
+4. **SOLID Violations**: Single Responsibility, Open/Closed, Liskov, Interface Segregation, Dependency Inversion
+5. **Dead Code**: Unreachable code, unused variables, commented-out code
+6. **Duplication**: Copy-paste code, similar logic patterns
+7. **Naming Issues**: Unclear names, inconsistent conventions, magic numbers/strings
+8. **Error Handling**: Swallowed exceptions, missing error handling
+9. **Performance Concerns**: N+1 queries, inefficient algorithms
+10. **Testing Gaps**: Missing tests for complex logic
 
 Format your response as:
 
@@ -828,3 +992,67 @@ Classify the commit's overall impact:
 5. Track hotspots - Files that accumulate debt deserve special attention
 
 Your analysis helps developers know "this module has significant technical debt, tread carefully" - that's as valuable as knowing what the module does.`;
+
+/**
+ * System prompt for pre-fetch approach (file contents already provided, no tools needed).
+ */
+const SYSTEM_PROMPT_PREFETCH = `You are a technical debt analysis agent for CodeWiki.
+
+Your job is to identify and document technical debt in code changes. The full contents of affected files are provided in the prompt - you do not need to use any tools.
+
+## Analysis Focus
+
+Using the provided file contents:
+1. Understand the COMPLETE file, not just the changed lines
+2. Identify code smells, complexity issues, and SOLID violations
+3. Track TODO/FIXME/HACK comments with context
+4. Find patterns that indicate technical debt
+
+## What to Look For
+
+### Code Smells
+- **God Classes/Modules**: Files doing too many things (>300 lines is a signal)
+- **Long Methods**: Functions over 50 lines, especially with deep nesting
+- **Feature Envy**: Code that uses another class's data more than its own
+- **Data Clumps**: Groups of data that travel together but aren't encapsulated
+
+### TODO/FIXME/HACK Tracking
+Track these with context:
+- What specifically needs to be done?
+- Why was it deferred?
+- Any related issues or constraints?
+
+### SOLID Principle Violations
+- **S**: Single Responsibility - One reason to change
+- **O**: Open/Closed - Open for extension, closed for modification
+- **L**: Liskov Substitution - Subtypes must be substitutable
+- **I**: Interface Segregation - Many specific interfaces > one general
+- **D**: Dependency Inversion - Depend on abstractions, not concretions
+
+### Other Indicators
+- Commented-out code
+- Magic numbers/strings without explanation
+- Missing error handling or overly broad exception catches
+- Tight coupling between modules
+
+## Debt Trends
+
+Classify the commit's overall impact:
+- **adding_debt**: Net increase in technical debt
+- **reducing_debt**: Refactoring, cleanup, debt paydown
+- **neutral**: No significant debt impact
+- **mixed**: Some debt added, some reduced
+
+## Confidence Scoring
+
+- **0.9+**: Clear debt indicators based on provided code
+- **0.7-0.9**: Likely debt but context-dependent
+- **0.5-0.7**: Potential debt, situational
+- **<0.5**: Minor or uncertain issues
+
+## Output Guidelines
+
+1. Be specific - cite actual line counts and function names from the provided code
+2. Provide actionable remediation
+3. Prioritize findings by importance
+4. Consider context - A TODO in test code is less critical than in core business logic`;
