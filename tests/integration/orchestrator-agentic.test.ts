@@ -145,7 +145,7 @@ describe('Agentic Orchestrator', () => {
         updatedAt: new Date(),
       });
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       // Should use completeWithTools, not complete
@@ -175,7 +175,7 @@ describe('Agentic Orchestrator', () => {
         updatedAt: new Date(),
       });
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       const call = llm.completeWithToolsCalls[0];
@@ -211,7 +211,7 @@ describe('Agentic Orchestrator', () => {
         updatedAt: new Date(),
       });
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       const call = llm.completeWithToolsCalls[0];
@@ -240,7 +240,7 @@ describe('Agentic Orchestrator', () => {
         updatedAt: new Date(),
       });
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       const call = llm.completeWithToolsCalls[0];
@@ -279,7 +279,7 @@ describe('Agentic Orchestrator', () => {
         { name: 'read_file', input: { path: 'README.md' } },
       ]);
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       // The mock should have tracked the tool execution
@@ -321,7 +321,7 @@ describe('Agentic Orchestrator', () => {
         { name: 'list_directory', input: { path: 'src' } },
       ]);
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       assert.strictEqual(llm.toolCallsExecuted.length, 1, 'Should execute one tool call');
@@ -357,7 +357,7 @@ After exploring the codebase with tools, I recommend focusing on documentation.
 # Work Items
 writer,,,Improve page readability based on codebase exploration`);
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       assert.ok(workItems.length > 0, 'Should generate work items');
@@ -388,7 +388,7 @@ writer,,,Improve page readability based on codebase exploration`);
       });
 
       // No LLM provided
-      const orchestrator = new Orchestrator(ctx.repos, undefined, { useLLM: true }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, undefined, { useLLM: true }, ctx.repoAccessFactory);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       // Should not throw, should use deterministic fallback
@@ -416,7 +416,7 @@ writer,,,Improve page readability based on codebase exploration`);
         updatedAt: new Date(),
       });
 
-      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: false }, ctx.git);
+      const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: false }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       // Should not call LLM at all

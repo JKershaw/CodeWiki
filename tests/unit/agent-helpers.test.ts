@@ -2,10 +2,10 @@
  * Tests for agent-helpers module.
  *
  * Tests the unified helper functions that allow agents to work with
- * both local repositories and GitHub API-based access.
+ * both local repositories and GitHub API-based access via UnifiedRepoAccess.
  */
 
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import {
   getCommitDiff,
@@ -15,243 +15,177 @@ import {
   fetchAffectedFileContents,
 } from '../../src/agents/agent-helpers.js';
 import type { AgentContext } from '../../src/agents/base-agent.js';
-import type { GitService } from '../../src/services/git/git-service.js';
-import type { RepositoryService } from '../../src/services/repository/repository-service.js';
-import type { Repo } from '../../src/domain/repo.js';
+import type { UnifiedRepoAccess } from '../../src/services/repository/unified-repo-access.js';
 
 describe('agent-helpers', () => {
   describe('getCommitDiff', () => {
-    it('uses repoService when available', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
-        getCommitDiff: mock.fn(async () => 'diff from repoService'),
-      };
-
-      const mockRepo: Partial<Repo> = {
-        id: 'repo-1',
-        isGitHubRepo: true,
-      };
-
-      const mockGit: Partial<GitService> = {
-        getCommitDiff: mock.fn(async () => 'diff from git'),
+    it('uses repoAccess to get commit diff', async () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        getCommitDiff: mock.fn(async () => 'diff from repoAccess'),
+        isLocal: () => false,
+        getLocalPath: () => undefined,
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: mockRepo as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const diff = await getCommitDiff(context, 'abc123');
 
-      assert.strictEqual(diff, 'diff from repoService');
-      assert.strictEqual((mockRepoService.getCommitDiff as any).mock.calls.length, 1);
-      assert.strictEqual((mockGit.getCommitDiff as any).mock.calls.length, 0);
+      assert.strictEqual(diff, 'diff from repoAccess');
+      assert.strictEqual((mockRepoAccess.getCommitDiff as any).mock.calls.length, 1);
     });
 
-    it('falls back to git service when repoService not available', async () => {
-      const mockGit: Partial<GitService> = {
-        getCommitDiff: mock.fn(async () => 'diff from git'),
-      };
-
+    it('throws when repoAccess is not available', async () => {
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
+        // No repoAccess
       };
 
-      const diff = await getCommitDiff(context, 'abc123');
-
-      assert.strictEqual(diff, 'diff from git');
-      assert.strictEqual((mockGit.getCommitDiff as any).mock.calls.length, 1);
-    });
-
-    it('falls back to git service when repo not available', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
-        getCommitDiff: mock.fn(async () => 'diff from repoService'),
-      };
-
-      const mockGit: Partial<GitService> = {
-        getCommitDiff: mock.fn(async () => 'diff from git'),
-      };
-
-      const context: AgentContext = {
-        repoId: 'repo-1',
-        wikiId: 'wiki-1',
-        repos: {} as any,
-        git: mockGit as GitService,
-        llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        // No repo provided
-      };
-
-      const diff = await getCommitDiff(context, 'abc123');
-
-      assert.strictEqual(diff, 'diff from git');
-      assert.strictEqual((mockGit.getCommitDiff as any).mock.calls.length, 1);
-      assert.strictEqual((mockRepoService.getCommitDiff as any).mock.calls.length, 0);
+      await assert.rejects(
+        async () => getCommitDiff(context, 'abc123'),
+        /repoAccess is required/
+      );
     });
   });
 
   describe('isLocalRepo', () => {
-    it('returns true when repo is not a GitHub repo', () => {
+    it('returns true when repoAccess.isLocal returns true', () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => true,
+        getLocalPath: () => '/path/to/repo',
+      };
+
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
-        repo: { isGitHubRepo: false } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       assert.strictEqual(isLocalRepo(context), true);
     });
 
-    it('returns false when isGitHubRepo is undefined (safe default)', () => {
-      // When isGitHubRepo is undefined, we don't know if it's local,
-      // so we return false to avoid trying filesystem operations on
-      // what might be a GitHub-only repo
+    it('returns false when repoAccess.isLocal returns false', () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
+      };
+
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
-        repo: {} as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       assert.strictEqual(isLocalRepo(context), false);
     });
 
-    it('returns false when repo is a GitHub repo', () => {
+    it('throws when repoAccess is not available', () => {
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: {} as any,
         llm: {} as any,
-        repo: { isGitHubRepo: true } as Repo,
+        // No repoAccess
       };
 
-      assert.strictEqual(isLocalRepo(context), false);
-    });
-
-    it('returns false when repo is not provided (safe default)', () => {
-      // When repo is not provided, we can't determine if it's local,
-      // so we return false to avoid trying filesystem operations
-      const context: AgentContext = {
-        repoId: 'repo-1',
-        wikiId: 'wiki-1',
-        repos: {} as any,
-        git: {} as any,
-        llm: {} as any,
-      };
-
-      assert.strictEqual(isLocalRepo(context), false);
+      assert.throws(
+        () => isLocalRepo(context),
+        /repoAccess is required/
+      );
     });
   });
 
   describe('getLocalRepoPath', () => {
-    it('returns path from git service for local repos', () => {
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
+    it('returns path from repoAccess.getLocalPath', () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => true,
+        getLocalPath: () => '/unified/path/to/repo',
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repo: { isGitHubRepo: false } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const path = getLocalRepoPath(context);
-
-      assert.strictEqual(path, '/path/to/repo');
+      assert.strictEqual(path, '/unified/path/to/repo');
     });
 
     it('returns undefined for GitHub repos', () => {
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repo: { isGitHubRepo: true } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const path = getLocalRepoPath(context);
-
       assert.strictEqual(path, undefined);
-      assert.strictEqual((mockGit.getRepoPath as any).mock.calls.length, 0);
     });
 
-    it('returns undefined when getRepoPath throws', () => {
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => {
-          throw new Error('Repo not registered');
-        }),
-      };
-
+    it('throws when repoAccess is not available', () => {
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repo: { isGitHubRepo: false } as Repo,
+        // No repoAccess
       };
 
-      const path = getLocalRepoPath(context);
-
-      assert.strictEqual(path, undefined);
+      assert.throws(
+        () => getLocalRepoPath(context),
+        /repoAccess is required/
+      );
     });
   });
 
   describe('createCodebaseToolExecutor', () => {
-    it('returns null when no tools available', () => {
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => {
-          throw new Error('Repo not registered');
-        }),
-      };
-
+    it('returns null when repoAccess is not available', () => {
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        // No repoService or repo
+        // No repoAccess
       };
 
       const executor = createCodebaseToolExecutor(context);
-
       assert.strictEqual(executor, null);
     });
 
     it('returns filesystem tools for local repos', () => {
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => true,
+        getLocalPath: () => '/path/to/repo',
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repo: { isGitHubRepo: false } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const executor = createCodebaseToolExecutor(context);
@@ -269,26 +203,20 @@ describe('agent-helpers', () => {
     });
 
     it('returns API tools for GitHub repos', () => {
-      const mockRepoService: Partial<RepositoryService> = {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
         getFileContent: mock.fn(async () => 'file content'),
         listDirectory: mock.fn(async () => []),
         getFileTree: mock.fn(async () => []),
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => {
-          throw new Error('Repo not registered');
-        }),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: { isGitHubRepo: true } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const executor = createCodebaseToolExecutor(context);
@@ -305,29 +233,23 @@ describe('agent-helpers', () => {
     });
 
     it('API tools execute correctly', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
         getFileContent: mock.fn(async () => 'file content from API'),
         listDirectory: mock.fn(async () => [
-          { name: 'file1.ts', path: 'file1.ts', type: 'file' as const, size: 100 },
-          { name: 'dir1', path: 'dir1', type: 'dir' as const, size: 0 },
+          { name: 'file1.ts', type: 'file' as const },
+          { name: 'dir1', type: 'dir' as const },
         ]),
         getFileTree: mock.fn(async () => ['src/index.ts', 'src/utils.ts', 'package.json']),
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => {
-          throw new Error('Repo not registered');
-        }),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: { isGitHubRepo: true } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const executor = createCodebaseToolExecutor(context);
@@ -355,26 +277,20 @@ describe('agent-helpers', () => {
     });
 
     it('handles unknown tool gracefully', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
         getFileContent: mock.fn(async () => 'content'),
         listDirectory: mock.fn(async () => []),
         getFileTree: mock.fn(async () => []),
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => {
-          throw new Error('Repo not registered');
-        }),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: { isGitHubRepo: true } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const executor = createCodebaseToolExecutor(context);
@@ -389,7 +305,9 @@ describe('agent-helpers', () => {
     });
 
     it('handles API errors gracefully', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
         getFileContent: mock.fn(async () => {
           throw new Error('File not found');
         }),
@@ -397,20 +315,12 @@ describe('agent-helpers', () => {
         getFileTree: mock.fn(async () => []),
       };
 
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => {
-          throw new Error('Repo not registered');
-        }),
-      };
-
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: { isGitHubRepo: true } as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const executor = createCodebaseToolExecutor(context);
@@ -426,28 +336,19 @@ describe('agent-helpers', () => {
   });
 
   describe('fetchAffectedFileContents', () => {
-    it('uses repoService when available for GitHub repos', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
-        getFileContent: mock.fn(async (_repo, path) => `content of ${path}`),
-      };
-
-      const mockRepo: Partial<Repo> = {
-        id: 'repo-1',
-        isGitHubRepo: true,
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
+    it('uses repoAccess to fetch file contents', async () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
+        getFileContent: mock.fn(async (path: string) => `content of ${path}`),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: mockRepo as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const results = await fetchAffectedFileContents(context, ['src/index.ts', 'src/utils.ts']);
@@ -459,51 +360,34 @@ describe('agent-helpers', () => {
       assert.strictEqual(results[1].content, 'content of src/utils.ts');
     });
 
-    it('returns error for GitHub repo without repoService', async () => {
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
-      };
-
+    it('throws when repoAccess is not available', async () => {
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repo: { isGitHubRepo: true } as Repo,
-        // No repoService provided
+        // No repoAccess
       };
 
-      const results = await fetchAffectedFileContents(context, ['src/index.ts']);
-
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0].path, 'src/index.ts');
-      assert.strictEqual(results[0].content, null);
-      assert.ok(results[0].error?.includes('GitHub repository requires RepositoryService'));
+      await assert.rejects(
+        async () => fetchAffectedFileContents(context, ['src/index.ts']),
+        /repoAccess is required/
+      );
     });
 
     it('skips non-source files', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
-        getFileContent: mock.fn(async (_repo, path) => `content of ${path}`),
-      };
-
-      const mockRepo: Partial<Repo> = {
-        id: 'repo-1',
-        isGitHubRepo: true,
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
+        getFileContent: mock.fn(async (path: string) => `content of ${path}`),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: mockRepo as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const results = await fetchAffectedFileContents(context, [
@@ -519,27 +403,18 @@ describe('agent-helpers', () => {
 
     it('truncates large files', async () => {
       const largeContent = 'A'.repeat(50000);
-      const mockRepoService: Partial<RepositoryService> = {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
         getFileContent: mock.fn(async () => largeContent),
-      };
-
-      const mockRepo: Partial<Repo> = {
-        id: 'repo-1',
-        isGitHubRepo: true,
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: mockRepo as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const results = await fetchAffectedFileContents(context, ['src/large.ts'], 1000);
@@ -550,29 +425,20 @@ describe('agent-helpers', () => {
     });
 
     it('handles API errors gracefully', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
         getFileContent: mock.fn(async () => {
           throw new Error('File not found');
         }),
-      };
-
-      const mockRepo: Partial<Repo> = {
-        id: 'repo-1',
-        isGitHubRepo: true,
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: mockRepo as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const results = await fetchAffectedFileContents(context, ['src/missing.ts']);
@@ -584,27 +450,18 @@ describe('agent-helpers', () => {
     });
 
     it('respects total size limit', async () => {
-      const mockRepoService: Partial<RepositoryService> = {
-        getFileContent: mock.fn(async (_repo, path) => `content of ${path} ${'x'.repeat(500)}`),
-      };
-
-      const mockRepo: Partial<Repo> = {
-        id: 'repo-1',
-        isGitHubRepo: true,
-      };
-
-      const mockGit: Partial<GitService> = {
-        getRepoPath: mock.fn(() => '/path/to/repo'),
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => false,
+        getLocalPath: () => undefined,
+        getFileContent: mock.fn(async (path: string) => `content of ${path} ${'x'.repeat(500)}`),
       };
 
       const context: AgentContext = {
         repoId: 'repo-1',
         wikiId: 'wiki-1',
         repos: {} as any,
-        git: mockGit as GitService,
         llm: {} as any,
-        repoService: mockRepoService as RepositoryService,
-        repo: mockRepo as Repo,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
       };
 
       const results = await fetchAffectedFileContents(

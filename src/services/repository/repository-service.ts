@@ -106,7 +106,9 @@ export function createRepositoryService(
     if (!deps.gitService) {
       throw new Error('Git service required for local repositories');
     }
-    return createLocalRepositoryService(repo.id, repo.fullName, deps.gitService);
+    // Use cloneUrl for the filesystem path (fullName is just an identifier)
+    const repoPath = repo.cloneUrl ?? repo.fullName;
+    return createLocalRepositoryService(repo.id, repoPath, deps.gitService);
   }
 }
 

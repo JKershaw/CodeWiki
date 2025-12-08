@@ -14,8 +14,7 @@ import type { Repositories } from '../../repositories/index.js';
 import type { BenchmarkRun } from '../../domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../../domain/quality-benchmark.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
-import type { RepositoryService } from '../repository/repository-service.js';
-import type { Repo } from '../../domain/repo.js';
+import type { UnifiedRepoAccess } from '../repository/unified-repo-access.js';
 
 /**
  * Context for codebase exploration tools (read_file, search_files, list_directory).
@@ -47,12 +46,8 @@ export interface AnalysisToolContext {
   repoId: string;
   /** Wiki ID being analyzed */
   wikiId: string;
-  /** Path to the source code repository (optional - enables filesystem access) */
-  repoPath?: string;
-  /** Repository service for GitHub API access (optional - fallback when repoPath not available) */
-  repoService?: RepositoryService;
-  /** Repository entity (required when using repoService) */
-  repo?: Repo;
+  /** Unified repository access for file and commit operations */
+  repoAccess?: UnifiedRepoAccess;
   /** Benchmark runs included in analysis */
   benchmarkRuns: BenchmarkRun[];
   /** Quality benchmark runs included in analysis */

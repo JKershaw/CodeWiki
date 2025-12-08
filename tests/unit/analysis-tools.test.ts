@@ -28,37 +28,84 @@ import type { BenchmarkRun } from '../../src/domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../../src/domain/quality-benchmark.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 import type { Repositories } from '../../src/repositories/index.js';
-import type { RepositoryService, FileEntry } from '../../src/services/repository/repository-service.js';
-import type { Repo } from '../../src/domain/repo.js';
+import type { FileEntry } from '../../src/services/repository/repository-service.js';
+import type { UnifiedRepoAccess } from '../../src/services/repository/unified-repo-access.js';
+import { readFile, readdir, stat } from 'fs/promises';
+import { join } from 'path';
+import { minimatch } from 'minimatch';
 
-// Helper to create a mock repository service for GitHub API access
-function createMockRepoService(overrides: Partial<RepositoryService> = {}): RepositoryService {
+// Helper to create a mock UnifiedRepoAccess
+function createMockRepoAccess(overrides: Partial<UnifiedRepoAccess> = {}): UnifiedRepoAccess {
   return {
-    loadCommits: async () => [],
-    getCommitDiff: async () => '',
     getFileContent: async () => 'mock file content',
     listDirectory: async () => [] as FileEntry[],
     getFileTree: async () => [],
     fileExists: async () => false,
-    getDefaultBranch: async () => 'main',
+    getCommitDiff: async () => '',
+    isLocal: () => false,
+    getLocalPath: () => undefined,
     ...overrides,
   };
 }
 
-// Helper to create a mock repo entity
-function createMockRepo(overrides: Partial<Repo> = {}): Repo {
+// Helper to create a real filesystem-backed UnifiedRepoAccess for a local path
+function createFilesystemRepoAccess(basePath: string): UnifiedRepoAccess {
   return {
-    id: 'test-repo-id',
-    name: 'test-repo',
-    fullName: 'owner/test-repo',
-    isGitHubRepo: true,
-    owner: 'owner',
-    repoName: 'test-repo',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    status: 'active',
-    ...overrides,
-  } as Repo;
+    async getFileContent(path: string): Promise<string> {
+      const fullPath = join(basePath, path);
+      return await readFile(fullPath, 'utf-8');
+    },
+    async listDirectory(path: string): Promise<FileEntry[]> {
+      const fullPath = join(basePath, path);
+      const entries = await readdir(fullPath);
+      const result: FileEntry[] = [];
+      for (const name of entries) {
+        const entryPath = join(fullPath, name);
+        const stats = await stat(entryPath);
+        result.push({
+          name,
+          type: stats.isDirectory() ? 'dir' : 'file',
+        });
+      }
+      return result;
+    },
+    async getFileTree(): Promise<string[]> {
+      const files: string[] = [];
+      const walk = async (dir: string, prefix: string) => {
+        const entries = await readdir(dir);
+        for (const entry of entries) {
+          const fullPath = join(dir, entry);
+          const stats = await stat(fullPath);
+          if (stats.isDirectory()) {
+            if (!entry.startsWith('.') && entry !== 'node_modules') {
+              await walk(fullPath, prefix ? `${prefix}/${entry}` : entry);
+            }
+          } else {
+            files.push(prefix ? `${prefix}/${entry}` : entry);
+          }
+        }
+      };
+      await walk(basePath, '');
+      return files;
+    },
+    async fileExists(path: string): Promise<boolean> {
+      try {
+        await stat(join(basePath, path));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async getCommitDiff(): Promise<string> {
+      return '';
+    },
+    isLocal(): boolean {
+      return true;
+    },
+    getLocalPath(): string | undefined {
+      return basePath;
+    },
+  };
 }
 
 // Helper to create a mock edit request
@@ -718,26 +765,15 @@ describe('Analysis Tools', () => {
   });
 
   describe('read_source_file', () => {
-    it('returns message when repoPath not available', async () => {
+    it('returns message when repoAccess not available', async () => {
       const context = createMockContext();
       const result = await readSourceFileTool.execute({ path: 'README.md' }, context);
       assert.ok(result.includes('not available'));
     });
 
-    it('returns error message (not ENOENT) for non-existent repoPath', async () => {
+    it('reads file content when repoAccess is available', async () => {
       const context = createMockContext({
-        repoPath: '/nonexistent/path/to/repo',
-      });
-
-      const result = await readSourceFileTool.execute({ path: 'README.md' }, context);
-      // Should return an error message, not throw ENOENT
-      assert.ok(result.includes('Error'));
-      assert.ok(!result.includes('ENOENT'), 'Should not expose raw ENOENT error');
-    });
-
-    it('reads file content when repoPath is available', async () => {
-      const context = createMockContext({
-        repoPath: process.cwd(), // Use current directory as test repo
+        repoAccess: createFilesystemRepoAccess(process.cwd()),
       });
 
       const result = await readSourceFileTool.execute({ path: 'package.json' }, context);
@@ -747,7 +783,7 @@ describe('Analysis Tools', () => {
 
     it('returns error for non-existent file', async () => {
       const context = createMockContext({
-        repoPath: process.cwd(),
+        repoAccess: createFilesystemRepoAccess(process.cwd()),
       });
 
       const result = await readSourceFileTool.execute({ path: 'nonexistent-file.xyz' }, context);
@@ -756,15 +792,15 @@ describe('Analysis Tools', () => {
   });
 
   describe('search_source_files', () => {
-    it('returns message when repoPath not available', async () => {
+    it('returns message when repoAccess not available', async () => {
       const context = createMockContext();
       const result = await searchSourceFilesTool.execute({ pattern: '**/*.ts' }, context);
       assert.ok(result.includes('not available'));
     });
 
-    it('finds files matching pattern when repoPath is available', async () => {
+    it('finds files matching pattern when repoAccess is available', async () => {
       const context = createMockContext({
-        repoPath: process.cwd(),
+        repoAccess: createFilesystemRepoAccess(process.cwd()),
       });
 
       const result = await searchSourceFilesTool.execute({ pattern: 'package.json' }, context);
@@ -773,7 +809,7 @@ describe('Analysis Tools', () => {
 
     it('returns message when no files match', async () => {
       const context = createMockContext({
-        repoPath: process.cwd(),
+        repoAccess: createFilesystemRepoAccess(process.cwd()),
       });
 
       const result = await searchSourceFilesTool.execute({ pattern: '**/*.nonexistent' }, context);
@@ -782,15 +818,15 @@ describe('Analysis Tools', () => {
   });
 
   describe('list_source_directory', () => {
-    it('returns message when repoPath not available', async () => {
+    it('returns message when repoAccess not available', async () => {
       const context = createMockContext();
       const result = await listSourceDirectoryTool.execute({ path: '.' }, context);
       assert.ok(result.includes('not available'));
     });
 
-    it('lists directory contents when repoPath is available', async () => {
+    it('lists directory contents when repoAccess is available', async () => {
       const context = createMockContext({
-        repoPath: process.cwd(),
+        repoAccess: createFilesystemRepoAccess(process.cwd()),
       });
 
       const result = await listSourceDirectoryTool.execute({ path: '.' }, context);
@@ -800,7 +836,7 @@ describe('Analysis Tools', () => {
 
     it('returns error for non-existent directory', async () => {
       const context = createMockContext({
-        repoPath: process.cwd(),
+        repoAccess: createFilesystemRepoAccess(process.cwd()),
       });
 
       const result = await listSourceDirectoryTool.execute({ path: 'nonexistent-dir' }, context);
@@ -808,22 +844,18 @@ describe('Analysis Tools', () => {
     });
   });
 
-  // GitHub API fallback tests for source tools
-  describe('read_source_file with GitHub API', () => {
-    it('reads file via repoService when repoPath not available', async () => {
-      const mockRepoService = createMockRepoService({
-        getFileContent: async (_repo, path) => {
-          if (path === 'README.md') {
-            return '# Test Project\n\nThis is a test readme.';
-          }
-          throw new Error('File not found');
-        },
-      });
-      const mockRepo = createMockRepo();
-
+  // Tests for source tools using mock repoAccess (API-based access)
+  describe('read_source_file with mock repoAccess', () => {
+    it('reads file via repoAccess', async () => {
       const context = createMockContext({
-        repoService: mockRepoService,
-        repo: mockRepo,
+        repoAccess: createMockRepoAccess({
+          getFileContent: async (path) => {
+            if (path === 'README.md') {
+              return '# Test Project\n\nThis is a test readme.';
+            }
+            throw new Error('File not found');
+          },
+        }),
       });
 
       const result = await readSourceFileTool.execute({ path: 'README.md' }, context);
@@ -831,61 +863,32 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('Test Project'), 'Should include file content');
     });
 
-    it('returns error when file not found via GitHub API', async () => {
-      const mockRepoService = createMockRepoService({
-        getFileContent: async () => {
-          throw new Error('Not Found');
-        },
-      });
-      const mockRepo = createMockRepo();
-
+    it('returns error when file not found via repoAccess', async () => {
       const context = createMockContext({
-        repoService: mockRepoService,
-        repo: mockRepo,
+        repoAccess: createMockRepoAccess({
+          getFileContent: async () => {
+            throw new Error('Not Found');
+          },
+        }),
       });
 
       const result = await readSourceFileTool.execute({ path: 'nonexistent.txt' }, context);
       assert.ok(result.includes('Error'), 'Should return error message');
     });
-
-    it('prefers repoPath over repoService when both available', async () => {
-      let apiCalled = false;
-      const mockRepoService = createMockRepoService({
-        getFileContent: async () => {
-          apiCalled = true;
-          return 'API content';
-        },
-      });
-      const mockRepo = createMockRepo();
-
-      const context = createMockContext({
-        repoPath: process.cwd(),
-        repoService: mockRepoService,
-        repo: mockRepo,
-      });
-
-      const result = await readSourceFileTool.execute({ path: 'package.json' }, context);
-      assert.ok(!apiCalled, 'Should not call API when repoPath available');
-      assert.ok(result.includes('codewiki'), 'Should read from local filesystem');
-    });
   });
 
-  describe('search_source_files with GitHub API', () => {
-    it('searches files via repoService when repoPath not available', async () => {
-      const mockRepoService = createMockRepoService({
-        getFileTree: async () => [
-          'src/index.ts',
-          'src/services/llm.ts',
-          'src/utils/helpers.ts',
-          'README.md',
-          'package.json',
-        ],
-      });
-      const mockRepo = createMockRepo();
-
+  describe('search_source_files with mock repoAccess', () => {
+    it('searches files via repoAccess', async () => {
       const context = createMockContext({
-        repoService: mockRepoService,
-        repo: mockRepo,
+        repoAccess: createMockRepoAccess({
+          getFileTree: async () => [
+            'src/index.ts',
+            'src/services/llm.ts',
+            'src/utils/helpers.ts',
+            'README.md',
+            'package.json',
+          ],
+        }),
       });
 
       const result = await searchSourceFilesTool.execute({ pattern: 'src/**/*.ts' }, context);
@@ -893,15 +896,11 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('src/services/llm.ts'), 'Should find nested files');
     });
 
-    it('returns message when no files match via GitHub API', async () => {
-      const mockRepoService = createMockRepoService({
-        getFileTree: async () => ['src/index.ts', 'README.md'],
-      });
-      const mockRepo = createMockRepo();
-
+    it('returns message when no files match via repoAccess', async () => {
       const context = createMockContext({
-        repoService: mockRepoService,
-        repo: mockRepo,
+        repoAccess: createMockRepoAccess({
+          getFileTree: async () => ['src/index.ts', 'README.md'],
+        }),
       });
 
       const result = await searchSourceFilesTool.execute({ pattern: '**/*.xyz' }, context);
@@ -909,25 +908,21 @@ describe('Analysis Tools', () => {
     });
   });
 
-  describe('list_source_directory with GitHub API', () => {
-    it('lists directory via repoService when repoPath not available', async () => {
-      const mockRepoService = createMockRepoService({
-        listDirectory: async (_repo, path) => {
-          if (path === 'src') {
-            return [
-              { name: 'index.ts', path: 'src/index.ts', type: 'file' as const, size: 100 },
-              { name: 'services', path: 'src/services', type: 'dir' as const, size: 0 },
-              { name: 'utils', path: 'src/utils', type: 'dir' as const, size: 0 },
-            ];
-          }
-          throw new Error('Directory not found');
-        },
-      });
-      const mockRepo = createMockRepo();
-
+  describe('list_source_directory with mock repoAccess', () => {
+    it('lists directory via repoAccess', async () => {
       const context = createMockContext({
-        repoService: mockRepoService,
-        repo: mockRepo,
+        repoAccess: createMockRepoAccess({
+          listDirectory: async (path) => {
+            if (path === 'src') {
+              return [
+                { name: 'index.ts', type: 'file' as const },
+                { name: 'services', type: 'dir' as const },
+                { name: 'utils', type: 'dir' as const },
+              ];
+            }
+            throw new Error('Directory not found');
+          },
+        }),
       });
 
       const result = await listSourceDirectoryTool.execute({ path: 'src' }, context);
@@ -936,17 +931,13 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('services/'), 'Should list directories with trailing slash');
     });
 
-    it('returns error when directory not found via GitHub API', async () => {
-      const mockRepoService = createMockRepoService({
-        listDirectory: async () => {
-          throw new Error('Not Found');
-        },
-      });
-      const mockRepo = createMockRepo();
-
+    it('returns error when directory not found via repoAccess', async () => {
       const context = createMockContext({
-        repoService: mockRepoService,
-        repo: mockRepo,
+        repoAccess: createMockRepoAccess({
+          listDirectory: async () => {
+            throw new Error('Not Found');
+          },
+        }),
       });
 
       const result = await listSourceDirectoryTool.execute({ path: 'nonexistent' }, context);

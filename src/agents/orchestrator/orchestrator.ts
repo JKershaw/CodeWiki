@@ -14,10 +14,9 @@ import type { WorkItem } from '../../domain/work-item.js';
 import { createWorkItem } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
-import type { GitService } from '../../services/git/git-service.js';
-import type { RepositoryServiceFactory } from '../../services/repository/repository-service.js';
+import type { UnifiedRepoAccessFactory, UnifiedRepoAccess } from '../../services/repository/unified-repo-access.js';
 import { codebaseTools } from '../../services/llm/codebase-tools.js';
-import type { ToolContext } from '../../services/llm/tools.js';
+import type { ToolContext, ToolDefinition } from '../../services/llm/tools.js';
 import { ContextGatherer } from './context-gatherer.js';
 import {
   ORCHESTRATOR_SYSTEM_PROMPT,
@@ -83,10 +82,9 @@ export class Orchestrator {
     private readonly repos: Repositories,
     private readonly llm?: LLMService,
     config?: OrchestratorConfig,
-    private readonly git?: GitService,
-    private readonly repoServiceFactory?: RepositoryServiceFactory
+    private readonly repoAccessFactory?: UnifiedRepoAccessFactory
   ) {
-    this.contextGatherer = new ContextGatherer(repos, repoServiceFactory);
+    this.contextGatherer = new ContextGatherer(repos, repoAccessFactory);
     this.config = {
       useLLM: config?.useLLM ?? false,
       model: config?.model ?? 'anthropic/claude-haiku-4.5',
@@ -233,19 +231,19 @@ export class Orchestrator {
     });
 
     // Create tool executor for codebase exploration
-    const toolExecutor = this.createToolExecutor(repoId);
+    const toolExecutor = await this.createToolExecutor(repoId);
 
     // Call LLM with tools - orchestrator can explore before deciding
     const completion = await this.llm!.completeWithTools({
       system: ORCHESTRATOR_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
-      tools: toolExecutor.tools.map(t => ({
+      tools: toolExecutor?.tools.map(t => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
-      })),
-      executeTools: toolExecutor.executeTools,
-      maxToolRounds: 5,
+      })) ?? [],
+      executeTools: toolExecutor?.executeTools ?? (async () => []),
+      maxToolRounds: toolExecutor ? 5 : 0,
       maxTokens: 4000,
       temperature: 0.3,
     });
@@ -305,7 +303,7 @@ export class Orchestrator {
 
     // Fallback: If LLM didn't schedule any exploration, add deterministic exploration
     let fallbackExplorationWork: WorkItem[] = [];
-    if (!llmScheduledExploration && this.git && this.contextGatherer) {
+    if (!llmScheduledExploration && this.contextGatherer) {
       const remainingSlots = maxItems - llmWorkItems.length;
       if (remainingSlots > 0) {
         const explorationCtx: StrategyContext = {
@@ -313,7 +311,6 @@ export class Orchestrator {
           repoId,
           wikiId,
           existingWorkKeys,
-          git: this.git,
           contextGatherer: this.contextGatherer,
         };
         const explorationResult = await codebaseExplorationStrategy(explorationCtx, remainingSlots);
@@ -357,32 +354,143 @@ export class Orchestrator {
 
   /**
    * Create a tool executor for the orchestrator to explore the codebase.
+   * Uses UnifiedRepoAccess to work with both local and GitHub repositories.
    */
-  private createToolExecutor(repoId: string): {
-    tools: typeof codebaseTools;
+  private async createToolExecutor(repoId: string): Promise<{
+    tools: ToolDefinition[];
+    executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
+  } | null> {
+    if (!this.repoAccessFactory) {
+      return null;
+    }
+
+    try {
+      const repoAccess = await this.repoAccessFactory.create(repoId);
+      const localPath = repoAccess.getLocalPath();
+
+      // For local repos, use filesystem-based tools
+      if (localPath) {
+        const toolContext: ToolContext = { repoPath: localPath, maxFileSize: 50000 };
+        return {
+          tools: codebaseTools,
+          executeTools: async (calls) => {
+            const results = await Promise.all(calls.map(async (call) => {
+              const tool = codebaseTools.find(t => t.name === call.name);
+              if (!tool) {
+                return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
+              }
+              try {
+                const result = await tool.execute(call.input, toolContext);
+                return { id: call.id, result };
+              } catch (error) {
+                return {
+                  id: call.id,
+                  result: `Error executing ${call.name}: ${error instanceof Error ? error.message : String(error)}`,
+                };
+              }
+            }));
+            return results;
+          },
+        };
+      }
+
+      // For GitHub repos, create API-based tools
+      return this.createUnifiedApiTools(repoAccess);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Create API-based tools using UnifiedRepoAccess.
+   */
+  private createUnifiedApiTools(repoAccess: UnifiedRepoAccess): {
+    tools: ToolDefinition[];
     executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
   } {
-    // Get repo path from git service
-    const repoPath = this.git?.getRepoPath(repoId);
-    const toolContext: ToolContext = { repoPath: repoPath ?? '', maxFileSize: 50000 };
+    const apiTools: ToolDefinition[] = [
+      {
+        name: 'read_file',
+        description: 'Read the contents of a file from the repository.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Relative path from repository root' },
+          },
+          required: ['path'],
+        },
+        execute: async (input) => {
+          const path = input['path'] as string;
+          try {
+            return await repoAccess.getFileContent(path);
+          } catch (error) {
+            return `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+      {
+        name: 'list_directory',
+        description: 'List contents of a directory in the repository.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Directory path relative to repository root' },
+          },
+          required: ['path'],
+        },
+        execute: async (input) => {
+          const path = input['path'] as string;
+          try {
+            const entries = await repoAccess.listDirectory(path);
+            return entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
+          } catch (error) {
+            return `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+      {
+        name: 'search_files',
+        description: 'Search for files matching a pattern. Returns file paths.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pattern: { type: 'string', description: 'Glob pattern (e.g., "**/*.ts")' },
+          },
+          required: ['pattern'],
+        },
+        execute: async (input) => {
+          const pattern = input['pattern'] as string;
+          try {
+            const allFiles = await repoAccess.getFileTree();
+            // Simple glob matching
+            const regexPattern = pattern
+              .replace(/\*\*/g, '<<<GLOBSTAR>>>')
+              .replace(/\*/g, '[^/]*')
+              .replace(/\?/g, '.')
+              .replace(/<<<GLOBSTAR>>>/g, '.*');
+            const regex = new RegExp(`^${regexPattern}$`);
+            const matches = allFiles.filter(file => regex.test(file));
+            if (matches.length === 0) {
+              return `No files found matching "${pattern}"`;
+            }
+            return matches.join('\n');
+          } catch (error) {
+            return `Error searching for "${pattern}": ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      },
+    ];
 
     return {
-      tools: codebaseTools,
+      tools: apiTools,
       executeTools: async (calls) => {
         const results = await Promise.all(calls.map(async (call) => {
-          const tool = codebaseTools.find(t => t.name === call.name);
+          const tool = apiTools.find(t => t.name === call.name);
           if (!tool) {
             return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
           }
-          try {
-            const result = await tool.execute(call.input, toolContext);
-            return { id: call.id, result };
-          } catch (error) {
-            return {
-              id: call.id,
-              result: `Error executing ${call.name}: ${error instanceof Error ? error.message : String(error)}`,
-            };
-          }
+          const result = await tool.execute(call.input, { repoPath: '', maxFileSize: 100000 });
+          return { id: call.id, result };
         }));
         return results;
       },
@@ -420,7 +528,6 @@ export class Orchestrator {
       repoId,
       wikiId,
       existingWorkKeys,
-      ...(this.git && { git: this.git }),
       ...(this.contextGatherer && { contextGatherer: this.contextGatherer }),
     };
 
@@ -560,8 +667,7 @@ export function createOrchestrator(
   repos: Repositories,
   llm?: LLMService,
   config?: OrchestratorConfig,
-  git?: GitService,
-  repoServiceFactory?: RepositoryServiceFactory
+  repoAccessFactory?: UnifiedRepoAccessFactory
 ): Orchestrator {
-  return new Orchestrator(repos, llm, config, git, repoServiceFactory);
+  return new Orchestrator(repos, llm, config, repoAccessFactory);
 }

@@ -1,6 +1,5 @@
 import type { Repositories } from '../../repositories/index.js';
-import type { RepositoryServiceFactory, RepositoryService } from '../../services/repository/repository-service.js';
-import type { Repo } from '../../domain/repo.js';
+import type { UnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
 
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
@@ -157,31 +156,8 @@ export interface OrchestratorContext {
 export class ContextGatherer {
   constructor(
     private readonly repos: Repositories,
-    private readonly repoServiceFactory?: RepositoryServiceFactory
+    private readonly repoAccessFactory?: UnifiedRepoAccessFactory
   ) {}
-
-  /**
-   * Get a repository service for the given repo, using authentication when available.
-   * For GitHub repos with a userId, this looks up the user's access token
-   * and uses authenticated access (required for private repos).
-   */
-  private async getRepoService(repo: Repo): Promise<RepositoryService | null> {
-    if (!this.repoServiceFactory) {
-      return null;
-    }
-
-    // For GitHub repos with a userId, try to use authenticated access
-    if (repo.isGitHubRepo && repo.userId) {
-      const user = await this.repos.users.findById(repo.userId);
-      if (user?.accessToken) {
-        return this.repoServiceFactory.getServiceWithToken(repo, user.accessToken);
-      }
-      // Fall through to unauthenticated access if no token
-      console.warn(`No access token found for user ${repo.userId}, using unauthenticated GitHub access`);
-    }
-
-    return this.repoServiceFactory.getService(repo);
-  }
 
   /**
    * Derive iteration phase from progress percentage.
@@ -410,28 +386,22 @@ export class ContextGatherer {
    * Scans the repository for source files and checks how well each
    * directory is documented in the wiki.
    *
-   * Uses RepositoryService abstraction to work uniformly with both
-   * local and GitHub repositories.
+   * Uses UnifiedRepoAccess to work uniformly with both local and GitHub repositories.
    */
   private async calculateDirectoryCoverage(
     repoId: string,
     wikiPages: Array<{ path: string; content: string }>
   ): Promise<DirectoryCoverage[]> {
-    // Look up the repository
-    const repo = await this.repos.repos.findById(repoId);
-    if (!repo) {
-      return [];
-    }
-
-    // Get authenticated service for private GitHub repos
-    const repoService = await this.getRepoService(repo);
-    if (!repoService) {
+    if (!this.repoAccessFactory) {
       return [];
     }
 
     try {
-      // Get all files via unified RepositoryService interface
-      const allFiles = await repoService.getFileTree(repo);
+      // Get unified access for this repository
+      const repoAccess = await this.repoAccessFactory.create(repoId);
+
+      // Get all files via unified interface
+      const allFiles = await repoAccess.getFileTree();
 
       // Filter to source files only (any directory)
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
@@ -538,33 +508,26 @@ export class ContextGatherer {
    * Build a deep coverage tree for LLM visualization.
    * Returns a hierarchical view of all directories with coverage data.
    *
-   * Uses RepositoryService abstraction to work uniformly with both
-   * local and GitHub repositories.
+   * Uses UnifiedRepoAccess to work uniformly with both local and GitHub repositories.
    */
   private async buildCoverageTree(
     repoId: string,
     wikiPages: Array<{ path: string; content: string }>
   ): Promise<DirectoryNode | null> {
-    // Look up the repository
-    const repo = await this.repos.repos.findById(repoId);
-    if (!repo) {
-      console.warn(`buildCoverageTree: repo not found for ${repoId}`);
-      return null;
-    }
-
-    // Get authenticated service for private GitHub repos
-    const repoService = await this.getRepoService(repo);
-    if (!repoService) {
-      console.warn(`buildCoverageTree: repoServiceFactory not available`);
+    if (!this.repoAccessFactory) {
+      console.warn(`buildCoverageTree: repoAccessFactory not available`);
       return null;
     }
 
     try {
-      // Get all files via unified RepositoryService interface
-      const allFiles = await repoService.getFileTree(repo);
+      // Get unified access for this repository
+      const repoAccess = await this.repoAccessFactory.create(repoId);
+
+      // Get all files via unified interface
+      const allFiles = await repoAccess.getFileTree();
 
       if (allFiles.length === 0) {
-        console.warn(`buildCoverageTree: getFileTree returned empty for ${repo.fullName}`);
+        console.warn(`buildCoverageTree: getFileTree returned empty for ${repoId}`);
         return null;
       }
 
@@ -572,7 +535,7 @@ export class ContextGatherer {
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
-        console.warn(`buildCoverageTree: no source files found in ${allFiles.length} files for ${repo.fullName}`);
+        console.warn(`buildCoverageTree: no source files found in ${allFiles.length} files for ${repoId}`);
         return null;
       }
 
@@ -893,7 +856,7 @@ export class ContextGatherer {
  */
 export function createContextGatherer(
   repos: Repositories,
-  repoServiceFactory?: RepositoryServiceFactory
+  repoAccessFactory?: UnifiedRepoAccessFactory
 ): ContextGatherer {
-  return new ContextGatherer(repos, repoServiceFactory);
+  return new ContextGatherer(repos, repoAccessFactory);
 }

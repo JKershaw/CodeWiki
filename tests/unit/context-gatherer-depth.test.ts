@@ -7,7 +7,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
-import type { RepositoryServiceFactory, RepositoryService, FileEntry } from '../../src/services/repository/repository-service.js';
+import type { UnifiedRepoAccessFactory, UnifiedRepoAccess, FileEntry } from '../../src/services/repository/unified-repo-access.js';
 import type { Repo } from '../../src/domain/repo.js';
 import { ContextGatherer, type DirectoryNode } from '../../src/agents/orchestrator/context-gatherer.js';
 
@@ -243,23 +243,24 @@ describe('ContextGatherer GitHub Mode', () => {
   }
 
   /**
-   * Create mock repository service factory.
+   * Create mock UnifiedRepoAccess factory.
    */
-  function createMockRepoServiceFactory(
+  function createMockRepoAccessFactory(
     srcEntries: FileEntry[],
     fileTree: string[]
-  ): RepositoryServiceFactory {
-    const mockService: Partial<RepositoryService> = {
-      listDirectory: mock.fn(async (_repo, path) => {
+  ): UnifiedRepoAccessFactory {
+    const mockAccess: Partial<UnifiedRepoAccess> = {
+      listDirectory: mock.fn(async (path: string) => {
         if (path === 'src') return srcEntries;
         return [];
       }),
       getFileTree: mock.fn(async () => fileTree),
+      isLocal: () => false,
+      getLocalPath: () => undefined,
     };
 
     return {
-      getService: mock.fn(() => mockService as RepositoryService),
-      getServiceWithToken: mock.fn(() => mockService as RepositoryService),
+      create: mock.fn(async () => mockAccess as UnifiedRepoAccess),
     };
   }
 
@@ -273,7 +274,7 @@ describe('ContextGatherer GitHub Mode', () => {
       assert.strictEqual(context.directoryCoverage.length, 0);
     });
 
-    it('returns empty for GitHub repo without repoServiceFactory', async () => {
+    it('returns empty for GitHub repo without repoAccessFactory', async () => {
       const repos = createMockRepos({ id: 'repo-1', isGitHubRepo: true } as Repo);
       const gatherer = new ContextGatherer(repos);
 
@@ -304,8 +305,8 @@ describe('ContextGatherer GitHub Mode', () => {
         'src/index.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(srcEntries, fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -362,8 +363,8 @@ describe('ContextGatherer GitHub Mode', () => {
         'src/services/llm/llm-service.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(srcEntries, fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -396,8 +397,8 @@ describe('ContextGatherer GitHub Mode', () => {
         'src/utils/types.d.ts',      // Should be excluded
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(srcEntries, fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(srcEntries, fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -414,19 +415,20 @@ describe('ContextGatherer GitHub Mode', () => {
         repoName: 'repo',
       } as Repo);
 
-      const mockService: Partial<RepositoryService> = {
+      const mockAccess: Partial<UnifiedRepoAccess> = {
         listDirectory: mock.fn(async () => {
           throw new Error('Directory not found');
         }),
         getFileTree: mock.fn(async () => []),
+        isLocal: () => false,
+        getLocalPath: () => undefined,
       };
 
-      const repoServiceFactory = {
-        getService: mock.fn(() => mockService as RepositoryService),
-        getServiceWithToken: mock.fn(() => mockService as RepositoryService),
+      const repoAccessFactory: UnifiedRepoAccessFactory = {
+        create: mock.fn(async () => mockAccess as UnifiedRepoAccess),
       };
 
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 

@@ -6,12 +6,14 @@
  */
 
 import { randomUUID } from 'crypto';
-import { access } from 'fs/promises';
 import type { Repositories } from '../repositories/index.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { GitService } from '../services/git/git-service.js';
-import type { RepositoryServiceFactory, RepositoryService } from '../services/repository/repository-service.js';
-import type { Repo } from '../domain/repo.js';
+import type { RepositoryServiceFactory } from '../services/repository/repository-service.js';
+import {
+  createUnifiedRepoAccessFactory,
+  type UnifiedRepoAccessFactory,
+} from '../services/repository/unified-repo-access.js';
 import { ResearchAgent } from '../agents/research/research-agent.js';
 import { GraderAgent, type GradeContext } from './grader-agent.js';
 import { loadQuestions, loadQuestionsByIds } from './question-loader.js';
@@ -50,6 +52,7 @@ export interface BenchmarkOptions {
 export class BenchmarkRunner {
   private readonly research: ResearchAgent;
   private readonly grader: GraderAgent;
+  private readonly repoAccessFactory?: UnifiedRepoAccessFactory;
 
   constructor(
     private readonly repos: Repositories,
@@ -59,6 +62,15 @@ export class BenchmarkRunner {
   ) {
     this.research = new ResearchAgent(repos, llm);
     this.grader = new GraderAgent(llm);
+
+    // Create unified repo access factory if we have the required dependencies
+    if (repoServiceFactory) {
+      this.repoAccessFactory = createUnifiedRepoAccessFactory({
+        repos,
+        repoServiceFactory,
+        gitService: git,
+      });
+    }
   }
 
   /**
@@ -95,10 +107,20 @@ export class BenchmarkRunner {
       // Get current page count from wiki
       const pageCount = await this.getPageCount(wikiId);
 
-      // Build grading context - supports both local repos and GitHub repos
-      const gradeContext = await this.buildGradeContext(repoId, repo);
+      // Build grading context using unified repo access
+      let gradeContext: GradeContext | null = null;
+      if (this.repoAccessFactory) {
+        try {
+          const repoAccess = await this.repoAccessFactory.create(repoId);
+          gradeContext = { repoAccess };
+          console.log(`[Benchmark] Created unified repo access (isLocal: ${repoAccess.isLocal()})`);
+        } catch (err) {
+          console.warn(`[Benchmark] Failed to create unified repo access: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
       if (!gradeContext) {
-        throw new Error('Unable to access repository for benchmarking. No local path or repository service available.');
+        throw new Error('Unable to access repository for benchmarking. No repository access factory available.');
       }
 
       // Start benchmark run
@@ -279,58 +301,6 @@ export class BenchmarkRunner {
   private async getPageCount(wikiId: string): Promise<number> {
     const pages = await this.repos.wikiPages.findByWiki(wikiId);
     return pages.length;
-  }
-
-  /**
-   * Build the grading context for a repository.
-   * Supports both local repos (via filesystem) and GitHub repos (via API).
-   */
-  private async buildGradeContext(repoId: string, repo: Repo | null): Promise<GradeContext | null> {
-    // Try local filesystem first - but only if it's not a GitHub repo
-    // and the path actually exists on the filesystem
-    if (repo && !repo.isGitHubRepo) {
-      try {
-        const repoPath = this.git.getRepoPath(repoId);
-        // Verify the path actually exists before using it
-        await access(repoPath);
-        console.log(`[Benchmark] Using local filesystem for grading: ${repoPath}`);
-        return { repoPath };
-      } catch (error) {
-        // Path doesn't exist or isn't accessible
-        console.log(`[Benchmark] Local path not accessible for repo ${repoId}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    } else if (repo?.isGitHubRepo) {
-      console.log(`[Benchmark] Repo ${repoId} is a GitHub repo, skipping local filesystem check`);
-    }
-
-    // Try GitHub API if we have a repo service factory and repo entity
-    if (this.repoServiceFactory && repo) {
-      console.log(`[Benchmark] Attempting GitHub API access for repo: ${repo.fullName} (isGitHubRepo: ${repo.isGitHubRepo}, userId: ${repo.userId ?? 'none'})`);
-
-      // For GitHub repos, create an authenticated service if possible
-      let repoService: RepositoryService;
-      if (repo.isGitHubRepo && repo.userId) {
-        // Look up user's access token for authenticated GitHub access
-        const user = await this.repos.users.findById(repo.userId);
-        if (user?.accessToken) {
-          console.log(`[Benchmark] Using authenticated GitHub access for user ${repo.userId}`);
-          repoService = this.repoServiceFactory.getServiceWithToken(repo, user.accessToken);
-        } else {
-          // Fall back to unauthenticated access
-          console.warn(`[Benchmark] No access token found for user ${repo.userId}, using unauthenticated GitHub access`);
-          repoService = this.repoServiceFactory.getService(repo);
-        }
-      } else {
-        console.log(`[Benchmark] Using default repository service (isGitHubRepo: ${repo.isGitHubRepo})`);
-        repoService = this.repoServiceFactory.getService(repo);
-      }
-
-      return { repoService, repo };
-    }
-
-    // No access method available
-    console.error(`[Benchmark] No access method available for repo ${repoId} (repoServiceFactory: ${!!this.repoServiceFactory}, repo: ${!!repo})`);
-    return null;
   }
 }
 

@@ -1,9 +1,9 @@
 /**
  * Helper functions for agents to access repository data.
  *
- * These helpers provide a unified interface that works with both:
- * - Local repositories (via GitService)
- * - GitHub repositories (via RepositoryService)
+ * These helpers use UnifiedRepoAccess to provide a clean interface that works with both:
+ * - Local repositories (via filesystem)
+ * - GitHub repositories (via API)
  */
 
 import { minimatch } from 'minimatch';
@@ -12,62 +12,56 @@ import type { ToolContext, ToolDefinition } from '../services/llm/tools.js';
 import { codebaseTools } from '../services/llm/codebase-tools.js';
 
 /**
- * Get the diff for a commit, using the best available service.
+ * Get the diff for a commit.
  *
- * Prefers RepositoryService (works with both GitHub and local repos)
- * but falls back to GitService for backwards compatibility.
+ * @throws Error if repoAccess is not available
  */
 export async function getCommitDiff(context: AgentContext, sha: string): Promise<string> {
-  // Prefer repoService if available (works with both GitHub and local repos)
-  if (context.repoService && context.repo) {
-    return context.repoService.getCommitDiff(context.repo, sha);
+  if (!context.repoAccess) {
+    throw new Error('repoAccess is required to get commit diff');
   }
-
-  // Fall back to git service for backwards compatibility
-  return context.git.getCommitDiff(context.repoId, sha);
+  return context.repoAccess.getCommitDiff(sha);
 }
 
 /**
  * Check if the repository is a local filesystem repository.
  *
  * Returns true if we can use filesystem-based tools.
- * Returns false if repo is undefined or is a GitHub repo.
  */
 export function isLocalRepo(context: AgentContext): boolean {
-  // Must have a repo object and it must explicitly be marked as not a GitHub repo
-  return context.repo?.isGitHubRepo === false;
+  if (!context.repoAccess) {
+    throw new Error('repoAccess is required to check if repo is local');
+  }
+  return context.repoAccess.isLocal();
 }
 
 /**
  * Get the local filesystem path for a repository.
  *
- * Returns undefined for GitHub repositories or when repo info is not available.
+ * Returns undefined for GitHub repositories.
  */
 export function getLocalRepoPath(context: AgentContext): string | undefined {
-  // Must have repo info and it must be a local repo (not GitHub)
-  if (!context.repo || context.repo.isGitHubRepo) {
-    return undefined;
+  if (!context.repoAccess) {
+    throw new Error('repoAccess is required to get local repo path');
   }
-
-  // For local repos, get the path from git service
-  try {
-    return context.git.getRepoPath(context.repoId);
-  } catch {
-    return undefined;
-  }
+  return context.repoAccess.getLocalPath();
 }
 
 /**
  * Create a tool executor for codebase exploration.
  *
- * For local repos: Uses filesystem-based tools
- * For GitHub repos: Creates API-based tools using RepositoryService
+ * For local repos: uses filesystem-based tools
+ * For GitHub repos: uses API-based tools via UnifiedRepoAccess
  */
 export function createCodebaseToolExecutor(context: AgentContext): {
   tools: ToolDefinition[];
   executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
 } | null {
-  const repoPath = getLocalRepoPath(context);
+  if (!context.repoAccess) {
+    return null;
+  }
+
+  const repoPath = context.repoAccess.getLocalPath();
 
   if (repoPath) {
     // Local repo - use filesystem-based tools
@@ -89,28 +83,17 @@ export function createCodebaseToolExecutor(context: AgentContext): {
     };
   }
 
-  // GitHub repo - create API-based tools
-  if (context.repoService && context.repo) {
-    return createApiCodebaseTools(context);
-  }
-
-  // No tools available
-  return null;
+  // GitHub repo - use unified API tools
+  return createUnifiedApiTools(context.repoAccess);
 }
 
 /**
- * Create API-based codebase tools for GitHub repositories.
+ * Create API-based codebase tools using UnifiedRepoAccess.
  */
-function createApiCodebaseTools(context: AgentContext): {
+function createUnifiedApiTools(repoAccess: NonNullable<AgentContext['repoAccess']>): {
   tools: ToolDefinition[];
   executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
 } {
-  const { repoService, repo } = context;
-
-  if (!repoService || !repo) {
-    throw new Error('RepositoryService and repo required for API-based tools');
-  }
-
   const apiTools: ToolDefinition[] = [
     {
       name: 'read_file',
@@ -128,7 +111,7 @@ function createApiCodebaseTools(context: AgentContext): {
       execute: async (input) => {
         const path = input['path'] as string;
         try {
-          return await repoService.getFileContent(repo, path);
+          return await repoAccess.getFileContent(path);
         } catch (error) {
           return `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
         }
@@ -150,7 +133,7 @@ function createApiCodebaseTools(context: AgentContext): {
       execute: async (input) => {
         const path = input['path'] as string;
         try {
-          const entries = await repoService.listDirectory(repo, path);
+          const entries = await repoAccess.listDirectory(path);
           return entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
         } catch (error) {
           return `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
@@ -173,8 +156,7 @@ function createApiCodebaseTools(context: AgentContext): {
       execute: async (input) => {
         const pattern = input['pattern'] as string;
         try {
-          const allFiles = await repoService.getFileTree(repo);
-          // Simple glob matching (supports **, *, and ?)
+          const allFiles = await repoAccess.getFileTree();
           const matches = filterByGlob(allFiles, pattern);
           if (matches.length === 0) {
             return `No files found matching "${pattern}"`;
@@ -195,7 +177,6 @@ function createApiCodebaseTools(context: AgentContext): {
         if (!tool) {
           return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
         }
-        // API tools don't need a toolContext, they use the repoService directly
         const result = await tool.execute(call.input, { repoPath: '', maxFileSize: 100000 });
         return { id: call.id, result };
       }));
@@ -239,6 +220,10 @@ export async function fetchAffectedFileContents(
   maxFileSize: number = 30000,
   maxTotalSize: number = 100000
 ): Promise<FetchedFileContent[]> {
+  if (!context.repoAccess) {
+    throw new Error('repoAccess is required to fetch file contents');
+  }
+
   const results: FetchedFileContent[] = [];
   let totalSize = 0;
 
@@ -256,29 +241,9 @@ export async function fetchAffectedFileContents(
     }
 
     try {
-      let content: string;
+      const content = await context.repoAccess.getFileContent(filePath);
 
-      if (context.repoService && context.repo) {
-        // Use repository service (works for both GitHub and local)
-        content = await context.repoService.getFileContent(context.repo, filePath);
-      } else if (isLocalRepo(context)) {
-        // Fall back to local file reading via git service (only for local repos)
-        const repoPath = context.git.getRepoPath(context.repoId);
-        const fs = await import('fs/promises');
-        const path = await import('path');
-        const fullPath = path.join(repoPath, filePath);
-        content = await fs.readFile(fullPath, 'utf-8');
-      } else {
-        // GitHub repo without repoService - cannot read file
-        results.push({
-          path: filePath,
-          content: null,
-          error: 'Cannot read file: GitHub repository requires RepositoryService',
-        });
-        continue;
-      }
-
-      // Check if file is too large
+      // Handle large files
       if (content.length > maxFileSize) {
         results.push({
           path: filePath,
@@ -294,11 +259,11 @@ export async function fetchAffectedFileContents(
         totalSize += content.length;
       }
     } catch (error) {
-      // File might be deleted in this commit, or inaccessible
+      // File might be deleted, binary, or inaccessible
       results.push({
         path: filePath,
         content: null,
-        error: error instanceof Error ? error.message : 'Failed to read file',
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -307,46 +272,93 @@ export async function fetchAffectedFileContents(
 }
 
 /**
- * Check if a file path is likely a source code file worth reading.
+ * Check if a file path looks like source code.
+ * Excludes binary files, lock files, and generated files.
  */
-function isSourceCodeFile(filePath: string): boolean {
-  // Skip common non-source files
-  const skipPatterns = [
-    /\.lock$/,
-    /package-lock\.json$/,
-    /yarn\.lock$/,
-    /pnpm-lock\.yaml$/,
+function isSourceCodeFile(path: string): boolean {
+  const extension = path.split('.').pop()?.toLowerCase();
+
+  // Source code extensions
+  const sourceExtensions = new Set([
+    'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
+    'py', 'rb', 'java', 'kt', 'scala',
+    'go', 'rs', 'c', 'cpp', 'h', 'hpp',
+    'cs', 'fs', 'vb',
+    'php', 'swift', 'm', 'mm',
+    'sql', 'sh', 'bash', 'zsh',
+    'yaml', 'yml', 'json', 'xml', 'toml',
+    'md', 'txt', 'rst',
+    'html', 'css', 'scss', 'sass', 'less',
+    'vue', 'svelte',
+    'dockerfile', 'makefile',
+  ]);
+
+  // Explicitly excluded patterns
+  const excludedPatterns = [
+    /^package-lock\.json$/,
+    /^yarn\.lock$/,
+    /^pnpm-lock\.yaml$/,
     /\.min\.(js|css)$/,
-    /\.(png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/i,
-    /\.(pdf|doc|docx|xls|xlsx)$/i,
-    /\.(zip|tar|gz|rar)$/i,
+    /\.bundle\.(js|css)$/,
+    /\.map$/,
+    /\.d\.ts$/,  // TypeScript declaration files
     /node_modules\//,
     /dist\//,
     /build\//,
     /\.git\//,
   ];
 
-  return !skipPatterns.some(pattern => pattern.test(filePath));
-}
-
-/**
- * Format fetched file contents for inclusion in a prompt.
- */
-export function formatFileContentsForPrompt(files: FetchedFileContent[]): string {
-  const sections: string[] = [];
-
-  for (const file of files) {
-    if (file.content) {
-      const truncatedNote = file.truncated ? ' (truncated)' : '';
-      sections.push(`### ${file.path}${truncatedNote}\n\n\`\`\`\n${file.content}\n\`\`\``);
-    } else if (file.error) {
-      sections.push(`### ${file.path}\n\n*${file.error}*`);
+  // Check exclusions first
+  for (const pattern of excludedPatterns) {
+    if (pattern.test(path)) {
+      return false;
     }
   }
 
-  if (sections.length === 0) {
+  // Check if extension is a known source type
+  if (extension && sourceExtensions.has(extension)) {
+    return true;
+  }
+
+  // Special filenames without extensions
+  const filename = path.split('/').pop()?.toLowerCase();
+  const specialFiles = new Set(['dockerfile', 'makefile', 'readme', 'license', 'changelog']);
+  if (filename && specialFiles.has(filename)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Format fetched file contents for LLM context.
+ *
+ * Creates a readable format with file paths as headers and content in code blocks.
+ */
+export function formatFetchedFilesForContext(
+  files: FetchedFileContent[],
+  prefix: string = '## Source Files'
+): string {
+  const sections: string[] = [prefix, ''];
+
+  for (const file of files) {
+    if (file.content !== null) {
+      const truncatedNote = file.truncated ? ' (truncated)' : '';
+      sections.push(`### ${file.path}${truncatedNote}`);
+      sections.push('```');
+      sections.push(file.content);
+      sections.push('```');
+      sections.push('');
+    } else if (file.error) {
+      sections.push(`### ${file.path}`);
+      sections.push(`*${file.error}*`);
+      sections.push('');
+    }
+  }
+
+  if (sections.length === 2) {
     return '*No source files available*';
   }
 
-  return sections.join('\n\n');
+  return sections.join('\n');
 }

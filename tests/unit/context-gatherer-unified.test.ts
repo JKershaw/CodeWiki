@@ -9,7 +9,7 @@
 import { describe, it, mock, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
-import type { RepositoryServiceFactory, RepositoryService } from '../../src/services/repository/repository-service.js';
+import type { UnifiedRepoAccessFactory, UnifiedRepoAccess } from '../../src/services/repository/unified-repo-access.js';
 import type { Repo } from '../../src/domain/repo.js';
 import { ContextGatherer, type DirectoryNode, type DirectoryCoverage } from '../../src/agents/orchestrator/context-gatherer.js';
 
@@ -69,17 +69,21 @@ function createMockRepos(repo: Partial<Repo> | null, wikiPages: WikiPage[] = [])
 }
 
 /**
- * Create mock repository service factory with specified file tree.
+ * Create mock unified repo access factory with specified file tree.
  */
-function createMockRepoServiceFactory(fileTree: string[]): RepositoryServiceFactory {
-  const mockService: Partial<RepositoryService> = {
+function createMockRepoAccessFactory(fileTree: string[]): UnifiedRepoAccessFactory {
+  const mockAccess: UnifiedRepoAccess = {
     getFileTree: mock.fn(async () => fileTree),
-    listDirectory: mock.fn(async () => []), // Not used in unified approach
+    listDirectory: mock.fn(async () => []),
+    getFileContent: mock.fn(async () => ''),
+    fileExists: mock.fn(async () => false),
+    getCommitDiff: mock.fn(async () => ''),
+    isLocal: () => false,
+    getLocalPath: () => undefined,
   };
 
   return {
-    getService: mock.fn(() => mockService as RepositoryService),
-    getServiceWithToken: mock.fn(() => mockService as RepositoryService),
+    create: mock.fn(async () => mockAccess),
   };
 }
 
@@ -101,8 +105,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/index.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -135,8 +139,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/index.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -157,7 +161,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         fullName: '/path/to/repo',
         isGitHubRepo: false,
       } as Repo);
-      const localFactory = createMockRepoServiceFactory(fileTree);
+      const localFactory = createMockRepoAccessFactory(fileTree);
       const localGatherer = new ContextGatherer(localRepos, localFactory);
       const localContext = await localGatherer.gather('local-repo', 'wiki-1');
 
@@ -169,7 +173,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         owner: 'owner',
         repoName: 'repo',
       } as Repo);
-      const githubFactory = createMockRepoServiceFactory(fileTree);
+      const githubFactory = createMockRepoAccessFactory(fileTree);
       const githubGatherer = new ContextGatherer(githubRepos, githubFactory);
       const githubContext = await githubGatherer.gather('github-repo', 'wiki-1');
 
@@ -195,8 +199,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/utils/another.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -218,8 +222,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/build/output.js',                // Should be excluded
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -250,8 +254,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/services/llm/llm-service.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -277,8 +281,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'lib/core/engine.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -300,21 +304,21 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'config.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
       assert.strictEqual(context.directoryCoverage.length, 0);
     });
 
-    it('returns empty coverage when repoServiceFactory is not provided', async () => {
+    it('returns empty coverage when repoAccessFactory is not provided', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
       } as Repo);
 
-      // No repoServiceFactory provided
+      // No repoAccessFactory provided
       const gatherer = new ContextGatherer(repos);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
@@ -338,8 +342,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/services/service.ts',    // 1 file, 2 mentions
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -362,8 +366,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/services/llm/llm-service.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -385,7 +389,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         id: 'local-repo',
         isGitHubRepo: false,
       } as Repo);
-      const localFactory = createMockRepoServiceFactory(fileTree);
+      const localFactory = createMockRepoAccessFactory(fileTree);
       const localGatherer = new ContextGatherer(localRepos, localFactory);
       const localContext = await localGatherer.gather('local-repo', 'wiki-1');
 
@@ -396,7 +400,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         owner: 'owner',
         repoName: 'repo',
       } as Repo);
-      const githubFactory = createMockRepoServiceFactory(fileTree);
+      const githubFactory = createMockRepoAccessFactory(fileTree);
       const githubGatherer = new ContextGatherer(githubRepos, githubFactory);
       const githubContext = await githubGatherer.gather('github-repo', 'wiki-1');
 
@@ -426,8 +430,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'lib/core/engine.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -448,15 +452,15 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'config.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
       assert.strictEqual(context.coverageTree, null);
     });
 
-    it('returns null tree when repoServiceFactory not provided', async () => {
+    it('returns null tree when repoAccessFactory not provided', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
@@ -482,8 +486,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         'src/services/git/git-service.ts',
       ];
 
-      const repoServiceFactory = createMockRepoServiceFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -517,12 +521,12 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         }),
       };
 
-      const repoServiceFactory = {
+      const repoAccessFactory = {
         getService: mock.fn(() => mockService as RepositoryService),
         getServiceWithToken: mock.fn(() => mockService as RepositoryService),
       };
 
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
@@ -533,8 +537,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
     it('handles repo not found', async () => {
       const repos = createMockRepos(null);
-      const repoServiceFactory = createMockRepoServiceFactory([]);
-      const gatherer = new ContextGatherer(repos, repoServiceFactory);
+      const repoAccessFactory = createMockRepoAccessFactory([]);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('nonexistent-repo', 'wiki-1');
 
