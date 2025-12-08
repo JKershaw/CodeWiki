@@ -2,11 +2,28 @@
 
 ## Executive Summary
 
-This audit identifies **8 distinct LLM usage patterns** in CodeWiki, of which **6 use agentic tool-calling loops** and **2 use single LLM calls**. Analysis reveals that **4 of the 6 agentic patterns could potentially be optimized to single LLM calls** with proper context pre-fetching, which would improve reliability and reduce resource consumption.
+This audit provides a **complete analysis of all 29 LLM-using components** in CodeWiki. Of the **18 that use agentic tool-calling loops**, **13-15 can be optimized** to single-call or pre-fetch patterns, while **3-5 represent legitimate agentic work** that should keep tools.
 
-**Key Finding:** Most tool usage in this codebase fetches data that is either:
+**Key Findings:**
+
+1. **Unused infrastructure exists:** `fetchAffectedFileContents()` helper is implemented but no agent uses it
+2. **Data is already loaded:** ResearchAgent loads ALL wiki pages, then makes LLM fetch them via tools
+3. **Hints are comprehensive:** Every benchmark question has verification hints - GraderAgent doesn't need to discover files
+4. **Legitimate exploration:** CodebaseExplorerAgent, SelfImprovementAgent, and Orchestrator genuinely need tools
+
+**Optimization Potential:**
+
+| Category | High | Medium | Keep Tools |
+|----------|------|--------|------------|
+| Analysis (7) | 6 | 0 | 1 |
+| Synthesis (7) | 3 | 4 | 0 |
+| Research (4) | 2 | 0 | 2 |
+| **Total (18)** | **11** | **4** | **3** |
+
+**Most tool usage fetches data that is either:**
 1. Already known at call time (e.g., files mentioned in a commit diff)
-2. Could be pre-fetched using simple keyword search (e.g., wiki pages matching question keywords)
+2. Already loaded into memory (e.g., wiki pages)
+3. Predictable (e.g., README.md, package.json, verification hints)
 
 ---
 
@@ -15,34 +32,34 @@ This audit identifies **8 distinct LLM usage patterns** in CodeWiki, of which **
 ### 1.1 Agentic Tool-Calling Patterns (use `completeWithTools`)
 
 **Analysis Agents (process commits):**
-| Agent | Tools | Max Rounds | Purpose | Analyzed? |
-|-------|-------|------------|---------|-----------|
-| SecurityAgent | codebase tools | 5 | Security audit | ✅ Yes |
-| CodeChangeAgent | codebase tools | 5 | Code change analysis | ✅ Yes |
-| TechnicalDebtAgent | codebase tools | 5 | Detect tech debt | ❌ Similar to CodeChange |
-| PatternAgent | codebase tools | 5 | Identify patterns | ❌ Similar to CodeChange |
-| NarrativeAgent | codebase tools | 5 | ADRs, planning docs | ❌ Similar to CodeChange |
-| DependencyAgent | codebase tools | 5 | Dependency changes | ❌ Similar to CodeChange |
-| CodebaseExplorerAgent | codebase tools | 5 | Explore directories | ❌ Similar to CodeChange |
+| Agent | Tools | Max Rounds | Purpose | Optimization |
+|-------|-------|------------|---------|--------------|
+| SecurityAgent | codebase tools | 5 | Security audit | ✅ HIGH - pre-fetch files |
+| CodeChangeAgent | codebase tools | 5 | Code change analysis | ✅ HIGH - pre-fetch files |
+| TechnicalDebtAgent | codebase tools | 5 | Detect tech debt | ✅ HIGH - same pattern |
+| PatternAgent | codebase tools | 5 | Identify patterns | ✅ HIGH - same pattern |
+| NarrativeAgent | codebase tools | 3 | ADRs, planning docs | ✅ HIGH - same pattern |
+| DependencyAgent | codebase tools | 3 | Dependency changes | ✅ HIGH - has early exit |
+| CodebaseExplorerAgent | codebase tools | 10 | Explore directories | ⚠️ LOW - genuine exploration |
 
 **Synthesis Agents (generate wiki content):**
-| Agent | Tools | Max Rounds | Purpose | Analyzed? |
-|-------|-------|------------|---------|-----------|
-| WriterAgent | codebase tools | 3 | Rewrite pages | ✅ Yes |
-| BootstrapAgent | codebase tools | 5 | Initial wiki structure | ❌ One-time use |
-| OverviewAgent | codebase tools | 5 | Create overview (2 calls) | ❌ Similar to Writer |
-| ProjectOverviewAgent | codebase tools | 5 | Project overview | ❌ Similar to Writer |
-| GettingStartedAgent | codebase tools | 5 | Getting started guide | ❌ Similar to Writer |
-| TestingGuideAgent | codebase tools | 5 | Testing documentation | ❌ Similar to Writer |
-| ExtensionGuideAgent | codebase tools | 5 | Extension guides | ❌ Similar to Writer |
+| Agent | Tools | Max Rounds | Purpose | Optimization |
+|-------|-------|------------|---------|--------------|
+| WriterAgent | codebase tools | 3 | Rewrite pages | ✅ MEDIUM - pre-fetch refs |
+| BootstrapAgent | codebase tools | 5 | Initial wiki structure | ✅ MEDIUM - pre-fetch docs |
+| OverviewAgent | codebase tools | 3 | Create category overview | ✅ HIGH - pages loaded |
+| ProjectOverviewAgent | codebase tools | 5 | Project overview | ✅ HIGH - pre-fetch docs |
+| GettingStartedAgent | codebase tools | 5 | Getting started guide | ✅ MEDIUM - pre-fetch some |
+| TestingGuideAgent | codebase tools | 5 | Testing documentation | ✅ MEDIUM - same pattern |
+| ExtensionGuideAgent | codebase tools | 5 | Extension guides | ✅ MEDIUM - same pattern |
 
 **Research/Grading Agents:**
-| Agent | Tools | Max Rounds | Purpose | Analyzed? |
-|-------|-------|------------|---------|-----------|
-| ResearchAgent | wiki tools | 5 | Answer questions | ✅ Yes |
-| GraderAgent | codebase tools | 5 | Grade answers | ✅ Yes |
-| SelfImprovementAgent | 22 analysis tools | 30 | Analyze trends | ✅ Yes |
-| Orchestrator | exploration tools | 3 | Prioritize work | ❌ Optional LLM mode |
+| Agent | Tools | Max Rounds | Purpose | Optimization |
+|-------|-------|------------|---------|--------------|
+| ResearchAgent | wiki tools | 5 | Answer questions | ✅ HIGH - pages in memory |
+| GraderAgent | codebase tools | 5 | Grade answers | ✅ HIGH - pre-fetch hints |
+| SelfImprovementAgent | 22 analysis tools | 30 | Analyze trends | ⚠️ LOW - genuine agentic |
+| Orchestrator | exploration tools | 5 | Prioritize work | ⚠️ LOW - has fallback |
 
 ### 1.2 Single-Call Patterns (use `complete`)
 
@@ -73,16 +90,18 @@ This audit identifies **8 distinct LLM usage patterns** in CodeWiki, of which **
 
 ### 1.3 Summary
 
-| Category | Total | Using Tools | Single Call | Analyzed |
-|----------|-------|-------------|-------------|----------|
-| Analysis Agents | 7 | 7 | 0 | 2 |
-| Synthesis Agents | 7 | 7 | 0 | 1 |
-| Meta Agents | 7 | 0 | 7 | 0 |
-| Consolidation | 4 | 0 | 4 | 0 |
-| Research/Other | 5 | 4 | 1 | 4 |
-| **Total** | **30** | **18** | **12** | **7** |
+| Category | Total | Using Tools | Can Optimize | Keep As-Is |
+|----------|-------|-------------|--------------|------------|
+| Analysis Agents | 7 | 7 | 6 (HIGH) | 1 (Explorer) |
+| Synthesis Agents | 7 | 7 | 5-7 (MEDIUM-HIGH) | 0-2 |
+| Meta Agents | 7 | 0 | N/A (already single-call) | 7 |
+| Consolidation | 4 | 0 | N/A (already single-call) | 4 |
+| Research/Other | 4 | 4 | 2 (HIGH) | 2 (Self-Imp, Orch) |
+| **Total** | **29** | **18** | **13-15** | **11-13** |
 
-**Key observation:** All 7 Meta Agents and 4 Consolidation Handlers already use single-call patterns. The optimization opportunity is primarily in the **18 tool-using agents**, of which the 7 Analysis Agents all share the same pattern (commit diff + codebase tools).
+**Key Finding:** Of the 18 tool-using agents:
+- **13-15 can be optimized** to single-call or pre-fetch patterns
+- **3-5 need tools** for legitimate exploration (CodebaseExplorer, SelfImprovement, Orchestrator)
 
 ---
 
@@ -673,6 +692,233 @@ For now, keep the current agentic approach because:
 3. The complexity of multi-call orchestration isn't justified
 
 **Future consideration:** If reliability becomes an issue, implement the phased approach as an alternative mode.
+
+---
+
+### 2.6 Remaining Analysis Agents (TechnicalDebt, Pattern, Narrative, Dependency)
+
+**Locations:**
+- `src/agents/analysis/technical-debt-agent.ts`
+- `src/agents/analysis/pattern-agent.ts`
+- `src/agents/analysis/narrative-agent.ts`
+- `src/agents/analysis/dependency-agent.ts`
+
+#### Pattern Summary
+
+All four agents follow the **exact same pattern** as SecurityAgent and CodeChangeAgent:
+
+```typescript
+// Same structure in all agents
+const diff = await getCommitDiff(context, commit.sha);
+const prompt = this.buildPrompt(commit, diff);
+const toolExecutor = createCodebaseToolExecutor(context);
+const completion = await context.llm.completeWithTools({
+  // ... same tools: read_file, search_files, list_directory
+  maxToolRounds: 3-5,
+});
+```
+
+#### Key Differences
+
+| Agent | Max Rounds | Max Tokens | Special Behavior |
+|-------|------------|------------|------------------|
+| TechnicalDebtAgent | 5 | 2500 | Detailed TODO/FIXME tracking |
+| PatternAgent | 5 | 4000 | Code snippet extraction |
+| NarrativeAgent | 3 | 2000 | ADR/planning doc detection |
+| DependencyAgent | 3 | 2000 | **Early exit if no deps changed** |
+
+#### Good Pattern: DependencyAgent Early Exit
+
+```typescript
+// DependencyAgent checks if commit touches dependency files BEFORE calling LLM
+const isDependencyRelated = this.hasDependencyChanges(commit.diffSummary.affectedFiles);
+if (!isDependencyRelated) {
+  return { result: ..., updates: [], costUsd: 0 };  // No LLM call!
+}
+```
+
+**Recommendation:** Apply this early-exit pattern to other agents where relevant.
+
+#### Optimization
+
+All four agents can benefit from the same optimization as SecurityAgent:
+- Pre-fetch files listed in `commit.diffSummary.affectedFiles`
+- Use the existing `fetchAffectedFileContents()` helper
+
+---
+
+### 2.7 CodebaseExplorerAgent
+
+**Location:** `src/agents/analysis/codebase-explorer-agent.ts`
+
+#### Purpose
+
+Documents undocumented parts of the codebase by exploring directories. Unlike commit-based agents, this explores code that hasn't changed recently.
+
+#### Data Flow Analysis
+
+| Data Source | Available Before LLM Call | Fetched Via Tools |
+|-------------|---------------------------|-------------------|
+| Target path | ✅ Yes | - |
+| Existing wiki pages | ✅ Yes | - |
+| Directory contents | ❌ No | `list_directory` |
+| File contents | ❌ No | `read_file` |
+| Related files | ❌ No | `search_files` |
+
+#### Why Tools Are Necessary Here
+
+The agent's purpose IS exploration. The system prompt says:
+```
+You MUST use tools before generating any documentation.
+NEVER output SUMMARY, FINDINGS, or WIKI_PAGES without first making these tool calls.
+```
+
+This is **legitimate agentic work** because:
+1. The agent doesn't know what files exist in the target directory
+2. Each discovery determines what to read next
+3. Pre-fetching would require knowing the entire directory structure
+
+#### Optimization Potential: LOW
+
+Keep as-is. The exploration is genuine.
+
+#### Good Pattern: Path Validation
+
+```typescript
+// Extract verified paths from tool calls to prevent hallucination
+const verifiedPaths = extractVerifiedPaths(completion.toolCalls);
+const validatedFindings = validateFindingPaths(analysis.findings, verifiedPaths);
+```
+
+This validates that paths mentioned in findings were actually accessed via tools.
+
+---
+
+### 2.8 Synthesis Agents (Bootstrap, Overview, ProjectOverview, GettingStarted)
+
+#### 2.8.1 BootstrapAgent
+
+**Location:** `src/agents/synthesis/bootstrap-agent.ts`
+
+**Purpose:** Creates foundation pages for empty wikis by reading README.md, PLAN.md, package.json.
+
+**Data Flow:**
+- Reads predictable files: README.md, PLAN.md, package.json
+- Lists src/ directory for structure
+
+**Optimization Potential: MEDIUM**
+
+Could pre-fetch the standard bootstrap files:
+```typescript
+const bootstrapFiles = ['README.md', 'PLAN.md', 'package.json', 'CLAUDE.md'];
+const preloaded = await Promise.all(
+  bootstrapFiles.map(f => readFile(f).catch(() => null))
+);
+```
+
+But directory listing is still needed, so tools aren't entirely eliminable.
+
+#### 2.8.2 OverviewAgent
+
+**Location:** `src/agents/synthesis/overview-agent.ts`
+
+**Purpose:** Creates category overview pages by synthesizing wiki pages in that category.
+
+**Data Flow:**
+| Data Source | Available Before LLM Call | Fetched Via Tools |
+|-------------|---------------------------|-------------------|
+| All wiki pages | ✅ Yes (loaded, summaries in prompt) | - |
+| Source code | ❌ No | Optional verification |
+
+**Optimization Potential: HIGH**
+
+The wiki pages are already loaded! Tools are only for optional verification.
+
+```typescript
+// Current: Loads pages, provides summaries, allows tool verification
+const categoryPages = pages.filter(p => p.path.startsWith(category + '/'));
+// Tool use is OPTIONAL - for verifying technical claims
+```
+
+**Recommendation:** Make this a single call. Include more page content in the prompt instead of tools.
+
+#### 2.8.3 ProjectOverviewAgent
+
+**Location:** `src/agents/synthesis/project-overview-agent.ts`
+
+**Purpose:** Creates project-level overview by reading README.md, package.json, etc.
+
+**Data Flow:**
+- Wiki pages loaded (provides context)
+- Needs README.md, PLAN.md, package.json from codebase
+
+**Optimization Potential: HIGH**
+
+Standard documentation files are predictable:
+```typescript
+const docFiles = ['README.md', 'PLAN.md', 'package.json', 'CLAUDE.md'];
+// Pre-fetch all of these, then single LLM call
+```
+
+#### 2.8.4 GettingStartedAgent
+
+**Location:** `src/agents/synthesis/getting-started-agent.ts`
+
+**Purpose:** Creates practical getting started guide.
+
+**Data Flow:**
+- Needs package.json (commands, deps)
+- Needs src/ directory listing
+- Needs README.md
+- Needs config files (.env.example, etc.)
+
+**Optimization Potential: MEDIUM**
+
+Some files are predictable, but directory exploration adds value:
+- Pre-fetch: package.json, README.md
+- Still need: directory listing, config file discovery
+
+---
+
+### 2.9 Orchestrator (LLM Mode)
+
+**Location:** `src/agents/orchestrator/orchestrator.ts`
+
+#### Purpose
+
+Makes intelligent work scheduling decisions. Can explore codebase before deciding what work to schedule.
+
+#### Data Flow
+
+| Data Source | Available Before LLM Call | Fetched Via Tools |
+|-------------|---------------------------|-------------------|
+| Wiki state | ✅ Yes (via ContextGatherer) | - |
+| Coverage tree | ✅ Yes | - |
+| Unprocessed commits | ✅ Yes | - |
+| Codebase structure | ❌ Optional | `list_directory`, `read_file` |
+
+#### LLM Usage Pattern
+
+```typescript
+// Optional LLM mode with deterministic fallback
+if (this.config.useLLM && this.llm) {
+  try {
+    return await this.generateWithLLM(repoId, wikiId, maxItems);
+  } catch (error) {
+    console.warn('LLM orchestration failed, falling back to deterministic:', error);
+  }
+}
+return await this.generateDeterministic(repoId, wikiId, maxItems);
+```
+
+#### Optimization Potential: LOW
+
+This is legitimate agentic work:
+- The LLM needs to understand the current wiki state
+- Tool use helps it make better scheduling decisions
+- Falls back to deterministic if LLM fails
+
+**Keep as-is.** The hybrid approach (LLM + fallback) is already robust.
 
 ---
 
