@@ -116,6 +116,65 @@ CONFIDENCE: 0.85`);
         assert.ok(result.costUsd > 0, 'Should incur LLM cost');
       });
 
+      it('generates links without .md extension', async () => {
+        const repoId = 'overview-no-md-ext';
+
+        await createTestRepo(ctx, repoId, {
+          'README.md': '# Test Project',
+        });
+
+        const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+        // Create category with 3+ pages
+        await createWikiPages(wiki.id, [
+          { path: 'agents/code-change', title: 'Code Change Agent', content: '# Code Change\n\nAnalyzes code changes.' },
+          { path: 'agents/link', title: 'Link Agent', content: '# Link Agent\n\nCreates links.' },
+          { path: 'agents/quality', title: 'Quality Agent', content: '# Quality Agent\n\nChecks quality.' },
+        ]);
+
+        // Mock LLM response
+        ctx.llm.setDefaultResponse(`TITLE:
+Agents Overview
+
+INTRODUCTION:
+Overview of the agent system.
+
+KEY_CONCEPTS:
+- Agents: Automated processors
+
+PAGES:
+- agents/code-change: Analyzes code
+- agents/link: Creates links
+- agents/quality: Checks quality
+
+READING_ORDER:
+1. Code Change Agent
+2. Link Agent
+
+CONFIDENCE: 0.85`);
+
+        const agent = new OverviewAgent();
+        const agentCtx = await ctx.agentContext(repoId);
+
+        const result = await agent.runOnWiki(agentCtx);
+
+        assert.strictEqual(result.updates.length, 1, 'Should create one overview page');
+
+        const update = result.updates[0]!;
+
+        // Critical assertion: Links should NOT have .md extension
+        assert.ok(!update.content.includes('.md)'), 'Links should not have .md extension');
+        assert.ok(!update.content.includes('.md]'), 'Links should not have .md in link text');
+
+        // Links should be in correct format: [Title](path) without .md
+        assert.ok(
+          update.content.includes('](agents/code-change)') ||
+          update.content.includes('](agents/link)') ||
+          update.content.includes('](agents/quality)'),
+          'Links should use path without .md extension'
+        );
+      });
+
       it('skips categories with too few pages', async () => {
         const repoId = 'overview-few-pages';
 

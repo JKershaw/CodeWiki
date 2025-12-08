@@ -363,11 +363,32 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   const recentRuns = runsResult.data || [];
 
   // Check for pages without links (need link agent)
+  // Link agent scheduling is more aggressive than other meta agents because
+  // cross-references are critical for wiki navigation
   if (workItems.length < remainingSlots) {
     const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0);
-    if (pagesWithoutLinks.length > 0) {
+    const totalPages = wikiPages.length;
+    const unlinkedRatio = totalPages > 0 ? pagesWithoutLinks.length / totalPages : 0;
+
+    // Schedule link agent if:
+    // 1. More than 30% of pages have no links, OR
+    // 2. More than 5 pages have no links (absolute threshold for small wikis)
+    const needsLinking = unlinkedRatio > 0.3 || pagesWithoutLinks.length > 5;
+
+    if (needsLinking) {
       const linkKey = 'link:wiki';
-      if (!ctx.existingWorkKeys.has(linkKey)) {
+
+      // Check for recent link runs (cooldown)
+      const recentLinkRuns = recentRuns
+        .filter(r => r.agentType === 'link' && r.status === 'completed')
+        .slice(0, 1);
+      const hasRecentRun = recentLinkRuns.length > 0;
+
+      // Override cooldown if unlinked ratio is very high (> 50%)
+      // This ensures link agent runs frequently when wiki is poorly linked
+      const shouldOverrideCooldown = unlinkedRatio > 0.5;
+
+      if (!ctx.existingWorkKeys.has(linkKey) && (!hasRecentRun || shouldOverrideCooldown)) {
         ctx.existingWorkKeys.add(linkKey);
         workItems.push(
           createWorkItem({

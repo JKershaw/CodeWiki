@@ -371,9 +371,41 @@ function pathToTitle(path: string): string {
 /**
  * Extract a title from a commit message.
  * Takes the first line and cleans it up.
+ * Handles merge commits, conventional commits, and regular messages.
  */
-function extractTitleFromMessage(message: string): string {
+export function extractTitleFromMessage(message: string): string {
   const firstLine = message.split('\n')[0] ?? message;
+
+  // Handle "Merge pull request #X from user/branch-name" format
+  if (firstLine.startsWith('Merge pull request')) {
+    const branchMatch = firstLine.match(/from\s+\S+\/(.+)$/);
+    if (branchMatch) {
+      const branchName = branchMatch[1]!;
+      // Remove common prefixes like "claude/", "feature/", "fix/"
+      const cleanedBranch = branchName.replace(/^(claude|feature|fix|bugfix|hotfix|release)[/-]/i, '');
+      // Remove trailing session IDs (like -01abc123xyz)
+      const withoutSessionId = cleanedBranch.replace(/-[0-9a-zA-Z]{20,}$/, '');
+      // Convert branch-name-style to Title Case
+      return withoutSessionId
+        .split(/[-_]/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return 'Merged Changes';
+  }
+
+  // Handle "Merge branch 'x' into 'y'" format
+  if (firstLine.startsWith('Merge branch')) {
+    const branchMatch = firstLine.match(/Merge branch '([^']+)'/);
+    if (branchMatch) {
+      return branchMatch[1]!
+        .split(/[-_]/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return 'Merged Changes';
+  }
+
   // Remove common prefixes like "feat:", "fix:", etc.
   const cleaned = firstLine.replace(/^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert)(\([^)]+\))?:\s*/i, '');
   // Capitalize first letter

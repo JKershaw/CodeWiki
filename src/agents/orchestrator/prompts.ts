@@ -35,7 +35,7 @@ A useful wiki explains HOW code works NOW with examples, not just WHAT changed i
 **META AGENTS** - Fix issues in existing content (no target):
 - wiki-editor: Processes pending edit requests. Run FIRST if any pending.
 - writer: Transforms shallow/commit-style pages into substantive articles. HIGH IMPACT.
-- link: Adds cross-references between pages.
+- link: Adds cross-references between pages. CRITICAL for navigation - run when >30% pages lack links.
 - quality: Reviews content quality, flags shallow pages.
 - consistency: Checks for contradictions. Run when 10+ pages.
 - structure: Analyzes wiki organization.
@@ -92,6 +92,7 @@ EXAMPLES:
 codebase-explorer,src/agents/orchestrator,Low coverage critical directory (12 files)
 project-overview,,No architecture overview exists yet
 writer,,4 pages have commit-style content needing rewrite
+link,,45% of pages have no cross-references
 code-change,abc123def456789,Recent API change needs documentation`;
 
 /**
@@ -131,7 +132,7 @@ Consider:
 - Has getting started: ${ctx.hasGettingStarted ? 'YES' : 'NO - run getting-started agent!'}
 - Has testing guide: ${ctx.hasTestingGuide ? 'YES' : (pageCount >= 15 ? 'NO - run testing-guide agent!' : 'NO (need 15+ pages)')}
 - Has extension guide: ${ctx.hasExtensionGuide ? 'YES' : (pageCount >= 15 ? 'NO - run extension-guide agent!' : 'NO (need 15+ pages)')}
-- Pages without links: ${ctx.pagesWithoutLinks} (link agent improves discoverability)
+- Pages without links: ${ctx.pagesWithoutLinks}${ctx.pagesWithoutLinks > 0 && ctx.wikiPages > 0 && (ctx.pagesWithoutLinks / ctx.wikiPages) > 0.3 ? ' - CRITICAL: >30% pages unlinked, run link agent!' : ' (link agent improves discoverability)'}
 ${coverageGaps.length > 0 ? `
 **COVERAGE GAPS - agents with 0% coverage:** ${coverageGaps.join(', ')}
 Consider including work for these agents to ensure diverse analysis.
