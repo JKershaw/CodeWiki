@@ -588,6 +588,44 @@ For each agent optimization:
 - Quality maintained or improved in all cases
 - WriterAgent showed significant improvement with pre-fetch approach
 
+### 2024-12-08: Additional Analysis Agents Completed
+
+**Remaining Analysis Agents Optimized:**
+
+| Agent | Optimization | Notes |
+|-------|--------------|-------|
+| TechnicalDebtAgent | Pre-fetch affected files | Falls back to tools if >60KB |
+| PatternAgent | Pre-fetch affected files | Falls back to tools if needed |
+| NarrativeAgent | Pre-fetch affected files | Falls back to tools if needed |
+| DependencyAgent | Pre-fetch dependency files | Retains early exit for non-dependency commits |
+
+**Implementation Details:**
+
+1. ✅ **TechnicalDebtAgent** (`src/agents/analysis/technical-debt-agent.ts`)
+   - Pre-fetch affected file contents for SOLID analysis, code smells, TODO tracking
+   - Single LLM call with file context
+   - Falls back to tools if context exceeds 60KB
+
+2. ✅ **PatternAgent** (`src/agents/analysis/pattern-agent.ts`)
+   - Pre-fetch affected files for pattern recognition
+   - Single LLM call instead of 5 tool rounds
+   - Falls back to tools for complex codebases
+
+3. ✅ **NarrativeAgent** (`src/agents/analysis/narrative-agent.ts`)
+   - Pre-fetch affected files for ADR/planning document analysis
+   - Single LLM call instead of 3 tool rounds
+   - Falls back to tools if needed
+
+4. ✅ **DependencyAgent** (`src/agents/analysis/dependency-agent.ts`)
+   - Pre-fetch package.json, lock files (higher limits: 30KB/80KB)
+   - Single LLM call for dependency analysis
+   - Retains early exit for non-dependency commits
+
+**Summary:**
+- **10 agents** now optimized with pre-fetch pattern
+- All analysis agents that use `completeWithTools` have been converted
+- Remaining agents (CodebaseExplorer, SelfImprovement, Orchestrator) require dynamic exploration
+
 ---
 
 ## Next Steps
@@ -600,5 +638,6 @@ For each agent optimization:
 6. ~~Continue with OverviewAgent optimization~~ ✅
 7. ~~Tier 2 agents (SecurityAgent, CodeChangeAgent, WriterAgent)~~ ✅
 8. ~~Fix writer-agent.test.ts (broken API)~~ ✅
-9. **Next**: Consider additional agents for optimization
+9. ~~Additional analysis agents (TechnicalDebt, Pattern, Narrative, Dependency)~~ ✅
 10. Monitor production quality metrics
+11. Consider synthesis agents that could benefit (BootstrapAgent, GettingStartedAgent)
