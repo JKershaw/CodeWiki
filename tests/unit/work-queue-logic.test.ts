@@ -11,7 +11,7 @@ import {
   ANALYSIS_AGENTS,
   META_AGENTS,
 } from '../../src/domain/work-queue-logic.js';
-import { createWorkItem, Priority } from '../../src/domain/work-item.js';
+import { createWorkItem } from '../../src/domain/work-item.js';
 import type { WorkItem } from '../../src/domain/work-item.js';
 
 function createCommitWorkItem(
@@ -23,7 +23,6 @@ function createCommitWorkItem(
     id: uuid(),
     repoId,
     agentType,
-    priority: Priority.RECENT_COMMIT,
     target: { type: 'commit', commitId },
   });
 }
@@ -33,7 +32,6 @@ function createWikiWorkItem(agentType: string, repoId = 'test-repo'): WorkItem {
     id: uuid(),
     repoId,
     agentType,
-    priority: Priority.META_AGENT,
     target: { type: 'wiki' },
   });
 }
@@ -102,17 +100,16 @@ describe('selectItemsForBatch', () => {
       assert.ok(result.itemsToClaim.some(i => i.agentType === 'structure'));
     });
 
-    it('respects priority ordering with mixed agent types', () => {
-      // Create items in priority order (higher priority first in array)
-      // Note: createWikiWorkItem uses META priority, createCommitWorkItem uses RECENT_COMMIT
+    it('preserves input order (FIFO)', () => {
+      // Items are processed in the order they appear (FIFO)
       const items = [
-        createCommitWorkItem('code-change', 'commit-1'), // Higher priority
-        createWikiWorkItem('link'),                       // Lower priority
+        createCommitWorkItem('code-change', 'commit-1'),
+        createWikiWorkItem('link'),
       ];
 
       const result = selectItemsForBatch(items, 10, new Set());
 
-      // Both claimed, order preserved from input
+      // Both claimed, order preserved from input (FIFO)
       assert.strictEqual(result.itemsToClaim.length, 2);
       assert.strictEqual(result.itemsToClaim[0]!.agentType, 'code-change');
       assert.strictEqual(result.itemsToClaim[1]!.agentType, 'link');

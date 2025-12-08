@@ -11,7 +11,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
-import { createWorkItem, Priority, getPriorityForPhase } from '../../domain/work-item.js';
+import { createWorkItem } from '../../domain/work-item.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
 import type { GitService } from '../../services/git/git-service.js';
@@ -188,7 +188,6 @@ export class Orchestrator {
       id: uuid(),
       repoId,
       agentType: 'bootstrap',
-      priority: Priority.USER_REQUEST,
     });
   }
 
@@ -296,7 +295,6 @@ export class Orchestrator {
         id: uuid(),
         repoId,
         agentType: item.agentType as AgentType,
-        priority: getPriorityForPhase(item.agentType, context.iterationPhase),
         ...(item.targetCommitId ? { targetCommitId: item.targetCommitId } : {}),
         ...(item.targetPath ? { targetPath: item.targetPath } : {}),
         orchestratorRunId: runId,

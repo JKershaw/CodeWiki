@@ -19,9 +19,10 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
   }
 
   async findPending(repoId: string, limit: number): Promise<WorkItem[]> {
+    // Sort by creation time (oldest first) - FIFO queue
     const docs = await this.collection
       .find({ repoId, status: 'pending' })
-      .sort({ priority: -1, createdAt: 1 })
+      .sort({ createdAt: 1 })
       .limit(limit)
       .toArray();
 
@@ -93,11 +94,11 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
   }
 
   async claimNext(repoId: string): Promise<WorkItem | null> {
-    // Atomically find and update the highest priority pending item
+    // Atomically find and update the oldest pending item (FIFO)
     const result = await this.collection.findOneAndUpdate(
       { repoId, status: 'pending' },
       { $set: { status: 'claimed', claimedAt: new Date() } },
-      { sort: { priority: -1, createdAt: 1 }, returnDocument: 'after' }
+      { sort: { createdAt: 1 }, returnDocument: 'after' }
     );
 
     return result ? toEntity<WorkItem>(result) : null;

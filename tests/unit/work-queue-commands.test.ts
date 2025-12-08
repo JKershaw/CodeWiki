@@ -16,7 +16,7 @@ import {
   createFailWorkItemCommand,
   handleFailWorkItem,
 } from '../../src/commands/work-queue.js';
-import { createWorkItem, Priority } from '../../src/domain/work-item.js';
+import { createWorkItem } from '../../src/domain/work-item.js';
 import type { Repositories } from '../../src/repositories/index.js';
 import type { WorkItem } from '../../src/domain/work-item.js';
 
@@ -78,7 +78,6 @@ describe('Work Queue Commands', () => {
         id: uuid(),
         repoId,
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
       });
 
       const repos = createMockRepos();
@@ -114,8 +113,8 @@ describe('Work Queue Commands', () => {
     it('saves multiple work items', async () => {
       const repoId = 'test-repo';
       const workItems = [
-        createWorkItem({ id: uuid(), repoId, agentType: 'code-change', priority: Priority.RECENT_COMMIT }),
-        createWorkItem({ id: uuid(), repoId, agentType: 'narrative', priority: Priority.RECENT_COMMIT }),
+        createWorkItem({ id: uuid(), repoId, agentType: 'code-change' }),
+        createWorkItem({ id: uuid(), repoId, agentType: 'narrative' }),
       ];
 
       const repos = createMockRepos();
@@ -155,7 +154,6 @@ describe('Work Queue Commands', () => {
         id: uuid(),
         repoId: 'test-repo',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
       });
       workItem.status = 'claimed';
 
@@ -197,7 +195,6 @@ describe('Work Queue Commands', () => {
         id: uuid(),
         repoId: 'test-repo',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
       });
       workItem.status = 'claimed';
 
