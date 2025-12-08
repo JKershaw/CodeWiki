@@ -4,6 +4,7 @@ import type { LLMService, ToolUseResult } from '../services/llm/llm-service.js';
 import type { Repositories } from '../repositories/index.js';
 import type { GitService } from '../services/git/git-service.js';
 import type { RepositoryService } from '../services/repository/repository-service.js';
+import type { UnifiedRepoAccess } from '../services/repository/unified-repo-access.js';
 import type { Repo } from '../domain/repo.js';
 import type { WorkTarget, CommitTarget, PathTarget, WikiTarget } from '../domain/work-target.js';
 import { isCommitTarget, isPathTarget, isWikiTarget } from '../domain/work-target.js';
@@ -22,21 +23,29 @@ export interface AgentContext {
   wikiId: string;
   /** All repositories for data access */
   repos: Repositories;
-  /**
-   * Git service for local repository access.
-   * @deprecated Use repoService for new code - it works with both GitHub and local repos.
-   */
-  git: GitService;
   /** LLM service for AI completions */
   llm: LLMService;
+
+  /**
+   * Unified repository access - the preferred way to access repository files and commits.
+   * Works with both local filesystem and GitHub API repositories.
+   * Use this instead of git, repoService, or repo.
+   */
+  repoAccess?: UnifiedRepoAccess;
+
+  /**
+   * Git service for local repository access.
+   * @deprecated Use repoAccess instead - it works with both GitHub and local repos.
+   */
+  git: GitService;
   /**
    * Unified repository service for file/commit access.
-   * Works with both GitHub API and local filesystem.
-   * Use this instead of git for new code.
+   * @deprecated Use repoAccess instead - it provides the same functionality with a simpler API.
    */
   repoService?: RepositoryService;
   /**
    * The repository entity with metadata (owner, repoName, isGitHubRepo).
+   * @deprecated Use repoAccess.isLocal() and repoAccess.getLocalPath() instead.
    */
   repo?: Repo;
 }

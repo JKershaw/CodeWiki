@@ -18,9 +18,37 @@ import type { AgentContext } from '../../src/agents/base-agent.js';
 import type { GitService } from '../../src/services/git/git-service.js';
 import type { RepositoryService } from '../../src/services/repository/repository-service.js';
 import type { Repo } from '../../src/domain/repo.js';
+import type { UnifiedRepoAccess } from '../../src/services/repository/unified-repo-access.js';
 
 describe('agent-helpers', () => {
   describe('getCommitDiff', () => {
+    it('uses repoAccess when available', async () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        getCommitDiff: mock.fn(async () => 'diff from repoAccess'),
+        isLocal: () => false,
+        getLocalPath: () => undefined,
+      };
+
+      const mockGit: Partial<GitService> = {
+        getCommitDiff: mock.fn(async () => 'diff from git'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
+      };
+
+      const diff = await getCommitDiff(context, 'abc123');
+
+      assert.strictEqual(diff, 'diff from repoAccess');
+      assert.strictEqual((mockRepoAccess.getCommitDiff as any).mock.calls.length, 1);
+      assert.strictEqual((mockGit.getCommitDiff as any).mock.calls.length, 0);
+    });
+
     it('uses repoService when available', async () => {
       const mockRepoService: Partial<RepositoryService> = {
         getCommitDiff: mock.fn(async () => 'diff from repoService'),
@@ -99,6 +127,26 @@ describe('agent-helpers', () => {
   });
 
   describe('isLocalRepo', () => {
+    it('uses repoAccess.isLocal when available', () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => true,
+        getLocalPath: () => '/path/to/repo',
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: {} as any,
+        llm: {} as any,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
+        // repo says GitHub, but repoAccess says local - repoAccess wins
+        repo: { isGitHubRepo: true } as Repo,
+      };
+
+      assert.strictEqual(isLocalRepo(context), true);
+    });
+
     it('returns true when repo is not a GitHub repo', () => {
       const context: AgentContext = {
         repoId: 'repo-1',
@@ -157,6 +205,33 @@ describe('agent-helpers', () => {
   });
 
   describe('getLocalRepoPath', () => {
+    it('uses repoAccess.getLocalPath when available', () => {
+      const mockRepoAccess: Partial<UnifiedRepoAccess> = {
+        isLocal: () => true,
+        getLocalPath: () => '/unified/path/to/repo',
+      };
+
+      const mockGit: Partial<GitService> = {
+        getRepoPath: mock.fn(() => '/git/path/to/repo'),
+      };
+
+      const context: AgentContext = {
+        repoId: 'repo-1',
+        wikiId: 'wiki-1',
+        repos: {} as any,
+        git: mockGit as GitService,
+        llm: {} as any,
+        repoAccess: mockRepoAccess as UnifiedRepoAccess,
+        repo: { isGitHubRepo: false } as Repo,
+      };
+
+      const path = getLocalRepoPath(context);
+
+      // Should use repoAccess, not git service
+      assert.strictEqual(path, '/unified/path/to/repo');
+      assert.strictEqual((mockGit.getRepoPath as any).mock.calls.length, 0);
+    });
+
     it('returns path from git service for local repos', () => {
       const mockGit: Partial<GitService> = {
         getRepoPath: mock.fn(() => '/path/to/repo'),

@@ -15,6 +15,7 @@ import type { BenchmarkRun } from '../../domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../../domain/quality-benchmark.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import type { RepositoryService } from '../repository/repository-service.js';
+import type { UnifiedRepoAccess } from '../repository/unified-repo-access.js';
 import type { Repo } from '../../domain/repo.js';
 
 /**
@@ -47,11 +48,24 @@ export interface AnalysisToolContext {
   repoId: string;
   /** Wiki ID being analyzed */
   wikiId: string;
-  /** Path to the source code repository (optional - enables filesystem access) */
+
+  /**
+   * Unified repository access - the preferred way to access repository files.
+   * Use this instead of repoPath, repoService, or repo.
+   */
+  repoAccess?: UnifiedRepoAccess;
+
+  /** Path to the source code repository (optional - enables filesystem access)
+   * @deprecated Use repoAccess instead
+   */
   repoPath?: string;
-  /** Repository service for GitHub API access (optional - fallback when repoPath not available) */
+  /** Repository service for GitHub API access (optional - fallback when repoPath not available)
+   * @deprecated Use repoAccess instead
+   */
   repoService?: RepositoryService;
-  /** Repository entity (required when using repoService) */
+  /** Repository entity (required when using repoService)
+   * @deprecated Use repoAccess instead
+   */
   repo?: Repo;
   /** Benchmark runs included in analysis */
   benchmarkRuns: BenchmarkRun[];

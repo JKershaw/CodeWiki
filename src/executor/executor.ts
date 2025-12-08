@@ -9,6 +9,10 @@ import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
 import type { RepositoryServiceFactory } from '../services/repository/repository-service.js';
+import {
+  createUnifiedRepoAccessFactory,
+  type UnifiedRepoAccess,
+} from '../services/repository/unified-repo-access.js';
 
 // Import CQRS commands
 import {
@@ -638,6 +642,22 @@ export class Executor {
       }
     }
 
+    // Create unified repo access - the new simplified interface
+    let repoAccess: UnifiedRepoAccess | undefined;
+    if (this.repoServiceFactory) {
+      try {
+        const repoAccessFactory = createUnifiedRepoAccessFactory({
+          repos: this.repos,
+          repoServiceFactory: this.repoServiceFactory,
+          gitService: this.git,
+        });
+        repoAccess = await repoAccessFactory.create(repoId);
+      } catch (err) {
+        // Log but don't fail - agents can fall back to legacy access methods
+        console.warn(`Failed to create unified repo access: ${err}`);
+      }
+    }
+
     // Build agent context, only including optional properties if they have values
     const context: AgentContext = {
       repoId,
@@ -645,6 +665,7 @@ export class Executor {
       repos: this.repos,
       git: this.git,
       llm: this.llm,
+      ...(repoAccess && { repoAccess }),
       ...(repoService && { repoService }),
       ...(repo && { repo }),
     };

@@ -4,6 +4,9 @@
  * These helpers provide a unified interface that works with both:
  * - Local repositories (via GitService)
  * - GitHub repositories (via RepositoryService)
+ *
+ * The preferred approach is to use repoAccess (UnifiedRepoAccess) when available.
+ * Legacy code paths using repoService/git are maintained for backwards compatibility.
  */
 
 import { minimatch } from 'minimatch';
@@ -14,11 +17,18 @@ import { codebaseTools } from '../services/llm/codebase-tools.js';
 /**
  * Get the diff for a commit, using the best available service.
  *
- * Prefers RepositoryService (works with both GitHub and local repos)
- * but falls back to GitService for backwards compatibility.
+ * Priority:
+ * 1. UnifiedRepoAccess (new unified interface)
+ * 2. RepositoryService (works with both GitHub and local repos)
+ * 3. GitService (backwards compatibility)
  */
 export async function getCommitDiff(context: AgentContext, sha: string): Promise<string> {
-  // Prefer repoService if available (works with both GitHub and local repos)
+  // Prefer repoAccess (new unified interface)
+  if (context.repoAccess) {
+    return context.repoAccess.getCommitDiff(sha);
+  }
+
+  // Fall back to repoService if available (works with both GitHub and local repos)
   if (context.repoService && context.repo) {
     return context.repoService.getCommitDiff(context.repo, sha);
   }
@@ -34,7 +44,12 @@ export async function getCommitDiff(context: AgentContext, sha: string): Promise
  * Returns false if repo is undefined or is a GitHub repo.
  */
 export function isLocalRepo(context: AgentContext): boolean {
-  // Must have a repo object and it must explicitly be marked as not a GitHub repo
+  // Prefer repoAccess (new unified interface)
+  if (context.repoAccess) {
+    return context.repoAccess.isLocal();
+  }
+
+  // Fall back to checking repo entity
   return context.repo?.isGitHubRepo === false;
 }
 
@@ -44,6 +59,11 @@ export function isLocalRepo(context: AgentContext): boolean {
  * Returns undefined for GitHub repositories or when repo info is not available.
  */
 export function getLocalRepoPath(context: AgentContext): string | undefined {
+  // Prefer repoAccess (new unified interface)
+  if (context.repoAccess) {
+    return context.repoAccess.getLocalPath();
+  }
+
   // Must have repo info and it must be a local repo (not GitHub)
   if (!context.repo || context.repo.isGitHubRepo) {
     return undefined;
@@ -60,8 +80,11 @@ export function getLocalRepoPath(context: AgentContext): string | undefined {
 /**
  * Create a tool executor for codebase exploration.
  *
- * For local repos: Uses filesystem-based tools
- * For GitHub repos: Creates API-based tools using RepositoryService
+ * Priority:
+ * 1. Local repo with repoAccess or repoPath - use filesystem-based tools
+ * 2. GitHub repo with repoAccess - use unified API tools
+ * 3. GitHub repo with repoService - use legacy API tools
+ * 4. No tools available - return null
  */
 export function createCodebaseToolExecutor(context: AgentContext): {
   tools: ToolDefinition[];
@@ -89,13 +112,117 @@ export function createCodebaseToolExecutor(context: AgentContext): {
     };
   }
 
-  // GitHub repo - create API-based tools
+  // GitHub repo with repoAccess - use unified API tools
+  if (context.repoAccess && !context.repoAccess.isLocal()) {
+    return createUnifiedApiTools(context.repoAccess);
+  }
+
+  // GitHub repo with legacy repoService - use legacy API tools
   if (context.repoService && context.repo) {
     return createApiCodebaseTools(context);
   }
 
   // No tools available
   return null;
+}
+
+/**
+ * Create API-based codebase tools using UnifiedRepoAccess.
+ * This is the new preferred approach for GitHub repositories.
+ */
+function createUnifiedApiTools(repoAccess: NonNullable<AgentContext['repoAccess']>): {
+  tools: ToolDefinition[];
+  executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
+} {
+  const apiTools: ToolDefinition[] = [
+    {
+      name: 'read_file',
+      description: 'Read the contents of a file from the repository.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Relative path from repository root',
+          },
+        },
+        required: ['path'],
+      },
+      execute: async (input) => {
+        const path = input['path'] as string;
+        try {
+          return await repoAccess.getFileContent(path);
+        } catch (error) {
+          return `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
+        }
+      },
+    },
+    {
+      name: 'list_directory',
+      description: 'List contents of a directory.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Directory path relative to repo root',
+          },
+        },
+        required: ['path'],
+      },
+      execute: async (input) => {
+        const path = input['path'] as string;
+        try {
+          const entries = await repoAccess.listDirectory(path);
+          return entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
+        } catch (error) {
+          return `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
+        }
+      },
+    },
+    {
+      name: 'search_files',
+      description: 'Search for files matching a pattern. Returns file paths.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pattern: {
+            type: 'string',
+            description: 'Glob pattern (e.g., "**/*.ts")',
+          },
+        },
+        required: ['pattern'],
+      },
+      execute: async (input) => {
+        const pattern = input['pattern'] as string;
+        try {
+          const allFiles = await repoAccess.getFileTree();
+          const matches = filterByGlob(allFiles, pattern);
+          if (matches.length === 0) {
+            return `No files found matching "${pattern}"`;
+          }
+          return matches.join('\n');
+        } catch (error) {
+          return `Error searching for "${pattern}": ${error instanceof Error ? error.message : String(error)}`;
+        }
+      },
+    },
+  ];
+
+  return {
+    tools: apiTools,
+    executeTools: async (calls) => {
+      const results = await Promise.all(calls.map(async (call) => {
+        const tool = apiTools.find(t => t.name === call.name);
+        if (!tool) {
+          return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
+        }
+        const result = await tool.execute(call.input, { repoPath: '', maxFileSize: 100000 });
+        return { id: call.id, result };
+      }));
+      return results;
+    },
+  };
 }
 
 /**
@@ -258,8 +385,11 @@ export async function fetchAffectedFileContents(
     try {
       let content: string;
 
-      if (context.repoService && context.repo) {
-        // Use repository service (works for both GitHub and local)
+      if (context.repoAccess) {
+        // Use unified repo access (works for both GitHub and local)
+        content = await context.repoAccess.getFileContent(filePath);
+      } else if (context.repoService && context.repo) {
+        // Fall back to legacy repository service
         content = await context.repoService.getFileContent(context.repo, filePath);
       } else if (isLocalRepo(context)) {
         // Fall back to local file reading via git service (only for local repos)
@@ -269,7 +399,7 @@ export async function fetchAffectedFileContents(
         const fullPath = path.join(repoPath, filePath);
         content = await fs.readFile(fullPath, 'utf-8');
       } else {
-        // GitHub repo without repoService - cannot read file
+        // GitHub repo without repoAccess or repoService - cannot read file
         results.push({
           path: filePath,
           content: null,

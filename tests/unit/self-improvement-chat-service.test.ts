@@ -348,6 +348,9 @@ describe('SelfImprovementChatService', () => {
         getRepoPath: (repoId: string) => join(tempDir, 'repos', repoId),
       };
 
+      // With UnifiedRepoAccessFactory, the factory does create a RepositoryService
+      // internally, but for local repos it creates a LocalRepoAccess that uses
+      // the gitService for filesystem operations.
       let repoServiceCreated = false;
       const mockRepoServiceFactory: RepositoryServiceFactory = {
         getService: () => {
@@ -370,9 +373,11 @@ describe('SelfImprovementChatService', () => {
 
       await service.chat('session-1', 'Read the source code');
 
-      // For local repos with existing paths, repoServiceFactory should NOT be used
-      // because the local filesystem takes precedence
-      assert.strictEqual(repoServiceCreated, false);
+      // With the new UnifiedRepoAccessFactory, the service is created for all repos
+      // (including local ones), but LocalRepoAccess uses the gitService internally
+      // This is the expected behavior as UnifiedRepoAccessFactory encapsulates the
+      // distinction between local and GitHub repos behind a unified interface
+      assert.strictEqual(repoServiceCreated, true);
     });
 
     it('falls back to repoServiceFactory when local path does not exist', async () => {

@@ -10,6 +10,8 @@ import * as git from 'isomorphic-git';
 import * as fs from 'fs';
 import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import { FileSystemGitService } from '../../src/services/git/git-service.js';
+import { createRepositoryServiceFactory } from '../../src/services/repository/repository-service.js';
+import { createUnifiedRepoAccessFactory } from '../../src/services/repository/unified-repo-access.js';
 import { MockLLMService } from './mock-llm.js';
 import { clearIgnoreCache } from '../../src/services/cwignore.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
@@ -58,6 +60,18 @@ export async function createTestContext(): Promise<TestContext> {
   const gitService = new FileSystemGitService(reposDir);
   const llm = new MockLLMService();
 
+  // Create repository service factory for unified access
+  const repoServiceFactory = createRepositoryServiceFactory({
+    gitService,
+  });
+
+  // Create unified repo access factory
+  const repoAccessFactory = createUnifiedRepoAccessFactory({
+    repos,
+    repoServiceFactory,
+    gitService,
+  });
+
   return {
     baseDir,
     dataDir,
@@ -67,7 +81,23 @@ export async function createTestContext(): Promise<TestContext> {
     llm,
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
-      return { repoId, wikiId: wiki.id, repos, git: gitService, llm };
+
+      // Create unified repo access for the test repo
+      let repoAccess;
+      try {
+        repoAccess = await repoAccessFactory.create(repoId);
+      } catch {
+        // Repo might not be registered yet, continue without repoAccess
+      }
+
+      return {
+        repoId,
+        wikiId: wiki.id,
+        repos,
+        git: gitService,
+        llm,
+        ...(repoAccess && { repoAccess }),
+      };
     },
     async cleanup(): Promise<void> {
       clearIgnoreCache();

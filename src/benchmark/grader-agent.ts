@@ -14,6 +14,7 @@ import { readFileTool, searchFilesTool, listDirectoryTool } from '../services/ll
 import type { BenchmarkQuestion, BenchmarkGrade } from '../domain/benchmark.js';
 import type { RepositoryService } from '../services/repository/repository-service.js';
 import type { Repo } from '../domain/repo.js';
+import type { UnifiedRepoAccess } from '../services/repository/unified-repo-access.js';
 
 /**
  * Result of grading a wiki answer.
@@ -35,11 +36,22 @@ export interface GradeResult {
  * Context for grading - supports both local and GitHub repos.
  */
 export interface GradeContext {
-  /** Local filesystem path (for local repos) */
+  /**
+   * Unified repository access - the preferred way to access repository files.
+   * Use this instead of repoPath, repoService, or repo.
+   */
+  repoAccess?: UnifiedRepoAccess;
+  /** Local filesystem path (for local repos)
+   * @deprecated Use repoAccess instead
+   */
   repoPath?: string;
-  /** Repository service (for GitHub repos) */
+  /** Repository service (for GitHub repos)
+   * @deprecated Use repoAccess instead
+   */
   repoService?: RepositoryService;
-  /** Repository entity (required when using repoService) */
+  /** Repository entity (required when using repoService)
+   * @deprecated Use repoAccess instead
+   */
   repo?: Repo;
 }
 
@@ -167,7 +179,13 @@ Start by reading the relevant code files, then provide your grade.`;
     tools: ToolDefinition[];
     executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
   } | null {
-    // Try local filesystem first (if repoPath is provided)
+    // Prefer unified repo access (works for both local and GitHub)
+    if (context.repoAccess) {
+      console.log(`[Grader] Creating unified tools via repoAccess (isLocal: ${context.repoAccess.isLocal()})`);
+      return this.createUnifiedTools(context.repoAccess, filesChecked);
+    }
+
+    // Fall back to local filesystem (if repoPath is provided)
     if (context.repoPath) {
       console.log(`[Grader] Creating filesystem tools for path: ${context.repoPath}`);
       const toolContext: ToolContext = {
@@ -340,6 +358,130 @@ Start by reading the relevant code files, then provide your grade.`;
             return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
           }
           // API tools don't need a toolContext, they use the repoService directly
+          const result = await tool.execute(call.input, { repoPath: '', maxFileSize: 100000 });
+          return { id: call.id, result };
+        }));
+        return results;
+      },
+    };
+  }
+
+  /**
+   * Create tools using UnifiedRepoAccess (works for both local and GitHub).
+   */
+  private createUnifiedTools(
+    repoAccess: UnifiedRepoAccess,
+    filesChecked: string[]
+  ): {
+    tools: ToolDefinition[];
+    executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
+  } {
+    const unifiedTools: ToolDefinition[] = [
+      {
+        name: 'read_file',
+        description: 'Read the contents of a file from the repository.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Relative path from repository root',
+            },
+          },
+          required: ['path'],
+        },
+        execute: async (input) => {
+          const path = input['path'] as string;
+          console.log(`[Grader Unified] read_file: ${path}`);
+          try {
+            filesChecked.push(path);
+            const content = await repoAccess.getFileContent(path);
+            if (content.length > 50000) {
+              return `File "${path}" is too large (${content.length} bytes). First 50000 bytes:\n${content.substring(0, 50000)}`;
+            }
+            const truncated = content.length > 200 ? content.substring(0, 200) + '...' : content;
+            console.log(`[Grader Unified] read_file success: ${truncated}`);
+            return content;
+          } catch (error) {
+            const errorMsg = `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
+            console.error(`[Grader Unified] ${errorMsg}`);
+            return errorMsg;
+          }
+        },
+      },
+      {
+        name: 'list_directory',
+        description: 'List contents of a directory in the repository.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Directory path relative to repository root',
+            },
+          },
+          required: ['path'],
+        },
+        execute: async (input) => {
+          const path = input['path'] as string;
+          console.log(`[Grader Unified] list_directory: ${path}`);
+          try {
+            const entries = await repoAccess.listDirectory(path);
+            const result = entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
+            console.log(`[Grader Unified] list_directory success: ${result.substring(0, 200)}`);
+            return result;
+          } catch (error) {
+            const errorMsg = `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
+            console.error(`[Grader Unified] ${errorMsg}`);
+            return errorMsg;
+          }
+        },
+      },
+      {
+        name: 'search_files',
+        description: 'Search for files matching a pattern. Returns file paths.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'Glob pattern (e.g., "**/*.ts")',
+            },
+          },
+          required: ['pattern'],
+        },
+        execute: async (input) => {
+          const pattern = input['pattern'] as string;
+          console.log(`[Grader Unified] search_files: ${pattern}`);
+          try {
+            const allFiles = await repoAccess.getFileTree();
+            console.log(`[Grader Unified] getFileTree returned ${allFiles.length} files`);
+            const matches = filterByGlob(allFiles, pattern);
+            if (matches.length === 0) {
+              console.log(`[Grader Unified] search_files: no matches for ${pattern}`);
+              return `No files found matching "${pattern}"`;
+            }
+            console.log(`[Grader Unified] search_files: ${matches.length} matches`);
+            return matches.join('\n');
+          } catch (error) {
+            const errorMsg = `Error searching for "${pattern}": ${error instanceof Error ? error.message : String(error)}`;
+            console.error(`[Grader Unified] ${errorMsg}`);
+            return errorMsg;
+          }
+        },
+      },
+    ];
+
+    return {
+      tools: unifiedTools,
+      executeTools: async (calls) => {
+        console.log(`[Grader Unified] Executing ${calls.length} tool calls`);
+        const results = await Promise.all(calls.map(async (call) => {
+          const tool = unifiedTools.find(t => t.name === call.name);
+          if (!tool) {
+            console.warn(`[Grader Unified] Unknown tool: ${call.name}`);
+            return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
+          }
           const result = await tool.execute(call.input, { repoPath: '', maxFileSize: 100000 });
           return { id: call.id, result };
         }));

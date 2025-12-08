@@ -10,6 +10,8 @@ import * as git from 'isomorphic-git';
 import * as fs from 'fs';
 import { createRepositories, type Repositories } from '../../../src/repositories/index.js';
 import { FileSystemGitService } from '../../../src/services/git/git-service.js';
+import { createRepositoryServiceFactory } from '../../../src/services/repository/repository-service.js';
+import { createUnifiedRepoAccessFactory } from '../../../src/services/repository/unified-repo-access.js';
 import { createOpenRouterLLM } from '../../../src/services/llm/openrouter-llm-service.js';
 import { clearIgnoreCache } from '../../../src/services/cwignore.js';
 import { getOrCreateActiveWiki } from '../../../src/commands/create-wiki.js';
@@ -53,6 +55,14 @@ export async function createLLMTestContext(): Promise<LLMTestContext> {
   const gitService = new FileSystemGitService(reposDir);
   const llm = createOpenRouterLLM();
 
+  // Create repository access factories for unified repo access
+  const repoServiceFactory = createRepositoryServiceFactory({ gitService });
+  const repoAccessFactory = createUnifiedRepoAccessFactory({
+    repos,
+    repoServiceFactory,
+    gitService,
+  });
+
   return {
     baseDir,
     dataDir,
@@ -63,12 +73,22 @@ export async function createLLMTestContext(): Promise<LLMTestContext> {
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
       const repoPath = join(reposDir, repoId);
+
+      // Create unified repo access for this repo
+      let repoAccess;
+      try {
+        repoAccess = await repoAccessFactory.create(repoId);
+      } catch {
+        // Continue without repoAccess if creation fails
+      }
+
       return {
         repoId,
         wikiId: wiki.id,
         repos,
         git: gitService,
         llm,
+        repoAccess,
         // Provide repo info so agents can use filesystem tools
         repo: {
           id: repoId,
