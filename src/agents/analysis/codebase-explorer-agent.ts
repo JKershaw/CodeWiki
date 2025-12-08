@@ -8,6 +8,13 @@ import {
 } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
 import { sortByPathRelevance } from '../../utils/path-relevance.js';
+import {
+  createParseContext,
+  parseSection,
+  parseListItemsWithFallback,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Codebase Explorer Agent - Documents undocumented parts of the codebase.
@@ -192,40 +199,36 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
   }
 
   private parseResponse(response: string): ParsedAnalysis {
-    const analysis: ParsedAnalysis = {
-      summary: '',
-      findings: [],
-      wikiPages: [],
-      confidence: 0.7,
-    };
+    const ctx = createParseContext('codebase-explorer', response);
 
     // Parse summary
-    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i);
-    if (summaryMatch) {
-      analysis.summary = summaryMatch[1]!.trim();
-    }
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i) ?? '';
 
     // Parse findings
-    const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|CONFIDENCE:|$)/i);
-    if (findingsMatch) {
-      const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of findingLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
-        if (match) {
-          analysis.findings.push({
-            type: match[1]!.trim(),
-            importance: (match[2]!.toLowerCase() as 'low' | 'medium' | 'high'),
-            description: match[3]!.trim(),
-            paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
-          });
-        }
-      }
-    }
+    const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
+      {
+        pattern: /^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        mapper: (m) => ({
+          type: m[1]!.trim(),
+          importance: m[2]!.toLowerCase() as 'low' | 'medium' | 'high',
+          description: m[3]!.trim(),
+          paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+        }),
+      },
+    ];
 
-    // Parse wiki pages (can be multiple)
-    const pagesSection = response.match(/WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    const findings = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|CONFIDENCE:|$)/i,
+      findingPatterns
+    );
+
+    // Parse wiki pages - uses custom ---PAGE--- block format
+    const wikiPages: ParsedAnalysis['wikiPages'] = [];
+    const pagesSection = parseSection(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
     if (pagesSection) {
-      const pageBlocks = pagesSection[1]!.split('---PAGE---').filter(b => b.trim());
+      const pageBlocks = pagesSection.split('---PAGE---').filter(b => b.trim());
 
       for (const block of pageBlocks) {
         const cleanBlock = block.replace(/---END_PAGE---/g, '').trim();
@@ -236,7 +239,7 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
         const contentMatch = cleanBlock.match(/CONTENT:\s*([\s\S]*?)$/i);
 
         if (pathMatch && contentMatch) {
-          analysis.wikiPages.push({
+          wikiPages.push({
             path: pathMatch[1]!.trim(),
             title: titleMatch?.[1]?.trim() ?? pathToTitle(pathMatch[1]!.trim()),
             content: contentMatch[1]!.trim(),
@@ -246,12 +249,14 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
     }
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return analysis;
+    return {
+      summary,
+      findings,
+      wikiPages,
+      confidence,
+    };
   }
 
   private generateUpdates(
