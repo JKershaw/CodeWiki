@@ -350,7 +350,7 @@ ${pages.map(p => {
   const desc = overview.pageDescriptions.find(pd =>
     pd.path === p.path || pd.path.includes(p.path.split('/').pop()!)
   );
-  return `- [${p.title}](${p.path}.md)${desc ? ` - ${desc.description}` : ''}`;
+  return `- [${p.title}](${p.path})${desc ? ` - ${desc.description}` : ''}`;
 }).join('\n')}`;
 
     // Build reading order section if provided
