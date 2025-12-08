@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { EditRequest, EditDecision } from '../../domain/edit-request.js';
-import { getSourceCommitSha, getSourceCommitTimestamp } from '../../domain/edit-request.js';
+import { isCommitEditSource } from '../../domain/edit-request.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { extractTitleWithFallback } from '../../commands/update-wiki-page.js';
 import {
@@ -40,14 +40,7 @@ export class WikiEditorAgent implements Agent {
     if (!isWikiTarget(target)) {
       throw new Error(`WikiEditorAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnWiki(context);
-  }
 
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('WikiEditorAgent does not run on commits. Use run() with WikiTarget instead.');
-  }
-
-  async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
     // Get pending edit requests, ordered by commit timestamp (oldest first)
     const pendingEdits = await context.repos.editRequests.findPending(context.wikiId);
 
@@ -190,15 +183,15 @@ export class WikiEditorAgent implements Agent {
     }
 
     // Case 5: Edit is from a NEWER or SAME commit - apply normally
-    const sourceTimestamp = getSourceCommitTimestamp(editRequest);
-    const sourceSha = getSourceCommitSha(editRequest);
+    const sourceSha = isCommitEditSource(editRequest.source) ? editRequest.source.commitSha : 'unknown';
+    const sourceTimestamp = isCommitEditSource(editRequest.source) ? editRequest.source.commitTimestamp : null;
 
     // For non-commit sources, always apply (they're considered current)
     if (!sourceTimestamp || sourceTimestamp >= latestPageCommitTimestamp) {
       return {
         decision: {
           action: 'apply',
-          reasoning: sourceSha
+          reasoning: sourceSha !== 'unknown'
             ? `Edit from commit ${sourceSha.slice(0, 7)} (${this.formatDate(sourceTimestamp!)}) is current`
             : `Edit from ${editRequest.source.type} source is current`,
           content: editRequest.proposedContent,
@@ -252,8 +245,8 @@ export class WikiEditorAgent implements Agent {
     latestPageCommitTimestamp: Date
   ): string {
     const hasHistorySection = currentPage.content.includes(this.HISTORY_SECTION_HEADER);
-    const sourceSha = getSourceCommitSha(editRequest) ?? 'unknown';
-    const sourceTimestamp = getSourceCommitTimestamp(editRequest);
+    const sourceSha = isCommitEditSource(editRequest.source) ? editRequest.source.commitSha : 'unknown';
+    const sourceTimestamp = isCommitEditSource(editRequest.source) ? editRequest.source.commitTimestamp : null;
     const truncationLimit = this.CONTENT_TRUNCATION_LIMIT;
 
     // Build truncation notice with remaining content hint
@@ -351,8 +344,8 @@ CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NO
       // Build content with history section
       const historyEntry = contentMatch?.[1]?.trim() || editRequest.proposedContent.slice(0, 500);
       const formattedEntry = this.formatHistoryEntry(
-        getSourceCommitSha(editRequest) ?? 'unknown',
-        getSourceCommitTimestamp(editRequest) ?? new Date(),
+        isCommitEditSource(editRequest.source) ? editRequest.source.commitSha : 'unknown',
+        isCommitEditSource(editRequest.source) ? editRequest.source.commitTimestamp : new Date(),
         historyEntry
       );
 
@@ -472,7 +465,7 @@ ${content}`;
     };
 
     // Only add optional properties if they have values
-    const sourceCommitId = getSourceCommitSha(editRequest);
+    const sourceCommitId = isCommitEditSource(editRequest.source) ? editRequest.source.commitSha : null;
     if (sourceCommitId) {
       update.sourceCommitId = sourceCommitId;
     }

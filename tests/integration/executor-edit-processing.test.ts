@@ -11,7 +11,7 @@ import { createTestContext, createTestRepo, type TestContext } from '../helpers/
 import { Executor, createExecutor } from '../../src/executor/executor.js';
 import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
-import { createEditRequest } from '../../src/domain/edit-request.js';
+import { createEditRequest, createCommitEditSource } from '../../src/domain/edit-request.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 
 describe('Executor Edit Request Processing', () => {
@@ -43,8 +43,7 @@ describe('Executor Edit Request Processing', () => {
       id: editId,
       repoId,
       wikiId,
-      sourceCommitSha: 'abc123',
-      sourceCommitTimestamp: new Date(),
+      source: createCommitEditSource('abc123', new Date()),
       sourceAgentType: 'code-change',
       sourceAgentRunId: uuid(),
       targetPagePath: pagePath,

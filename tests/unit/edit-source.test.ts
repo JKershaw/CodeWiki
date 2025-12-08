@@ -13,8 +13,6 @@ import {
   isStoryEditSource,
   isManualEditSource,
   getEditSourceTimestamp,
-  legacyToEditSource,
-  editSourceToLegacy,
   type EditSource,
 } from '../../src/domain/edit-source.js';
 
@@ -111,53 +109,6 @@ describe('EditSource', () => {
       const ts = getEditSourceTimestamp(source);
       assert.ok(ts.getTime() >= before);
       assert.ok(ts.getTime() <= after);
-    });
-  });
-
-  describe('legacyToEditSource', () => {
-    it('converts legacy commit fields to commit source', () => {
-      const timestamp = new Date('2024-01-15T10:00:00Z');
-      const source = legacyToEditSource('abc123', timestamp);
-
-      assert.strictEqual(source.type, 'commit');
-      assert.strictEqual(source.commitSha, 'abc123');
-      assert.strictEqual(source.commitTimestamp.getTime(), timestamp.getTime());
-    });
-  });
-
-  describe('editSourceToLegacy', () => {
-    it('extracts legacy fields from commit source', () => {
-      const timestamp = new Date('2024-01-15T10:00:00Z');
-      const source = createCommitEditSource('abc123', timestamp);
-      const legacy = editSourceToLegacy(source);
-
-      assert.strictEqual(legacy.sourceCommitSha, 'abc123');
-      assert.strictEqual(legacy.sourceCommitTimestamp?.getTime(), timestamp.getTime());
-    });
-
-    it('returns null values for story source', () => {
-      const source = createStoryEditSource('s1', 'write');
-      const legacy = editSourceToLegacy(source);
-
-      assert.strictEqual(legacy.sourceCommitSha, null);
-      assert.strictEqual(legacy.sourceCommitTimestamp, null);
-    });
-
-    it('returns null values for manual source', () => {
-      const source = createManualEditSource();
-      const legacy = editSourceToLegacy(source);
-
-      assert.strictEqual(legacy.sourceCommitSha, null);
-      assert.strictEqual(legacy.sourceCommitTimestamp, null);
-    });
-
-    it('round-trips through legacy conversion for commit sources', () => {
-      const timestamp = new Date('2024-01-15T10:00:00Z');
-      const original = createCommitEditSource('abc123', timestamp);
-      const legacy = editSourceToLegacy(original);
-      const roundTrip = legacyToEditSource(legacy.sourceCommitSha!, legacy.sourceCommitTimestamp!);
-
-      assert.deepStrictEqual(roundTrip, original);
     });
   });
 });

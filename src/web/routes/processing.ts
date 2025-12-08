@@ -16,7 +16,7 @@ import {
   createListWorkItemsQuery,
   handleListWorkItems,
 } from '../../queries/index.js';
-import { getTargetCommitId, getTargetPath } from '../../domain/work-item.js';
+import { isCommitTarget, isPathTarget } from '../../domain/work-item.js';
 
 /**
  * Create processing status routes.
@@ -58,8 +58,7 @@ export function createProcessingRoutes(deps: Dependencies): Router {
       const completed = completedResult.data || [];
       const failed = failedResult.data || [];
 
-      // Sort pending by priority (highest first)
-      pending.sort((a, b) => b.priority - a.priority);
+      // Work items no longer have priority field, keep in insertion order
 
       // Sort claimed by claimedAt (most recent first)
       claimed.sort((a, b) =>
@@ -70,9 +69,8 @@ export function createProcessingRoutes(deps: Dependencies): Router {
       const formatItem = (item: typeof pending[0]) => ({
         id: item.id,
         agentType: item.agentType,
-        targetCommitId: getTargetCommitId(item),
-        targetPagePath: getTargetPath(item),
-        priority: item.priority,
+        targetCommitId: isCommitTarget(item.target) ? item.target.commitId : null,
+        targetPagePath: isPathTarget(item.target) ? item.target.path : null,
         status: item.status,
         createdAt: item.createdAt,
         claimedAt: item.claimedAt,

@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { PatternAgent } from '../../src/agents/analysis/pattern-agent.js';
 import { patternAgentResponses } from '../fixtures/agent-responses.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('PatternAgent', () => {
   let ctx: TestContext;
@@ -24,7 +25,7 @@ describe('PatternAgent', () => {
     ctx.llm.reset();
   });
 
-  describe('runOnCommit', () => {
+  describe('run', () => {
     it('detects Repository pattern implementation', async () => {
       const repoId = 'pattern-repository';
 
@@ -111,7 +112,7 @@ export interface User {
       const agent = new PatternAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify the Repository pattern
       const patternFinding = result.result.findings.find(f =>
@@ -210,7 +211,7 @@ export class DatabaseService {
       const agent = new PatternAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify Factory pattern
       const factoryFinding = result.result.findings.find(f =>
@@ -298,7 +299,7 @@ export class AppManager {
       const agent = new PatternAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify anti-pattern with high importance
       const antiPatternFinding = result.result.findings.find(f =>
@@ -360,7 +361,7 @@ export function formatCurrency(amount: number): string {
       const agent = new PatternAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should have minimal or no findings
       assert.ok(result.result.findings.length <= 1, 'Should have minimal findings for simple code');
@@ -381,7 +382,7 @@ export function formatCurrency(amount: number): string {
       const agentCtx = await ctx.agentContext(repoId);
 
       await assert.rejects(
-        async () => agent.runOnCommit('nonexistent-commit-id', agentCtx),
+        async () => agent.run(createCommitTarget('nonexistent-commit-id'), agentCtx),
         /not found/i,
         'Should throw error for non-existent commit'
       );

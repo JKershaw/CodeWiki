@@ -36,14 +36,6 @@ export class LinkAgent implements Agent {
     return this.runOnWikiImpl(context);
   }
 
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('LinkAgent does not run on commits. Use run() with WikiTarget instead.');
-  }
-
-  async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
-    return this.runOnWikiImpl(context);
-  }
-
   private async runOnWikiImpl(context: AgentContext): Promise<AgentRunResult> {
     // Get wiki pages via CQRS query
     const pagesQuery = createListWikiPagesQuery(context.wikiId);

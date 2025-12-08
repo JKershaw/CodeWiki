@@ -41,24 +41,8 @@ export class CodebaseExplorerAgent implements Agent {
     if (!isPathTarget(target)) {
       throw new Error(`CodebaseExplorerAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnPathImpl(target.path, context);
-  }
+    const targetPath = target.path;
 
-  /**
-   * @deprecated Use run() with PathTarget instead
-   */
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('CodebaseExplorerAgent does not run on commits. Use run() with PathTarget instead.');
-  }
-
-  /**
-   * @deprecated Use run() with PathTarget instead
-   */
-  async runOnPath(targetPath: string, context: AgentContext): Promise<AgentRunResult> {
-    return this.runOnPathImpl(targetPath, context);
-  }
-
-  private async runOnPathImpl(targetPath: string, context: AgentContext): Promise<AgentRunResult> {
     // Check existing wiki pages to avoid duplication
     const pagesQuery = createListWikiPagesQuery(context.wikiId);
     const pagesResult = await handleListWikiPages(pagesQuery, context.repos);

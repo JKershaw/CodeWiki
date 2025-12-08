@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { PatternAgent } from '../../src/agents/analysis/pattern-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -71,7 +72,7 @@ export function capitalize(str: string): string {
       const agent = new PatternAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Verify structure
       assert.ok(result.result, 'result.result should exist');
@@ -149,7 +150,7 @@ export class PostgresUserRepository implements UserRepository {
       const agent = new PatternAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify Repository pattern detection
       const analysisText = JSON.stringify({
@@ -224,7 +225,7 @@ export class NotificationFactory {
       const agent = new PatternAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify Factory pattern detection
       const analysisText = JSON.stringify({

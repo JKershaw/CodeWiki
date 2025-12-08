@@ -1,10 +1,5 @@
 import type { AgentType } from './agent-run.js';
-import {
-  type WorkTarget,
-  legacyToWorkTarget,
-  isCommitTarget,
-  isPathTarget,
-} from './work-target.js';
+import type { WorkTarget } from './work-target.js';
 
 // Re-export WorkTarget types for convenience
 export {
@@ -19,7 +14,6 @@ export {
   isCommitTarget,
   isPathTarget,
   isWikiTarget,
-  legacyToWorkTarget,
 } from './work-target.js';
 
 /**
@@ -34,8 +28,6 @@ export interface WorkItem {
   agentType: AgentType;
   /** The target of this work item (commit, path, or wiki) */
   target: WorkTarget;
-  /** @deprecated Priority is no longer used. Queue is FIFO. Kept for backwards compatibility. */
-  priority: number;
   /** Current status */
   status: WorkItemStatus;
   /** When this item was created */
@@ -50,20 +42,6 @@ export interface WorkItem {
   orchestratorRunId: string | null;
 }
 
-/**
- * Helper to get targetCommitId from WorkItem (for backward compatibility).
- */
-export function getTargetCommitId(item: WorkItem): string | null {
-  return isCommitTarget(item.target) ? item.target.commitId : null;
-}
-
-/**
- * Helper to get targetPath from WorkItem (for backward compatibility).
- */
-export function getTargetPath(item: WorkItem): string | null {
-  return isPathTarget(item.target) ? item.target.path : null;
-}
-
 export type WorkItemStatus =
   | 'pending'    // Waiting to be processed
   | 'claimed'    // Being processed
@@ -74,26 +52,15 @@ export function createWorkItem(params: {
   id: string;
   repoId: string;
   agentType: AgentType;
-  /** Target for the work. Takes precedence over targetCommitId/targetPath if provided. */
-  target?: WorkTarget;
-  /** @deprecated Use target instead. Kept for backward compatibility. */
-  targetCommitId?: string;
-  /** @deprecated Use target instead. Kept for backward compatibility. */
-  targetPath?: string;
+  /** Target for the work (commit, path, or wiki) */
+  target: WorkTarget;
   orchestratorRunId?: string;
 }): WorkItem {
-  // Resolve target: prefer explicit target, fall back to legacy fields
-  const target = params.target ?? legacyToWorkTarget(
-    params.targetCommitId ?? null,
-    params.targetPath ?? null
-  );
-
   return {
     id: params.id,
     repoId: params.repoId,
     agentType: params.agentType,
-    target,
-    priority: 0, // Priority is deprecated, queue is FIFO
+    target: params.target,
     status: 'pending',
     createdAt: new Date(),
     claimedAt: null,

@@ -7,6 +7,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { CodeChangeAgent } from '../../src/agents/analysis/code-change-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('Commit Processing', () => {
   let ctx: TestContext;
@@ -81,7 +82,7 @@ CONFIDENCE: 0.8`);
       // Run the agent
       const agent = new CodeChangeAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Verify results
       assert.ok(result.updates.length > 0, 'Should produce wiki updates');
@@ -144,7 +145,7 @@ CONFIDENCE: 0.75`);
 
       const agent = new CodeChangeAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       assert.ok(result.updates.length > 0);
       assert.strictEqual(result.result.confidence, 0.75);

@@ -37,10 +37,8 @@ export class TechnicalDebtAgent implements Agent {
     if (!isCommitTarget(target)) {
       throw new Error(`TechnicalDebtAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnCommit(target.commitId, context);
-  }
+    const commitId = target.commitId;
 
-  async runOnCommit(commitId: string, context: AgentContext): Promise<AgentRunResult> {
     // Get the commit via CQRS query
     const commitQuery = createGetCommitQuery(commitId);
     const commitResult = await handleGetCommit(commitQuery, context.repos);

@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { DependencyAgent } from '../../src/agents/analysis/dependency-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -78,7 +79,7 @@ describe('DependencyAgent with Real LLM', { timeout: 120000 }, () => {
       const agent = new DependencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Verify structure
       assert.ok(result.result, 'result.result should exist');
@@ -120,7 +121,7 @@ describe('DependencyAgent with Real LLM', { timeout: 120000 }, () => {
       const agent = new DependencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify detection of new dependencies
       const analysisText = JSON.stringify({
@@ -169,7 +170,7 @@ describe('DependencyAgent with Real LLM', { timeout: 120000 }, () => {
       const agent = new DependencyAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify detection of version updates
       const analysisText = JSON.stringify({

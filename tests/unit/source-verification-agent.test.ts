@@ -64,8 +64,8 @@ describe('SourceVerificationAgent', () => {
       const mockContext = {} as any;
 
       await assert.rejects(
-        () => agent.runOnCommit('abc123', mockContext),
-        /does not run on commits/i
+        () => agent.run(createCommitTarget('abc123'), mockContext),
+        /cannot handle target type/i
       );
     });
   });

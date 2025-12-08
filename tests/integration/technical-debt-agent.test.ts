@@ -7,6 +7,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { TechnicalDebtAgent } from '../../src/agents/analysis/technical-debt-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('TechnicalDebtAgent', () => {
   let ctx: TestContext;
@@ -23,7 +24,7 @@ describe('TechnicalDebtAgent', () => {
     ctx.llm.reset();
   });
 
-  describe('runOnCommit', () => {
+  describe('run', () => {
     it('identifies TODO/FIXME comments', async () => {
       const repoId = 'debt-todo-comments';
 
@@ -111,7 +112,7 @@ CONFIDENCE: 0.85`);
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify the debt trend
       assert.ok(result.result.summary.includes('debt'), 'Summary should mention debt');
@@ -227,7 +228,7 @@ CONFIDENCE: 0.92`);
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify God class
       const godClassFinding = result.result.findings.find(f =>
@@ -318,7 +319,7 @@ CONFIDENCE: 0.9`);
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should report neutral debt trend
       assert.ok(
@@ -416,7 +417,7 @@ CONFIDENCE: 0.88`);
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify debt reduction
       assert.ok(
@@ -505,7 +506,7 @@ CONFIDENCE: 0.95`);
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should create multiple wiki pages
       assert.ok(result.updates.length >= 2, 'Should create multiple wiki pages for significant findings');
@@ -536,7 +537,7 @@ CONFIDENCE: 0.95`);
       const agentCtx = await ctx.agentContext(repoId);
 
       await assert.rejects(
-        async () => agent.runOnCommit('nonexistent-commit-id', agentCtx),
+        async () => agent.run(createCommitTarget('nonexistent-commit-id'), agentCtx),
         /not found/i,
         'Should throw error for non-existent commit'
       );

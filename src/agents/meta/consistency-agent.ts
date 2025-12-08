@@ -34,17 +34,6 @@ import {
 export class ConsistencyAgent implements Agent {
   readonly type: AgentType = 'consistency';
 
-  canHandle(target: WorkTarget): boolean {
-    return isWikiTarget(target);
-  }
-
-  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
-    if (!isWikiTarget(target)) {
-      throw new Error(`ConsistencyAgent cannot handle target type: ${target.type}`);
-    }
-    return this.runOnWiki(context);
-  }
-
   // Thresholds
   private readonly MIN_PAGES_FOR_ANALYSIS = 5;
   private readonly SIMILARITY_THRESHOLD = 0.6;
@@ -54,11 +43,15 @@ export class ConsistencyAgent implements Agent {
     return SYSTEM_PROMPT;
   }
 
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('ConsistencyAgent does not run on commits. Use runOnWiki instead.');
+  canHandle(target: WorkTarget): boolean {
+    return isWikiTarget(target);
   }
 
-  async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
+  async run(target: WorkTarget, context: AgentContext): Promise<AgentRunResult> {
+    if (!isWikiTarget(target)) {
+      throw new Error(`ConsistencyAgent cannot handle target type: ${target.type}`);
+    }
+
     // Get wiki pages via CQRS query
     const pagesQuery = createListWikiPagesQuery(context.wikiId);
     const pagesResult = await handleListWikiPages(pagesQuery, context.repos);

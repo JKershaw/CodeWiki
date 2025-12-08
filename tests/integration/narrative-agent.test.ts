@@ -7,6 +7,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
 import { NarrativeAgent } from '../../src/agents/analysis/narrative-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import { narrativeAgentResponses } from '../fixtures/agent-responses.js';
 
 describe('NarrativeAgent', () => {
@@ -24,7 +25,7 @@ describe('NarrativeAgent', () => {
     ctx.llm.reset();
   });
 
-  describe('runOnCommit', () => {
+  describe('run', () => {
     it('detects Architecture Decision Records (ADRs)', async () => {
       const repoId = 'narrative-adr';
 
@@ -77,7 +78,7 @@ We will use the CQRS (Command Query Responsibility Segregation) pattern.
       const agent = new NarrativeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify architecture decision
       const adrFinding = result.result.findings.find(f =>
@@ -159,7 +160,7 @@ Build the most comprehensive documentation platform.
       const agent = new NarrativeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify planning document
       const planningFinding = result.result.findings.find(f =>
@@ -222,7 +223,7 @@ export function multiply(a: number, b: number): number {
       const agent = new NarrativeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should have minimal findings for non-narrative commit
       assert.ok(result.result.findings.length === 0, 'Should have no findings for non-narrative code');
@@ -327,7 +328,7 @@ CONFIDENCE: 0.88`);
       const agent = new NarrativeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Should identify design document
       const designFinding = result.result.findings.find(f =>
@@ -352,7 +353,7 @@ CONFIDENCE: 0.88`);
       const agentCtx = await ctx.agentContext(repoId);
 
       await assert.rejects(
-        async () => agent.runOnCommit('nonexistent-commit-id', agentCtx),
+        async () => agent.run(createCommitTarget('nonexistent-commit-id'), agentCtx),
         /not found/i,
         'Should throw error for non-existent commit'
       );

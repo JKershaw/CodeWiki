@@ -38,14 +38,7 @@ export class WikiIndexAgent implements Agent {
     if (!isWikiTarget(target)) {
       throw new Error(`WikiIndexAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnWiki(context);
-  }
 
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('WikiIndexAgent does not run on commits. Use runOnWiki instead.');
-  }
-
-  async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
     // Get wiki pages via CQRS query
     const pagesQuery = createListWikiPagesQuery(context.wikiId);
     const pagesResult = await handleListWikiPages(pagesQuery, context.repos);

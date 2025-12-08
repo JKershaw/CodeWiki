@@ -17,6 +17,7 @@ import { BootstrapAgent } from '../../../src/agents/synthesis/bootstrap-agent.js
 import { ProjectOverviewAgent } from '../../../src/agents/synthesis/project-overview-agent.js';
 import { SecurityAgent } from '../../../src/agents/analysis/security-agent.js';
 import { CodeChangeAgent } from '../../../src/agents/analysis/code-change-agent.js';
+import { createCommitTarget } from '../../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -347,7 +348,7 @@ export function fibonacci(n: number): number {
       // Run analysis agents on the commit
       console.log('Running CodeChangeAgent on new commit...');
       const codeChangeAgent = new CodeChangeAgent();
-      const codeChangeResult = await codeChangeAgent.runOnCommit(commitSha, agentCtx);
+      const codeChangeResult = await codeChangeAgent.run(createCommitTarget(commitSha), agentCtx);
 
       // Save any wiki updates from analysis
       if (codeChangeResult.updates.length > 0) {
@@ -470,14 +471,14 @@ export class NoteRepository {
 
       // 2. Security analysis
       const securityAgent = new SecurityAgent();
-      const securityResult = await securityAgent.runOnCommit(commitSha, agentCtx);
+      const securityResult = await securityAgent.run(createCommitTarget(commitSha), agentCtx);
       if (securityResult.updates.length > 0) {
         await saveWikiPages(agentCtx.wikiId, securityResult.updates);
       }
 
       // 3. Code change analysis
       const codeChangeAgent = new CodeChangeAgent();
-      const codeChangeResult = await codeChangeAgent.runOnCommit(commitSha, agentCtx);
+      const codeChangeResult = await codeChangeAgent.run(createCommitTarget(commitSha), agentCtx);
       if (codeChangeResult.updates.length > 0) {
         await saveWikiPages(agentCtx.wikiId, codeChangeResult.updates);
       }

@@ -1,7 +1,7 @@
 import type { Collection, Db, Document, Filter } from 'mongodb';
 import type { WorkQueueRepository } from '../interfaces/work-queue-repository.js';
 import type { WorkItem, WorkItemStatus } from '../../domain/work-item.js';
-import { getTargetCommitId, getWorkTargetKey } from '../../domain/work-item.js';
+import { isCommitTarget, getWorkTargetKey } from '../../domain/work-item.js';
 import { selectItemsForBatch } from '../../domain/work-queue-logic.js';
 import { toEntity, toEntities, toDocument, byId, byIds, replaceOp } from './mongo-utils.js';
 import type { AgentType } from '../../agents/registry.js';
@@ -179,7 +179,7 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
 
     // Check if any item targets this commit
     for (const item of items) {
-      if (getTargetCommitId(item) === targetCommitId) {
+      if (isCommitTarget(item.target) && item.target.commitId === targetCommitId) {
         return true;
       }
     }

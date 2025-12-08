@@ -13,6 +13,7 @@ import { BrokenLinkHandler } from '../../src/agents/consolidation/handlers/broke
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { createFinding, type Finding, type FindingType } from '../../src/domain/finding.js';
 import { consolidationAgentResponses } from '../fixtures/agent-responses.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('ConsolidationAgent', () => {
   let ctx: TestContext;
@@ -99,7 +100,7 @@ describe('ConsolidationAgent', () => {
       const agent = new ConsolidationAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.ok(
         result.result.summary.toLowerCase().includes('no findings'),
@@ -134,7 +135,7 @@ describe('ConsolidationAgent', () => {
       const agent = new ConsolidationAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should have processed the finding (incurred LLM cost)
       assert.ok(result.costUsd > 0, 'Should incur LLM cost for processing');
@@ -183,7 +184,7 @@ describe('ConsolidationAgent', () => {
       const agent = new ConsolidationAgent(registry);
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should indicate unsupported type
       assert.ok(
@@ -198,9 +199,9 @@ describe('ConsolidationAgent', () => {
       const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit', agentCtx),
-        /does not run on commits/i,
-        'Should throw error when called with commit'
+        async () => agent.run(createCommitTarget('any-commit'), agentCtx),
+        /cannot handle target type/i,
+        'Should throw error when called with commit target'
       );
     });
   });
@@ -233,7 +234,7 @@ describe('ConsolidationAgent', () => {
       const agent = new ConsolidationAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      await agent.runOnWiki(agentCtx);
+      await agent.run(createWikiTarget(), agentCtx);
 
       // Check finding status was updated
       const updatedFinding = await ctx.repos.findings.findById(finding.id);

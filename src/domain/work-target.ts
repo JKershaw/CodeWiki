@@ -94,38 +94,3 @@ export function getWorkTargetKey(target: WorkTarget): string {
       return 'wiki';
   }
 }
-
-/**
- * Convert legacy targetCommitId/targetPath to WorkTarget.
- * Handles the migration from the old nullable fields.
- */
-export function legacyToWorkTarget(
-  targetCommitId: string | null,
-  targetPath: string | null
-): WorkTarget {
-  if (targetCommitId) {
-    return createCommitTarget(targetCommitId);
-  }
-  if (targetPath) {
-    return createPathTarget(targetPath);
-  }
-  return createWikiTarget();
-}
-
-/**
- * Convert WorkTarget to legacy format for backward compatibility.
- * Returns { targetCommitId, targetPath } with appropriate null values.
- */
-export function workTargetToLegacy(target: WorkTarget): {
-  targetCommitId: string | null;
-  targetPath: string | null;
-} {
-  switch (target.type) {
-    case 'commit':
-      return { targetCommitId: target.commitId, targetPath: null };
-    case 'path':
-      return { targetCommitId: null, targetPath: target.path };
-    case 'wiki':
-      return { targetCommitId: null, targetPath: null };
-  }
-}

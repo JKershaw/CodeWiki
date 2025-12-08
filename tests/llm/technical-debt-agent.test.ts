@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { TechnicalDebtAgent } from '../../src/agents/analysis/technical-debt-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -71,7 +72,7 @@ export function processData(data: any) {
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Verify structure
       assert.ok(result.result, 'result.result should exist');
@@ -127,7 +128,7 @@ export class TaskManager {
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify detection of debt markers
       // Include wiki updates (where the real content often lives)
@@ -211,7 +212,7 @@ export function processOrder(order: any, user: any, inventory: any, config: any)
       const agent = new TechnicalDebtAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify detection of complexity issues
       // Include wiki updates (where the real content often lives)

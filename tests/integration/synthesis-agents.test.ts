@@ -9,6 +9,7 @@ import { createTestContext, createTestRepo, type TestContext } from '../helpers/
 import { OverviewAgent } from '../../src/agents/synthesis/overview-agent.js';
 import { GettingStartedAgent } from '../../src/agents/synthesis/getting-started-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('Synthesis Agents', () => {
   let ctx: TestContext;
@@ -50,7 +51,7 @@ describe('Synthesis Agents', () => {
   }
 
   describe('OverviewAgent', () => {
-    describe('runOnWiki', () => {
+    describe('run (wiki target)', () => {
       it('creates overview for category with enough pages', async () => {
         const repoId = 'overview-create';
 
@@ -97,7 +98,7 @@ CONFIDENCE: 0.85`);
         const agent = new OverviewAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         // Should create an overview page
         assert.strictEqual(result.updates.length, 1, 'Should create one overview page');
@@ -156,7 +157,7 @@ CONFIDENCE: 0.85`);
         const agent = new OverviewAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         assert.strictEqual(result.updates.length, 1, 'Should create one overview page');
 
@@ -193,7 +194,7 @@ CONFIDENCE: 0.85`);
         const agent = new OverviewAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         // Should not create any pages
         assert.strictEqual(result.updates.length, 0, 'Should not create overview for small category');
@@ -222,7 +223,7 @@ CONFIDENCE: 0.85`);
         const agent = new OverviewAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         // Should indicate all categories have overviews
         assert.ok(
@@ -280,7 +281,7 @@ CONFIDENCE: 0.85`);
         const agent = new OverviewAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         // Should create overview for the larger category first (api)
         assert.strictEqual(result.updates.length, 1, 'Should create one overview');
@@ -295,8 +296,8 @@ CONFIDENCE: 0.85`);
         const agentCtx = await ctx.agentContext('any-repo');
 
         await assert.rejects(
-          async () => agent.runOnCommit('any-commit', agentCtx),
-          /does not run on commits/i,
+          async () => agent.run(createCommitTarget('any-commit'), agentCtx),
+          /cannot handle target type/i,
           'Should throw error for commit target'
         );
       });
@@ -321,7 +322,7 @@ CONFIDENCE: 0.85`);
   });
 
   describe('GettingStartedAgent', () => {
-    describe('runOnWiki', () => {
+    describe('run (wiki target)', () => {
       it('creates getting started guide when wiki is mature', async () => {
         const repoId = 'getting-started-create';
 
@@ -394,7 +395,7 @@ Check out the documentation pages for more details.`);
         const agent = new GettingStartedAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         // Should create getting started guide
         assert.strictEqual(result.updates.length, 1, 'Should create one guide page');
@@ -438,7 +439,7 @@ Check out the documentation pages for more details.`);
         const agent = new GettingStartedAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         // Should indicate not enough pages
         assert.ok(
@@ -479,7 +480,7 @@ Check out the documentation pages for more details.`);
         const agent = new GettingStartedAgent();
         const agentCtx = await ctx.agentContext(repoId);
 
-        const result = await agent.runOnWiki(agentCtx);
+        const result = await agent.run(createWikiTarget(), agentCtx);
 
         // Should indicate guide exists
         assert.ok(
@@ -496,8 +497,8 @@ Check out the documentation pages for more details.`);
         const agentCtx = await ctx.agentContext('any-repo');
 
         await assert.rejects(
-          async () => agent.runOnCommit('any-commit', agentCtx),
-          /does not run on commits/i,
+          async () => agent.run(createCommitTarget('any-commit'), agentCtx),
+          /cannot handle target type/i,
           'Should throw error for commit target'
         );
       });

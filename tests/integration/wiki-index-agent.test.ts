@@ -9,6 +9,7 @@ import { createTestContext, createTestRepo, type TestContext } from '../helpers/
 import { WikiIndexAgent } from '../../src/agents/synthesis/wiki-index-agent.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
+import { createWikiTarget, createCommitTarget } from '../../src/domain/work-target.js';
 
 describe('WikiIndexAgent', () => {
   let ctx: TestContext;
@@ -54,7 +55,7 @@ describe('WikiIndexAgent', () => {
     return pages;
   }
 
-  describe('runOnWiki', () => {
+  describe('run (wiki target)', () => {
     it('creates wiki index when wiki has 10+ pages', async () => {
       const repoId = 'wiki-index-10-pages';
 
@@ -67,7 +68,7 @@ describe('WikiIndexAgent', () => {
 
       const agent = new WikiIndexAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should create the wiki index
       assert.ok(result.updates.length > 0, 'Should create wiki index page');
@@ -102,7 +103,7 @@ describe('WikiIndexAgent', () => {
 
       const agent = new WikiIndexAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should not create index
       assert.strictEqual(result.updates.length, 0, 'Should not create index for small wiki');
@@ -136,7 +137,7 @@ describe('WikiIndexAgent', () => {
 
       const agent = new WikiIndexAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should skip - index is up to date
       assert.strictEqual(result.updates.length, 0, 'Should not update when index is current');
@@ -170,7 +171,7 @@ describe('WikiIndexAgent', () => {
 
       const agent = new WikiIndexAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should update the index (page count changed by 5)
       assert.ok(result.updates.length > 0, 'Should update index when page count changes significantly');
@@ -221,7 +222,7 @@ describe('WikiIndexAgent', () => {
 
       const agent = new WikiIndexAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.ok(result.updates.length > 0, 'Should create index');
 
@@ -280,7 +281,7 @@ describe('WikiIndexAgent', () => {
 
       const agent = new WikiIndexAgent();
       const agentCtx = await ctx.agentContext(repoId);
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       const content = result.updates[0]!.content;
 
@@ -291,15 +292,15 @@ describe('WikiIndexAgent', () => {
     });
   });
 
-  describe('runOnCommit', () => {
+  describe('run (commit target)', () => {
     it('throws error when called', async () => {
       const agent = new WikiIndexAgent();
       const agentCtx = await ctx.agentContext('any-repo');
 
       await assert.rejects(
-        async () => agent.runOnCommit('any-commit-id', agentCtx),
-        /does not run on commits/,
-        'Should throw error explaining agent does not run on commits'
+        async () => agent.run(createCommitTarget('any-commit-id'), agentCtx),
+        /cannot handle target type/,
+        'Should throw error explaining agent does not handle commits'
       );
     });
   });

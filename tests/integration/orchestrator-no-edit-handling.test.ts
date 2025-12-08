@@ -9,7 +9,7 @@ import { v4 as uuid } from 'uuid';
 import { createTestContext, createTestRepo, type TestContext } from '../helpers/index.js';
 import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
-import { createEditRequest } from '../../src/domain/edit-request.js';
+import { createEditRequest, createCommitEditSource } from '../../src/domain/edit-request.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 
 describe('Orchestrator No Edit Handling', () => {
@@ -40,8 +40,7 @@ describe('Orchestrator No Edit Handling', () => {
         id: uuid(),
         repoId,
         wikiId,
-        sourceCommitSha: `commit${i}`,
-        sourceCommitTimestamp: new Date(),
+        source: createCommitEditSource(`commit${i}`, new Date()),
         sourceAgentType: 'code-change',
         sourceAgentRunId: uuid(),
         targetPagePath: `docs/page-${i}`,

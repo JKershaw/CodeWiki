@@ -109,33 +109,3 @@ export function getEditSourceTimestamp(source: EditSource): Date {
       return source.timestamp;
   }
 }
-
-/**
- * Convert legacy commit fields to EditSource.
- */
-export function legacyToEditSource(
-  sourceCommitSha: string,
-  sourceCommitTimestamp: Date
-): CommitEditSource {
-  return createCommitEditSource(sourceCommitSha, sourceCommitTimestamp);
-}
-
-/**
- * Extract legacy commit fields from EditSource (for backward compatibility).
- * Returns null values for non-commit sources.
- */
-export function editSourceToLegacy(source: EditSource): {
-  sourceCommitSha: string | null;
-  sourceCommitTimestamp: Date | null;
-} {
-  if (isCommitEditSource(source)) {
-    return {
-      sourceCommitSha: source.commitSha,
-      sourceCommitTimestamp: source.commitTimestamp,
-    };
-  }
-  return {
-    sourceCommitSha: null,
-    sourceCommitTimestamp: null,
-  };
-}

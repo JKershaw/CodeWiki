@@ -10,8 +10,7 @@ import { FileEditRequestRepository } from '../../src/repositories/file-based/fil
 import {
   createEditRequest,
   createCommitEditSource,
-  getSourceCommitSha,
-  getSourceCommitTimestamp,
+  isCommitEditSource,
   type EditRequest,
 } from '../../src/domain/edit-request.js';
 import { mkdtemp, rm } from 'fs/promises';
@@ -90,9 +89,11 @@ describe('EditRequestRepository', () => {
       const retrieved = await repo.findById(editRequest.id);
 
       assert.ok(retrieved);
-      const retrievedTimestamp = getSourceCommitTimestamp(retrieved);
-      assert.ok(retrievedTimestamp instanceof Date);
-      assert.strictEqual(retrievedTimestamp.getTime(), timestamp.getTime());
+      assert.ok(isCommitEditSource(retrieved.source));
+      if (isCommitEditSource(retrieved.source)) {
+        assert.ok(retrieved.source.commitTimestamp instanceof Date);
+        assert.strictEqual(retrieved.source.commitTimestamp.getTime(), timestamp.getTime());
+      }
     });
   });
 
@@ -124,9 +125,14 @@ describe('EditRequestRepository', () => {
 
       const results = await repo.findPending('wiki-1');
       assert.strictEqual(results.length, 3);
-      assert.strictEqual(getSourceCommitTimestamp(results[0]!)!.getTime(), olderTs.getTime());
-      assert.strictEqual(getSourceCommitTimestamp(results[1]!)!.getTime(), middleTs.getTime());
-      assert.strictEqual(getSourceCommitTimestamp(results[2]!)!.getTime(), newerTs.getTime());
+      assert.ok(isCommitEditSource(results[0]!.source));
+      assert.ok(isCommitEditSource(results[1]!.source));
+      assert.ok(isCommitEditSource(results[2]!.source));
+      if (isCommitEditSource(results[0]!.source) && isCommitEditSource(results[1]!.source) && isCommitEditSource(results[2]!.source)) {
+        assert.strictEqual(results[0]!.source.commitTimestamp.getTime(), olderTs.getTime());
+        assert.strictEqual(results[1]!.source.commitTimestamp.getTime(), middleTs.getTime());
+        assert.strictEqual(results[2]!.source.commitTimestamp.getTime(), newerTs.getTime());
+      }
     });
 
     it('returns empty array when no pending requests', async () => {
@@ -161,7 +167,10 @@ describe('EditRequestRepository', () => {
 
       const results = await repo.findByCommit('repo-1', 'abc123');
       assert.strictEqual(results.length, 1);
-      assert.strictEqual(getSourceCommitSha(results[0]!), 'abc123');
+      assert.ok(isCommitEditSource(results[0]!.source));
+      if (isCommitEditSource(results[0]!.source)) {
+        assert.strictEqual(results[0]!.source.commitSha, 'abc123');
+      }
     });
   });
 

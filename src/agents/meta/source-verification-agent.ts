@@ -43,14 +43,7 @@ export class SourceVerificationAgent implements Agent {
     if (!isWikiTarget(target)) {
       throw new Error(`SourceVerificationAgent cannot handle target type: ${target.type}`);
     }
-    return this.runOnWiki(context);
-  }
 
-  async runOnCommit(_commitId: string, _context: AgentContext): Promise<AgentRunResult> {
-    throw new Error('SourceVerificationAgent does not run on commits. Use run() with WikiTarget instead.');
-  }
-
-  async runOnWiki(context: AgentContext): Promise<AgentRunResult> {
     // Check if we have tool access for source verification
     const toolExecutor = createCodebaseToolExecutor(context);
     if (!toolExecutor) {

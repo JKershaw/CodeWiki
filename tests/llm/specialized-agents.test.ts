@@ -1,4 +1,5 @@
 /**
+import { createPathTarget } from '../../src/domain/work-target.js';
  * Real LLM tests for Specialized Agents.
  *
  * Tests for agents with unique APIs:
@@ -16,6 +17,7 @@ import 'dotenv/config';
 import { createSpecAgent } from '../../src/agents/spec/spec-agent.js';
 import { createResearchAgent } from '../../src/agents/research/research-agent.js';
 import { CodebaseExplorerAgent } from '../../src/agents/analysis/codebase-explorer-agent.js';
+import { createPathTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -316,7 +318,7 @@ export class EmailService {
       const agentCtx = await ctx.agentContext(repoId);
 
       const agent = new CodebaseExplorerAgent();
-      const result = await agent.runOnPath('src/services', agentCtx);
+      const result = await agent.run(createPathTarget('src/services'), agentCtx);
 
       // LLM-as-judge: Verify exploration quality
       const analysisText = JSON.stringify({

@@ -1,7 +1,6 @@
 import type { EditRequestRepository } from '../interfaces/edit-request-repository.js';
 import type { EditRequest, EditRequestStatus } from '../../domain/edit-request.js';
 import {
-  getSourceCommitSha,
   getEditSourceTimestamp,
   isCommitEditSource,
 } from '../../domain/edit-request.js';
@@ -45,10 +44,10 @@ export class FileEditRequestRepository implements EditRequestRepository {
   }
 
   async findByCommit(repoId: string, commitSha: string): Promise<EditRequest[]> {
-    // Use getSourceCommitSha helper to extract SHA from EditSource abstraction
+    // Use type guard to check for commit source and extract SHA from EditSource abstraction
     // No need to hydrate dates for SHA comparison (string doesn't need hydration)
     const results = await this.store.find(
-      (er) => er.repoId === repoId && getSourceCommitSha(er) === commitSha
+      (er) => er.repoId === repoId && isCommitEditSource(er.source) && er.source.commitSha === commitSha
     );
     return results.map((er) => this.hydrateDates(er));
   }

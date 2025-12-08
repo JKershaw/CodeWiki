@@ -1,4 +1,5 @@
 /**
+import { createPathTarget } from '../../src/domain/work-target.js';
  * Real LLM tests for CodebaseExplorerAgent.
  *
  * These tests verify:
@@ -15,6 +16,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { CodebaseExplorerAgent } from '../../src/agents/analysis/codebase-explorer-agent.js';
+import { createPathTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
