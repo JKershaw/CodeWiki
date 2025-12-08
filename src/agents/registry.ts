@@ -24,6 +24,7 @@ import { QualityAgent } from './meta/quality-agent.js';
 import { ConsistencyAgent } from './meta/consistency-agent.js';
 import { WikiEditorAgent } from './meta/wiki-editor-agent.js';
 import { SourceVerificationAgent } from './meta/source-verification-agent.js';
+import { CategoryAgent } from './meta/category-agent.js';
 
 // Consolidation agent
 import { ConsolidationAgent } from './consolidation/consolidation-agent.js';
@@ -68,6 +69,7 @@ function initializeRegistry(): void {
   agentRegistry.set('consistency', new ConsistencyAgent());
   agentRegistry.set('wiki-editor', new WikiEditorAgent());
   agentRegistry.set('source-verification', new SourceVerificationAgent());
+  agentRegistry.set('category', new CategoryAgent());
 
   // Consolidation agent
   agentRegistry.set('consolidation', new ConsolidationAgent());
@@ -157,6 +159,7 @@ export const META_AGENTS: AgentType[] = [
   'quality',              // Content quality review
   'consistency',          // Cross-page consistency check
   'source-verification',  // Verify wiki content matches source code
+  'category',             // Category inference and mismatch detection
 ];
 
 // Re-export AgentType from domain for convenience

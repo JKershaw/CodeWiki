@@ -78,6 +78,10 @@ export interface FindingMetadata {
   actualBehavior?: string;
   /** For inaccurate: relevant code snippet as evidence */
   codeSnippet?: string;
+  /** For category_mismatch: the suggested category for the page */
+  suggestedCategory?: string;
+  /** For category_mismatch: confidence in the suggested category (0-1) */
+  categoryConfidence?: number;
 }
 
 /**

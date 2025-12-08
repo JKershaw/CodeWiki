@@ -21,6 +21,10 @@ export interface WikiPage {
   links: string[];
   /** Pages that link to this page */
   backlinks: string[];
+  /** Inferred category for the page (e.g., "architecture", "security") */
+  category?: string;
+  /** Confidence score for the category assignment (0-1) */
+  categoryConfidence?: number;
   /** When the page was created */
   createdAt: Date;
   /** When the page was last updated */

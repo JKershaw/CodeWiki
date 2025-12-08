@@ -32,6 +32,8 @@ export const META_AGENTS: AgentType[] = [
   'structure',
   'quality',
   'consistency',
+  'source-verification',
+  'category',
 ];
 
 /**
