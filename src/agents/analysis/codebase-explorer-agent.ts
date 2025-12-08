@@ -475,6 +475,7 @@ Write as encyclopedia articles:
 Your documentation should:
 - Be comprehensive but focused
 - Include code examples and interface definitions FROM THE ACTUAL CODE
+- Use EXACT names for classes, functions, files, and variables as they appear in the source
 - Explain architectural decisions and patterns you observed
 - Be useful to a developer trying to understand the codebase
 
