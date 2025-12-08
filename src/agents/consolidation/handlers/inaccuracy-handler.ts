@@ -5,6 +5,7 @@ import type { WikiPage, WikiPageUpdate } from '../../../domain/wiki-page.js';
 import type { FindingHandler, FindingHandlerResult } from '../finding-handler.js';
 import { HandlerUtils } from '../finding-handler.js';
 import { createCodebaseToolExecutor } from '../../agent-helpers.js';
+import { createParseContext, parseSection } from '../../parsing/index.js';
 
 /**
  * Handler for inaccurate content findings.
@@ -165,8 +166,8 @@ CHANGES_MADE:
   }
 
   private parseCorrection(response: string): string | null {
-    const match = response.match(/CORRECTED_CONTENT:\s*([\s\S]*?)(?=CHANGES_MADE:|$)/i);
-    return match?.[1]?.trim() || null;
+    const ctx = createParseContext('inaccuracy-handler', response);
+    return parseSection(ctx, 'CORRECTED_CONTENT', /CORRECTED_CONTENT:\s*([\s\S]*?)(?=CHANGES_MADE:|$)/i);
   }
 }
 

@@ -13,6 +13,12 @@ import {
   getFailureSummary,
   getParseStats,
   validateMinLength,
+  parseChoice,
+  parseListItemsWithFallback,
+  parseStringList,
+  parseBlocks,
+  mapSeverity,
+  mapPriority,
 } from '../../src/agents/parsing/index.js';
 
 describe('Response Parser', () => {
@@ -403,5 +409,631 @@ CONFIDENCE: 0.6`;
     assert.strictEqual(title, null);
     assert.ok(content);
     assert.ok(content.includes('actual content'));
+  });
+});
+
+describe('parseChoice', () => {
+  const validDecisions = ['merge', 'keep-separate'] as const;
+  const validTrends = ['adding_debt', 'reducing_debt', 'neutral', 'mixed'] as const;
+
+  it('should parse a valid choice value', () => {
+    const ctx = createParseContext('test', 'DECISION: merge\nCONFIDENCE: 0.8');
+
+    const result = parseChoice(ctx, 'DECISION', /DECISION:\s*(\S+)/i, validDecisions);
+
+    assert.strictEqual(result, 'merge');
+    assert.ok(ctx.successfulSections.includes('DECISION'));
+  });
+
+  it('should be case-insensitive', () => {
+    const ctx = createParseContext('test', 'DECISION: MERGE\nCONFIDENCE: 0.8');
+
+    const result = parseChoice(ctx, 'DECISION', /DECISION:\s*(\S+)/i, validDecisions);
+
+    assert.strictEqual(result, 'merge');
+  });
+
+  it('should handle hyphen/underscore variations', () => {
+    const ctx = createParseContext('test', 'DECISION: keep_separate');
+
+    const result = parseChoice(ctx, 'DECISION', /DECISION:\s*(\S+)/i, validDecisions);
+
+    assert.strictEqual(result, 'keep-separate');
+  });
+
+  it('should handle debt trends with underscore normalization', () => {
+    const ctx = createParseContext('test', 'DEBT_TREND: adding-debt');
+
+    const result = parseChoice(ctx, 'DEBT_TREND', /DEBT_TREND:\s*(\S+)/i, validTrends);
+
+    assert.strictEqual(result, 'adding_debt');
+  });
+
+  it('should return default value for invalid choice', () => {
+    const ctx = createParseContext('test', 'DECISION: invalid');
+
+    const result = parseChoice(ctx, 'DECISION', /DECISION:\s*(\S+)/i, validDecisions, {
+      defaultValue: 'keep-separate',
+    });
+
+    assert.strictEqual(result, 'keep-separate');
+    assert.strictEqual(ctx.failures.length, 1);
+  });
+
+  it('should return null for missing choice without default', () => {
+    const ctx = createParseContext('test', 'OTHER: stuff');
+
+    const result = parseChoice(ctx, 'DECISION', /DECISION:\s*(\S+)/i, validDecisions);
+
+    assert.strictEqual(result, null);
+    assert.strictEqual(ctx.failures.length, 1);
+  });
+
+  it('should mark required failures correctly', () => {
+    const ctx = createParseContext('test', 'OTHER: stuff');
+
+    parseChoice(ctx, 'DECISION', /DECISION:\s*(\S+)/i, validDecisions, { required: true });
+
+    assert.ok(hasRequiredFailures(ctx));
+  });
+});
+
+describe('parseListItemsWithFallback', () => {
+  interface Finding {
+    type: string;
+    severity: string;
+    description: string;
+    paths: string[];
+  }
+
+  const findingPatterns = [
+    {
+      // Format: - [TYPE] [SEVERITY:level] Description [paths]
+      pattern: /^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+      mapper: (m: RegExpMatchArray): Finding => ({
+        type: m[1]!.trim(),
+        severity: m[2]!.toLowerCase(),
+        description: m[3]!.trim(),
+        paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+      }),
+    },
+    {
+      // Format: - [TYPE] (severity) Description
+      pattern: /^-\s*\[([^\]]+)\]\s*\((\w+)\)\s*(.+)$/i,
+      mapper: (m: RegExpMatchArray): Finding => ({
+        type: m[1]!.trim(),
+        severity: m[2]!.toLowerCase(),
+        description: m[3]!.trim(),
+        paths: [],
+      }),
+    },
+    {
+      // Format: - **TYPE** (severity): Description
+      pattern: /^-\s*\*\*([^*]+)\*\*\s*\((\w+)\)[:\s]*(.+)$/i,
+      mapper: (m: RegExpMatchArray): Finding => ({
+        type: m[1]!.trim(),
+        severity: m[2]!.toLowerCase(),
+        description: m[3]!.trim(),
+        paths: [],
+      }),
+    },
+  ];
+
+  it('should parse items with first matching pattern', () => {
+    const response = `FINDINGS:
+- [Code Smell] [SEVERITY:high] Long method detected [src/main.ts]
+- [Dead Code] [SEVERITY:low] Unused variable [src/utils.ts]
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      findingPatterns
+    );
+
+    assert.strictEqual(items.length, 2);
+    assert.strictEqual(items[0]!.type, 'Code Smell');
+    assert.strictEqual(items[0]!.severity, 'high');
+    assert.deepStrictEqual(items[0]!.paths, ['src/main.ts']);
+    assert.strictEqual(items[1]!.type, 'Dead Code');
+  });
+
+  it('should try fallback patterns when first fails', () => {
+    const response = `FINDINGS:
+- [Code Smell] (high) Long method detected
+- **Dead Code** (low): Unused variable
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      findingPatterns
+    );
+
+    assert.strictEqual(items.length, 2);
+    assert.strictEqual(items[0]!.type, 'Code Smell');
+    assert.strictEqual(items[0]!.severity, 'high');
+    assert.strictEqual(items[1]!.type, 'Dead Code');
+    assert.strictEqual(items[1]!.severity, 'low');
+  });
+
+  it('should handle mixed formats in same section', () => {
+    const response = `FINDINGS:
+- [Code Smell] [SEVERITY:high] First finding [path1]
+- [Dead Code] (medium) Second finding
+- **Complexity** (low): Third finding
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      findingPatterns
+    );
+
+    assert.strictEqual(items.length, 3);
+  });
+
+  it('should return empty array for missing section', () => {
+    const ctx = createParseContext('test', 'OTHER: stuff');
+
+    const items = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      findingPatterns
+    );
+
+    assert.deepStrictEqual(items, []);
+  });
+
+  it('should skip lines that match no pattern', () => {
+    const response = `FINDINGS:
+- [Code Smell] [SEVERITY:high] Valid finding
+- This line has no valid format
+- [Another] [SEVERITY:low] Also valid
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      findingPatterns
+    );
+
+    assert.strictEqual(items.length, 2);
+  });
+});
+
+describe('parseStringList', () => {
+  it('should parse a simple string list', () => {
+    const response = `RECOMMENDATIONS:
+- First recommendation
+- Second recommendation
+- Third recommendation
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseStringList(
+      ctx,
+      'RECOMMENDATIONS',
+      /RECOMMENDATIONS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
+    );
+
+    assert.strictEqual(items.length, 3);
+    assert.strictEqual(items[0], 'First recommendation');
+    assert.strictEqual(items[1], 'Second recommendation');
+    assert.strictEqual(items[2], 'Third recommendation');
+  });
+
+  it('should trim whitespace from items', () => {
+    const response = `ITEMS:
+-   Item with leading spaces
+-	Item with tabs
+- Normal item
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseStringList(
+      ctx,
+      'ITEMS',
+      /ITEMS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
+    );
+
+    assert.strictEqual(items.length, 3);
+    assert.strictEqual(items[0], 'Item with leading spaces');
+    assert.strictEqual(items[1], 'Item with tabs');
+    assert.strictEqual(items[2], 'Normal item');
+  });
+
+  it('should filter empty lines', () => {
+    const response = `ITEMS:
+- First
+-
+- Second
+-
+- Third
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseStringList(
+      ctx,
+      'ITEMS',
+      /ITEMS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
+    );
+
+    assert.strictEqual(items.length, 3);
+  });
+
+  it('should return empty array for missing section', () => {
+    const ctx = createParseContext('test', 'OTHER: stuff');
+
+    const items = parseStringList(
+      ctx,
+      'ITEMS',
+      /ITEMS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
+    );
+
+    assert.deepStrictEqual(items, []);
+  });
+});
+
+describe('parseBlocks', () => {
+  interface WikiUpdate {
+    path: string;
+    action: string;
+    content: string;
+  }
+
+  const blockPattern = /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
+
+  it('should parse block-delimited content', () => {
+    const response = `WIKI_UPDATES:
+=== [architecture/overview] [create] ===
+# Architecture Overview
+
+The system uses a multi-agent architecture.
+=== END ===
+
+=== [guides/setup] [update] ===
+# Setup Guide
+
+Follow these steps to set up the project.
+=== END ===
+
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseBlocks<WikiUpdate>(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      blockPattern,
+      (m) => ({
+        path: m[1]!.trim(),
+        action: m[2]!.toLowerCase(),
+        content: m[3]!.trim(),
+      })
+    );
+
+    assert.strictEqual(items.length, 2);
+    assert.strictEqual(items[0]!.path, 'architecture/overview');
+    assert.strictEqual(items[0]!.action, 'create');
+    assert.ok(items[0]!.content.includes('Architecture Overview'));
+    assert.strictEqual(items[1]!.path, 'guides/setup');
+    assert.strictEqual(items[1]!.action, 'update');
+  });
+
+  it('should handle blocks with various whitespace', () => {
+    const response = `WIKI_UPDATES:
+===  [path/one]  [create]  ===
+Content one
+===  END  ===
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const items = parseBlocks<WikiUpdate>(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      blockPattern,
+      (m) => ({
+        path: m[1]!.trim(),
+        action: m[2]!.toLowerCase(),
+        content: m[3]!.trim(),
+      })
+    );
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0]!.path, 'path/one');
+  });
+
+  it('should return empty array for missing section', () => {
+    const ctx = createParseContext('test', 'OTHER: stuff');
+
+    const items = parseBlocks<WikiUpdate>(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      blockPattern,
+      (m) => ({
+        path: m[1]!.trim(),
+        action: m[2]!.toLowerCase(),
+        content: m[3]!.trim(),
+      })
+    );
+
+    assert.deepStrictEqual(items, []);
+  });
+
+  it('should handle pattern without global flag', () => {
+    const response = `WIKI_UPDATES:
+=== [path/one] [create] ===
+Content
+=== END ===
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+    const nonGlobalPattern = /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/i;
+
+    const items = parseBlocks<WikiUpdate>(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      nonGlobalPattern,
+      (m) => ({
+        path: m[1]!.trim(),
+        action: m[2]!.toLowerCase(),
+        content: m[3]!.trim(),
+      })
+    );
+
+    // Should still find items by adding global flag internally
+    assert.strictEqual(items.length, 1);
+  });
+});
+
+describe('mapSeverity', () => {
+  it('should map critical and high to high importance', () => {
+    assert.strictEqual(mapSeverity('critical'), 'high');
+    assert.strictEqual(mapSeverity('high'), 'high');
+    assert.strictEqual(mapSeverity('urgent'), 'high');
+    assert.strictEqual(mapSeverity('CRITICAL'), 'high');
+    assert.strictEqual(mapSeverity('HIGH'), 'high');
+  });
+
+  it('should map medium variants to medium importance', () => {
+    assert.strictEqual(mapSeverity('medium'), 'medium');
+    assert.strictEqual(mapSeverity('normal'), 'medium');
+    assert.strictEqual(mapSeverity('moderate'), 'medium');
+    assert.strictEqual(mapSeverity('MEDIUM'), 'medium');
+  });
+
+  it('should map low and unknown to low importance', () => {
+    assert.strictEqual(mapSeverity('low'), 'low');
+    assert.strictEqual(mapSeverity('minor'), 'low');
+    assert.strictEqual(mapSeverity('info'), 'low');
+    assert.strictEqual(mapSeverity('unknown'), 'low');
+    assert.strictEqual(mapSeverity(''), 'low');
+  });
+
+  it('should handle whitespace', () => {
+    assert.strictEqual(mapSeverity('  high  '), 'high');
+    assert.strictEqual(mapSeverity('\tmedium\t'), 'medium');
+  });
+
+  it('should use custom mapping when provided', () => {
+    const customMapping = {
+      'p0': 'high' as const,
+      'p1': 'medium' as const,
+      'p2': 'low' as const,
+    };
+
+    assert.strictEqual(mapSeverity('p0', customMapping), 'high');
+    assert.strictEqual(mapSeverity('p1', customMapping), 'medium');
+    assert.strictEqual(mapSeverity('p2', customMapping), 'low');
+    // Should fall back to default for unmapped values
+    assert.strictEqual(mapSeverity('critical', customMapping), 'high');
+  });
+});
+
+describe('mapPriority', () => {
+  it('should map high priority values', () => {
+    assert.strictEqual(mapPriority('critical'), 'high');
+    assert.strictEqual(mapPriority('high'), 'high');
+    assert.strictEqual(mapPriority('urgent'), 'high');
+    assert.strictEqual(mapPriority('p0'), 'high');
+    assert.strictEqual(mapPriority('p1'), 'high');
+  });
+
+  it('should map medium priority values', () => {
+    assert.strictEqual(mapPriority('medium'), 'medium');
+    assert.strictEqual(mapPriority('normal'), 'medium');
+    assert.strictEqual(mapPriority('p2'), 'medium');
+  });
+
+  it('should map low and unknown to low', () => {
+    assert.strictEqual(mapPriority('low'), 'low');
+    assert.strictEqual(mapPriority('p3'), 'low');
+    assert.strictEqual(mapPriority('unknown'), 'low');
+  });
+});
+
+describe('Integration: Complete agent response parsing', () => {
+  it('should parse a complex TechnicalDebtAgent-style response', () => {
+    const response = `SUMMARY:
+This commit introduces some technical debt through complex nested conditionals.
+
+DEBT_TREND: adding_debt
+
+FINDINGS:
+- [Code Smell] [SEVERITY:high] Complex nested conditional in main function [src/main.ts]
+- [Dead Code] [SEVERITY:low] Unused import statements [src/utils.ts, src/helpers.ts]
+
+TODO_ITEMS:
+- [src/main.ts:45] [TODO] Refactor this function
+- [src/utils.ts:12] [FIXME] Handle edge case
+
+REMEDIATION:
+- Extract complex conditional into separate function
+- Remove unused imports
+
+CONFIDENCE: 0.85`;
+
+    const ctx = createParseContext('technical-debt', response);
+
+    // Parse summary
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=DEBT_TREND:|FINDINGS:|$)/i);
+    assert.ok(summary);
+    assert.ok(summary.includes('technical debt'));
+
+    // Parse debt trend
+    const trend = parseChoice(ctx, 'DEBT_TREND', /DEBT_TREND:\s*(\S+)/i,
+      ['adding_debt', 'reducing_debt', 'neutral', 'mixed'] as const);
+    assert.strictEqual(trend, 'adding_debt');
+
+    // Parse findings with fallback
+    const findings = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=TODO_ITEMS:|REMEDIATION:|CONFIDENCE:|$)/i,
+      [
+        {
+          pattern: /^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+          mapper: (m) => ({
+            type: m[1]!.trim(),
+            severity: mapSeverity(m[2]!),
+            description: m[3]!.trim(),
+            paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+          }),
+        },
+      ]
+    );
+    assert.strictEqual(findings.length, 2);
+    assert.strictEqual(findings[0]!.type, 'Code Smell');
+    assert.strictEqual(findings[0]!.severity, 'high');
+
+    // Parse remediation as string list
+    const remediations = parseStringList(
+      ctx,
+      'REMEDIATION',
+      /REMEDIATION:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
+    );
+    assert.strictEqual(remediations.length, 2);
+    assert.ok(remediations[0]!.includes('complex conditional'));
+
+    // Parse confidence
+    const confidence = parseConfidence(ctx);
+    assert.strictEqual(confidence, 0.85);
+
+    // Should have no required failures
+    assert.ok(!hasRequiredFailures(ctx));
+  });
+
+  it('should parse a DuplicateHandler-style response', () => {
+    const response = `DECISION: merge
+REASON: Both pages cover the same topic with overlapping content.
+PRIMARY_PAGE: architecture/overview
+MERGED_CONTENT:
+# Architecture Overview
+
+This is the merged content from both pages.
+DELETE_PAGES: architecture/intro, architecture/summary
+CONFIDENCE: 0.9`;
+
+    const ctx = createParseContext('duplicate-handler', response);
+
+    const decision = parseChoice(ctx, 'DECISION', /DECISION:\s*(\S+)/i,
+      ['merge', 'keep-separate'] as const);
+    assert.strictEqual(decision, 'merge');
+
+    const reason = parseSection(ctx, 'REASON', /REASON:\s*(.+?)(?=PRIMARY_PAGE:|$)/is);
+    assert.ok(reason);
+    assert.ok(reason.includes('overlapping content'));
+
+    const primaryPage = parseSection(ctx, 'PRIMARY_PAGE', /PRIMARY_PAGE:\s*(.+?)(?=MERGED_CONTENT:|DELETE_PAGES:|$)/is);
+    assert.strictEqual(primaryPage, 'architecture/overview');
+
+    const content = parseSection(ctx, 'MERGED_CONTENT', /MERGED_CONTENT:\s*([\s\S]*?)(?=DELETE_PAGES:|CONFIDENCE:|$)/i);
+    assert.ok(content);
+    assert.ok(content.includes('Architecture Overview'));
+
+    const confidence = parseConfidence(ctx);
+    assert.strictEqual(confidence, 0.9);
+  });
+
+  it('should parse a CodeChangeAgent-style response with blocks', () => {
+    const response = `PAGE_TITLE: Multi-Agent Architecture Implementation
+
+SUMMARY:
+The codebase implements a multi-agent architecture for processing code changes.
+
+FINDINGS:
+- [ARCHITECTURE] [IMPORTANCE:high] New agent system implemented [src/agents/]
+
+WIKI_UPDATES:
+=== [architecture/agents] [create] ===
+# Agent System
+
+The agent system provides specialized processors for different aspects of code analysis.
+
+## Available Agents
+
+- CodeChangeAgent: Analyzes code changes
+- SecurityAgent: Security auditing
+=== END ===
+
+=== [guides/contributing] [update] ===
+# Contributing Guide
+
+When adding new agents, follow the established patterns.
+=== END ===
+
+CONFIDENCE: 0.85`;
+
+    const ctx = createParseContext('code-change', response);
+
+    const title = parseSection(ctx, 'PAGE_TITLE', /PAGE_TITLE:\s*(.+?)(?=\n|SUMMARY:|$)/i);
+    assert.strictEqual(title, 'Multi-Agent Architecture Implementation');
+
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i);
+    assert.ok(summary);
+
+    const updates = parseBlocks(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      (m) => ({
+        path: m[1]!.trim(),
+        action: m[2]!.toLowerCase() as 'create' | 'update' | 'merge',
+        content: m[3]!.trim(),
+      })
+    );
+
+    assert.strictEqual(updates.length, 2);
+    assert.strictEqual(updates[0]!.path, 'architecture/agents');
+    assert.strictEqual(updates[0]!.action, 'create');
+    assert.ok(updates[0]!.content.includes('Agent System'));
+    assert.strictEqual(updates[1]!.path, 'guides/contributing');
+    assert.strictEqual(updates[1]!.action, 'update');
+
+    const confidence = parseConfidence(ctx);
+    assert.strictEqual(confidence, 0.85);
   });
 });

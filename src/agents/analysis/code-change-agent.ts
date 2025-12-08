@@ -7,6 +7,14 @@ import {
   getCommitDiff,
   createCodebaseToolExecutor,
 } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseListItemsWithFallback,
+  parseBlocks,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Code Change Agent - Standard analysis of what changed in a commit.
@@ -184,86 +192,85 @@ CONFIDENCE: [0-1 value]
   }
 
   private parseResponse(response: string): ParsedAnalysis {
-    const analysis: ParsedAnalysis = {
-      pageTitle: '',
-      summary: '',
-      findings: [],
-      wikiUpdates: [],
-      confidence: 0.5,
-    };
+    const ctx = createParseContext('code-change', response);
 
     // Parse page title
-    const titleMatch = response.match(/PAGE_TITLE:\s*(.+?)(?=\n|SUMMARY:|$)/i);
-    if (titleMatch) {
-      analysis.pageTitle = titleMatch[1]!.trim();
-    }
+    const pageTitle = parseSection(ctx, 'PAGE_TITLE', /PAGE_TITLE:\s*(.+?)(?=\n|SUMMARY:|$)/i) ?? '';
 
     // Parse summary
-    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i);
-    if (summaryMatch) {
-      analysis.summary = summaryMatch[1]!.trim();
-    }
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i) ?? '';
 
-    // Parse findings
-    const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (findingsMatch) {
-      const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of findingLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
-        if (match) {
-          analysis.findings.push({
-            type: match[1]!.trim(),
-            importance: (match[2]!.toLowerCase() as 'low' | 'medium' | 'high'),
-            description: match[3]!.trim(),
-            paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
-          });
-        }
-      }
-    }
+    // Define finding patterns
+    const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
+      {
+        pattern: /^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        mapper: (m) => ({
+          type: m[1]!.trim(),
+          importance: m[2]!.toLowerCase() as 'low' | 'medium' | 'high',
+          description: m[3]!.trim(),
+          paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+        }),
+      },
+    ];
 
-    // Parse wiki updates - new format with full content blocks
-    const updatesSection = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesSection) {
-      // Match blocks like: === [path] [action] ===\n[content]\n=== END ===
-      const blockRegex = /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
-      let blockMatch;
-      while ((blockMatch = blockRegex.exec(updatesSection[1]!)) !== null) {
-        const path = blockMatch[1]!.trim();
-        const action = blockMatch[2]!.toLowerCase() as 'create' | 'update' | 'merge';
-        const content = blockMatch[3]!.trim();
+    const findings = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      findingPatterns
+    );
 
+    // Parse wiki updates using block format
+    const wikiUpdates = parseBlocks<ParsedAnalysis['wikiUpdates'][0]>(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      (m) => {
+        const content = m[3]!.trim();
         if (content && content.length > 0) {
-          analysis.wikiUpdates.push({
-            path,
-            action,
+          return {
+            path: m[1]!.trim(),
+            action: m[2]!.toLowerCase() as 'create' | 'update' | 'merge',
             content,
-          });
+          };
         }
+        return null;
       }
+    );
 
-      // Fallback: also try to parse old format for backward compatibility
-      if (analysis.wikiUpdates.length === 0) {
-        const updateLines = updatesSection[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-        for (const line of updateLines) {
-          const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*(.+)$/i);
-          if (match) {
-            analysis.wikiUpdates.push({
-              path: match[1]!.trim(),
-              action: match[2]!.toLowerCase() as 'create' | 'update' | 'merge',
-              content: match[3]!.trim(), // Use description as content for legacy format
-            });
-          }
-        }
-      }
+    // Fallback: try legacy line format if no blocks found
+    let finalWikiUpdates = wikiUpdates;
+    if (wikiUpdates.length === 0) {
+      const legacyPatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
+        {
+          pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*(.+)$/i,
+          mapper: (m) => ({
+            path: m[1]!.trim(),
+            action: m[2]!.toLowerCase() as 'create' | 'update' | 'merge',
+            content: m[3]!.trim(),
+          }),
+        },
+      ];
+
+      finalWikiUpdates = parseListItemsWithFallback(
+        ctx,
+        'WIKI_UPDATES_LEGACY',
+        /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+        legacyPatterns
+      );
     }
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
 
-    return analysis;
+    return {
+      pageTitle,
+      summary,
+      findings,
+      wikiUpdates: finalWikiUpdates,
+      confidence,
+    };
   }
 
   private generateUpdates(

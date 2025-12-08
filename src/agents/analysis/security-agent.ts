@@ -4,6 +4,16 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseChoice,
+  parseListItemsWithFallback,
+  parseStringList,
+  parseConfidence,
+  mapSeverity,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Security Agent - Audits commits for security-relevant changes.
@@ -153,86 +163,85 @@ CONFIDENCE: [0-1 value]
   }
 
   private parseResponse(response: string): ParsedAnalysis {
-    const analysis: ParsedAnalysis = {
-      summary: '',
-      securityRelevance: 'none',
-      findings: [],
-      vulnerabilities: [],
-      recommendations: [],
-      wikiUpdates: [],
-      confidence: 0.5,
-    };
+    const ctx = createParseContext('security', response);
 
     // Parse summary
-    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=SECURITY_RELEVANCE:|FINDINGS:|$)/i);
-    if (summaryMatch) {
-      analysis.summary = summaryMatch[1]!.trim();
-    }
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=SECURITY_RELEVANCE:|FINDINGS:|$)/i) ?? '';
 
-    // Parse security relevance
-    const relevanceMatch = response.match(/SECURITY_RELEVANCE:\s*(\w+)/i);
-    if (relevanceMatch) {
-      analysis.securityRelevance = relevanceMatch[1]!.toLowerCase() as SecurityRelevance;
-    }
+    // Parse security relevance using parseChoice
+    const securityRelevance = parseChoice(
+      ctx,
+      'SECURITY_RELEVANCE',
+      /SECURITY_RELEVANCE:\s*(\w+)/i,
+      ['critical', 'high', 'medium', 'low', 'none'] as const,
+      { defaultValue: 'none' }
+    ) ?? 'none';
 
-    // Parse findings
-    const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=VULNERABILITIES:|RECOMMENDATIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (findingsMatch) {
-      const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of findingLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
-        if (match) {
-          analysis.findings.push({
-            type: match[1]!.trim(),
-            importance: mapSeverityToImportance(match[2]!.toLowerCase()),
-            description: match[3]!.trim(),
-            paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
-          });
-        }
-      }
-    }
+    // Define finding patterns
+    const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
+      {
+        pattern: /^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        mapper: (m) => ({
+          type: m[1]!.trim(),
+          importance: mapSeverity(m[2]!),
+          description: m[3]!.trim(),
+          paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+        }),
+      },
+    ];
 
-    // Parse vulnerabilities
-    const vulnsMatch = response.match(/VULNERABILITIES:\s*([\s\S]*?)(?=RECOMMENDATIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (vulnsMatch) {
-      const vulnLines = vulnsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of vulnLines) {
-        analysis.vulnerabilities.push(line.replace(/^-\s*/, '').trim());
-      }
-    }
+    const findings = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=VULNERABILITIES:|RECOMMENDATIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      findingPatterns
+    );
 
-    // Parse recommendations
-    const recsMatch = response.match(/RECOMMENDATIONS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (recsMatch) {
-      const recLines = recsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of recLines) {
-        analysis.recommendations.push(line.replace(/^-\s*/, '').trim());
-      }
-    }
+    // Parse vulnerabilities as string list
+    const vulnerabilities = parseStringList(
+      ctx,
+      'VULNERABILITIES',
+      /VULNERABILITIES:\s*([\s\S]*?)(?=RECOMMENDATIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+    );
 
-    // Parse wiki updates
-    const updatesMatch = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesMatch) {
-      const updateLines = updatesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of updateLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
-        if (match) {
-          analysis.wikiUpdates.push({
-            path: match[1]!.trim(),
-            action: match[2]!.toLowerCase() as 'create' | 'update',
-            description: match[3]!.trim(),
-          });
-        }
-      }
-    }
+    // Parse recommendations as string list
+    const recommendations = parseStringList(
+      ctx,
+      'RECOMMENDATIONS',
+      /RECOMMENDATIONS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i
+    );
+
+    // Define wiki update patterns
+    const wikiUpdatePatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
+      {
+        pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
+        mapper: (m) => ({
+          path: m[1]!.trim(),
+          action: m[2]!.toLowerCase() as 'create' | 'update',
+          description: m[3]!.trim(),
+        }),
+      },
+    ];
+
+    const wikiUpdates = parseListItemsWithFallback(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      wikiUpdatePatterns
+    );
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
 
-    return analysis;
+    return {
+      summary,
+      securityRelevance,
+      findings,
+      vulnerabilities,
+      recommendations,
+      wikiUpdates,
+      confidence,
+    };
   }
 
   private generateUpdates(
@@ -342,11 +351,6 @@ interface ParsedAnalysis {
   confidence: number;
 }
 
-function mapSeverityToImportance(severity: string): 'low' | 'medium' | 'high' {
-  if (severity === 'critical' || severity === 'high') return 'high';
-  if (severity === 'medium') return 'medium';
-  return 'low';
-}
 
 const SYSTEM_PROMPT = `You are a security audit agent for CodeWiki, a system that generates living documentation from Git repositories.
 

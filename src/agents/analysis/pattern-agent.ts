@@ -8,9 +8,12 @@ import {
   createParseContext,
   parseSection,
   parseSectionItems,
+  parseListItemsWithFallback,
+  parseStringList,
   parseConfidence,
   getParseStats,
   type ParseContext,
+  type ItemPattern,
 } from '../parsing/index.js';
 
 /**
@@ -260,19 +263,17 @@ export function parsePatternResponse(response: string): ParsedPatternAnalysis {
   analysis.tradeOffs = parseTradeOffs(ctx, response);
 
   // Parse conventions (simple list extraction)
-  analysis.conventions = parseSimpleList(
+  analysis.conventions = parseStringList(
     ctx,
     'CONVENTIONS',
-    /CONVENTIONS:\s*([\s\S]*?)(?=ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
-    response
+    /CONVENTIONS:\s*([\s\S]*?)(?=ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
   );
 
   // Parse anti-patterns (simple list extraction)
-  analysis.antiPatterns = parseSimpleList(
+  analysis.antiPatterns = parseStringList(
     ctx,
     'ANTI_PATTERNS',
-    /ANTI_PATTERNS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i,
-    response
+    /ANTI_PATTERNS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i
   );
 
   // Parse wiki updates
@@ -305,43 +306,34 @@ export function parsePatternResponse(response: string): ParsedPatternAnalysis {
 /**
  * Parse key files with handling for role variants.
  */
-function parseKeyFiles(ctx: ParseContext, response: string): KeyFile[] {
-  const keyFiles: KeyFile[] = [];
+function parseKeyFiles(ctx: ParseContext, _response: string): KeyFile[] {
+  const keyFilePatterns: ItemPattern<KeyFile>[] = [
+    // Format: - [path] [ROLE] description
+    {
+      pattern: /^-\s*\[([^\]]+)\]\s*\[(PRIMARY|SUPPORTING|RELATED|EXAMPLE)\]\s*(.*)$/i,
+      mapper: (m) => ({
+        path: m[1]!.trim(),
+        role: m[2]!.toUpperCase().trim() as KeyFileRole,
+        description: m[3]!.trim(),
+      }),
+    },
+    // Format without role: - [path] description
+    {
+      pattern: /^-\s*\[([^\]]+)\]\s*(.*)$/i,
+      mapper: (m) => ({
+        path: m[1]!.trim(),
+        role: 'RELATED' as KeyFileRole,
+        description: m[2]!.trim(),
+      }),
+    },
+  ];
 
-  const sectionMatch = response.match(
-    /KEY_FILES:\s*([\s\S]*?)(?=CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+  return parseListItemsWithFallback(
+    ctx,
+    'KEY_FILES',
+    /KEY_FILES:\s*([\s\S]*?)(?=CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+    keyFilePatterns
   );
-
-  if (!sectionMatch) {
-    return keyFiles;
-  }
-
-  ctx.successfulSections.push('KEY_FILES');
-  const lines = sectionMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
-
-  for (const line of lines) {
-    // Try to match with role: - [path] [ROLE] description
-    const matchWithRole = line.match(/^-\s*\[([^\]]+)\]\s*\[(PRIMARY|SUPPORTING|RELATED|EXAMPLE)\]\s*(.*)$/i);
-    if (matchWithRole) {
-      keyFiles.push({
-        path: matchWithRole[1]!.trim(),
-        role: matchWithRole[2]!.toUpperCase().trim() as KeyFileRole,
-        description: matchWithRole[3]!.trim(),
-      });
-    } else {
-      // Try to match without role: - [path] description
-      const matchWithoutRole = line.match(/^-\s*\[([^\]]+)\]\s*(.*)$/i);
-      if (matchWithoutRole) {
-        keyFiles.push({
-          path: matchWithoutRole[1]!.trim(),
-          role: 'RELATED',
-          description: matchWithoutRole[2]!.trim(),
-        });
-      }
-    }
-  }
-
-  return keyFiles;
 }
 
 /**
@@ -378,72 +370,34 @@ function parseCodeSnippets(ctx: ParseContext, response: string): CodeSnippet[] {
 /**
  * Parse trade-offs with fallback for entries without names.
  */
-function parseTradeOffs(ctx: ParseContext, response: string): TradeOff[] {
-  const tradeOffs: TradeOff[] = [];
+function parseTradeOffs(ctx: ParseContext, _response: string): TradeOff[] {
+  const tradeOffPatterns: ItemPattern<TradeOff>[] = [
+    // Format: - [Name] description
+    {
+      pattern: /^-\s*\[([^\]]+)\]\s*(.+)$/,
+      mapper: (m) => ({
+        name: m[1]!.trim(),
+        description: m[2]!.trim(),
+      }),
+    },
+    // Fallback: - description (no name)
+    {
+      pattern: /^-\s*(.+)$/,
+      mapper: (m) => ({
+        name: 'Trade-off',
+        description: m[1]!.trim(),
+      }),
+    },
+  ];
 
-  const sectionMatch = response.match(
-    /TRADE_OFFS:\s*([\s\S]*?)(?=CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+  return parseListItemsWithFallback(
+    ctx,
+    'TRADE_OFFS',
+    /TRADE_OFFS:\s*([\s\S]*?)(?=CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+    tradeOffPatterns
   );
-
-  if (!sectionMatch) {
-    return tradeOffs;
-  }
-
-  ctx.successfulSections.push('TRADE_OFFS');
-  const lines = sectionMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
-
-  for (const line of lines) {
-    // Try to match with name: - [Name] description
-    const matchWithName = line.match(/^-\s*\[([^\]]+)\]\s*(.+)$/);
-    if (matchWithName) {
-      tradeOffs.push({
-        name: matchWithName[1]!.trim(),
-        description: matchWithName[2]!.trim(),
-      });
-    } else {
-      // Match without name
-      const desc = line.replace(/^-\s*/, '').trim();
-      if (desc) {
-        tradeOffs.push({
-          name: 'Trade-off',
-          description: desc,
-        });
-      }
-    }
-  }
-
-  return tradeOffs;
 }
 
-/**
- * Parse a simple list section (just lines starting with -).
- */
-function parseSimpleList(
-  ctx: ParseContext,
-  sectionName: string,
-  pattern: RegExp,
-  response: string
-): string[] {
-  const items: string[] = [];
-
-  const sectionMatch = response.match(pattern);
-
-  if (!sectionMatch) {
-    return items;
-  }
-
-  ctx.successfulSections.push(sectionName);
-  const lines = sectionMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
-
-  for (const line of lines) {
-    const item = line.replace(/^-\s*/, '').trim();
-    if (item) {
-      items.push(item);
-    }
-  }
-
-  return items;
-}
 
 /**
  * Generate wiki page updates from the parsed analysis.

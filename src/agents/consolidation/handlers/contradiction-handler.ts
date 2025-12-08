@@ -4,6 +4,7 @@ import type { FindingGroup, FindingType, Finding } from '../../../domain/finding
 import type { WikiPage, WikiPageUpdate } from '../../../domain/wiki-page.js';
 import type { FindingHandler, FindingHandlerResult } from '../finding-handler.js';
 import { HandlerUtils } from '../finding-handler.js';
+import { createParseContext, parseSection, parseConfidence } from '../../parsing/index.js';
 
 /**
  * Decision structure for contradiction resolution.
@@ -96,35 +97,30 @@ CONFIDENCE: [0-1]
   }
 
   private parseDecision(response: string): ContradictionDecision {
-    const decision: ContradictionDecision = {
-      resolution: '',
-      updates: new Map(),
-      summary: 'Contradiction resolution',
-      confidence: 0.6,
-    };
+    const ctx = createParseContext('contradiction-handler', response);
 
-    const resolutionMatch = response.match(/RESOLUTION:\s*(.+?)(?=UPDATES:|$)/is);
-    if (resolutionMatch) {
-      decision.resolution = resolutionMatch[1]!.trim();
-    }
+    // Parse resolution
+    const resolution = parseSection(ctx, 'RESOLUTION', /RESOLUTION:\s*(.+?)(?=UPDATES:|UPDATED_CONTENT:|$)/is) ?? '';
 
-    // Parse updated content sections
+    // Parse updated content sections - uses custom block format
+    const updates = new Map<string, string>();
     const contentMatches = response.matchAll(/---\[([^\]]+)\]---\s*([\s\S]*?)(?=---\[|SUMMARY:|CONFIDENCE:|$)/g);
     for (const match of contentMatches) {
-      decision.updates.set(match[1]!.trim(), match[2]!.trim());
+      updates.set(match[1]!.trim(), match[2]!.trim());
     }
 
-    const summaryMatch = response.match(/SUMMARY:\s*(.+?)(?=CONFIDENCE:|$)/is);
-    if (summaryMatch) {
-      decision.summary = summaryMatch[1]!.trim();
-    }
+    // Parse summary
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*(.+?)(?=CONFIDENCE:|$)/is) ?? 'Contradiction resolution';
 
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      decision.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    // Parse confidence
+    const confidence = parseConfidence(ctx, { defaultValue: 0.6 });
 
-    return decision;
+    return {
+      resolution,
+      updates,
+      summary,
+      confidence,
+    };
   }
 
   private generateUpdates(

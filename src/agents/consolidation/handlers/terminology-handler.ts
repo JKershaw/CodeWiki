@@ -4,6 +4,13 @@ import type { FindingGroup, FindingType } from '../../../domain/finding.js';
 import type { WikiPage, WikiPageUpdate } from '../../../domain/wiki-page.js';
 import type { FindingHandler, FindingHandlerResult } from '../finding-handler.js';
 import { HandlerUtils } from '../finding-handler.js';
+import {
+  createParseContext,
+  parseSection,
+  parseListItemsWithFallback,
+  parseConfidence,
+  type ItemPattern,
+} from '../../parsing/index.js';
 
 /**
  * Decision structure for terminology standardization.
@@ -111,54 +118,65 @@ CONFIDENCE: [0-1]
   }
 
   private parseDecision(response: string): TerminologyDecision {
-    const decision: TerminologyDecision = {
-      canonicalTerms: new Map(),
-      replacements: [],
-      summary: 'Terminology standardization',
-      confidence: 0.7,
+    const ctx = createParseContext('terminology-handler', response);
+
+    // Parse canonical terms
+    const canonicalTerms = new Map<string, string>();
+    const canonicalPatterns: ItemPattern<{ canonical: string; replaced: string[] }>[] = [
+      {
+        pattern: /^-\s*\[?([^\]:]+)\]?:\s*replaces\s*\[([^\]]+)\]/i,
+        mapper: (m) => ({
+          canonical: m[1]!.trim(),
+          replaced: m[2]!.split(',').map(t => t.trim()),
+        }),
+      },
+    ];
+
+    const canonicalItems = parseListItemsWithFallback(
+      ctx,
+      'CANONICAL_TERMS',
+      /CANONICAL_TERMS:\s*([\s\S]*?)(?=REPLACEMENTS:|SUMMARY:|$)/i,
+      canonicalPatterns
+    );
+
+    for (const item of canonicalItems) {
+      for (const term of item.replaced) {
+        canonicalTerms.set(term.toLowerCase(), item.canonical);
+      }
+    }
+
+    // Parse replacements
+    const replacementPatterns: ItemPattern<TerminologyDecision['replacements'][0]>[] = [
+      {
+        pattern: /^-\s*\[?([^\]:]+)\]?:\s*\[?([^\]→]+)\]?\s*→\s*\[?([^\]]+)\]?/,
+        mapper: (m) => ({
+          pagePath: m[1]!.trim(),
+          oldTerm: m[2]!.trim(),
+          newTerm: m[3]!.trim(),
+        }),
+      },
+    ];
+
+    const replacements = parseListItemsWithFallback(
+      ctx,
+      'REPLACEMENTS',
+      /REPLACEMENTS:\s*([\s\S]*?)(?=SUMMARY:|CONFIDENCE:|$)/i,
+      replacementPatterns
+    );
+
+    // Parse summary
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*(.+?)(?=CONFIDENCE:|$)/is)
+      ?? 'Terminology standardization';
+
+    // Parse confidence
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
+
+    return {
+      canonicalTerms,
+      replacements,
+      summary,
+      confidence,
     };
-
-    const canonicalMatch = response.match(/CANONICAL_TERMS:\s*([\s\S]*?)(?=REPLACEMENTS:|SUMMARY:|$)/i);
-    if (canonicalMatch) {
-      const lines = canonicalMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[?([^\]:]+)\]?:\s*replaces\s*\[([^\]]+)\]/i);
-        if (match) {
-          const canonical = match[1]!.trim();
-          const replaced = match[2]!.split(',').map(t => t.trim());
-          for (const term of replaced) {
-            decision.canonicalTerms.set(term.toLowerCase(), canonical);
-          }
-        }
-      }
-    }
-
-    const replacementsMatch = response.match(/REPLACEMENTS:\s*([\s\S]*?)(?=SUMMARY:|CONFIDENCE:|$)/i);
-    if (replacementsMatch) {
-      const lines = replacementsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[?([^\]:]+)\]?:\s*\[?([^\]→]+)\]?\s*→\s*\[?([^\]]+)\]?/);
-        if (match) {
-          decision.replacements.push({
-            pagePath: match[1]!.trim(),
-            oldTerm: match[2]!.trim(),
-            newTerm: match[3]!.trim(),
-          });
-        }
-      }
-    }
-
-    const summaryMatch = response.match(/SUMMARY:\s*(.+?)(?=CONFIDENCE:|$)/is);
-    if (summaryMatch) {
-      decision.summary = summaryMatch[1]!.trim();
-    }
-
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      decision.confidence = parseFloat(confidenceMatch[1]!);
-    }
-
-    return decision;
   }
 
   private generateUpdates(

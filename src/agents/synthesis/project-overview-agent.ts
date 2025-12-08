@@ -4,6 +4,13 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseListItemsWithFallback,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Project Overview Agent - Creates a project-level overview page.
@@ -235,86 +242,75 @@ Output ONLY the markdown content. No explanations before or after.
   }
 
   private parseResponse(response: string): ParsedProjectOverview {
-    const overview: ParsedProjectOverview = {
-      projectName: '',
-      purpose: '',
-      architecture: '',
-      keyComponents: [],
-      keyConcepts: [],
-      entryPoints: [],
-      confidence: 0.7,
-    };
+    const ctx = createParseContext('project-overview', response);
+
+    // Define common pattern for name:description items
+    const nameDescPatterns: ItemPattern<{ name: string; description: string }>[] = [
+      {
+        pattern: /^-\s*\[?([^\]:]+)\]?:\s*(.+)$/,
+        mapper: (m) => ({
+          name: m[1]!.trim(),
+          description: m[2]!.trim(),
+        }),
+      },
+    ];
+
+    // Define pattern for entry points (path:reason)
+    const entryPointPatterns: ItemPattern<{ path: string; reason: string }>[] = [
+      {
+        pattern: /^-\s*\[?([^\]:]+)\]?:\s*(.+)$/,
+        mapper: (m) => ({
+          path: m[1]!.trim(),
+          reason: m[2]!.trim(),
+        }),
+      },
+    ];
 
     // Parse project name
-    const nameMatch = response.match(/PROJECT_NAME:\s*(.+?)(?=\n|PURPOSE:|$)/i);
-    if (nameMatch) {
-      overview.projectName = nameMatch[1]!.trim();
-    }
+    const projectName = parseSection(ctx, 'PROJECT_NAME', /PROJECT_NAME:\s*(.+?)(?=\n|PURPOSE:|$)/i) || '';
 
     // Parse purpose
-    const purposeMatch = response.match(/PURPOSE:\s*([\s\S]*?)(?=ARCHITECTURE:|KEY_COMPONENTS:|$)/i);
-    if (purposeMatch) {
-      overview.purpose = purposeMatch[1]!.trim();
-    }
+    const purpose = parseSection(ctx, 'PURPOSE', /PURPOSE:\s*([\s\S]*?)(?=ARCHITECTURE:|KEY_COMPONENTS:|$)/i) || '';
 
     // Parse architecture
-    const archMatch = response.match(/ARCHITECTURE:\s*([\s\S]*?)(?=KEY_COMPONENTS:|KEY_CONCEPTS:|$)/i);
-    if (archMatch) {
-      overview.architecture = archMatch[1]!.trim();
-    }
+    const architecture = parseSection(ctx, 'ARCHITECTURE', /ARCHITECTURE:\s*([\s\S]*?)(?=KEY_COMPONENTS:|KEY_CONCEPTS:|$)/i) || '';
 
     // Parse key components
-    const componentsMatch = response.match(/KEY_COMPONENTS:\s*([\s\S]*?)(?=KEY_CONCEPTS:|ENTRY_POINTS:|CONFIDENCE:|$)/i);
-    if (componentsMatch) {
-      const lines = componentsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[?([^\]:]+)\]?:\s*(.+)$/);
-        if (match) {
-          overview.keyComponents.push({
-            name: match[1]!.trim(),
-            description: match[2]!.trim(),
-          });
-        }
-      }
-    }
+    const keyComponents = parseListItemsWithFallback(
+      ctx,
+      'KEY_COMPONENTS',
+      /KEY_COMPONENTS:\s*([\s\S]*?)(?=KEY_CONCEPTS:|ENTRY_POINTS:|CONFIDENCE:|$)/i,
+      nameDescPatterns
+    );
 
     // Parse key concepts
-    const conceptsMatch = response.match(/KEY_CONCEPTS:\s*([\s\S]*?)(?=ENTRY_POINTS:|CONFIDENCE:|$)/i);
-    if (conceptsMatch) {
-      const lines = conceptsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[?([^\]:]+)\]?:\s*(.+)$/);
-        if (match) {
-          overview.keyConcepts.push({
-            name: match[1]!.trim(),
-            description: match[2]!.trim(),
-          });
-        }
-      }
-    }
+    const keyConcepts = parseListItemsWithFallback(
+      ctx,
+      'KEY_CONCEPTS',
+      /KEY_CONCEPTS:\s*([\s\S]*?)(?=ENTRY_POINTS:|CONFIDENCE:|$)/i,
+      nameDescPatterns
+    );
 
     // Parse entry points
-    const entryMatch = response.match(/ENTRY_POINTS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (entryMatch) {
-      const lines = entryMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[?([^\]:]+)\]?:\s*(.+)$/);
-        if (match) {
-          overview.entryPoints.push({
-            path: match[1]!.trim(),
-            reason: match[2]!.trim(),
-          });
-        }
-      }
-    }
+    const entryPoints = parseListItemsWithFallback(
+      ctx,
+      'ENTRY_POINTS',
+      /ENTRY_POINTS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      entryPointPatterns
+    );
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      overview.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return overview;
+    return {
+      projectName,
+      purpose,
+      architecture,
+      keyComponents,
+      keyConcepts,
+      entryPoints,
+      confidence,
+    };
   }
 
   private generateUpdate(overview: ParsedProjectOverview, pages: WikiPage[]): WikiPageUpdate {

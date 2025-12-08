@@ -6,6 +6,11 @@ import type { EditRequest, EditDecision } from '../../domain/edit-request.js';
 import { getSourceCommitSha, getSourceCommitTimestamp } from '../../domain/edit-request.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { extractTitleWithFallback } from '../../commands/update-wiki-page.js';
+import {
+  createParseContext,
+  parseChoice,
+  parseSection,
+} from '../parsing/index.js';
 
 /**
  * Wiki Editor Agent - Intelligently processes edit requests from analysis agents.
@@ -324,14 +329,22 @@ CONTENT: [If HISTORY or MERGE, provide the actual wiki markdown text to use - NO
     editRequest: EditRequest,
     currentPage: WikiPage
   ): EditDecision {
-    const decisionMatch = response.match(/DECISION:\s*(SKIP|HISTORY|MERGE|CONFLICT)/i);
-    const reasoningMatch = response.match(/REASONING:\s*([^\n]+)/i);
-    const contentMatch = response.match(/CONTENT:\s*([\s\S]*?)(?=$)/i);
+    const ctx = createParseContext('wiki-editor', response);
+    const DECISION_VALUES = ['skip', 'history', 'merge', 'conflict'] as const;
 
-    const llmDecision = decisionMatch?.[1]?.toLowerCase() ?? 'skip';
+    const llmDecision = parseChoice(
+      ctx,
+      'DECISION',
+      /DECISION:\s*(SKIP|HISTORY|MERGE|CONFLICT)/i,
+      DECISION_VALUES,
+      { defaultValue: 'skip' }
+    ) ?? 'skip';
+
     const reasoning =
-      reasoningMatch?.[1]?.trim() ||
+      parseSection(ctx, 'REASONING', /REASONING:\s*([^\n]+)/i) ||
       'Unable to parse reasoning from response';
+
+    const contentMatch = response.match(/CONTENT:\s*([\s\S]*?)(?=$)/i);
 
     // Handle HISTORY decision
     if (llmDecision === 'history') {
