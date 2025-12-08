@@ -4,6 +4,12 @@ import type { FindingGroup, FindingType, Finding } from '../../../domain/finding
 import type { WikiPage, WikiPageUpdate } from '../../../domain/wiki-page.js';
 import type { FindingHandler, FindingHandlerResult } from '../finding-handler.js';
 import { HandlerUtils } from '../finding-handler.js';
+import {
+  createParseContext,
+  parseSection,
+  parseChoice,
+  parseConfidence,
+} from '../../parsing/index.js';
 
 /**
  * Decision structure for duplicate page handling.
@@ -99,46 +105,42 @@ CONFIDENCE: [0-1]
   }
 
   private parseDecision(response: string): DuplicateDecision {
-    const decision: DuplicateDecision = {
-      action: 'keep-separate',
-      primaryPage: '',
-      mergedContent: '',
-      deletePages: [],
-      summary: 'Could not parse consolidation decision',
-      confidence: 0.5,
+    const ctx = createParseContext('duplicate-handler', response);
+
+    // Parse decision action
+    const action = parseChoice(
+      ctx,
+      'DECISION',
+      /DECISION:\s*(merge|keep-separate)/i,
+      ['merge', 'keep-separate'] as const,
+      { defaultValue: 'keep-separate' }
+    ) ?? 'keep-separate';
+
+    // Parse reason/summary
+    const summary = parseSection(ctx, 'REASON', /REASON:\s*(.+?)(?=PRIMARY_PAGE:|$)/is)
+      ?? 'Could not parse consolidation decision';
+
+    // Parse primary page
+    const primaryPage = parseSection(ctx, 'PRIMARY_PAGE', /PRIMARY_PAGE:\s*(.+?)(?=MERGED_CONTENT:|DELETE_PAGES:|$)/is) ?? '';
+
+    // Parse merged content
+    const mergedContent = parseSection(ctx, 'MERGED_CONTENT', /MERGED_CONTENT:\s*([\s\S]*?)(?=DELETE_PAGES:|CONFIDENCE:|$)/i) ?? '';
+
+    // Parse delete pages
+    const deletePagesRaw = parseSection(ctx, 'DELETE_PAGES', /DELETE_PAGES:\s*(.+?)(?=CONFIDENCE:|$)/is) ?? '';
+    const deletePages = deletePagesRaw.split(',').map(p => p.trim()).filter(Boolean);
+
+    // Parse confidence
+    const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
+
+    return {
+      action,
+      primaryPage,
+      mergedContent,
+      deletePages,
+      summary,
+      confidence,
     };
-
-    const decisionMatch = response.match(/DECISION:\s*(merge|keep-separate)/i);
-    if (decisionMatch) {
-      decision.action = decisionMatch[1]!.toLowerCase() as 'merge' | 'keep-separate';
-    }
-
-    const reasonMatch = response.match(/REASON:\s*(.+?)(?=PRIMARY_PAGE:|$)/is);
-    if (reasonMatch) {
-      decision.summary = reasonMatch[1]!.trim();
-    }
-
-    const primaryMatch = response.match(/PRIMARY_PAGE:\s*(.+?)(?=MERGED_CONTENT:|DELETE_PAGES:|$)/is);
-    if (primaryMatch) {
-      decision.primaryPage = primaryMatch[1]!.trim();
-    }
-
-    const contentMatch = response.match(/MERGED_CONTENT:\s*([\s\S]*?)(?=DELETE_PAGES:|CONFIDENCE:|$)/i);
-    if (contentMatch) {
-      decision.mergedContent = contentMatch[1]!.trim();
-    }
-
-    const deleteMatch = response.match(/DELETE_PAGES:\s*(.+?)(?=CONFIDENCE:|$)/is);
-    if (deleteMatch) {
-      decision.deletePages = deleteMatch[1]!.split(',').map(p => p.trim()).filter(Boolean);
-    }
-
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      decision.confidence = parseFloat(confidenceMatch[1]!);
-    }
-
-    return decision;
   }
 
   private async generateUpdates(

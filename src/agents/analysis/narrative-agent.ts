@@ -4,6 +4,16 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseChoice,
+  parseListItemsWithFallback,
+  parseStringList,
+  parseBlocks,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Narrative Agent - Detects meta-documents and captures project storytelling.
@@ -164,103 +174,103 @@ CONFIDENCE: [0-1 value]
   }
 
   private parseResponse(response: string): ParsedAnalysis {
-    const analysis: ParsedAnalysis = {
-      summary: '',
-      narrativeType: 'none',
-      pageTitle: '',
-      findings: [],
-      keyDecisions: [],
-      wikiUpdates: [],
-      confidence: 0.5,
-    };
+    const ctx = createParseContext('narrative', response);
 
     // Parse summary
-    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=NARRATIVE_TYPE:|PAGE_TITLE:|FINDINGS:|$)/i);
-    if (summaryMatch) {
-      analysis.summary = summaryMatch[1]!.trim();
-    }
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=NARRATIVE_TYPE:|PAGE_TITLE:|FINDINGS:|$)/i) ?? '';
 
     // Parse narrative type
-    const typeMatch = response.match(/NARRATIVE_TYPE:\s*(\w+)/i);
-    if (typeMatch) {
-      analysis.narrativeType = typeMatch[1]!.toLowerCase() as NarrativeType;
-    }
+    const narrativeType = parseChoice(
+      ctx,
+      'NARRATIVE_TYPE',
+      /NARRATIVE_TYPE:\s*(\w+)/i,
+      ['planning', 'adr', 'design', 'changelog', 'philosophy', 'guide', 'readme', 'decision', 'none'] as const,
+      { defaultValue: 'none' }
+    ) ?? 'none';
 
     // Parse page title
-    const titleMatch = response.match(/PAGE_TITLE:\s*(.+?)(?=\n|FINDINGS:|KEY_DECISIONS:|$)/i);
-    if (titleMatch) {
-      analysis.pageTitle = titleMatch[1]!.trim();
-    }
+    const pageTitle = parseSection(ctx, 'PAGE_TITLE', /PAGE_TITLE:\s*(.+?)(?=\n|FINDINGS:|KEY_DECISIONS:|$)/i) ?? '';
 
     // Parse findings
-    const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=KEY_DECISIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (findingsMatch) {
-      const findingLines = findingsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of findingLines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i);
-        if (match) {
-          analysis.findings.push({
-            type: match[1]!.trim(),
-            importance: match[2]!.toLowerCase() as 'low' | 'medium' | 'high',
-            description: match[3]!.trim(),
-            paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
-          });
-        }
-      }
-    }
+    const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
+      {
+        pattern: /^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        mapper: (m) => ({
+          type: m[1]!.trim(),
+          importance: m[2]!.toLowerCase() as 'low' | 'medium' | 'high',
+          description: m[3]!.trim(),
+          paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+        }),
+      },
+    ];
 
-    // Parse key decisions
-    const decisionsMatch = response.match(/KEY_DECISIONS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (decisionsMatch) {
-      const decisionLines = decisionsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of decisionLines) {
-        analysis.keyDecisions.push(line.replace(/^-\s*/, '').trim());
-      }
-    }
+    const findings = parseListItemsWithFallback(
+      ctx,
+      'FINDINGS',
+      /FINDINGS:\s*([\s\S]*?)(?=KEY_DECISIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      findingPatterns
+    );
 
-    // Parse wiki updates - new format with full content blocks
-    const updatesSection = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesSection) {
-      // Match blocks like: === [path] [action] ===\n[content]\n=== END ===
-      const blockRegex = /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
-      let blockMatch;
-      while ((blockMatch = blockRegex.exec(updatesSection[1]!)) !== null) {
-        const path = blockMatch[1]!.trim();
-        const action = blockMatch[2]!.toLowerCase() as 'create' | 'update';
-        const content = blockMatch[3]!.trim();
+    // Parse key decisions as string list
+    const keyDecisions = parseStringList(
+      ctx,
+      'KEY_DECISIONS',
+      /KEY_DECISIONS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i
+    );
 
+    // Parse wiki updates using block format
+    const wikiUpdates = parseBlocks<ParsedAnalysis['wikiUpdates'][0]>(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      (m) => {
+        const content = m[3]!.trim();
         if (content && content.length > 0) {
-          analysis.wikiUpdates.push({
-            path,
-            action,
+          return {
+            path: m[1]!.trim(),
+            action: m[2]!.toLowerCase() as 'create' | 'update',
             content,
-          });
+          };
         }
+        return null;
       }
+    );
 
-      // Fallback: also try to parse old format for backward compatibility
-      if (analysis.wikiUpdates.length === 0) {
-        const updateLines = updatesSection[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-        for (const line of updateLines) {
-          const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
-          if (match) {
-            analysis.wikiUpdates.push({
-              path: match[1]!.trim(),
-              action: match[2]!.toLowerCase() as 'create' | 'update',
-              content: match[3]!.trim(), // Use description as content for legacy format
-            });
-          }
-        }
-      }
+    // Fallback: try legacy line format if no blocks found
+    let finalWikiUpdates = wikiUpdates;
+    if (wikiUpdates.length === 0) {
+      const legacyPatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
+        {
+          pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
+          mapper: (m) => ({
+            path: m[1]!.trim(),
+            action: m[2]!.toLowerCase() as 'create' | 'update',
+            content: m[3]!.trim(),
+          }),
+        },
+      ];
+
+      finalWikiUpdates = parseListItemsWithFallback(
+        ctx,
+        'WIKI_UPDATES_LEGACY',
+        /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+        legacyPatterns
+      );
     }
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
 
-    return analysis;
+    return {
+      summary,
+      narrativeType,
+      pageTitle,
+      findings,
+      keyDecisions,
+      wikiUpdates: finalWikiUpdates,
+      confidence,
+    };
   }
 
   private generateUpdates(

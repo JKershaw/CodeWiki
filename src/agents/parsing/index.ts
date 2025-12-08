@@ -6,6 +6,7 @@
  * - Automatic failure logging
  * - Required vs optional section handling
  * - Parse statistics for monitoring
+ * - Multi-format fallback parsing for LLM output variations
  */
 
 export {
@@ -15,12 +16,26 @@ export {
   type ParseFailure,
   type ParseOptions,
   type ParseStats,
+  type ChoiceParseOptions,
+  type ItemPattern,
+  type Severity,
+  type Importance,
 
   // Core functions
   createParseContext,
   parseSection,
   parseSectionItems,
   parseConfidence,
+
+  // Extended parsing functions
+  parseChoice,
+  parseListItemsWithFallback,
+  parseStringList,
+  parseBlocks,
+
+  // Mapping utilities
+  mapSeverity,
+  mapPriority,
 
   // Validation and inspection
   hasRequiredFailures,

@@ -347,3 +347,314 @@ export function validateMinLength(
   }
   return true;
 }
+
+/**
+ * Options for parsing a choice/enum field.
+ */
+export interface ChoiceParseOptions<T> {
+  /** Whether this section is required (default: false) */
+  required?: boolean;
+  /** Default value to use if parsing fails */
+  defaultValue?: T;
+  /** Custom error message */
+  errorMessage?: string;
+}
+
+/**
+ * Parse a choice/enum field from the response.
+ *
+ * Used for fields like:
+ * ```
+ * DECISION: merge
+ * SECURITY_RELEVANCE: high
+ * DEBT_TREND: adding_debt
+ * ```
+ *
+ * @param ctx - The parsing context
+ * @param sectionName - Human-readable name of the section
+ * @param pattern - Regex pattern with a capture group for the value
+ * @param validValues - Array of valid values (case-insensitive matching)
+ * @param options - Parsing options
+ * @returns The matched value or default/null
+ */
+export function parseChoice<T extends string>(
+  ctx: ParseContext,
+  sectionName: string,
+  pattern: RegExp,
+  validValues: readonly T[],
+  options: ChoiceParseOptions<T> = {}
+): T | null {
+  const { required = false, defaultValue, errorMessage } = options;
+
+  const match = ctx.response.match(pattern);
+
+  if (match && match[1]) {
+    const rawValue = match[1].trim().toLowerCase();
+    // Normalize underscores and hyphens for comparison
+    const normalizedValue = rawValue.replace(/-/g, '_');
+
+    // Find matching valid value (case-insensitive, underscore/hyphen agnostic)
+    const foundValue = validValues.find(v => {
+      const normalizedValid = v.toLowerCase().replace(/-/g, '_');
+      return normalizedValid === normalizedValue;
+    });
+
+    if (foundValue) {
+      ctx.successfulSections.push(sectionName);
+      return foundValue;
+    }
+  }
+
+  // Parsing failed - log and record the failure
+  const failure: ParseFailure = {
+    section: sectionName,
+    required,
+    pattern: pattern.source.slice(0, 50) + (pattern.source.length > 50 ? '...' : ''),
+    responsePreview: getResponsePreview(ctx.response, sectionName),
+    timestamp: new Date(),
+  };
+
+  ctx.failures.push(failure);
+
+  const message = errorMessage ?? `Failed to parse ${sectionName} (valid: ${validValues.join(', ')})`;
+  const logMethod = required ? console.error : console.warn;
+
+  logMethod(
+    `[${ctx.agentType}] ${message}`,
+    {
+      section: sectionName,
+      required,
+      validValues,
+      responsePreview: failure.responsePreview,
+    }
+  );
+
+  return defaultValue ?? null;
+}
+
+/**
+ * Item pattern definition for fallback parsing.
+ */
+export interface ItemPattern<T> {
+  /** Regex pattern to match the line item */
+  pattern: RegExp;
+  /** Function to convert the match to the desired type */
+  mapper: (match: RegExpMatchArray) => T | null;
+}
+
+/**
+ * Parse list items with multiple fallback patterns.
+ *
+ * Tries each pattern in order until one matches. This handles LLM output
+ * variations where the same semantic content may be formatted differently.
+ *
+ * @param ctx - The parsing context
+ * @param sectionName - Human-readable name of the section
+ * @param sectionPattern - Regex to extract the entire section
+ * @param itemPatterns - Array of pattern/mapper pairs to try in order
+ * @param options - Parsing options
+ */
+export function parseListItemsWithFallback<T>(
+  ctx: ParseContext,
+  sectionName: string,
+  sectionPattern: RegExp,
+  itemPatterns: ItemPattern<T>[],
+  options: ParseOptions = {}
+): T[] {
+  const parseOptions: ParseOptions = {};
+  if (options.required !== undefined) parseOptions.required = options.required;
+  if (options.errorMessage !== undefined) parseOptions.errorMessage = options.errorMessage;
+
+  const sectionContent = parseSection(ctx, sectionName, sectionPattern, parseOptions);
+
+  if (!sectionContent) {
+    return [];
+  }
+
+  const items: T[] = [];
+  const lines = sectionContent.split('\n').filter(l => l.trim().startsWith('-'));
+  let unmatchedLines = 0;
+
+  for (const line of lines) {
+    let matched = false;
+
+    // Try each pattern in order
+    for (const { pattern, mapper } of itemPatterns) {
+      const match = line.match(pattern);
+      if (match) {
+        const item = mapper(match);
+        if (item !== null) {
+          items.push(item);
+          matched = true;
+          break;
+        }
+      }
+    }
+
+    if (!matched) {
+      unmatchedLines++;
+    }
+  }
+
+  // Log if many lines didn't match any pattern
+  if (unmatchedLines > 0 && unmatchedLines > lines.length / 2) {
+    console.warn(
+      `[${ctx.agentType}] ${sectionName}: ${unmatchedLines}/${lines.length} lines didn't match any pattern`,
+      { sectionPreview: sectionContent.slice(0, 200) }
+    );
+  }
+
+  return items;
+}
+
+/**
+ * Parse a simple string list from a section.
+ *
+ * Used for sections like:
+ * ```
+ * RECOMMENDATIONS:
+ * - First recommendation
+ * - Second recommendation
+ * ```
+ *
+ * @param ctx - The parsing context
+ * @param sectionName - Human-readable name of the section
+ * @param sectionPattern - Regex to extract the entire section
+ * @param options - Parsing options
+ */
+export function parseStringList(
+  ctx: ParseContext,
+  sectionName: string,
+  sectionPattern: RegExp,
+  options: ParseOptions = {}
+): string[] {
+  const parseOptions: ParseOptions = {};
+  if (options.required !== undefined) parseOptions.required = options.required;
+  if (options.errorMessage !== undefined) parseOptions.errorMessage = options.errorMessage;
+
+  const sectionContent = parseSection(ctx, sectionName, sectionPattern, parseOptions);
+
+  if (!sectionContent) {
+    return [];
+  }
+
+  return sectionContent
+    .split('\n')
+    .filter(l => l.trim().startsWith('-'))
+    .map(l => l.replace(/^-\s*/, '').trim())
+    .filter(l => l.length > 0);
+}
+
+/**
+ * Parse blocks with delimiters from the response.
+ *
+ * Used for sections like:
+ * ```
+ * WIKI_UPDATES:
+ * === [path/to/page] [create] ===
+ * Content here...
+ * === END ===
+ * ```
+ *
+ * @param ctx - The parsing context
+ * @param sectionName - Human-readable name of the section
+ * @param sectionPattern - Regex to extract the entire section containing blocks
+ * @param blockPattern - Regex with global flag to match each block (must have capture groups)
+ * @param mapper - Function to convert block match to desired type
+ * @param options - Parsing options
+ */
+export function parseBlocks<T>(
+  ctx: ParseContext,
+  sectionName: string,
+  sectionPattern: RegExp,
+  blockPattern: RegExp,
+  mapper: (match: RegExpMatchArray) => T | null,
+  options: ParseOptions = {}
+): T[] {
+  const parseOptions: ParseOptions = {};
+  if (options.required !== undefined) parseOptions.required = options.required;
+  if (options.errorMessage !== undefined) parseOptions.errorMessage = options.errorMessage;
+
+  const sectionContent = parseSection(ctx, sectionName, sectionPattern, parseOptions);
+
+  if (!sectionContent) {
+    return [];
+  }
+
+  const items: T[] = [];
+
+  // Ensure the pattern has the global flag
+  const globalPattern = blockPattern.global
+    ? blockPattern
+    : new RegExp(blockPattern.source, blockPattern.flags + 'g');
+
+  let match;
+  while ((match = globalPattern.exec(sectionContent)) !== null) {
+    const item = mapper(match);
+    if (item !== null) {
+      items.push(item);
+    }
+  }
+
+  return items;
+}
+
+/**
+ * Standard severity levels used across agents.
+ */
+export type Severity = 'critical' | 'high' | 'medium' | 'low';
+
+/**
+ * Standard importance levels used across agents.
+ */
+export type Importance = 'high' | 'medium' | 'low';
+
+/**
+ * Map a severity string to a standard importance level.
+ *
+ * Default mapping:
+ * - critical, high -> 'high'
+ * - medium, normal -> 'medium'
+ * - low, minor, info -> 'low'
+ *
+ * @param value - The severity string to map
+ * @param customMapping - Optional custom mapping to override defaults
+ */
+export function mapSeverity(
+  value: string,
+  customMapping?: Partial<Record<string, Importance>>
+): Importance {
+  const normalized = value.toLowerCase().trim();
+
+  // Apply custom mapping first
+  if (customMapping && normalized in customMapping) {
+    return customMapping[normalized]!;
+  }
+
+  // Default mapping
+  if (normalized === 'critical' || normalized === 'high' || normalized === 'urgent') {
+    return 'high';
+  }
+  if (normalized === 'medium' || normalized === 'normal' || normalized === 'moderate') {
+    return 'medium';
+  }
+  // low, minor, info, or anything else
+  return 'low';
+}
+
+/**
+ * Map a priority string to a standard level.
+ *
+ * @param value - The priority string to map
+ */
+export function mapPriority(value: string): 'high' | 'medium' | 'low' {
+  const normalized = value.toLowerCase().trim();
+
+  if (normalized === 'critical' || normalized === 'high' || normalized === 'urgent' || normalized === 'p0' || normalized === 'p1') {
+    return 'high';
+  }
+  if (normalized === 'medium' || normalized === 'normal' || normalized === 'p2') {
+    return 'medium';
+  }
+  return 'low';
+}

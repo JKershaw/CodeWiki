@@ -4,6 +4,16 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  createParseContext,
+  parseSection,
+  parseChoice,
+  parseListItemsWithFallback,
+  parseStringList,
+  parseBlocks,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Dependency Agent - Tracks external dependency changes and their implications.
@@ -211,152 +221,163 @@ CONFIDENCE: [0-1 value]
   }
 
   private parseResponse(response: string): ParsedAnalysis {
-    const analysis: ParsedAnalysis = {
-      summary: '',
-      changes: [],
-      breakingChanges: [],
-      securityNotes: [],
-      impact: 'minimal',
-      dependencyDetails: [],
-      findings: [],
-      wikiUpdates: [],
-      confidence: 0.5,
-    };
+    const ctx = createParseContext('dependency', response);
 
     // Parse summary
-    const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?=CHANGES:|$)/i);
-    if (summaryMatch) {
-      analysis.summary = summaryMatch[1]!.trim();
-    }
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=CHANGES:|$)/i) ?? '';
 
     // Parse changes
-    const changesMatch = response.match(/CHANGES:\s*([\s\S]*?)(?=BREAKING_CHANGES:|SECURITY_NOTES:|IMPACT:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (changesMatch) {
-      const changeLines = changesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of changeLines) {
-        const match = line.match(/^-\s*\[(ADDED|REMOVED|UPDATED)]\s*([^\s[]+)\s*(?:\[([^\]]*)])?\s*(.*)$/i);
-        if (match) {
-          const change = {
-            action: match[1]!.toLowerCase() as 'added' | 'removed' | 'updated',
-            packageName: match[2]!.trim(),
-            versionChange: match[3]?.trim(),
-            reason: match[4]?.trim() || '',
+    const changePatterns: ItemPattern<DependencyChange & { finding: ParsedAnalysis['findings'][0] }>[] = [
+      {
+        pattern: /^-\s*\[(ADDED|REMOVED|UPDATED)]\s*([^\s[]+)\s*(?:\[([^\]]*)])?\s*(.*)$/i,
+        mapper: (m) => {
+          const action = m[1]!.toLowerCase() as 'added' | 'removed' | 'updated';
+          const packageName = m[2]!.trim();
+          const versionChange = m[3]?.trim();
+          const reason = m[4]?.trim() || '';
+          return {
+            action,
+            packageName,
+            versionChange,
+            reason,
+            finding: {
+              type: `dependency-${action}`,
+              importance: action === 'removed' ? 'medium' as const : 'low' as const,
+              description: `${packageName}${versionChange ? ` (${versionChange})` : ''}: ${reason}`,
+              paths: [],
+            },
           };
-          analysis.changes.push(change);
+        },
+      },
+    ];
 
-          // Convert to finding
-          analysis.findings.push({
-            type: `dependency-${change.action}`,
-            importance: change.action === 'removed' ? 'medium' : 'low',
-            description: `${change.packageName}${change.versionChange ? ` (${change.versionChange})` : ''}: ${change.reason}`,
-            paths: [],
-          });
-        }
-      }
-    }
+    const changesWithFindings = parseListItemsWithFallback(
+      ctx,
+      'CHANGES',
+      /CHANGES:\s*([\s\S]*?)(?=BREAKING_CHANGES:|SECURITY_NOTES:|IMPACT:|DEPENDENCY_DETAILS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      changePatterns
+    );
+
+    const changes: DependencyChange[] = changesWithFindings.map(c => ({
+      action: c.action,
+      packageName: c.packageName,
+      versionChange: c.versionChange,
+      reason: c.reason,
+    }));
+
+    const findings: ParsedAnalysis['findings'] = changesWithFindings.map(c => c.finding);
 
     // Parse breaking changes
-    const breakingMatch = response.match(/BREAKING_CHANGES:\s*([\s\S]*?)(?=SECURITY_NOTES:|IMPACT:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (breakingMatch) {
-      const breakingLines = breakingMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of breakingLines) {
-        const content = line.replace(/^-\s*/, '').trim();
-        if (content && content.toLowerCase() !== 'none') {
-          analysis.breakingChanges.push(content);
-          analysis.findings.push({
-            type: 'breaking-change',
-            importance: 'high',
-            description: content,
-            paths: [],
-          });
-        }
-      }
+    const breakingChangesRaw = parseStringList(
+      ctx,
+      'BREAKING_CHANGES',
+      /BREAKING_CHANGES:\s*([\s\S]*?)(?=SECURITY_NOTES:|IMPACT:|DEPENDENCY_DETAILS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+    ).filter(content => content.toLowerCase() !== 'none');
+
+    // Add breaking changes to findings
+    for (const content of breakingChangesRaw) {
+      findings.push({
+        type: 'breaking-change',
+        importance: 'high',
+        description: content,
+        paths: [],
+      });
     }
 
     // Parse security notes
-    const securityMatch = response.match(/SECURITY_NOTES:\s*([\s\S]*?)(?=IMPACT:|WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (securityMatch) {
-      const securityLines = securityMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of securityLines) {
-        const content = line.replace(/^-\s*/, '').trim();
-        if (content && content.toLowerCase() !== 'none') {
-          analysis.securityNotes.push(content);
-        }
-      }
-    }
+    const securityNotes = parseStringList(
+      ctx,
+      'SECURITY_NOTES',
+      /SECURITY_NOTES:\s*([\s\S]*?)(?=IMPACT:|DEPENDENCY_DETAILS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+    ).filter(content => content.toLowerCase() !== 'none');
 
     // Parse impact
-    const impactMatch = response.match(/IMPACT:\s*(\w+)/i);
-    if (impactMatch) {
-      analysis.impact = impactMatch[1]!.toLowerCase() as 'minimal' | 'moderate' | 'significant';
-    }
+    const impact = parseChoice(
+      ctx,
+      'IMPACT',
+      /IMPACT:\s*(\w+)/i,
+      ['minimal', 'moderate', 'significant'] as const,
+      { defaultValue: 'minimal' }
+    ) ?? 'minimal';
 
-    // Parse dependency details - new detailed format
-    const detailsSection = response.match(/DEPENDENCY_DETAILS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i);
-    if (detailsSection) {
-      // Match blocks like: === [package] ===\n...\n=== END ===
-      const blockRegex = /===\s*\[([^\]]+)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
-      let blockMatch;
-      while ((blockMatch = blockRegex.exec(detailsSection[1]!)) !== null) {
-        const packageName = blockMatch[1]!.trim();
-        const blockContent = blockMatch[2]!;
+    // Parse dependency details using block format
+    const dependencyDetails = parseBlocks<DependencyDetail>(
+      ctx,
+      'DEPENDENCY_DETAILS',
+      /DEPENDENCY_DETAILS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      /===\s*\[([^\]]+)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      (m) => {
+        const packageName = m[1]!.trim();
+        const blockContent = m[2]!;
 
         const purposeMatch = blockContent.match(/PURPOSE:\s*([\s\S]*?)(?=USAGE:|CONSIDERATIONS:|$)/i);
         const usageMatch = blockContent.match(/USAGE:\s*([\s\S]*?)(?=CONSIDERATIONS:|$)/i);
         const considerationsMatch = blockContent.match(/CONSIDERATIONS:\s*([\s\S]*?)$/i);
 
-        analysis.dependencyDetails.push({
+        return {
           packageName,
           purpose: purposeMatch ? purposeMatch[1]!.trim() : '',
           usage: usageMatch ? usageMatch[1]!.trim() : '',
           considerations: considerationsMatch ? considerationsMatch[1]!.trim() : '',
-        });
+        };
       }
-    }
+    );
 
-    // Parse wiki updates - new format with full content blocks
-    const updatesSection = response.match(/WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (updatesSection) {
-      // Match blocks like: === [path] [action] ===\n[content]\n=== END ===
-      const blockRegex = /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi;
-      let blockMatch;
-      while ((blockMatch = blockRegex.exec(updatesSection[1]!)) !== null) {
-        const path = blockMatch[1]!.trim();
-        const action = blockMatch[2]!.toLowerCase() as 'create' | 'update';
-        const content = blockMatch[3]!.trim();
-
+    // Parse wiki updates using block format
+    const wikiUpdates = parseBlocks<ParsedAnalysis['wikiUpdates'][0]>(
+      ctx,
+      'WIKI_UPDATES',
+      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      (m) => {
+        const content = m[3]!.trim();
         if (content && content.length > 0) {
-          analysis.wikiUpdates.push({
-            path,
-            action,
+          return {
+            path: m[1]!.trim(),
+            action: m[2]!.toLowerCase() as 'create' | 'update',
             content,
-          });
+          };
         }
+        return null;
       }
+    );
 
-      // Fallback: also try to parse old format for backward compatibility
-      if (analysis.wikiUpdates.length === 0) {
-        const updateLines = updatesSection[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-        for (const line of updateLines) {
-          const match = line.match(/^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i);
-          if (match) {
-            analysis.wikiUpdates.push({
-              path: match[1]!.trim(),
-              action: match[2]!.toLowerCase() as 'create' | 'update',
-              content: match[3]!.trim(), // Use description as content for legacy format
-            });
-          }
-        }
-      }
+    // Fallback: try legacy line format if no blocks found
+    let finalWikiUpdates = wikiUpdates;
+    if (wikiUpdates.length === 0) {
+      const legacyPatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
+        {
+          pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
+          mapper: (m) => ({
+            path: m[1]!.trim(),
+            action: m[2]!.toLowerCase() as 'create' | 'update',
+            content: m[3]!.trim(),
+          }),
+        },
+      ];
+
+      finalWikiUpdates = parseListItemsWithFallback(
+        ctx,
+        'WIKI_UPDATES_LEGACY',
+        /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+        legacyPatterns
+      );
     }
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
 
-    return analysis;
+    return {
+      summary,
+      changes,
+      breakingChanges: breakingChangesRaw,
+      securityNotes,
+      impact,
+      dependencyDetails,
+      findings,
+      wikiUpdates: finalWikiUpdates,
+      confidence,
+    };
   }
 
   private generateUpdates(
