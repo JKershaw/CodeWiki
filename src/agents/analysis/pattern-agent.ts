@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget, extractToolMetrics } 
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor, fetchAffectedFileContents, formatFetchedFilesForContext } from '../agent-helpers.js';
 import {
   createParseContext,
   parseSection,
@@ -19,17 +19,18 @@ import {
 /**
  * Pattern Agent - Recognizes recurring patterns across commits.
  *
+ * OPTIMIZATION: Pre-fetches affected file contents and includes them directly in
+ * the prompt, reducing tool calls. Falls back to tool-based approach only if
+ * context would exceed limits.
+ *
  * This agent identifies design patterns, architectural patterns,
  * coding conventions, and anti-patterns in the codebase.
- *
- * Enhanced to provide:
- * - Key files and directories identification
- * - Code snippet extraction
- * - Implementation explanations
- * - Trade-off analysis
  */
 export class PatternAgent implements Agent {
   readonly type: AgentType = 'pattern';
+
+  private readonly MAX_FILE_SIZE = 20000;
+  private readonly MAX_TOTAL_SIZE = 60000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -45,18 +46,78 @@ export class PatternAgent implements Agent {
     }
     const commitId = target.commitId;
 
-    // Get the commit via CQRS query
     const commitQuery = createGetCommitQuery(commitId);
     const commitResult = await handleGetCommit(commitQuery, context.repos);
     if (!commitResult.success || !commitResult.data) {
       throw new Error(`Commit not found: ${commitId}`);
     }
     const commit = commitResult.data;
-
     const diff = await getCommitDiff(context, commit.sha);
-    const prompt = this.buildPrompt(commit, diff);
 
-    // Set up codebase exploration tools for verification
+    // Try pre-fetch approach first
+    if (context.repoAccess && commit.diffSummary.affectedFiles.length > 0) {
+      const prefetchResult = await this.runWithPrefetch(commit, diff, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    return this.runWithTools(commit, diff, context);
+  }
+
+  private async runWithPrefetch(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    const fetchedFiles = await fetchAffectedFileContents(
+      context,
+      commit.diffSummary.affectedFiles,
+      this.MAX_FILE_SIZE,
+      this.MAX_TOTAL_SIZE
+    );
+
+    const filesWithContent = fetchedFiles.filter(f => f.content !== null);
+    if (filesWithContent.length === 0) {
+      return null;
+    }
+
+    const fileContext = formatFetchedFilesForContext(fetchedFiles, '## Full File Contents');
+    const prompt = this.buildPrefetchPrompt(commit, diff, fileContext);
+
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_PREFETCH,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 4000,
+      temperature: 0.3,
+    });
+
+    const analysis = parsePatternResponse(completion.content);
+    const updates = generatePatternWikiUpdates(commit, analysis);
+
+    return {
+      result: createAgentResult({
+        summary: analysis.summary,
+        findings: analysis.findings.map(f => createFinding({
+          type: f.type,
+          description: f.description,
+          relatedPaths: f.paths,
+          importance: f.importance,
+        })),
+        confidence: analysis.confidence,
+      }),
+      updates,
+      costUsd: completion.costUsd,
+      toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: commit.diffSummary.affectedFiles },
+    };
+  }
+
+  private async runWithTools(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult> {
+    const prompt = this.buildPrompt(commit, diff);
     const toolExecutor = createCodebaseToolExecutor(context);
 
     const completion = await context.llm.completeWithTools({
@@ -75,7 +136,6 @@ export class PatternAgent implements Agent {
 
     const analysis = parsePatternResponse(completion.content);
     const updates = generatePatternWikiUpdates(commit, analysis);
-    const toolMetrics = extractToolMetrics(completion);
 
     return {
       result: createAgentResult({
@@ -90,7 +150,7 @@ export class PatternAgent implements Agent {
       }),
       updates,
       costUsd: completion.costUsd,
-      toolMetrics,
+      toolMetrics: extractToolMetrics(completion),
     };
   }
 
@@ -166,6 +226,82 @@ CONVENTIONS:
 
 ANTI_PATTERNS:
 - [Anti-pattern with explanation of why it's problematic]
+
+WIKI_UPDATES:
+- [PAGE_PATH] [ACTION:create/update] [Content description]
+
+CONFIDENCE: [0-1 value]
+`;
+  }
+
+  private buildPrefetchPrompt(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    fileContext: string
+  ): string {
+    const truncatedDiff = diff.length > 8000 ? diff.slice(0, 8000) + '\n... (diff truncated)' : diff;
+
+    return `Analyze this commit for design patterns, architectural patterns, and coding conventions.
+
+## Commit Information
+
+**SHA:** ${commit.sha.slice(0, 8)}
+**Message:** ${commit.message}
+**Author:** ${commit.authorName}
+**Date:** ${commit.committedAt.toISOString()}
+**Files Changed:** ${commit.diffSummary.affectedFiles.length}
+**Lines:** +${commit.diffSummary.linesAdded} / -${commit.diffSummary.linesDeleted}
+
+## Diff
+
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+
+${fileContext}
+
+## Analysis Instructions
+
+The full contents of affected files are provided above. Use them to:
+- Identify design patterns, architectural patterns, and coding conventions
+- Extract actual code snippets that exemplify patterns
+- Understand how patterns are implemented in the codebase
+
+Look for:
+1. **Design Patterns**: Factory, Singleton, Observer, Strategy, Repository, etc.
+2. **Architectural Patterns**: CQRS, Event Sourcing, Layered, etc.
+3. **Coding Conventions**: Naming, file structure, error handling
+4. **Testing Patterns**: Test organization, mocking approaches
+5. **Anti-patterns**: God classes, magic numbers, etc.
+
+Format your response as:
+
+SUMMARY:
+[Brief description of patterns observed]
+
+PATTERNS_FOUND:
+- [PATTERN_NAME] [CATEGORY:design/architecture/convention/testing/anti-pattern] [Description] [Affected paths]
+
+KEY_FILES:
+- [FILE_PATH] [ROLE:PRIMARY/SUPPORTING/RELATED/EXAMPLE] [Description]
+
+CODE_SNIPPETS:
+- [SNIPPET_NAME] [FILE_PATH:LINE_RANGE]
+\`\`\`language
+[Code that exemplifies the pattern]
+\`\`\`
+
+IMPLEMENTATION_EXPLANATION:
+[How the code implements the pattern]
+
+TRADE_OFFS:
+- [TRADE_OFF_NAME] [Analysis]
+
+CONVENTIONS:
+- [Convention with example]
+
+ANTI_PATTERNS:
+- [Anti-pattern with explanation]
 
 WIKI_UPDATES:
 - [PAGE_PATH] [ACTION:create/update] [Content description]
@@ -667,5 +803,39 @@ When documenting patterns, you MUST provide:
 Your confidence should reflect:
 - 0.9+: Clear, canonical pattern implementation with strong evidence
 - 0.7-0.9: Pattern with some adaptation or variation
+- 0.5-0.7: Emerging pattern, may not be intentional
+- <0.5: Uncertain pattern identification`;
+
+const SYSTEM_PROMPT_PREFETCH = `You are a pattern recognition agent for CodeWiki.
+
+Your job is to identify patterns in the code. The full contents of affected files are provided in the prompt - you do not need to use any tools.
+
+## Analysis Focus
+
+Using the provided file contents:
+1. Identify design patterns, architectural patterns, and coding conventions
+2. Extract actual code snippets that exemplify patterns
+3. Understand how patterns are implemented
+
+## What to Look For
+
+**Design Patterns**: Factory, Builder, Singleton, Strategy, Repository, Observer, Command, etc.
+**Architectural Patterns**: CQRS, Event Sourcing, Layered Architecture, Clean Architecture
+**Coding Conventions**: Naming patterns, file organization, error handling approaches
+**Testing Patterns**: Test organization, mocking, fixtures
+**Anti-Patterns**: God classes, magic numbers, copy-paste code
+
+## Documentation Requirements
+
+When documenting patterns, provide:
+1. **Key Files**: List specific files implementing the pattern with their roles
+2. **Code Snippets**: Actual code from the provided files
+3. **Implementation Explanation**: How the code implements the pattern
+4. **Trade-offs**: Design decisions and their implications
+
+## Confidence Scoring
+
+- 0.9+: Clear, canonical pattern with strong evidence from provided code
+- 0.7-0.9: Pattern with some adaptation
 - 0.5-0.7: Emerging pattern, may not be intentional
 - <0.5: Uncertain pattern identification`;

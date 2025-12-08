@@ -3,7 +3,7 @@ import { createAgentResult, createFinding, isCommitTarget, extractToolMetrics } 
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import { getCommitDiff, createCodebaseToolExecutor, fetchAffectedFileContents, formatFetchedFilesForContext } from '../agent-helpers.js';
 import {
   createParseContext,
   parseSection,
@@ -18,12 +18,19 @@ import {
 /**
  * Narrative Agent - Detects meta-documents and captures project storytelling.
  *
+ * OPTIMIZATION: Pre-fetches affected file contents and includes them directly in
+ * the prompt, reducing tool calls. Falls back to tool-based approach only if
+ * context would exceed limits.
+ *
  * This agent looks for planning files, ADRs (Architecture Decision Records),
  * idea docs, changelogs, and other narrative content that explains the "why"
  * behind the codebase.
  */
 export class NarrativeAgent implements Agent {
   readonly type: AgentType = 'narrative';
+
+  private readonly MAX_FILE_SIZE = 20000;
+  private readonly MAX_TOTAL_SIZE = 50000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -39,18 +46,78 @@ export class NarrativeAgent implements Agent {
     }
     const commitId = target.commitId;
 
-    // Get the commit via CQRS query
     const commitQuery = createGetCommitQuery(commitId);
     const commitResult = await handleGetCommit(commitQuery, context.repos);
     if (!commitResult.success || !commitResult.data) {
       throw new Error(`Commit not found: ${commitId}`);
     }
     const commit = commitResult.data;
-
     const diff = await getCommitDiff(context, commit.sha);
-    const prompt = this.buildPrompt(commit, diff);
 
-    // Set up codebase exploration tools for verification
+    // Try pre-fetch approach first
+    if (context.repoAccess && commit.diffSummary.affectedFiles.length > 0) {
+      const prefetchResult = await this.runWithPrefetch(commit, diff, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    return this.runWithTools(commit, diff, context);
+  }
+
+  private async runWithPrefetch(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    const fetchedFiles = await fetchAffectedFileContents(
+      context,
+      commit.diffSummary.affectedFiles,
+      this.MAX_FILE_SIZE,
+      this.MAX_TOTAL_SIZE
+    );
+
+    const filesWithContent = fetchedFiles.filter(f => f.content !== null);
+    if (filesWithContent.length === 0) {
+      return null;
+    }
+
+    const fileContext = formatFetchedFilesForContext(fetchedFiles, '## Full File Contents');
+    const prompt = this.buildPrefetchPrompt(commit, diff, fileContext);
+
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_PREFETCH,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 2000,
+      temperature: 0.3,
+    });
+
+    const analysis = this.parseResponse(completion.content);
+    const updates = this.generateUpdates(commit, analysis);
+
+    return {
+      result: createAgentResult({
+        summary: analysis.summary,
+        findings: analysis.findings.map(f => createFinding({
+          type: f.type,
+          description: f.description,
+          relatedPaths: f.paths,
+          importance: f.importance,
+        })),
+        confidence: analysis.confidence,
+      }),
+      updates,
+      costUsd: completion.costUsd,
+      toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: commit.diffSummary.affectedFiles },
+    };
+  }
+
+  private async runWithTools(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult> {
+    const prompt = this.buildPrompt(commit, diff);
     const toolExecutor = createCodebaseToolExecutor(context);
 
     const completion = await context.llm.completeWithTools({
@@ -166,6 +233,72 @@ Do NOT just write a brief description - write a complete article.]
 === END ===
 
 (Repeat for each page)
+
+CONFIDENCE: [0-1 value]
+`;
+  }
+
+  private buildPrefetchPrompt(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    fileContext: string
+  ): string {
+    const truncatedDiff = diff.length > 8000 ? diff.slice(0, 8000) + '\n... (diff truncated)' : diff;
+
+    return `Analyze this commit for narrative and meta-documentation content.
+
+## Commit Information
+
+**SHA:** ${commit.sha.slice(0, 8)}
+**Message:** ${commit.message}
+**Author:** ${commit.authorName}
+**Date:** ${commit.committedAt.toISOString()}
+**Files Changed:** ${commit.diffSummary.affectedFiles.length}
+
+## Diff
+
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+
+${fileContext}
+
+## Analysis Instructions
+
+The full contents of affected files are provided above. Use them to:
+- Identify planning documents, ADRs, design docs, changelogs
+- Extract key decisions and their rationale
+- Understand the "why" behind the codebase
+
+Look for:
+1. Planning documents (PLAN.md, roadmap)
+2. Architecture Decision Records (ADRs)
+3. Design documents or RFCs
+4. Changelogs or release notes
+5. Philosophy or principles documents
+6. Important README updates that explain "why"
+
+Format your response as:
+
+SUMMARY:
+[Brief description of narrative content found]
+
+NARRATIVE_TYPE:
+[One of: planning, adr, design, changelog, philosophy, guide, readme, decision, none]
+
+PAGE_TITLE:
+[Short, descriptive title - 3-6 words]
+
+FINDINGS:
+- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
+
+KEY_DECISIONS:
+- [Decision description with context]
+
+WIKI_UPDATES:
+=== [PAGE_PATH] [ACTION:create/update] ===
+[Full markdown content]
+=== END ===
 
 CONFIDENCE: [0-1 value]
 `;
@@ -408,6 +541,37 @@ When you find such content:
 4. Focus on WHAT the decision/plan IS, not that it was committed
 
 Your confidence should reflect:
+- 0.9+: Clear narrative document with explicit decisions/rationale
+- 0.7-0.9: Good context, clear intent
+- 0.5-0.7: Implied decisions from code changes
+- <0.5: No significant narrative content`;
+
+const SYSTEM_PROMPT_PREFETCH = `You are a technical writer extracting project knowledge from meta-documentation.
+
+The full contents of affected files are provided in the prompt - you do not need to use any tools.
+
+CRITICAL: Write as encyclopedia articles, NOT commit summaries.
+
+BAD: "This commit adds a planning document that describes..."
+GOOD: "The project follows a CQRS architecture pattern, chosen because..."
+
+## Analysis Focus
+
+Your specialty is identifying and extracting knowledge from:
+- Planning documents (project vision, roadmaps)
+- Architecture Decision Records (ADRs)
+- Design documents and RFCs
+- Philosophy and principles documents
+- Important README content
+
+When you find such content:
+1. Extract the key decisions and their rationale
+2. Write it as standalone documentation
+3. Give it a descriptive title like "CQRS Architecture Decision"
+4. Focus on WHAT the decision/plan IS
+
+## Confidence Scoring
+
 - 0.9+: Clear narrative document with explicit decisions/rationale
 - 0.7-0.9: Good context, clear intent
 - 0.5-0.7: Implied decisions from code changes
