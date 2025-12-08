@@ -34,19 +34,33 @@ describe('Tool Enforcement', () => {
       assert.strictEqual(result.message, 'OK');
     });
 
-    it('returns invalid when minToolCalls not met', () => {
+    it('returns invalid when minFilesRead not met', () => {
       const metrics: ToolMetrics = {
         toolCallCount: 0,
         toolsUsed: {},
         filesRead: [],
       };
 
-      // 'code-change' requires minToolCalls: 1
+      // 'code-change' requires minFilesRead: 1
       const result = validateToolUsage('code-change', metrics);
 
       assert.strictEqual(result.valid, false);
-      assert.ok(result.message.includes('made 0 tool call(s)'));
+      assert.ok(result.message.includes('processed 0 file(s)'));
       assert.ok(result.message.includes('1 required'));
+    });
+
+    it('returns valid when files are pre-fetched (no tool calls)', () => {
+      const metrics: ToolMetrics = {
+        toolCallCount: 0,
+        toolsUsed: {},
+        filesRead: ['src/foo.ts', 'src/bar.ts'], // Pre-fetched files
+      };
+
+      // 'code-change' requires minFilesRead: 1, but minToolCalls: 0
+      const result = validateToolUsage('code-change', metrics);
+
+      assert.strictEqual(result.valid, true);
+      assert.strictEqual(result.message, 'OK');
     });
 
     it('returns valid when minToolCalls is met', () => {
@@ -63,15 +77,17 @@ describe('Tool Enforcement', () => {
       assert.strictEqual(result.toolCallCount, 2);
     });
 
-    it('returns invalid when required tool is not used', () => {
+    it('returns invalid when required tool is not used (with config override)', () => {
       const metrics: ToolMetrics = {
         toolCallCount: 1,
         toolsUsed: { search_files: 1 }, // Used search_files but not read_file
         filesRead: [],
       };
 
-      // 'code-change' requires read_file
-      const result = validateToolUsage('code-change', metrics);
+      // Use config override to require specific tools
+      const result = validateToolUsage('code-change', metrics, {
+        requiredTools: ['read_file'],
+      });
 
       assert.strictEqual(result.valid, false);
       assert.ok(result.message.includes('did not use required tool'));
@@ -79,14 +95,16 @@ describe('Tool Enforcement', () => {
       assert.deepStrictEqual(result.missingTools, ['read_file']);
     });
 
-    it('returns valid when all required tools are used', () => {
+    it('returns valid when all required tools are used (with config override)', () => {
       const metrics: ToolMetrics = {
         toolCallCount: 3,
         toolsUsed: { read_file: 2, search_files: 1 },
         filesRead: ['src/foo.ts', 'src/bar.ts'],
       };
 
-      const result = validateToolUsage('security', metrics);
+      const result = validateToolUsage('security', metrics, {
+        requiredTools: ['read_file'],
+      });
 
       assert.strictEqual(result.valid, true);
       assert.deepStrictEqual(result.missingTools, []);
@@ -142,14 +160,11 @@ describe('Tool Enforcement', () => {
   });
 
   describe('hasToolRequirements', () => {
-    it('returns true for agents with minToolCalls > 0', () => {
-      assert.strictEqual(hasToolRequirements('code-change'), true);
-      assert.strictEqual(hasToolRequirements('pattern'), true);
-    });
-
-    it('returns true for agents with requiredTools', () => {
-      // code-change has requiredTools: ['read_file']
-      assert.strictEqual(hasToolRequirements('code-change'), true);
+    it('returns false for agents with only minFilesRead (pre-fetch is acceptable)', () => {
+      // Analysis agents now use minFilesRead instead of minToolCalls
+      // hasToolRequirements checks minToolCalls > 0 OR requiredTools
+      assert.strictEqual(hasToolRequirements('code-change'), false);
+      assert.strictEqual(hasToolRequirements('pattern'), false);
     });
 
     it('returns false for agents with no requirements', () => {
@@ -182,7 +197,7 @@ describe('Tool Enforcement', () => {
       const metrics: ToolMetrics = {
         toolCallCount: 0,
         toolsUsed: {},
-        filesRead: [],
+        filesRead: [], // No files read = invalid for code-change
       };
 
       const log = formatToolMetricsForLog('code-change', metrics);
@@ -191,6 +206,20 @@ describe('Tool Enforcement', () => {
       assert.ok(log.includes('code-change'));
       assert.ok(log.includes('0 tool call(s)'));
       assert.ok(log.includes('none'));
+    });
+
+    it('formats valid pre-fetch usage correctly', () => {
+      const metrics: ToolMetrics = {
+        toolCallCount: 0,
+        toolsUsed: {},
+        filesRead: ['src/foo.ts', 'src/bar.ts'], // Pre-fetched files
+      };
+
+      const log = formatToolMetricsForLog('code-change', metrics);
+
+      assert.ok(log.includes('✓')); // Valid because files were read
+      assert.ok(log.includes('code-change'));
+      assert.ok(log.includes('0 tool call(s)'));
     });
   });
 
@@ -214,18 +243,19 @@ describe('Tool Enforcement', () => {
   });
 
   describe('DEFAULT_TOOL_REQUIREMENTS', () => {
-    it('has strict requirements for analysis agents', () => {
-      const analysisAgents = ['code-change', 'pattern', 'security', 'technical-debt'];
+    it('has minFilesRead requirements for analysis agents (pre-fetch accepted)', () => {
+      const analysisAgents = ['code-change', 'pattern', 'security', 'technical-debt', 'codebase-explorer'];
 
       for (const agent of analysisAgents) {
         const config = DEFAULT_TOOL_REQUIREMENTS[agent as keyof typeof DEFAULT_TOOL_REQUIREMENTS];
         assert.ok(config, `${agent} should have config`);
-        assert.ok(config.minToolCalls && config.minToolCalls > 0, `${agent} should require tool calls`);
+        assert.ok(config.minFilesRead && config.minFilesRead > 0, `${agent} should require files to be read`);
+        assert.strictEqual(config.minToolCalls, 0, `${agent} should accept pre-fetch (minToolCalls: 0)`);
         assert.strictEqual(config.warnOnly, undefined, `${agent} should be strict (not warnOnly)`);
       }
     });
 
-    it('has warnOnly for synthesis agents', () => {
+    it('has warnOnly for some agents', () => {
       const warnOnlyAgents = ['narrative', 'dependency', 'bootstrap', 'project-overview'];
 
       for (const agent of warnOnlyAgents) {
