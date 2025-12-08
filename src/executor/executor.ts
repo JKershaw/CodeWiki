@@ -4,7 +4,7 @@ import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { createWorkItem, getTargetCommitId, getTargetPath, Priority } from '../domain/work-item.js';
+import { createWorkItem, getTargetCommitId, getTargetPath } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -190,7 +190,6 @@ export class Executor {
             id: uuid(),
             repoId,
             agentType: 'wiki-editor',
-            priority: Priority.USER_REQUEST, // Highest priority - process edits immediately
           });
 
           // Save and immediately claim it

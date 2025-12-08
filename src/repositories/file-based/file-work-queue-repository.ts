@@ -44,11 +44,8 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
     const pending = (await this.store.find(w =>
       w.repoId === repoId && w.status === 'pending'
     )).map(normalizeWorkItem);
-    // Sort by priority (highest first), then by creation time (oldest first)
-    pending.sort((a, b) => {
-      if (b.priority !== a.priority) return b.priority - a.priority;
-      return a.createdAt.getTime() - b.createdAt.getTime();
-    });
+    // Sort by creation time (oldest first) - FIFO queue
+    pending.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     return pending.slice(0, limit);
   }
 
@@ -100,7 +97,7 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
   }
 
   async claimNext(repoId: string): Promise<WorkItem | null> {
-    // Get the highest priority pending item
+    // Get the oldest pending item (FIFO)
     const pending = await this.findPending(repoId, 1);
     if (pending.length === 0) return null;
 

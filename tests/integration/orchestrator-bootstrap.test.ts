@@ -70,10 +70,6 @@ describe('Orchestrator Bootstrap Behavior', () => {
       assert.ok(workItems.length > 0, 'Should generate work items');
       assert.strictEqual(workItems[0]?.agentType, 'bootstrap',
         `First work item should be bootstrap, got ${workItems[0]?.agentType}`);
-
-      // Bootstrap should have highest priority
-      assert.ok(workItems[0]?.priority >= 90,
-        `Bootstrap should have high priority, got ${workItems[0]?.priority}`);
     });
 
     it('returns only bootstrap work item when wiki is empty', async () => {

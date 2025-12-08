@@ -124,11 +124,11 @@ export async function createMongoIndexes(db: Db): Promise<void> {
     { key: { targetCommitId: 1 } },
   ]);
 
-  // Work queue collection
+  // Work queue collection (FIFO ordering by createdAt)
   await db.collection('work-queue').createIndexes([
     { key: { repoId: 1 } },
     { key: { repoId: 1, status: 1 } },
-    { key: { repoId: 1, status: 1, priority: -1, createdAt: 1 } },
+    { key: { repoId: 1, status: 1, createdAt: 1 } },
     { key: { repoId: 1, agentType: 1, status: 1 } },
   ]);
 

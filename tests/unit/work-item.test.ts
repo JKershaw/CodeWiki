@@ -7,7 +7,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   createWorkItem,
-  Priority,
   getTargetCommitId,
   getTargetPath,
   createCommitTarget,
@@ -23,13 +22,12 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
       });
 
       assert.strictEqual(workItem.id, 'work-1');
       assert.strictEqual(workItem.repoId, 'repo-1');
       assert.strictEqual(workItem.agentType, 'code-change');
-      assert.strictEqual(workItem.priority, Priority.RECENT_COMMIT);
+      assert.strictEqual(workItem.priority, 0);
       assert.strictEqual(workItem.status, 'pending');
     });
 
@@ -38,7 +36,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.BACKGROUND,
       });
 
       assert.strictEqual(workItem.status, 'pending');
@@ -49,7 +46,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.BACKGROUND,
       });
 
       assert.strictEqual(workItem.target.type, 'wiki');
@@ -66,7 +62,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
         targetCommitId: 'abc123def',
       });
 
@@ -79,7 +74,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'codebase-explorer',
-        priority: Priority.EXPLORATION,
         targetPath: 'src/services/llm',
       });
 
@@ -93,7 +87,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
         target,
       });
 
@@ -107,7 +100,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
         target,
         targetCommitId: 'should-be-ignored',
       });
@@ -121,7 +113,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
         targetCommitId: 'abc123def',
         orchestratorRunId: 'orch-run-456',
       });
@@ -134,7 +125,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
       });
 
       assert.strictEqual(workItem.orchestratorRunId, null);
@@ -146,38 +136,12 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.BACKGROUND,
       });
       const after = Date.now();
 
       assert.ok(workItem.createdAt instanceof Date);
       assert.ok(workItem.createdAt.getTime() >= before);
       assert.ok(workItem.createdAt.getTime() <= after);
-    });
-
-    it('supports all priority levels', () => {
-      const priorities = [
-        Priority.USER_REQUEST,
-        Priority.CONFLICT_RESOLUTION,
-        Priority.LOW_CONFIDENCE,
-        Priority.EXPLORATION,
-        Priority.RECENT_COMMIT,
-        Priority.SYNTHESIS,
-        Priority.HISTORICAL_COMMIT,
-        Priority.META,
-        Priority.BACKGROUND,
-      ];
-
-      for (const priority of priorities) {
-        const workItem = createWorkItem({
-          id: `work-${priority}`,
-          repoId: 'repo-1',
-          agentType: 'code-change',
-          priority,
-        });
-
-        assert.strictEqual(workItem.priority, priority);
-      }
     });
   });
 
@@ -187,7 +151,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
         target: createCommitTarget('sha123'),
       });
       assert.strictEqual(getTargetCommitId(workItem), 'sha123');
@@ -198,7 +161,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'codebase-explorer',
-        priority: Priority.EXPLORATION,
         target: createPathTarget('src/foo'),
       });
       assert.strictEqual(getTargetCommitId(pathItem), null);
@@ -207,7 +169,6 @@ describe('WorkItem', () => {
         id: 'work-2',
         repoId: 'repo-1',
         agentType: 'link',
-        priority: Priority.META,
         target: createWikiTarget(),
       });
       assert.strictEqual(getTargetCommitId(wikiItem), null);
@@ -218,7 +179,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'codebase-explorer',
-        priority: Priority.EXPLORATION,
         target: createPathTarget('src/services'),
       });
       assert.strictEqual(getTargetPath(workItem), 'src/services');
@@ -229,7 +189,6 @@ describe('WorkItem', () => {
         id: 'work-1',
         repoId: 'repo-1',
         agentType: 'code-change',
-        priority: Priority.RECENT_COMMIT,
         target: createCommitTarget('sha123'),
       });
       assert.strictEqual(getTargetPath(commitItem), null);
@@ -238,7 +197,6 @@ describe('WorkItem', () => {
         id: 'work-2',
         repoId: 'repo-1',
         agentType: 'link',
-        priority: Priority.META,
         target: createWikiTarget(),
       });
       assert.strictEqual(getTargetPath(wikiItem), null);
