@@ -9,6 +9,19 @@ const TEST_GITHUB_REPO_URL = 'https://github.com/octocat/Hello-World';
 const TEST_GITHUB_REPO_NAME = 'octocat/Hello-World';
 
 test.describe('Repository Management', () => {
+  // Clean up the GitHub test repo after all tests in this describe block
+  test.afterAll(async ({ request }) => {
+    // Find and delete the octocat/Hello-World repo if it exists
+    const response = await request.get('/api/repos');
+    if (response.ok()) {
+      const repos = await response.json();
+      const testRepo = repos.find((r: { fullName: string }) => r.fullName === TEST_GITHUB_REPO_NAME);
+      if (testRepo) {
+        await request.delete(`/api/repos/${testRepo.id}`);
+      }
+    }
+  });
+
   test('can add a new repository', async ({ page }) => {
     await page.goto('/');
 

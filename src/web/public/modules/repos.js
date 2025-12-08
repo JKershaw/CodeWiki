@@ -147,7 +147,7 @@ async function addRepo(pathOrUrl, isGitHubUrl = false) {
       body: JSON.stringify(body),
     });
     loadingCard.remove();
-    loadRepos();
+    await loadRepos();
   } catch (error) {
     loadingCard.remove();
 
