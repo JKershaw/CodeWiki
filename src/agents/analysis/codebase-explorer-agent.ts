@@ -6,7 +6,7 @@ import {
   createListWikiPagesQuery,
   handleListWikiPages,
 } from '../../queries/index.js';
-import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import { createCodebaseToolExecutor, formatFetchedFilesForContext, type FetchedFileContent } from '../agent-helpers.js';
 import { sortByPathRelevance } from '../../utils/path-relevance.js';
 import {
   createParseContext,
@@ -29,6 +29,11 @@ import {
 export class CodebaseExplorerAgent implements Agent {
   readonly type: AgentType = 'codebase-explorer';
 
+  // Size limits for pre-fetch approach
+  private readonly MAX_FILE_SIZE = 20000;
+  private readonly MAX_TOTAL_SIZE = 80000;
+  private readonly MAX_FILES_TO_PREFETCH = 10;
+
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
   }
@@ -48,15 +53,130 @@ export class CodebaseExplorerAgent implements Agent {
     const pagesResult = await handleListWikiPages(pagesQuery, context.repos);
     const existingPages = pagesResult.data || [];
     const existingPagePaths = existingPages.map(p => p.path);
-    const existingContent = existingPages.map(p => p.content.toLowerCase()).join('\n');
+
+    // Try pre-fetch approach first for simpler, more reliable execution
+    if (context.repoAccess) {
+      const prefetchResult = await this.runWithPrefetch(targetPath, existingPagePaths, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    // Fall back to tool-based exploration if pre-fetch failed or is unavailable
+    return this.runWithTools(targetPath, existingPagePaths, context);
+  }
+
+  /**
+   * Run with pre-fetched directory listing and file contents.
+   * Returns null if pre-fetch is not suitable (too many files, etc.).
+   */
+  private async runWithPrefetch(
+    targetPath: string,
+    existingPagePaths: string[],
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    if (!context.repoAccess) {
+      return null;
+    }
+
+    try {
+      // Pre-list the directory structure
+      const dirListing = await this.listDirectoryTree(targetPath, context);
+      if (!dirListing || dirListing.files.length === 0) {
+        return null; // No files found, fall back to tools
+      }
+
+      // If too many files, fall back to tools for selective exploration
+      if (dirListing.files.length > this.MAX_FILES_TO_PREFETCH * 2) {
+        console.log(`[codebase-explorer] Too many files (${dirListing.files.length}), using tool-based approach`);
+        return null;
+      }
+
+      // Select key files to pre-read (prioritize implementations over index files)
+      const keyFiles = this.selectKeyFiles(dirListing.files);
+
+      // Pre-fetch file contents
+      const fileContents = await this.prefetchFiles(keyFiles, context);
+      const totalSize = fileContents.reduce((sum, f) => sum + (f.content?.length || 0), 0);
+
+      // If context is too large, fall back to tools
+      if (totalSize > this.MAX_TOTAL_SIZE) {
+        console.log(`[codebase-explorer] Context too large (${totalSize}), using tool-based approach`);
+        return null;
+      }
+
+      // Build the pre-fetch prompt with directory structure and file contents
+      const prompt = this.buildPrefetchPrompt(targetPath, dirListing, fileContents, existingPagePaths);
+
+      // Single LLM call with all context
+      const completion = await context.llm.complete({
+        system: SYSTEM_PROMPT_PREFETCH,
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: 4000,
+        temperature: 0.3,
+      });
+
+      // Parse the response
+      const analysis = this.parseResponse(completion.content);
+
+      // All paths are verified since we pre-fetched them
+      const verifiedPaths = new Set(keyFiles);
+      dirListing.files.forEach(f => verifiedPaths.add(f));
+      const validatedFindings = validateFindingPaths(analysis.findings, verifiedPaths);
+
+      // Generate wiki updates
+      const updates = this.generateUpdates(targetPath, analysis, existingPagePaths);
+
+      // Create exploration finding
+      const filesRead = fileContents.filter(f => f.content !== null).map(f => f.path);
+      const explorationFinding = createFinding({
+        type: 'EXPLORATION',
+        description: `Pre-fetched and documented ${filesRead.length} source files in ${targetPath}`,
+        relatedPaths: filesRead,
+        importance: 'low',
+      });
+
+      return {
+        result: createAgentResult({
+          summary: analysis.summary,
+          findings: [
+            ...validatedFindings.map(f => createFinding({
+              type: f.type,
+              description: f.description,
+              relatedPaths: f.paths,
+              importance: f.importance,
+            })),
+            explorationFinding,
+          ],
+          confidence: analysis.confidence,
+        }),
+        updates,
+        costUsd: completion.costUsd,
+        toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: filesRead }, // No tool calls in pre-fetch mode
+      };
+    } catch (error) {
+      console.warn(`[codebase-explorer] Pre-fetch failed: ${error}, falling back to tools`);
+      return null;
+    }
+  }
+
+  /**
+   * Run with tool-based exploration (fallback).
+   */
+  private async runWithTools(
+    targetPath: string,
+    existingPagePaths: string[],
+    context: AgentContext
+  ): Promise<AgentRunResult> {
+    const existingContent = ''; // Not used in tool mode prompt
 
     // Build the prompt for the LLM
     const prompt = this.buildPrompt(targetPath, existingPagePaths, existingContent);
 
-    // Set up codebase exploration tools (works with both local and GitHub repos)
+    // Set up codebase exploration tools
     const toolExecutor = createCodebaseToolExecutor(context);
 
-    // Get LLM analysis with tool use for deep exploration
+    // Get LLM analysis with tool use
     const completion = await context.llm.completeWithTools({
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
@@ -66,7 +186,7 @@ export class CodebaseExplorerAgent implements Agent {
         inputSchema: t.inputSchema,
       })) ?? [],
       executeTools: toolExecutor?.executeTools ?? (async () => []),
-      maxToolRounds: 10, // Allow more exploration for directories
+      maxToolRounds: 5, // Reduced from 10 - should be enough with better guidance
       maxTokens: 4000,
       temperature: 0.3,
     });
@@ -77,10 +197,10 @@ export class CodebaseExplorerAgent implements Agent {
     // Extract verified paths from tool calls
     const verifiedPaths = extractVerifiedPaths(completion.toolCalls);
 
-    // Validate and filter paths in findings to prevent hallucinated paths
+    // Validate and filter paths in findings
     const validatedFindings = validateFindingPaths(analysis.findings, verifiedPaths);
 
-    // Generate wiki updates based on the analysis
+    // Generate wiki updates
     const updates = this.generateUpdates(targetPath, analysis, existingPagePaths);
 
     // Include tool usage in findings
@@ -116,6 +236,190 @@ export class CodebaseExplorerAgent implements Agent {
       costUsd: completion.costUsd,
       toolMetrics: extractToolMetrics(completion),
     };
+  }
+
+  /**
+   * List directory tree structure.
+   */
+  private async listDirectoryTree(
+    targetPath: string,
+    context: AgentContext
+  ): Promise<{ tree: string; files: string[] } | null> {
+    if (!context.repoAccess) {
+      return null;
+    }
+
+    try {
+      const entries = await context.repoAccess.listDirectory(targetPath);
+      const files: string[] = [];
+      const treeLines: string[] = [];
+
+      for (const entry of entries) {
+        const fullPath = targetPath === '.' ? entry.name : `${targetPath}/${entry.name}`;
+        if (entry.type === 'dir') {
+          treeLines.push(`${entry.name}/`);
+          // Recursively list subdirectories (one level deep)
+          try {
+            const subEntries = await context.repoAccess.listDirectory(fullPath);
+            for (const subEntry of subEntries) {
+              const subPath = `${fullPath}/${subEntry.name}`;
+              if (subEntry.type === 'dir') {
+                treeLines.push(`  ${subEntry.name}/`);
+              } else {
+                treeLines.push(`  ${subEntry.name}`);
+                if (this.isSourceFile(subEntry.name)) {
+                  files.push(subPath);
+                }
+              }
+            }
+          } catch {
+            // Ignore subdirectory listing errors
+          }
+        } else {
+          treeLines.push(entry.name);
+          if (this.isSourceFile(entry.name)) {
+            files.push(fullPath);
+          }
+        }
+      }
+
+      return {
+        tree: treeLines.join('\n'),
+        files,
+      };
+    } catch (error) {
+      console.warn(`[codebase-explorer] Failed to list directory ${targetPath}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a filename looks like source code.
+   */
+  private isSourceFile(filename: string): boolean {
+    const sourceExtensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.kt'];
+    const skipPatterns = ['.test.', '.spec.', '.d.ts', 'index.ts', 'index.js'];
+
+    // Skip test and declaration files
+    if (skipPatterns.some(p => filename.includes(p))) {
+      return false;
+    }
+
+    return sourceExtensions.some(ext => filename.endsWith(ext));
+  }
+
+  /**
+   * Select key files to pre-read, prioritizing implementations over index files.
+   */
+  private selectKeyFiles(files: string[]): string[] {
+    // Sort to prioritize implementation files
+    const sorted = [...files].sort((a, b) => {
+      const aName = a.split('/').pop() || '';
+      const bName = b.split('/').pop() || '';
+
+      // Deprioritize index files
+      const aIsIndex = aName.startsWith('index.');
+      const bIsIndex = bName.startsWith('index.');
+      if (aIsIndex && !bIsIndex) return 1;
+      if (!aIsIndex && bIsIndex) return -1;
+
+      // Prioritize by name length (shorter = more likely core file)
+      return aName.length - bName.length;
+    });
+
+    return sorted.slice(0, this.MAX_FILES_TO_PREFETCH);
+  }
+
+  /**
+   * Pre-fetch file contents.
+   */
+  private async prefetchFiles(
+    files: string[],
+    context: AgentContext
+  ): Promise<FetchedFileContent[]> {
+    if (!context.repoAccess) {
+      return [];
+    }
+
+    const results: FetchedFileContent[] = [];
+    let totalSize = 0;
+
+    for (const filePath of files) {
+      if (totalSize >= this.MAX_TOTAL_SIZE) {
+        break;
+      }
+
+      try {
+        const content = await context.repoAccess.getFileContent(filePath);
+        if (content.length > this.MAX_FILE_SIZE) {
+          results.push({
+            path: filePath,
+            content: content.slice(0, this.MAX_FILE_SIZE),
+            truncated: true,
+          });
+          totalSize += this.MAX_FILE_SIZE;
+        } else {
+          results.push({ path: filePath, content });
+          totalSize += content.length;
+        }
+      } catch (error) {
+        results.push({
+          path: filePath,
+          content: null,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Build prompt for pre-fetch approach with all context included.
+   */
+  private buildPrefetchPrompt(
+    targetPath: string,
+    dirListing: { tree: string; files: string[] },
+    fileContents: FetchedFileContent[],
+    existingPagePaths: string[]
+  ): string {
+    const sortedPaths = sortByPathRelevance(existingPagePaths, targetPath);
+    const existingPagesInfo = sortedPaths.length > 0
+      ? `\n## Existing Wiki Pages (avoid duplication)\n${sortedPaths.slice(0, 15).map(p => `- ${p}`).join('\n')}`
+      : '';
+
+    const filesContext = formatFetchedFilesForContext(fileContents, '## Source Files');
+
+    return `## Document: ${targetPath}
+
+## Directory Structure
+\`\`\`
+${dirListing.tree}
+\`\`\`
+
+${filesContext}
+${existingPagesInfo}
+
+Based on the directory structure and source files above, create comprehensive documentation.
+
+## Output Format
+
+SUMMARY:
+[2-3 paragraph overview of this code module]
+
+FINDINGS:
+- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
+
+WIKI_PAGES:
+---PAGE---
+PATH: [category/page-name]
+TITLE: [Descriptive title]
+CONTENT:
+[Markdown content with code examples from the files above]
+---END_PAGE---
+
+CONFIDENCE: [0.8-1.0 since you have full file contents]
+`;
   }
 
   private buildPrompt(
@@ -461,3 +765,27 @@ Confidence scoring:
 - 0.7-0.9: Read most files but some unexplored
 - 0.5-0.7: Limited file reads, may need more exploration
 - <0.5: Insufficient tool use, documentation may be inaccurate`;
+
+/**
+ * Simplified system prompt for pre-fetch mode.
+ * No tool instructions needed since all context is provided upfront.
+ */
+const SYSTEM_PROMPT_PREFETCH = `You are a documentation writer for source code.
+
+## Your Task
+Create comprehensive documentation for the code provided. The directory structure and file contents have been pre-loaded for you.
+
+## Documentation Guidelines
+- Write encyclopedia-style documentation based on the actual code
+- Use EXACT class, function, and variable names from the source
+- Include code examples from the provided files
+- Explain purpose, patterns, and how components work together
+- Focus on what makes this code unique, not generic descriptions
+
+## Wiki Page Guidelines
+- Use lowercase paths with hyphens (e.g., "services/user-service")
+- Each page should be 200-500 words minimum
+- Only reference file paths shown in the directory structure
+
+## Output Format
+Respond with SUMMARY, FINDINGS, WIKI_PAGES, and CONFIDENCE sections as specified in the prompt.`;
