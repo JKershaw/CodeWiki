@@ -48,7 +48,7 @@ export async function handleUpdateWikiPage(
         id: uuid(),
         wikiId,
         path: update.path,
-        title: update.title ?? extractTitle(update.content),
+        title: update.title ?? extractTitleWithFallback(update.content, update.path),
         content: update.content,
       };
       if (update.sourceCommitId) {
@@ -94,7 +94,7 @@ export async function handleUpdateWikiPage(
 
       const updateParams: { content: string; title?: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
         content: update.content,
-        title: update.title ?? extractTitle(update.content),
+        title: update.title ?? extractTitleWithFallback(update.content, update.path),
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
       };
       if (update.sourceCommitId) {
@@ -136,7 +136,7 @@ export async function handleUpdateWikiPage(
           id: uuid(),
           wikiId,
           path: update.path,
-          title: update.title ?? extractTitle(update.content),
+          title: update.title ?? extractTitleWithFallback(update.content, update.path),
           content: update.content,
         };
         if (update.sourceCommitId) {
@@ -179,7 +179,7 @@ export async function handleUpdateWikiPage(
       const mergedContent = mergeContent(existing.content, update.content);
       const mergeUpdateParams: { content: string; title?: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
         content: mergedContent,
-        title: extractTitle(mergedContent),
+        title: extractTitleWithFallback(mergedContent, update.path),
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
       };
       if (update.sourceCommitId) {
@@ -264,11 +264,57 @@ export async function handleUpdateWikiPage(
 
 /**
  * Extract title from markdown content.
- * Looks for first H1 heading.
+ * Looks for first H1 heading. Falls back to 'Untitled' if no H1 found.
+ *
+ * The regex is lenient - it allows zero or more spaces after # to handle
+ * cases where LLMs generate `#Title` without a space (technically invalid
+ * markdown, but common in practice).
+ *
+ * Uses negative lookahead (?!#) to ensure we only match H1, not H2 (##) or deeper.
+ * Uses [ \t]* instead of \s* to match only horizontal whitespace (not newlines).
  */
 export function extractTitle(content: string): string {
-  const match = content.match(/^#\s+(.+)$/m);
-  return match ? match[1]! : 'Untitled';
+  // Match H1 with zero or more horizontal whitespace after # (more lenient than strict markdown)
+  // (?!#) ensures we don't match ## (H2) or deeper headings
+  // [ \t]* matches only spaces and tabs, not newlines (important for multiline content)
+  const match = content.match(/^#(?!#)[ \t]*(.+)$/m);
+  if (match) {
+    // Trim the captured title in case of leading/trailing whitespace
+    const title = match[1]!.trim();
+    if (title.length > 0) {
+      return title;
+    }
+  }
+  return 'Untitled';
+}
+
+/**
+ * Extract title from a page path.
+ * Converts paths like "architecture/cqrs-pattern" to "Cqrs Pattern".
+ * Used as a fallback when content has no H1 heading.
+ */
+export function extractTitleFromPath(path: string): string {
+  const lastPart = path.split('/').pop() ?? path;
+  if (!lastPart || lastPart.length === 0) {
+    return 'Untitled';
+  }
+  return lastPart
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
+ * Extract title from content with path-based fallback.
+ * First tries to extract from H1 heading in content, then falls back to
+ * deriving a title from the page path.
+ */
+export function extractTitleWithFallback(content: string, path: string): string {
+  const contentTitle = extractTitle(content);
+  if (contentTitle !== 'Untitled') {
+    return contentTitle;
+  }
+  return extractTitleFromPath(path);
 }
 
 /**

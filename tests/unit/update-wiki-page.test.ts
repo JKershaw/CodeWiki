@@ -8,6 +8,8 @@ import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
 import {
   extractTitle,
+  extractTitleFromPath,
+  extractTitleWithFallback,
   createUpdateWikiPageCommand,
   handleUpdateWikiPage,
 } from '../../src/commands/update-wiki-page.js';
@@ -45,14 +47,83 @@ describe('extractTitle', () => {
   });
 
   it('handles H1 with extra whitespace', () => {
-    // Regex `^#\s+(.+)$` consumes whitespace after #, captures the rest
+    // Title is trimmed to remove leading/trailing whitespace
     const content = '#   Title With Spaces   \n\nContent';
-    assert.strictEqual(extractTitle(content), 'Title With Spaces   ');
+    assert.strictEqual(extractTitle(content), 'Title With Spaces');
   });
 
   it('handles H1 with special characters', () => {
     const content = '# My Title: A Story (Part 1)\n\nContent';
     assert.strictEqual(extractTitle(content), 'My Title: A Story (Part 1)');
+  });
+
+  it('extracts title from H1 without space after # (lenient parsing)', () => {
+    // LLMs sometimes generate `#Title` without a space - we handle this gracefully
+    const content = '#NoSpaceTitle\n\nContent';
+    assert.strictEqual(extractTitle(content), 'NoSpaceTitle');
+  });
+
+  it('extracts title from H1 with zero spaces after #', () => {
+    const content = '#ZeroSpaceTitle\n\nSome content here.';
+    assert.strictEqual(extractTitle(content), 'ZeroSpaceTitle');
+  });
+
+  it('returns Untitled when H1 has only whitespace after #', () => {
+    const content = '#    \n\nContent';
+    assert.strictEqual(extractTitle(content), 'Untitled');
+  });
+});
+
+describe('extractTitleFromPath', () => {
+  it('extracts title from simple path', () => {
+    assert.strictEqual(extractTitleFromPath('overview'), 'Overview');
+  });
+
+  it('extracts title from path with directory', () => {
+    assert.strictEqual(extractTitleFromPath('architecture/overview'), 'Overview');
+  });
+
+  it('converts hyphens to spaces and capitalizes', () => {
+    assert.strictEqual(extractTitleFromPath('architecture/cqrs-pattern'), 'Cqrs Pattern');
+  });
+
+  it('handles deep paths', () => {
+    assert.strictEqual(extractTitleFromPath('docs/guides/getting-started'), 'Getting Started');
+  });
+
+  it('returns Untitled for empty path', () => {
+    assert.strictEqual(extractTitleFromPath(''), 'Untitled');
+  });
+
+  it('handles path ending with slash', () => {
+    // Split on '/' and pop returns empty string
+    assert.strictEqual(extractTitleFromPath('test/'), 'Untitled');
+  });
+});
+
+describe('extractTitleWithFallback', () => {
+  it('extracts title from content when H1 exists', () => {
+    const content = '# My Page Title\n\nContent here.';
+    assert.strictEqual(extractTitleWithFallback(content, 'test/page'), 'My Page Title');
+  });
+
+  it('falls back to path when no H1 in content', () => {
+    const content = 'No heading here, just text.';
+    assert.strictEqual(extractTitleWithFallback(content, 'architecture/system-design'), 'System Design');
+  });
+
+  it('prefers content H1 over path-based title', () => {
+    const content = '# Explicit Title\n\nContent.';
+    assert.strictEqual(extractTitleWithFallback(content, 'different/path-name'), 'Explicit Title');
+  });
+
+  it('falls back to path for empty content', () => {
+    assert.strictEqual(extractTitleWithFallback('', 'test/my-page'), 'My Page');
+  });
+
+  it('handles H1 without space (lenient) before falling back', () => {
+    const content = '#DirectTitle\n\nContent.';
+    assert.strictEqual(extractTitleWithFallback(content, 'fallback/path'), 'DirectTitle');
   });
 });
 
@@ -151,13 +222,13 @@ describe('handleUpdateWikiPage', () => {
       assert.strictEqual(result.data?.title, 'Explicit Title');
     });
 
-    it('falls back to Untitled when no H1 and no title provided', async () => {
+    it('falls back to path-based title when no H1 and no title provided', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
       const command = createUpdateWikiPageCommand({
         type: 'create',
-        path: 'test/page',
+        path: 'architecture/system-design',
         content: 'No heading here, just text.',
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
@@ -166,7 +237,26 @@ describe('handleUpdateWikiPage', () => {
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
       assert.strictEqual(result.success, true);
-      assert.strictEqual(result.data?.title, 'Untitled');
+      // Falls back to title derived from path
+      assert.strictEqual(result.data?.title, 'System Design');
+    });
+
+    it('extracts title from H1 without space (lenient parsing)', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/page',
+        content: '#NoSpaceTitle\n\nContent without space after hash.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.title, 'NoSpaceTitle');
     });
   });
 
@@ -232,7 +322,7 @@ describe('handleUpdateWikiPage', () => {
       assert.strictEqual(result.data?.title, 'Explicit Override Title');
     });
 
-    it('sets title to Untitled when content has no H1', async () => {
+    it('falls back to path-based title when updated content has no H1', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
       const pageId = uuid();
@@ -241,7 +331,7 @@ describe('handleUpdateWikiPage', () => {
       const initialPage = createWikiPage({
         id: pageId,
         wikiId,
-        path: 'test/page',
+        path: 'guides/quick-start',
         title: 'Original Title',
         content: '# Original Title\n\nOriginal content.',
       });
@@ -250,7 +340,7 @@ describe('handleUpdateWikiPage', () => {
       // Update with content that has no H1
       const command = createUpdateWikiPageCommand({
         type: 'update',
-        path: 'test/page',
+        path: 'guides/quick-start',
         content: 'No heading in this update.',
         agentRunId: 'agent-1',
         confidenceDelta: 0.1,
@@ -259,7 +349,8 @@ describe('handleUpdateWikiPage', () => {
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
       assert.strictEqual(result.success, true);
-      assert.strictEqual(result.data?.title, 'Untitled');
+      // Falls back to path-based title instead of 'Untitled'
+      assert.strictEqual(result.data?.title, 'Quick Start');
     });
   });
 

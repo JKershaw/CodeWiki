@@ -5,6 +5,7 @@ import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { EditRequest, EditDecision } from '../../domain/edit-request.js';
 import { getSourceCommitSha, getSourceCommitTimestamp } from '../../domain/edit-request.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import { extractTitleWithFallback } from '../../commands/update-wiki-page.js';
 
 /**
  * Wiki Editor Agent - Intelligently processes edit requests from analysis agents.
@@ -441,10 +442,18 @@ ${content}`;
     }
 
     // For 'apply' and 'merge-to-history'
+    const content = decision.content || editRequest.proposedContent;
+
+    // Always extract title - use explicit title if provided, otherwise extract from content
+    // This ensures we don't end up with 'Untitled' pages when content has an H1 header
+    const title = editRequest.targetPageTitle ||
+      extractTitleWithFallback(content, editRequest.targetPagePath);
+
     const update: WikiPageUpdate = {
       type: currentPage ? 'update' : 'create',
       path: editRequest.targetPagePath,
-      content: decision.content || editRequest.proposedContent,
+      content,
+      title,
       agentRunId: '', // Will be set by executor
       confidenceDelta: editRequest.confidenceDelta,
     };
@@ -453,9 +462,6 @@ ${content}`;
     const sourceCommitId = getSourceCommitSha(editRequest);
     if (sourceCommitId) {
       update.sourceCommitId = sourceCommitId;
-    }
-    if (editRequest.targetPageTitle) {
-      update.title = editRequest.targetPageTitle;
     }
     if (editRequest.redirectTo) {
       update.redirectTo = editRequest.redirectTo;
