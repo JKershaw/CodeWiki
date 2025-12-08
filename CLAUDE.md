@@ -20,6 +20,43 @@ To run end-to-end tests, you also need to install Playwright browsers:
 npx playwright install
 ```
 
+## Development Workflow
+
+### Test Driven Development (TDD)
+
+**Always follow Test Driven Development.** Before implementing any feature or fix:
+
+1. **Research existing tests first** - Before starting any work, explore the test suite to understand:
+   - How similar features are tested
+   - What test patterns and helpers are available
+   - Whether related tests already exist that need updating
+   - The LLM test suite for agent-related changes
+
+2. **Write tests before implementation** - Follow the red-green-refactor cycle:
+   - Write a failing test that describes the expected behavior
+   - Implement the minimum code to make the test pass
+   - Refactor while keeping tests green
+
+3. **Consider all test types** - Depending on the change, you may need:
+   - Unit tests for isolated logic
+   - Integration tests for component interactions
+   - LLM tests for agent behavior verification
+   - E2E tests for user-facing features
+
+### Before Starting Any Task
+
+Always research the existing codebase and tests:
+
+```bash
+# Explore relevant test files
+ls tests/unit/ tests/integration/ tests/llm/
+
+# Search for related tests
+grep -r "describe.*FeatureName" tests/
+```
+
+Review `tests/helpers/` for available test utilities like `MockLLMService` and `createTestContext`.
+
 ## Development Commands
 
 - `npm run build` - Compile TypeScript and copy static assets
