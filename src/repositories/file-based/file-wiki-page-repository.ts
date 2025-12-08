@@ -65,6 +65,7 @@ export class FileWikiPageRepository implements WikiPageRepository {
 
   async updateContent(id: string, updates: {
     content: string;
+    title?: string;
     confidence?: number;
     sourceCommitId?: string;
     sourceAgentRunId?: string;
@@ -73,6 +74,9 @@ export class FileWikiPageRepository implements WikiPageRepository {
     if (page) {
       page.content = updates.content;
       page.updatedAt = new Date();
+      if (updates.title !== undefined) {
+        page.title = updates.title;
+      }
       if (updates.confidence !== undefined) {
         page.confidence = updates.confidence;
       }

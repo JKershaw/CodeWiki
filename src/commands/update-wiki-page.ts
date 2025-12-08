@@ -48,7 +48,7 @@ export async function handleUpdateWikiPage(
         id: uuid(),
         wikiId,
         path: update.path,
-        title: extractTitle(update.content),
+        title: update.title ?? extractTitle(update.content),
         content: update.content,
       };
       if (update.sourceCommitId) {
@@ -83,8 +83,9 @@ export async function handleUpdateWikiPage(
       // Capture content before update for history
       const contentBefore = existing.content;
 
-      const updateParams: { content: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
+      const updateParams: { content: string; title?: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
         content: update.content,
+        title: update.title ?? extractTitle(update.content),
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
       };
       if (update.sourceCommitId) {
@@ -117,7 +118,7 @@ export async function handleUpdateWikiPage(
           id: uuid(),
           wikiId,
           path: update.path,
-          title: extractTitle(update.content),
+          title: update.title ?? extractTitle(update.content),
           content: update.content,
         };
         if (update.sourceCommitId) {
@@ -149,8 +150,9 @@ export async function handleUpdateWikiPage(
 
       // Merge content (append new content to existing)
       const mergedContent = mergeContent(existing.content, update.content);
-      const mergeUpdateParams: { content: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
+      const mergeUpdateParams: { content: string; title?: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
         content: mergedContent,
+        title: extractTitle(mergedContent),
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
       };
       if (update.sourceCommitId) {
@@ -228,7 +230,7 @@ export async function handleUpdateWikiPage(
  * Extract title from markdown content.
  * Looks for first H1 heading.
  */
-function extractTitle(content: string): string {
+export function extractTitle(content: string): string {
   const match = content.match(/^#\s+(.+)$/m);
   return match ? match[1]! : 'Untitled';
 }

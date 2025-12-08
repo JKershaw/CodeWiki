@@ -54,6 +54,7 @@ export interface WikiPageRepository {
    */
   updateContent(id: string, updates: {
     content: string;
+    title?: string;
     confidence?: number;
     sourceCommitId?: string;
     sourceAgentRunId?: string;
