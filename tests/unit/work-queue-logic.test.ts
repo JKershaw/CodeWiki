@@ -61,16 +61,34 @@ describe('selectItemsForBatch', () => {
     });
   });
 
-  describe('Rule 2: Meta agents blocked by analysis work', () => {
-    it('skips meta agents when analysis work is pending', () => {
+  describe('Meta agents can be claimed alongside analysis work', () => {
+    it('claims meta agents even when analysis work is pending', () => {
       const codeChange = createCommitWorkItem('code-change', 'commit-1');
       const link = createWikiWorkItem('link');
 
       const result = selectItemsForBatch([codeChange, link], 10, new Set());
 
-      assert.strictEqual(result.itemsToClaim.length, 1);
-      assert.strictEqual(result.itemsToClaim[0]!.agentType, 'code-change');
-      assert.strictEqual(result.skippedReasons.get(link.id), 'meta_agent_blocked_by_analysis');
+      // Both should be claimed - no gating
+      assert.strictEqual(result.itemsToClaim.length, 2);
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'code-change'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'link'));
+      // No skipped reasons for meta agents
+      assert.strictEqual(result.skippedReasons.has(link.id), false);
+    });
+
+    it('claims multiple meta agents alongside analysis work', () => {
+      const codeChange = createCommitWorkItem('code-change', 'commit-1');
+      const link = createWikiWorkItem('link');
+      const structure = createWikiWorkItem('structure');
+      const quality = createWikiWorkItem('quality');
+
+      const result = selectItemsForBatch([codeChange, link, structure, quality], 10, new Set());
+
+      assert.strictEqual(result.itemsToClaim.length, 4);
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'code-change'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'link'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'structure'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'quality'));
     });
 
     it('allows meta agents when no analysis work is pending', () => {
@@ -83,9 +101,41 @@ describe('selectItemsForBatch', () => {
       assert.ok(result.itemsToClaim.some(i => i.agentType === 'link'));
       assert.ok(result.itemsToClaim.some(i => i.agentType === 'structure'));
     });
+
+    it('respects priority ordering with mixed agent types', () => {
+      // Create items in priority order (higher priority first in array)
+      // Note: createWikiWorkItem uses META priority, createCommitWorkItem uses RECENT_COMMIT
+      const items = [
+        createCommitWorkItem('code-change', 'commit-1'), // Higher priority
+        createWikiWorkItem('link'),                       // Lower priority
+      ];
+
+      const result = selectItemsForBatch(items, 10, new Set());
+
+      // Both claimed, order preserved from input
+      assert.strictEqual(result.itemsToClaim.length, 2);
+      assert.strictEqual(result.itemsToClaim[0]!.agentType, 'code-change');
+      assert.strictEqual(result.itemsToClaim[1]!.agentType, 'link');
+    });
+
+    it('claims all meta agent types without blocking', () => {
+      const codeChange = createCommitWorkItem('code-change', 'commit-1');
+      const metaItems = META_AGENTS.map(agentType => createWikiWorkItem(agentType));
+
+      const result = selectItemsForBatch([codeChange, ...metaItems], 20, new Set());
+
+      // All should be claimed
+      assert.strictEqual(result.itemsToClaim.length, 1 + META_AGENTS.length);
+      for (const agentType of META_AGENTS) {
+        assert.ok(
+          result.itemsToClaim.some(i => i.agentType === agentType),
+          `${agentType} should be claimed`
+        );
+      }
+    });
   });
 
-  describe('Rule 3: Code-change prerequisite', () => {
+  describe('Rule 2: Code-change prerequisite', () => {
     it('skips analysis agents on commits not processed by code-change', () => {
       const narrative = createCommitWorkItem('narrative', 'commit-1');
 
@@ -115,7 +165,7 @@ describe('selectItemsForBatch', () => {
     });
   });
 
-  describe('Rule 4: Parallel execution of different agents on same commit', () => {
+  describe('Rule 3: Parallel execution of different agents on same commit', () => {
     it('allows different agents to process the same commit in parallel', () => {
       const commitId = 'commit-1';
       const narrative = createCommitWorkItem('narrative', commitId);
@@ -211,6 +261,64 @@ describe('selectItemsForBatch', () => {
       // technical-debt on commit-3 should be blocked (waiting for code-change)
       const blocked = items.find(i => i.agentType === 'technical-debt');
       assert.strictEqual(result.skippedReasons.get(blocked!.id), 'waiting_for_code_change');
+    });
+
+    it('handles realistic scenario with analysis and meta agents together', () => {
+      const processedCommits = new Set(['commit-1']);
+
+      const items = [
+        // Analysis agents
+        createCommitWorkItem('code-change', 'commit-2'),  // New commit
+        createCommitWorkItem('narrative', 'commit-1'),    // Processed commit
+        createCommitWorkItem('security', 'commit-1'),     // Processed commit
+        // Meta agents - should all be claimed alongside analysis work
+        createWikiWorkItem('link'),
+        createWikiWorkItem('structure'),
+        createWikiWorkItem('quality'),
+      ];
+
+      const result = selectItemsForBatch(items, 10, processedCommits);
+
+      // All 6 items should be claimed
+      assert.strictEqual(result.itemsToClaim.length, 6);
+
+      // Verify analysis agents claimed
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'code-change'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'narrative'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'security'));
+
+      // Verify meta agents claimed (the key fix being tested)
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'link'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'structure'));
+      assert.ok(result.itemsToClaim.some(i => i.agentType === 'quality'));
+
+      // No meta agents should be skipped
+      assert.strictEqual(result.skippedReasons.size, 0);
+    });
+
+    it('link agent works in typical wiki generation scenario', () => {
+      // Simulate typical scenario: many analysis items pending, link work also pending
+      const processedCommits = new Set(['commit-1', 'commit-2', 'commit-3']);
+
+      const items = [
+        // Many analysis agents processing commits
+        createCommitWorkItem('narrative', 'commit-1'),
+        createCommitWorkItem('security', 'commit-1'),
+        createCommitWorkItem('technical-debt', 'commit-2'),
+        createCommitWorkItem('pattern', 'commit-3'),
+        createCommitWorkItem('dependency', 'commit-3'),
+        // Link agent should NOT be blocked
+        createWikiWorkItem('link'),
+      ];
+
+      const result = selectItemsForBatch(items, 10, processedCommits);
+
+      // All items should be claimed
+      assert.strictEqual(result.itemsToClaim.length, 6);
+      assert.ok(
+        result.itemsToClaim.some(i => i.agentType === 'link'),
+        'link agent must be claimed alongside analysis work'
+      );
     });
   });
 });

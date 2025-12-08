@@ -65,8 +65,9 @@ export interface WorkQueueRepository {
    * Respects ordering constraints:
    * - Bootstrap must run alone
    * - code-change must complete on a commit before other analysis agents
-   * - Meta agents only run when no analysis work is pending
    * - Same commit won't be claimed by multiple agents in one batch
+   *
+   * Meta agents can run alongside analysis agents, with priority determining order.
    *
    * @param repoId - Repository to claim work for
    * @param maxItems - Maximum number of items to claim
