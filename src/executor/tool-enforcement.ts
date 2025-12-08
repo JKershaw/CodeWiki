@@ -15,8 +15,10 @@ import type { ToolMetrics } from '../agents/base-agent.js';
  * Configuration for tool usage requirements per agent type.
  */
 export interface ToolEnforcementConfig {
-  /** Minimum number of tool calls required */
+  /** Minimum number of tool calls required (0 if pre-fetch is acceptable) */
   minToolCalls?: number;
+  /** Minimum number of files that must be read (via tools OR pre-fetch) */
+  minFilesRead?: number;
   /** Specific tools that must be used at least once */
   requiredTools?: string[];
   /** If true, log warning instead of throwing error */
@@ -37,19 +39,25 @@ export interface ToolValidationResult {
 /**
  * Default tool requirements per agent type.
  *
- * Analysis agents that cite specific code require tool verification.
+ * Analysis agents that cite specific code require file verification.
+ * This can be satisfied by either tool calls OR pre-fetched files.
  * Synthesis agents work on existing wiki content, lower requirements.
  * Meta agents work on wiki structure, no tool requirements.
+ *
+ * NOTE: Many agents now use pre-fetch patterns instead of tool calls.
+ * The validation accepts filesRead as an alternative to tool calls.
  */
 export const DEFAULT_TOOL_REQUIREMENTS: Partial<Record<AgentType, ToolEnforcementConfig>> = {
-  // Analysis agents - HIGH enforcement (they cite specific code)
-  'code-change': { minToolCalls: 1, requiredTools: ['read_file'] },
-  'pattern': { minToolCalls: 1, requiredTools: ['read_file'] },
-  'security': { minToolCalls: 1, requiredTools: ['read_file'] },
-  'technical-debt': { minToolCalls: 1, requiredTools: ['read_file'] },
-  'codebase-explorer': { minToolCalls: 2, requiredTools: ['list_directory', 'read_file'] },
-  'narrative': { minToolCalls: 1, warnOnly: true },
-  'dependency': { minToolCalls: 1, warnOnly: true },
+  // Analysis agents - require file access (via tools OR pre-fetch)
+  // minToolCalls: 0 because pre-fetch is now preferred
+  // minFilesRead: ensures files were actually processed
+  'code-change': { minToolCalls: 0, minFilesRead: 1 },
+  'pattern': { minToolCalls: 0, minFilesRead: 1 },
+  'security': { minToolCalls: 0, minFilesRead: 1 },
+  'technical-debt': { minToolCalls: 0, minFilesRead: 1 },
+  'codebase-explorer': { minToolCalls: 0, minFilesRead: 1 },
+  'narrative': { minToolCalls: 0, minFilesRead: 1, warnOnly: true },
+  'dependency': { minToolCalls: 0, minFilesRead: 1, warnOnly: true },
 
   // Synthesis agents - MEDIUM enforcement (they transform existing content)
   // These agents primarily work with wiki content but may verify against code
@@ -85,9 +93,25 @@ export function validateToolUsage(
   const config = configOverride ?? DEFAULT_TOOL_REQUIREMENTS[agentType] ?? {};
   const callCount = metrics.toolCallCount;
   const toolsUsed = Object.keys(metrics.toolsUsed);
+  const filesReadCount = metrics.filesRead?.length ?? 0;
 
-  // Check minimum calls
-  if (config.minToolCalls !== undefined && callCount < config.minToolCalls) {
+  // Check minimum files read (can be satisfied by tools OR pre-fetch)
+  if (config.minFilesRead !== undefined && config.minFilesRead > 0) {
+    // Files can be read via tool calls OR pre-fetch
+    const totalFilesProcessed = filesReadCount;
+    if (totalFilesProcessed < config.minFilesRead) {
+      return {
+        valid: false,
+        message: `Agent '${agentType}' processed ${totalFilesProcessed} file(s), but ${config.minFilesRead} required`,
+        toolCallCount: callCount,
+        toolsUsed,
+        missingTools: [],
+      };
+    }
+  }
+
+  // Check minimum tool calls (only if explicitly required)
+  if (config.minToolCalls !== undefined && config.minToolCalls > 0 && callCount < config.minToolCalls) {
     return {
       valid: false,
       message: `Agent '${agentType}' made ${callCount} tool call(s), but ${config.minToolCalls} required`,
