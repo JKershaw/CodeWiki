@@ -18,18 +18,18 @@ export class MongoEditRequestRepository implements EditRequestRepository {
   async findPending(wikiId: string): Promise<EditRequest[]> {
     const docs = await this.collection
       .find({ wikiId, status: 'pending' })
-      .sort({ commitTimestamp: 1 })
+      .sort({ 'source.commitTimestamp': 1 })
       .toArray();
     return toEntities<EditRequest>(docs);
   }
 
   async findByPagePath(wikiId: string, pagePath: string): Promise<EditRequest[]> {
-    const docs = await this.collection.find({ wikiId, pagePath }).toArray();
+    const docs = await this.collection.find({ wikiId, targetPagePath: pagePath }).toArray();
     return toEntities<EditRequest>(docs);
   }
 
   async findByCommit(repoId: string, commitSha: string): Promise<EditRequest[]> {
-    const docs = await this.collection.find({ repoId, commitSha }).toArray();
+    const docs = await this.collection.find({ repoId, 'source.type': 'commit', 'source.commitSha': commitSha }).toArray();
     return toEntities<EditRequest>(docs);
   }
 
@@ -50,7 +50,7 @@ export class MongoEditRequestRepository implements EditRequestRepository {
   async hasPendingForPage(wikiId: string, pagePath: string): Promise<boolean> {
     const count = await this.collection.countDocuments({
       wikiId,
-      pagePath,
+      targetPagePath: pagePath,
       status: 'pending',
     });
     return count > 0;
