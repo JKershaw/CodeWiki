@@ -4,23 +4,57 @@
 **Test Parameters:** 50 iterations on CodeWiki repository
 **Model:** openai/gpt-4o-mini
 
-## Actionable Bug List
+---
 
-### BUG-001: Overview Agent Generates Broken Links
+## ✅ Fixed Issues
+
+### BUG-001: Overview Agent Generates Broken Links ✅ FIXED
 **Severity:** Critical
-**Component:** `src/agents/synthesis/overview-agent.ts` (likely)
+**Component:** `src/agents/synthesis/overview-agent.ts`
 **Symptom:** Links in generated overview pages include `.md` extension
-**Example:**
-```markdown
-[Orchestrator](agents/orchestrator.md)  # Should be: agents/orchestrator
-```
-**Impact:** All links in overview pages are broken
-**Fix:** Strip `.md` extension from link paths before generating markdown
+**Fix Applied:** Removed `.md` extension from link generation at line 353
+**Test Added:** `tests/integration/synthesis-agents.test.ts` - "generates links without .md extension"
+**Commit:** `cc8ee87`
 
 ---
 
+### BUG-003: Commit Pages Use Raw Commit Message as Title ✅ FIXED
+**Severity:** High
+**Component:** `src/agents/analysis/code-change-agent.ts`
+**Symptom:** Page titles like "Merge pull request #238 from JKershaw/claude/add-openrouter-env-config-011cd1QjbHK9gPkqNhQLhb2B"
+**Fix Applied:** Updated `extractTitleFromMessage()` function (lines 376-413) to:
+- Handle "Merge pull request #X from user/branch" format
+- Handle "Merge branch 'x' into 'y'" format
+- Remove common prefixes (claude/, feature/, fix/)
+- Remove session IDs from branch names
+- Convert to Title Case
+**Test Added:** `tests/unit/commit-title-extraction.test.ts` with 14 test cases
+**Commit:** `cc8ee87`
+
+---
+
+### BUG-004: Link Agent Severely Under-Scheduled ✅ FIXED
+**Severity:** High
+**Component:** `src/agents/orchestrator/strategies.ts` and `src/agents/orchestrator/prompts.ts`
+**Symptom:** 77% of pages (55/71) have no Related Pages section
+**Fix Applied:**
+1. **Deterministic Strategy** (strategies.ts lines 365-402):
+   - Uses ratio-based scheduling (>30% unlinked OR >5 pages)
+   - Added cooldown check with override for high unlinked ratio (>50%)
+2. **LLM Orchestrator Prompt** (prompts.ts):
+   - Marked link agent as "CRITICAL for navigation"
+   - Added example showing link agent usage
+   - Added CRITICAL warning when >30% pages unlinked
+**Test Added:** `tests/unit/link-agent-scheduling.test.ts` with 4 test cases
+**Commit:** `cc8ee87`
+
+---
+
+## Remaining Issues
+
 ### BUG-002: No Deduplication Check for Similar Content
 **Severity:** Critical
+**Status:** NOT FIXED
 **Component:** Page creation pipeline / orchestrator
 **Symptom:** Multiple pages created for same topic
 **Example:** LLM Service has 3 separate pages:
@@ -29,25 +63,6 @@
 - `components/llm-service`
 **Impact:** Content fragmentation, user confusion, wasted resources
 **Fix:** Before creating page, check for existing pages with similar path/title/content
-
----
-
-### BUG-003: Commit Pages Use Raw Commit Message as Title
-**Severity:** High
-**Component:** `src/agents/analysis/code-change-agent.ts`
-**Symptom:** Page titles like "Merge pull request #238 from JKershaw/claude/add-openrouter-env-config-011cd1QjbHK9gPkqNhQLhb2B"
-**Impact:** Unreadable wiki navigation
-**Fix:** Generate summarized descriptive title from commit content analysis
-
----
-
-### BUG-004: Link Agent Severely Under-Scheduled
-**Severity:** High
-**Component:** `src/agents/orchestrator/`
-**Symptom:** 77% of pages (55/71) have no Related Pages section
-**Evidence:** Link agent ran only 2 times in 50 iterations
-**Impact:** Poor wiki navigation, isolated content
-**Fix:** Increase link agent scheduling priority in orchestrator strategies
 
 ---
 
@@ -156,13 +171,23 @@ TLS_error:|268435581:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED
 
 ---
 
-## Priority Order for Fixes
+## Priority Order for Remaining Fixes
 
-1. **BUG-001** - Broken links are immediately visible to all wiki users
-2. **BUG-002** - Duplicate content wastes resources and confuses users
-3. **BUG-004** - Poor linking makes wiki hard to navigate
-4. **BUG-003** - Bad titles are highly visible
-5. **BUG-008** - High failure rate wastes time and money
-6. **BUG-009** - Writer agent not working reduces content quality
-7. **DESIGN-001** - Orchestrator rebalancing improves overall wiki quality
-8. Remaining issues as time permits
+| Priority | Issue | Status | Notes |
+|----------|-------|--------|-------|
+| ~~1~~ | ~~BUG-001~~ | ✅ FIXED | Broken links fixed |
+| 1 | BUG-002 | NOT FIXED | Duplicate content prevention |
+| ~~2~~ | ~~BUG-004~~ | ✅ FIXED | Link agent scheduling improved |
+| ~~3~~ | ~~BUG-003~~ | ✅ FIXED | Commit titles improved |
+| 2 | BUG-008 | NOT FIXED | API retry logic |
+| 3 | BUG-009 | NOT FIXED | Writer agent investigation |
+| 4 | DESIGN-001 | PARTIALLY FIXED | LLM prompt updated for balance |
+| 5 | BUG-005 | NOT FIXED | Duplicate titles |
+| 6 | BUG-006 | NOT FIXED | Title capitalization |
+| 7 | BUG-007 | NOT FIXED | Link text mismatch |
+
+## Summary
+
+- **Fixed:** 3 issues (BUG-001, BUG-003, BUG-004)
+- **Remaining:** 7 issues + 3 systemic issues
+- **Tests Added:** 19 new test cases across 3 test files

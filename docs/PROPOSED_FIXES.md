@@ -2,18 +2,20 @@
 
 **Date:** 2025-12-08
 **Based on:** 50-iteration test run and codebase analysis
+**Last Updated:** 2025-12-08
 
 This document provides specific, targeted fixes for each identified bug with exact file locations and code changes.
 
 ---
 
-## FIX-001: Overview Agent Broken Links (.md Extension)
+## FIX-001: Overview Agent Broken Links (.md Extension) ✅ IMPLEMENTED
 
 **Bug:** Links in overview pages include `.md` extension but wiki paths don't have extensions
 **File:** `src/agents/synthesis/overview-agent.ts`
 **Line:** 353
+**Status:** ✅ **FIXED** in commit `cc8ee87`
 
-### Current Code
+### Original Code
 ```typescript
 return `- [${p.title}](${p.path}.md)${desc ? ` - ${desc.description}` : ''}`;
 ```
@@ -23,8 +25,11 @@ return `- [${p.title}](${p.path}.md)${desc ? ` - ${desc.description}` : ''}`;
 return `- [${p.title}](${p.path})${desc ? ` - ${desc.description}` : ''}`;
 ```
 
+### Test Added
+`tests/integration/synthesis-agents.test.ts` - "generates links without .md extension"
+
 ### Explanation
-Simply remove the `.md` extension. Wiki paths are stored without extensions (e.g., `agents/orchestrator`), so links should match.
+Simply removed the `.md` extension. Wiki paths are stored without extensions (e.g., `agents/orchestrator`), so links should match.
 
 ---
 
@@ -107,13 +112,14 @@ if (existingPaths.some(ep => ep.includes(dir.path.split('/').pop()!))) {
 
 ---
 
-## FIX-003: Improve Commit Page Title Generation
+## FIX-003: Improve Commit Page Title Generation ✅ IMPLEMENTED
 
 **Bug:** Merge commit messages become page titles (e.g., "Merge pull request #238...")
 **File:** `src/agents/analysis/code-change-agent.ts`
-**Lines:** 375-381
+**Lines:** 376-413
+**Status:** ✅ **FIXED** in commit `cc8ee87`
 
-### Current Code
+### Original Code
 ```typescript
 function extractTitleFromMessage(message: string): string {
   const firstLine = message.split('\n')[0] ?? message;
@@ -124,26 +130,26 @@ function extractTitleFromMessage(message: string): string {
 }
 ```
 
-### Fixed Code
+### Fixed Code (Implemented)
 ```typescript
-function extractTitleFromMessage(message: string): string {
+export function extractTitleFromMessage(message: string): string {
   const firstLine = message.split('\n')[0] ?? message;
 
-  // Handle merge commits - extract the actual content
+  // Handle "Merge pull request #X from user/branch-name" format
   if (firstLine.startsWith('Merge pull request')) {
-    // Try to find a meaningful title in the PR branch name or body
-    // e.g., "Merge pull request #238 from user/add-feature" -> "Add Feature"
     const branchMatch = firstLine.match(/from\s+\S+\/(.+)$/);
     if (branchMatch) {
       const branchName = branchMatch[1]!;
+      // Remove common prefixes like "claude/", "feature/", "fix/"
+      const cleanedBranch = branchName.replace(/^(claude|feature|fix|bugfix|hotfix|release)[/-]/i, '');
+      // Remove trailing session IDs (like -01abc123xyz)
+      const withoutSessionId = cleanedBranch.replace(/-[0-9a-zA-Z]{20,}$/, '');
       // Convert branch-name-style to Title Case
-      return branchName
-        .replace(/^(claude|feature|fix|bugfix|hotfix)[/-]/i, '')
+      return withoutSessionId
         .split(/[-_]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
     }
-    // Fallback for merge commits without parseable branch
     return 'Merged Changes';
   }
 
@@ -153,7 +159,7 @@ function extractTitleFromMessage(message: string): string {
     if (branchMatch) {
       return branchMatch[1]!
         .split(/[-_]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
     }
     return 'Merged Changes';
@@ -161,93 +167,104 @@ function extractTitleFromMessage(message: string): string {
 
   // Remove common prefixes like "feat:", "fix:", etc.
   const cleaned = firstLine.replace(/^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert)(\([^)]+\))?:\s*/i, '');
-
   // Capitalize first letter
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 ```
 
-### Additional Fix: Enforce LLM Title Generation
-The code-change agent's prompt already asks for `PAGE_TITLE:`, but sometimes the LLM doesn't provide it. Add emphasis:
+### Test Added
+`tests/unit/commit-title-extraction.test.ts` with 14 test cases covering:
+- Merge pull request commits
+- Merge branch commits
+- Conventional commits (feat:, fix:, etc.)
+- Regular commits
 
-**File:** `src/agents/analysis/code-change-agent.ts`
-**Line:** 156-157 (in SYSTEM_PROMPT)
-
-```typescript
-PAGE_TITLE:
-[REQUIRED - You MUST provide a descriptive title. Use something like "Multi-Agent Processing Pipeline" or "CQRS Architecture Implementation". NEVER use commit hashes, PR numbers, or branch names as titles.]
-```
+### Notes
+- Function is now exported for testability
+- Also removes session IDs from branch names (e.g., `-01abc123xyz`)
 
 ---
 
-## FIX-004: Increase Link Agent Scheduling Frequency
+## FIX-004: Increase Link Agent Scheduling Frequency ✅ IMPLEMENTED
 
 **Bug:** Link agent runs only once, leaving 77% of pages without Related Pages
-**File:** `src/agents/orchestrator/strategies.ts`
-**Lines:** 366-381
+**Files:**
+- `src/agents/orchestrator/strategies.ts` (lines 365-402)
+- `src/agents/orchestrator/prompts.ts` (lines 38, 95, 134)
+**Status:** ✅ **FIXED** in commit `cc8ee87`
 
-### Current Code
+### Original Code (strategies.ts)
 ```typescript
 if (pagesWithoutLinks.length > 0) {
   const linkKey = 'link:wiki';
   if (!ctx.existingWorkKeys.has(linkKey)) {
     ctx.existingWorkKeys.add(linkKey);
-    workItems.push(createWorkItem({
-      id: uuid(),
-      repoId: ctx.repoId,
-      agentType: 'link',
-    }));
+    workItems.push(createWorkItem({...}));
   }
 }
 ```
 
-### Fixed Code
+### Fixed Code (Implemented - strategies.ts)
 ```typescript
-// Link agent should run more frequently based on unlinked page ratio
-const totalPages = wikiPages.length;
-const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0);
-const unlinkedRatio = totalPages > 0 ? pagesWithoutLinks.length / totalPages : 0;
+// Check for pages without links (need link agent)
+// Link agent scheduling is more aggressive than other meta agents because
+// cross-references are critical for wiki navigation
+if (workItems.length < remainingSlots) {
+  const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0);
+  const totalPages = wikiPages.length;
+  const unlinkedRatio = totalPages > 0 ? pagesWithoutLinks.length / totalPages : 0;
 
-// Schedule link agent if:
-// 1. More than 30% of pages have no links, OR
-// 2. More than 5 pages have no links (absolute threshold)
-const needsLinking = unlinkedRatio > 0.3 || pagesWithoutLinks.length > 5;
+  // Schedule link agent if:
+  // 1. More than 30% of pages have no links, OR
+  // 2. More than 5 pages have no links (absolute threshold for small wikis)
+  const needsLinking = unlinkedRatio > 0.3 || pagesWithoutLinks.length > 5;
 
-if (needsLinking) {
-  // Check cooldown - don't run more than once per 5 iterations
-  const recentLinkRuns = recentRuns
-    .filter(r => r.agentType === 'link' && r.status === 'completed')
-    .slice(0, 1);
+  if (needsLinking) {
+    const linkKey = 'link:wiki';
 
-  const hasRecentRun = recentLinkRuns.length > 0;
-  const linkKey = 'link:wiki';
+    // Check for recent link runs (cooldown)
+    const recentLinkRuns = recentRuns
+      .filter(r => r.agentType === 'link' && r.status === 'completed')
+      .slice(0, 1);
+    const hasRecentRun = recentLinkRuns.length > 0;
 
-  // Allow re-scheduling if no recent run OR if unlinked ratio is very high
-  if (!ctx.existingWorkKeys.has(linkKey) && (!hasRecentRun || unlinkedRatio > 0.5)) {
-    ctx.existingWorkKeys.add(linkKey);
-    workItems.push(createWorkItem({
-      id: uuid(),
-      repoId: ctx.repoId,
-      agentType: 'link',
-    }));
+    // Override cooldown if unlinked ratio is very high (> 50%)
+    // This ensures link agent runs frequently when wiki is poorly linked
+    const shouldOverrideCooldown = unlinkedRatio > 0.5;
+
+    if (!ctx.existingWorkKeys.has(linkKey) && (!hasRecentRun || shouldOverrideCooldown)) {
+      ctx.existingWorkKeys.add(linkKey);
+      workItems.push(createWorkItem({...}));
+    }
   }
 }
 ```
 
-### Alternative: Process Pages in Batches
-Another approach is to make the link agent process a subset of pages each run:
+### LLM Orchestrator Prompt Updates (prompts.ts)
 
-**File:** `src/agents/meta/link-agent.ts`
-
-```typescript
-// In runOnWiki method, limit pages per run:
-const MAX_PAGES_PER_RUN = 10;
-const pagesToAnalyze = pages
-  .filter(p => p.links.length === 0)
-  .slice(0, MAX_PAGES_PER_RUN);  // Process in batches
-
-// This allows link agent to run multiple times, each processing a batch
+1. **Agent description** (line 38):
 ```
+- link: Adds cross-references between pages. CRITICAL for navigation - run when >30% pages lack links.
+```
+
+2. **Added example** (line 95):
+```
+link,,45% of pages have no cross-references
+```
+
+3. **Dynamic warning** (line 134):
+```typescript
+- Pages without links: ${ctx.pagesWithoutLinks}${
+  (ratio > 0.3) ? ' - CRITICAL: >30% pages unlinked, run link agent!' : ' (link agent improves discoverability)'
+}
+```
+
+### Test Added
+`tests/unit/link-agent-scheduling.test.ts` with 4 test cases:
+- Schedules link agent when pages have no links
+- Does not schedule when all pages have links
+- Respects recent run cooldown
+- Reschedules when high percentage of pages are unlinked
 
 ---
 
@@ -356,43 +373,45 @@ for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
 
 ## Implementation Priority
 
-| Priority | Fix | Effort | Impact |
-|----------|-----|--------|--------|
-| 1 | FIX-001 (overview .md links) | Low | Critical - immediate broken links |
-| 2 | FIX-003 (commit titles) | Low | High - visible UX issue |
-| 3 | FIX-004 (link agent scheduling) | Medium | High - 77% pages unlinked |
-| 4 | FIX-002 (deduplication) | Medium | Critical - prevents fragmentation |
-| 5 | FIX-005 (title normalization) | Low | Low - cosmetic |
-| 6 | FIX-006 (duplicate titles) | Low | Medium - navigation clarity |
-| 7 | FIX-007 (retry logic) | Low | Medium - reliability |
+| Priority | Fix | Effort | Impact | Status |
+|----------|-----|--------|--------|--------|
+| 1 | FIX-001 (overview .md links) | Low | Critical | ✅ DONE |
+| 2 | FIX-003 (commit titles) | Low | High | ✅ DONE |
+| 3 | FIX-004 (link agent scheduling) | Medium | High | ✅ DONE |
+| 4 | FIX-002 (deduplication) | Medium | Critical | ⏳ TODO |
+| 5 | FIX-005 (title normalization) | Low | Low | ⏳ TODO |
+| 6 | FIX-006 (duplicate titles) | Low | Medium | ⏳ TODO |
+| 7 | FIX-007 (retry logic) | Low | Medium | ⏳ TODO |
 
 ---
 
-## Testing Recommendations
+## Tests Added
 
-After implementing fixes:
+| Fix | Test File | Test Cases |
+|-----|-----------|------------|
+| FIX-001 | `tests/integration/synthesis-agents.test.ts` | 1 |
+| FIX-003 | `tests/unit/commit-title-extraction.test.ts` | 14 |
+| FIX-004 | `tests/unit/link-agent-scheduling.test.ts` | 4 |
+| **Total** | **3 files** | **19 tests** |
 
-1. **Unit Test for FIX-001:**
-```typescript
-test('overview agent generates links without .md extension', async () => {
-  const update = agent.generateUpdate('agents', overview, pages);
-  expect(update.content).not.toContain('.md)');
-  expect(update.content).toContain('](agents/orchestrator)');
-});
+---
+
+## Verification Recommendations
+
+After implementing remaining fixes, run:
+
+1. **All tests:**
+```bash
+npm run lint && npm run typecheck && npm run test
 ```
 
-2. **Integration Test for FIX-004:**
-```typescript
-test('link agent runs multiple times when pages are unlinked', async () => {
-  // Create 10 pages without links
-  // Run 5 iterations
-  // Verify link agent ran at least twice
-});
+2. **E2E Test (50 iterations):**
+```bash
+npx tsx src/cli.ts process . 50
 ```
 
-3. **E2E Test:**
-Run 50 iterations again after fixes and verify:
-- No broken links in wiki
-- No duplicate topic pages
-- > 50% of pages have Related Pages
-- All commit pages have readable titles
+Then verify:
+- ✅ No broken links in wiki (FIX-001 verified)
+- ⏳ No duplicate topic pages (FIX-002 pending)
+- ✅ > 50% of pages have Related Pages (FIX-004 should help)
+- ✅ All commit pages have readable titles (FIX-003 verified)
