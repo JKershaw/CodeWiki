@@ -12,6 +12,7 @@ import type { GitHubRepoService } from '../github/github-repo-service.js';
 import type { GitService } from '../git/git-service.js';
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, relative, sep } from 'path';
+import { createIgnoreFilter } from '../cwignore.js';
 
 /**
  * Options for listing commits.
@@ -217,41 +218,65 @@ function createLocalRepositoryService(
     async listDirectory(_repo: Repo, dirPath: string, _ref?: string): Promise<FileEntry[]> {
       const fullPath = join(repoPath, dirPath);
       const entries = await readdir(fullPath, { withFileTypes: true });
+      const ignoreFilter = await createIgnoreFilter(repoPath);
 
-      return Promise.all(
-        entries
-          .filter(entry => !entry.name.startsWith('.'))
-          .map(async entry => {
-            const entryPath = join(dirPath, entry.name);
-            const fullEntryPath = join(repoPath, entryPath);
-            const stats = await stat(fullEntryPath);
-            return {
-              name: entry.name,
-              path: entryPath,
-              type: entry.isDirectory() ? 'dir' as const : 'file' as const,
-              size: stats.size,
-            };
-          })
-      );
+      const results: FileEntry[] = [];
+      for (const entry of entries) {
+        const entryPath = dirPath ? join(dirPath, entry.name) : entry.name;
+        // Normalize path for ignore filter (use forward slashes)
+        const normalizedPath = entryPath.split(sep).join('/');
+
+        if (entry.isDirectory()) {
+          // For directories, check both the directory itself and a hypothetical child
+          // This handles patterns like "node_modules/**" which match children but not the dir itself
+          const dirPathCheck = normalizedPath + '/';
+          const childPathCheck = normalizedPath + '/x';
+          if (ignoreFilter.ignores(dirPathCheck) || ignoreFilter.ignores(childPathCheck)) {
+            continue;
+          }
+        } else {
+          if (ignoreFilter.ignores(normalizedPath)) {
+            continue;
+          }
+        }
+
+        const fullEntryPath = join(repoPath, entryPath);
+        const stats = await stat(fullEntryPath);
+        results.push({
+          name: entry.name,
+          path: entryPath,
+          type: entry.isDirectory() ? 'dir' as const : 'file' as const,
+          size: stats.size,
+        });
+      }
+      return results;
     },
 
     async getFileTree(_repo: Repo, _ref?: string): Promise<string[]> {
       const files: string[] = [];
+      const ignoreFilter = await createIgnoreFilter(repoPath);
 
       async function walkDir(dir: string): Promise<void> {
         const entries = await readdir(dir, { withFileTypes: true });
 
         for (const entry of entries) {
-          if (entry.name.startsWith('.')) continue;
-
           const fullPath = join(dir, entry.name);
+          const relativePath = relative(repoPath, fullPath);
+          // Normalize path separators for cross-platform compatibility
+          const normalizedPath = relativePath.split(sep).join('/');
 
           if (entry.isDirectory()) {
+            // Check if directory should be ignored (with trailing slash)
+            if (ignoreFilter.ignores(normalizedPath + '/')) {
+              continue;
+            }
             await walkDir(fullPath);
           } else if (entry.isFile()) {
-            const relativePath = relative(repoPath, fullPath);
-            // Normalize path separators for Windows compatibility
-            files.push(relativePath.split(sep).join('/'));
+            // Check if file should be ignored
+            if (ignoreFilter.ignores(normalizedPath)) {
+              continue;
+            }
+            files.push(normalizedPath);
           }
         }
       }
