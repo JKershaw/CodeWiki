@@ -3,6 +3,12 @@ import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import {
+  createParseContext,
+  parseListItemsWithFallback,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Quality Agent - Reviews wiki content quality and suggests improvements.
@@ -266,51 +272,54 @@ CONFIDENCE: [0-1]
   }
 
   private parseResponse(response: string): QualityAnalysis {
-    const analysis: QualityAnalysis = {
-      issues: [],
-      improvements: [],
-      confidence: 0.7,
-    };
+    const ctx = createParseContext('quality', response);
 
     // Parse issues
-    const issuesMatch = response.match(/ISSUES:\s*([\s\S]*?)(?=IMPROVEMENTS:|CONFIDENCE:|$)/i);
-    if (issuesMatch) {
-      const lines = issuesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[SEVERITY:(\w+)\]\s*\|\s*\[([^\]]+)\]\s*\|\s*(.+)$/i);
-        if (match) {
-          analysis.issues.push({
-            pagePath: match[2]!.trim(),
-            type: 'content_quality',
-            description: match[3]!.trim(),
-            severity: match[1]!.toLowerCase() as 'high' | 'medium' | 'low',
-          });
-        }
-      }
-    }
+    const issuePatterns: ItemPattern<QualityIssue>[] = [
+      {
+        pattern: /^-\s*\[SEVERITY:(\w+)\]\s*\|\s*\[([^\]]+)\]\s*\|\s*(.+)$/i,
+        mapper: (m) => ({
+          pagePath: m[2]!.trim(),
+          type: 'content_quality',
+          description: m[3]!.trim(),
+          severity: m[1]!.toLowerCase() as 'high' | 'medium' | 'low',
+        }),
+      },
+    ];
+
+    const issues = parseListItemsWithFallback(
+      ctx,
+      'ISSUES',
+      /ISSUES:\s*([\s\S]*?)(?=IMPROVEMENTS:|CONFIDENCE:|$)/i,
+      issuePatterns
+    );
 
     // Parse improvements
-    const improvementsMatch = response.match(/IMPROVEMENTS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (improvementsMatch) {
-      const lines = improvementsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[([^\]]+)\]\s*\|\s*(.+)$/i);
-        if (match) {
-          analysis.improvements.push({
-            pagePath: match[1]!.trim(),
-            suggestion: match[2]!.trim(),
-          });
-        }
-      }
-    }
+    const improvementPatterns: ItemPattern<{ pagePath: string; suggestion: string }>[] = [
+      {
+        pattern: /^-\s*\[([^\]]+)\]\s*\|\s*(.+)$/i,
+        mapper: (m) => ({
+          pagePath: m[1]!.trim(),
+          suggestion: m[2]!.trim(),
+        }),
+      },
+    ];
+
+    const improvements = parseListItemsWithFallback(
+      ctx,
+      'IMPROVEMENTS',
+      /IMPROVEMENTS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      improvementPatterns
+    );
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return analysis;
+    return {
+      issues,
+      improvements,
+      confidence,
+    };
   }
 
   private generateUpdates(

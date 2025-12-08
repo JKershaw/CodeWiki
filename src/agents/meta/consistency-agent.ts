@@ -13,6 +13,13 @@ import {
   handleCreateFindings,
   type CreateFindingInput,
 } from '../../commands/index.js';
+import {
+  createParseContext,
+  parseListItemsWithFallback,
+  parseStringList,
+  parseConfidence,
+  type ItemPattern,
+} from '../parsing/index.js';
 
 /**
  * Consistency Agent - Detects inconsistencies across wiki pages.
@@ -481,62 +488,62 @@ CONFIDENCE: [0-1]
   }
 
   private parseResponse(response: string): ConsistencyAnalysis {
-    const analysis: ConsistencyAnalysis = {
-      issues: [],
-      terminologyMap: [],
-      suggestions: [],
-      confidence: 0.7,
-    };
+    const ctx = createParseContext('consistency', response);
 
     // Parse issues
-    const issuesMatch = response.match(/ISSUES:\s*([\s\S]*?)(?=TERMINOLOGY_MAP:|SUGGESTIONS:|CONFIDENCE:|$)/i);
-    if (issuesMatch) {
-      const lines = issuesMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*\[SEVERITY:(\w+)\]\s*\|\s*\[TYPE:(\w+)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*(.+)$/i);
-        if (match) {
-          analysis.issues.push({
-            type: match[2]!.toLowerCase(),
-            description: match[4]!.trim(),
-            affectedPages: match[3]!.split(',').map(p => p.trim()).filter(Boolean),
-            severity: match[1]!.toLowerCase() as 'high' | 'medium' | 'low',
-          });
-        }
-      }
-    }
+    const issuePatterns: ItemPattern<ConsistencyIssue>[] = [
+      {
+        pattern: /^-\s*\[SEVERITY:(\w+)\]\s*\|\s*\[TYPE:(\w+)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*(.+)$/i,
+        mapper: (m) => ({
+          type: m[2]!.toLowerCase(),
+          description: m[4]!.trim(),
+          affectedPages: m[3]!.split(',').map(p => p.trim()).filter(Boolean),
+          severity: m[1]!.toLowerCase() as 'high' | 'medium' | 'low',
+        }),
+      },
+    ];
+
+    const issues = parseListItemsWithFallback(
+      ctx,
+      'ISSUES',
+      /ISSUES:\s*([\s\S]*?)(?=TERMINOLOGY_MAP:|SUGGESTIONS:|CONFIDENCE:|$)/i,
+      issuePatterns
+    );
 
     // Parse terminology map
-    const termMatch = response.match(/TERMINOLOGY_MAP:\s*([\s\S]*?)(?=SUGGESTIONS:|CONFIDENCE:|$)/i);
-    if (termMatch) {
-      const lines = termMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        const match = line.match(/^-\s*(.+?):\s*(.+)$/);
-        if (match) {
-          const terms = match[1]!.split('=').map(t => t.trim());
-          analysis.terminologyMap.push({
-            terms,
-            description: match[2]!.trim(),
-          });
-        }
-      }
-    }
+    const termPatterns: ItemPattern<{ terms: string[]; description: string }>[] = [
+      {
+        pattern: /^-\s*(.+?):\s*(.+)$/,
+        mapper: (m) => ({
+          terms: m[1]!.split('=').map(t => t.trim()),
+          description: m[2]!.trim(),
+        }),
+      },
+    ];
+
+    const terminologyMap = parseListItemsWithFallback(
+      ctx,
+      'TERMINOLOGY_MAP',
+      /TERMINOLOGY_MAP:\s*([\s\S]*?)(?=SUGGESTIONS:|CONFIDENCE:|$)/i,
+      termPatterns
+    );
 
     // Parse suggestions
-    const suggestionsMatch = response.match(/SUGGESTIONS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (suggestionsMatch) {
-      const lines = suggestionsMatch[1]!.trim().split('\n').filter(l => l.startsWith('-'));
-      for (const line of lines) {
-        analysis.suggestions.push(line.replace(/^-\s*/, '').trim());
-      }
-    }
+    const suggestions = parseStringList(
+      ctx,
+      'SUGGESTIONS',
+      /SUGGESTIONS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
+    );
 
     // Parse confidence
-    const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-    if (confidenceMatch) {
-      analysis.confidence = parseFloat(confidenceMatch[1]!);
-    }
+    const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return analysis;
+    return {
+      issues,
+      terminologyMap,
+      suggestions,
+      confidence,
+    };
   }
 
   private generateUpdates(_analysis: ConsistencyAnalysis): WikiPageUpdate[] {
