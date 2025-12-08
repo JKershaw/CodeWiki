@@ -155,7 +155,7 @@ export interface OrchestratorDecision {
 // Agent types the LLM can output
 const EXPLORATION_AGENTS = ['codebase-explorer'];
 const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency'];
-const META_AGENTS = ['wiki-editor', 'link', 'structure', 'quality', 'consistency'];
+const META_AGENTS = ['wiki-editor', 'link', 'structure', 'quality', 'consistency', 'source-verification', 'category'];
 const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'testing-guide', 'extension-guide', 'writer', 'wiki-index', 'toc'];
 const ALL_AGENTS = [...EXPLORATION_AGENTS, ...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 
