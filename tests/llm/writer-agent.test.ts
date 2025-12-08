@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { WriterAgent } from '../../src/agents/synthesis/writer-agent.js';
+import { createWikiTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -106,7 +107,7 @@ This change introduces login and logout functionality.
       );
 
       const agent = new WriterAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Verify structure
       assert.ok(result.result, 'result.result should exist');
@@ -177,7 +178,7 @@ The implementation uses bcrypt for password hashing.
       );
 
       const agent = new WriterAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should have produced an update
       assert.ok(result.updates.length > 0, 'Should produce wiki updates');
@@ -239,7 +240,7 @@ All endpoints require authentication via JWT tokens.
       );
 
       const agent = new WriterAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       assert.ok(result.updates.length > 0, 'Should produce wiki updates');
 

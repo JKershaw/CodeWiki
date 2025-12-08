@@ -6,6 +6,8 @@ import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
 import {
   getCommitDiff,
   createCodebaseToolExecutor,
+  fetchAffectedFileContents,
+  formatFetchedFilesForContext,
 } from '../agent-helpers.js';
 import {
   createParseContext,
@@ -19,11 +21,20 @@ import {
 /**
  * Code Change Agent - Standard analysis of what changed in a commit.
  *
+ * OPTIMIZATION: Pre-fetches affected file contents and includes them
+ * directly in the prompt, reducing tool calls. Falls back to tool-based
+ * approach only if context would exceed limits.
+ *
  * This is the basic analysis agent that looks at commits and generates
  * wiki content describing what changed and why.
  */
 export class CodeChangeAgent implements Agent {
   readonly type: AgentType = 'code-change';
+
+  // Max file size for pre-fetch
+  private readonly MAX_FILE_SIZE = 20000;
+  // Max total context for pre-fetched files
+  private readonly MAX_TOTAL_SIZE = 60000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -50,10 +61,80 @@ export class CodeChangeAgent implements Agent {
     // Get the diff for this commit (uses repoService if available, falls back to git)
     const diff = await getCommitDiff(context, commit.sha);
 
-    // Build the prompt for the LLM
-    // Note: We intentionally do NOT pre-fetch file contents. The LLM must use
-    // tools (read_file) to access full file contents. This ensures proper
-    // verification and avoids bloating the prompt with potentially large files.
+    // Try pre-fetch approach first
+    if (context.repoAccess && commit.diffSummary.affectedFiles.length > 0) {
+      const prefetchResult = await this.runWithPrefetch(commit, diff, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    // Fall back to tool-based approach
+    return this.runWithTools(commit, diff, context);
+  }
+
+  /**
+   * Optimized run using pre-fetched file contents.
+   */
+  private async runWithPrefetch(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    // Pre-fetch affected files
+    const fetchedFiles = await fetchAffectedFileContents(
+      context,
+      commit.diffSummary.affectedFiles,
+      this.MAX_FILE_SIZE,
+      this.MAX_TOTAL_SIZE
+    );
+
+    // Check if we got any content
+    const filesWithContent = fetchedFiles.filter(f => f.content !== null);
+    if (filesWithContent.length === 0) {
+      return null; // Fall back to tools
+    }
+
+    // Build prompt with pre-fetched content
+    const fileContext = formatFetchedFilesForContext(fetchedFiles, '## Full File Contents');
+    const prompt = this.buildPrefetchPrompt(commit, diff, fileContext);
+
+    // Use single LLM call
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_PREFETCH,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 3000,
+      temperature: 0.3,
+    });
+
+    const analysis = this.parseResponse(completion.content);
+    const updates = this.generateUpdates(commit, analysis, context.repoId);
+
+    return {
+      result: createAgentResult({
+        summary: analysis.summary,
+        findings: analysis.findings.map(f => createFinding({
+          type: f.type,
+          description: f.description,
+          relatedPaths: f.paths,
+          importance: f.importance,
+        })),
+        confidence: analysis.confidence,
+      }),
+      updates,
+      costUsd: completion.costUsd,
+      toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: commit.diffSummary.affectedFiles },
+    };
+  }
+
+  /**
+   * Tool-based run for complex cases or fallback.
+   */
+  private async runWithTools(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult> {
     const prompt = this.buildPrompt(commit, diff);
 
     // Set up codebase exploration tools (works with both local and GitHub repos)
@@ -146,6 +227,80 @@ The diff above shows only the changed lines. To write accurate documentation, yo
 1. Use \`read_file\` to read the COMPLETE contents of affected files
 2. Understand the full context, not just the changed lines
 3. Verify your documentation against the actual source code
+
+Write documentation as wiki articles that a developer would find useful. Focus on:
+1. What capability or change was introduced (not "this commit adds...")
+2. Why it matters and how it fits into the system
+3. Key technical details and design decisions
+4. Any patterns, conventions, or gotchas
+
+Format your response as follows:
+
+PAGE_TITLE:
+[Descriptive title like "Multi-Agent Processing Pipeline" or "CQRS Architecture Implementation" - NOT "Commit abc123"]
+
+SUMMARY:
+[2-3 paragraph article written in encyclopedia style. Do NOT start with "This commit..." - write as if explaining the feature/change to someone who doesn't know it came from a commit. Focus on WHAT exists and WHY, not on the commit itself.]
+
+FINDINGS:
+- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths comma-separated]
+
+WIKI_UPDATES:
+For each additional wiki page that should be created or updated, provide FULL article content.
+Write each page as a complete, standalone article (2-4 paragraphs minimum).
+
+=== [PAGE_PATH] [ACTION:create/update/merge] ===
+[Write the FULL markdown content for this wiki page here.
+Include:
+- A clear explanation of what this component/concept is
+- How it works (mechanism, key functions, data flow)
+- Usage examples or patterns if applicable
+- Any important caveats or edge cases
+
+Do NOT just write a brief description - write a complete article.]
+=== END ===
+
+(Repeat for each page)
+
+CONFIDENCE: [0-1 value]
+`;
+  }
+
+  /**
+   * Build prompt with pre-fetched file contents (optimized approach).
+   */
+  private buildPrefetchPrompt(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    fileContext: string
+  ): string {
+    const truncatedDiff = diff.length > 8000 ? diff.slice(0, 8000) + '\n... (diff truncated)' : diff;
+
+    return `Analyze this git commit and write wiki articles about the changes.
+
+## Commit Information
+
+**SHA:** ${commit.sha.slice(0, 8)}
+**Message:** ${commit.message}
+**Author:** ${commit.authorName}
+**Date:** ${commit.committedAt.toISOString()}
+**Files Changed:** ${commit.diffSummary.affectedFiles.length}
+**Lines:** +${commit.diffSummary.linesAdded} / -${commit.diffSummary.linesDeleted}
+
+## Diff
+
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+
+${fileContext}
+
+## Analysis Instructions
+
+The full contents of affected files are provided above. Use them to:
+- Understand the complete context beyond just the changed lines
+- Write accurate documentation based on the actual source code
+- Identify how the changes fit into the overall architecture
 
 Write documentation as wiki articles that a developer would find useful. Focus on:
 1. What capability or change was introduced (not "this commit adds...")
@@ -453,3 +608,52 @@ Your confidence should reflect:
 - 0.7-0.9: Reasonable inference from code and context
 - 0.5-0.7: Some ambiguity, might need verification
 - <0.5: Significant uncertainty, needs review`;
+
+/**
+ * System prompt for pre-fetch approach (file contents already provided, no tools needed).
+ */
+const SYSTEM_PROMPT_PREFETCH = `You are a technical writer creating wiki documentation from code changes.
+
+The full contents of affected files are provided in the prompt. You do not need to use any tools - all the code you need to analyze is already available.
+
+## Analysis Focus
+
+Using the provided file contents:
+1. Understand the COMPLETE file, not just the changed lines
+2. Identify how the changed code fits into the overall architecture
+3. Write documentation based on the actual source code
+
+CRITICAL: Write as encyclopedia articles, NOT commit summaries.
+
+BAD: "This commit adds a new authentication system..."
+GOOD: "The authentication system provides secure user login using OAuth 2.0..."
+
+Your documentation should:
+- Describe WHAT EXISTS, not what was committed
+- Explain WHY the system works this way
+- Help developers understand and use the code
+- Read like Wikipedia, not a changelog
+
+## Required Content Depth
+
+Every wiki page you create should address:
+
+1. **Purpose**: What problem does this solve? Why does it exist?
+2. **Mechanism**: HOW does it work? Describe the control flow, key functions, and interactions.
+3. **Usage**: How would a developer use or configure this?
+4. **Boundaries**: What are the limitations, edge cases, or failure modes?
+
+If you cannot determine any of these from the provided code, state what's unclear rather than omitting the section.
+
+Give each page a descriptive title that captures the topic (e.g., "Multi-Agent Processing Pipeline", "OAuth Authentication Flow"), NOT "Commit abc123".
+
+When suggesting wiki pages:
+- Use lowercase paths with hyphens (e.g., "architecture/cqrs-pattern")
+- Group related content (e.g., "components/auth", "guides/testing")
+- Prefer updating existing pages over creating new ones for small changes
+
+Your confidence should reflect:
+- 0.9+: Clear implementation based on provided code
+- 0.7-0.9: Reasonable inference from code and context
+- 0.5-0.7: Some ambiguity in the provided code
+- <0.5: Significant uncertainty, incomplete information`;

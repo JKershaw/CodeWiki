@@ -3,7 +3,12 @@ import { createAgentResult, createFinding, isCommitTarget, extractToolMetrics } 
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createGetCommitQuery, handleGetCommit } from '../../queries/index.js';
-import { getCommitDiff, createCodebaseToolExecutor } from '../agent-helpers.js';
+import {
+  getCommitDiff,
+  createCodebaseToolExecutor,
+  fetchAffectedFileContents,
+  formatFetchedFilesForContext,
+} from '../agent-helpers.js';
 import {
   createParseContext,
   parseSection,
@@ -18,11 +23,20 @@ import {
 /**
  * Security Agent - Audits commits for security-relevant changes.
  *
+ * OPTIMIZATION: Pre-fetches affected file contents and includes them
+ * directly in the prompt, reducing tool calls. Falls back to tool-based
+ * approach only if context would exceed limits.
+ *
  * This agent looks for authentication/authorization changes, cryptographic
  * code, input validation, security configurations, and potential vulnerabilities.
  */
 export class SecurityAgent implements Agent {
   readonly type: AgentType = 'security';
+
+  // Max file size for pre-fetch
+  private readonly MAX_FILE_SIZE = 20000;
+  // Max total context for pre-fetched files
+  private readonly MAX_TOTAL_SIZE = 60000;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -47,6 +61,81 @@ export class SecurityAgent implements Agent {
     const commit = commitResult.data;
 
     const diff = await getCommitDiff(context, commit.sha);
+
+    // Try pre-fetch approach first
+    if (context.repoAccess && commit.diffSummary.affectedFiles.length > 0) {
+      const prefetchResult = await this.runWithPrefetch(commit, diff, context);
+      if (prefetchResult) {
+        return prefetchResult;
+      }
+    }
+
+    // Fall back to tool-based approach
+    return this.runWithTools(commit, diff, context);
+  }
+
+  /**
+   * Optimized run using pre-fetched file contents.
+   */
+  private async runWithPrefetch(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult | null> {
+    // Pre-fetch affected files
+    const fetchedFiles = await fetchAffectedFileContents(
+      context,
+      commit.diffSummary.affectedFiles,
+      this.MAX_FILE_SIZE,
+      this.MAX_TOTAL_SIZE
+    );
+
+    // Check if we got any content
+    const filesWithContent = fetchedFiles.filter(f => f.content !== null);
+    if (filesWithContent.length === 0) {
+      return null; // Fall back to tools
+    }
+
+    // Build prompt with pre-fetched content
+    const fileContext = formatFetchedFilesForContext(fetchedFiles, '## Full File Contents');
+    const prompt = this.buildPrefetchPrompt(commit, diff, fileContext);
+
+    // Use single LLM call
+    const completion = await context.llm.complete({
+      system: SYSTEM_PROMPT_PREFETCH,
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 2000,
+      temperature: 0.2,
+    });
+
+    const analysis = this.parseResponse(completion.content);
+    const updates = this.generateUpdates(commit, analysis);
+
+    return {
+      result: createAgentResult({
+        summary: analysis.summary,
+        findings: analysis.findings.map(f => createFinding({
+          type: f.type,
+          description: f.description,
+          relatedPaths: f.paths,
+          importance: f.importance,
+        })),
+        confidence: analysis.confidence,
+      }),
+      updates,
+      costUsd: completion.costUsd,
+      toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: commit.diffSummary.affectedFiles },
+    };
+  }
+
+  /**
+   * Tool-based run for complex cases or fallback.
+   */
+  private async runWithTools(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    context: AgentContext
+  ): Promise<AgentRunResult> {
     const prompt = this.buildPrompt(commit, diff);
 
     // Set up codebase exploration tools for verification
@@ -63,7 +152,7 @@ export class SecurityAgent implements Agent {
       executeTools: toolExecutor?.executeTools ?? (async () => []),
       maxToolRounds: 5,
       maxTokens: 2000,
-      temperature: 0.2, // Lower temperature for security analysis
+      temperature: 0.2,
     });
 
     const analysis = this.parseResponse(completion.content);
@@ -122,6 +211,79 @@ You have access to tools to explore the source code:
 - Verify how authentication/authorization is implemented
 - Check for proper input validation patterns
 - Find related security configurations
+- Trace data flow for potential injection vectors
+
+Analyze for:
+1. Authentication/authorization changes
+2. Cryptographic code (hashing, encryption, keys)
+3. Input validation and sanitization
+4. Security configuration changes
+5. Secrets or credentials handling
+6. SQL injection, XSS, CSRF vulnerabilities
+7. File/path traversal risks
+8. Dependency security implications
+9. Access control changes
+10. Audit logging changes
+
+Format your response as:
+
+SUMMARY:
+[Brief security assessment of the commit]
+
+SECURITY_RELEVANCE:
+[One of: critical, high, medium, low, none]
+
+FINDINGS:
+- [CATEGORY] [SEVERITY:critical/high/medium/low] [Description] [Affected paths]
+
+VULNERABILITIES:
+- [Vulnerability type] [Description] [CWE if known]
+
+RECOMMENDATIONS:
+- [Recommendation for improving security]
+
+WIKI_UPDATES:
+- [PAGE_PATH] [ACTION:create/update] [Content description]
+
+CONFIDENCE: [0-1 value]
+`;
+  }
+
+  /**
+   * Build prompt with pre-fetched file contents (optimized approach).
+   */
+  private buildPrefetchPrompt(
+    commit: { sha: string; message: string; authorName: string; committedAt: Date; diffSummary: { affectedFiles: string[]; linesAdded: number; linesDeleted: number } },
+    diff: string,
+    fileContext: string
+  ): string {
+    const truncatedDiff = diff.length > 8000 ? diff.slice(0, 8000) + '\n... (diff truncated)' : diff;
+
+    return `Perform a security audit of this commit.
+
+## Commit Information
+
+**SHA:** ${commit.sha.slice(0, 8)}
+**Message:** ${commit.message}
+**Author:** ${commit.authorName}
+**Date:** ${commit.committedAt.toISOString()}
+**Files Changed:** ${commit.diffSummary.affectedFiles.length}
+**Lines:** +${commit.diffSummary.linesAdded} / -${commit.diffSummary.linesDeleted}
+
+## Diff
+
+\`\`\`diff
+${truncatedDiff}
+\`\`\`
+
+${fileContext}
+
+## Analysis Instructions
+
+The full contents of affected files are provided above. Use them to:
+- Understand the complete security context of each change
+- Verify authentication/authorization implementations
+- Check for proper input validation patterns
 - Trace data flow for potential injection vectors
 
 Analyze for:
@@ -364,6 +526,52 @@ You have access to tools (read_file, search_files, list_directory) to explore th
 4. **Check security configurations** in related config files
 
 If you cannot verify a security concern, note it as "potential" or "needs review" rather than definitive.
+
+Look for:
+
+1. **Authentication & Authorization**: Login flows, session management, role-based access
+2. **Cryptography**: Hashing algorithms, encryption, key management, secure random
+3. **Input Validation**: Sanitization, escaping, parameterized queries
+4. **Configuration**: Security headers, CORS, CSP, secrets management
+5. **Vulnerabilities**: OWASP Top 10, injection, XSS, CSRF, path traversal
+6. **Dependencies**: Known vulnerable packages, security updates
+7. **Audit Trail**: Logging of security events, access logs
+
+Security Relevance Levels:
+- **critical**: Direct vulnerability, exposed credentials, broken authentication
+- **high**: Security-sensitive code changes, crypto implementation
+- **medium**: Input handling, authorization logic, security configuration
+- **low**: Minor security-adjacent changes, documentation
+- **none**: No security relevance
+
+Be thorough but avoid false positives. Focus on actual security implications rather than stylistic concerns.
+
+Your confidence should reflect:
+- 0.9+: Clear security issue or secure implementation
+- 0.7-0.9: Security-relevant code with minor uncertainty
+- 0.5-0.7: Potentially security-relevant, needs review
+- <0.5: Uncertain security implications`;
+
+/**
+ * System prompt for pre-fetch approach (file contents already provided, no tools needed).
+ */
+const SYSTEM_PROMPT_PREFETCH = `You are a security audit agent for CodeWiki, a system that generates living documentation from Git repositories.
+
+Your job is to analyze commits for security implications.
+
+## Context Provided
+
+The full contents of affected files are provided in the prompt. You do not need to use any tools - all the code you need to analyze is already available.
+
+## Analysis Focus
+
+Using the provided file contents:
+1. **Understand the complete security context** of each changed file
+2. **Trace data flow** within the provided files to identify injection vectors
+3. **Verify authentication/authorization** implementations
+4. **Check for security anti-patterns** in the actual code
+
+If information is incomplete, note it as "potential" or "needs review" rather than definitive.
 
 Look for:
 
