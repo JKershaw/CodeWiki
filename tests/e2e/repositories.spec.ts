@@ -8,6 +8,12 @@ import { test, expect } from '@playwright/test';
 const TEST_GITHUB_REPO_URL = 'https://github.com/octocat/Hello-World';
 const TEST_GITHUB_REPO_NAME = 'octocat/Hello-World';
 
+// Check if GitHub environment is configured
+const GITHUB_ENV_CONFIGURED = !!(
+  process.env['GITHUB_APP_CLIENT_ID'] &&
+  process.env['GITHUB_APP_CLIENT_SECRET']
+);
+
 test.describe('Repository Management', () => {
   // Clean up the GitHub test repo after all tests in this describe block
   test.afterAll(async ({ request }) => {
@@ -120,6 +126,8 @@ test.describe('Repository Management', () => {
   });
 
   test('can add a GitHub repository by URL', async ({ page }) => {
+    test.skip(!GITHUB_ENV_CONFIGURED, 'Skipping: GitHub environment variables not configured');
+
     await page.goto('/');
 
     // Get initial repo count
@@ -154,19 +162,15 @@ test.describe('Repository Management', () => {
     // Click to add the repository
     await page.click('#submit-repo-btn');
 
-    // Wait for the cloning card to appear with "cloning" status
-    await expect(page.locator('.card-status:has-text("cloning")')).toBeVisible({ timeout: 10000 });
+    // Wait for the final repo card to appear (not the loading card)
+    // This may take a while for the API call to complete
+    const newCard = page.locator(`.card:not(.repo-loading-card):has(.card-title:has-text("${TEST_GITHUB_REPO_NAME}"))`);
+    await expect(newCard).toBeVisible({ timeout: 60000 });
 
-    // Wait for cloning to complete - the card should update to show the repo name
-    // This may take a while for the clone + commit loading
-    await expect(page.locator(`.card-title:has-text("${TEST_GITHUB_REPO_NAME}")`)).toBeVisible({ timeout: 60000 });
-
-    // Verify we have one more card than before
-    await expect(page.locator('.card')).toHaveCount(initialCards + 1, { timeout: 10000 });
+    // Verify we have one more card than before (excluding loading cards)
+    await expect(page.locator('.card:not(.repo-loading-card)')).toHaveCount(initialCards + 1, { timeout: 10000 });
 
     // The new repo card should have stats displayed
-    const newCard = page.locator(`.card:has(.card-title:has-text("${TEST_GITHUB_REPO_NAME}"))`);
-    await expect(newCard).toBeVisible();
     await expect(newCard.locator('.stat')).toHaveCount(4);
   });
 
