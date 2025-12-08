@@ -61,6 +61,15 @@ export async function handleUpdateWikiPage(
 
       await repos.wikiPages.save(page);
 
+      // Update links if provided
+      if (update.links && update.links.length > 0) {
+        await repos.wikiPages.updateLinks(page.id, update.links);
+        page.links = update.links;
+
+        // Add backlinks to target pages
+        await updateBacklinks(repos, wikiId, page.path, [], update.links);
+      }
+
       // Record history for create
       await recordHistory(repos, {
         wikiId,
@@ -95,6 +104,15 @@ export async function handleUpdateWikiPage(
         updateParams.sourceAgentRunId = update.agentRunId;
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
+
+      // Update links if provided
+      if (update.links) {
+        const oldLinks = existing.links || [];
+        await repos.wikiPages.updateLinks(existing.id, update.links);
+
+        // Update backlinks on target pages
+        await updateBacklinks(repos, wikiId, existing.path, oldLinks, update.links);
+      }
 
       // Record history for update
       await recordHistory(repos, {
@@ -131,6 +149,15 @@ export async function handleUpdateWikiPage(
 
         await repos.wikiPages.save(page);
 
+        // Update links if provided
+        if (update.links && update.links.length > 0) {
+          await repos.wikiPages.updateLinks(page.id, update.links);
+          page.links = update.links;
+
+          // Add backlinks to target pages
+          await updateBacklinks(repos, wikiId, page.path, [], update.links);
+        }
+
         // Record history for create (merge on non-existent page)
         await recordHistory(repos, {
           wikiId,
@@ -162,6 +189,15 @@ export async function handleUpdateWikiPage(
         mergeUpdateParams.sourceAgentRunId = update.agentRunId;
       }
       await repos.wikiPages.updateContent(existing.id, mergeUpdateParams);
+
+      // Update links if provided
+      if (update.links && update.links.length > 0) {
+        const oldLinks = existing.links || [];
+        await repos.wikiPages.updateLinks(existing.id, update.links);
+
+        // Update backlinks on target pages
+        await updateBacklinks(repos, wikiId, existing.path, oldLinks, update.links);
+      }
 
       // Record history for update (merge on existing page)
       await recordHistory(repos, {
@@ -293,4 +329,37 @@ async function recordHistory(
   });
 
   await repos.wikiPageHistory.save(history);
+}
+
+/**
+ * Update backlinks on target pages when links change.
+ * Adds backlinks for new links and removes backlinks for removed links.
+ */
+async function updateBacklinks(
+  repos: Repositories,
+  wikiId: string,
+  sourcePath: string,
+  oldLinks: string[],
+  newLinks: string[]
+): Promise<void> {
+  // Find links that were added
+  const addedLinks = newLinks.filter(link => !oldLinks.includes(link));
+  // Find links that were removed
+  const removedLinks = oldLinks.filter(link => !newLinks.includes(link));
+
+  // Add backlinks to newly linked pages
+  for (const targetPath of addedLinks) {
+    const targetPage = await repos.wikiPages.findByPath(wikiId, targetPath);
+    if (targetPage) {
+      await repos.wikiPages.addBacklink(targetPage.id, sourcePath);
+    }
+  }
+
+  // Remove backlinks from pages no longer linked
+  for (const targetPath of removedLinks) {
+    const targetPage = await repos.wikiPages.findByPath(wikiId, targetPath);
+    if (targetPage) {
+      await repos.wikiPages.removeBacklink(targetPage.id, sourcePath);
+    }
+  }
 }

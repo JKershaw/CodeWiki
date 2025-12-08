@@ -108,4 +108,11 @@ export class MongoWikiPageRepository implements WikiPageRepository {
       { $pull: { backlinks: linkingPagePath } } as unknown as Document
     );
   }
+
+  async updateLinks(pageId: string, links: string[]): Promise<void> {
+    await this.collection.updateOne(
+      byId(pageId),
+      { $set: { links } }
+    );
+  }
 }

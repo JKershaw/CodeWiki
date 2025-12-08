@@ -50,6 +50,8 @@ export interface WikiPageUpdate {
   redirectTo?: string;
   /** For consolidation: ID of finding that triggered this update */
   findingId?: string;
+  /** Links to other wiki pages (paths) to set on this page */
+  links?: string[];
 }
 
 export function createWikiPage(params: {

@@ -11,6 +11,7 @@ import { tmpdir } from 'os';
 import {
   parseIgnorePatterns,
   loadIgnorePatterns,
+  createIgnoreFilter,
   clearIgnoreCache,
   DEFAULT_IGNORE_PATTERNS,
 } from '../../src/services/cwignore.js';
@@ -132,7 +133,8 @@ coverage/**`;
     it('clears cache correctly', async () => {
       const clearDir = await mkdtemp(join(tmpdir(), 'cwignore-clear-'));
       try {
-        await writeFile(join(clearDir, '.cwignore'), 'dist/');
+        // Use patterns that aren't in defaults
+        await writeFile(join(clearDir, '.cwignore'), 'custom-pattern/');
         await loadIgnorePatterns(clearDir);
 
         clearIgnoreCache(clearDir);
@@ -141,7 +143,7 @@ coverage/**`;
         const patterns = await loadIgnorePatterns(clearDir);
 
         assert.ok(patterns.includes('different/**'));
-        assert.ok(!patterns.includes('dist/**'));
+        assert.ok(!patterns.includes('custom-pattern/**'));
       } finally {
         clearIgnoreCache();
         await rm(clearDir, { recursive: true });
@@ -184,6 +186,153 @@ coverage/
         clearIgnoreCache();
         await rm(complexDir, { recursive: true });
       }
+    });
+
+    it('loads .gitignore patterns', async () => {
+      const gitignoreDir = await mkdtemp(join(tmpdir(), 'cwignore-gitignore-'));
+      try {
+        await writeFile(join(gitignoreDir, '.gitignore'), '*.pyc\n__pycache__/\n.env');
+        const patterns = await loadIgnorePatterns(gitignoreDir);
+
+        // Should include defaults
+        assert.ok(patterns.includes('node_modules/**'));
+
+        // Should include .gitignore patterns
+        assert.ok(patterns.includes('*.pyc'));
+        assert.ok(patterns.includes('__pycache__/**'));
+        assert.ok(patterns.includes('.env'));
+      } finally {
+        clearIgnoreCache();
+        await rm(gitignoreDir, { recursive: true });
+      }
+    });
+
+    it('merges .gitignore and .cwignore patterns (layered approach)', async () => {
+      const layeredDir = await mkdtemp(join(tmpdir(), 'cwignore-layered-'));
+      try {
+        // Create .gitignore
+        await writeFile(join(layeredDir, '.gitignore'), '*.pyc\n__pycache__/');
+        // Create .cwignore with additional patterns
+        await writeFile(join(layeredDir, '.cwignore'), 'docs/generated/\n*.tmp');
+
+        const patterns = await loadIgnorePatterns(layeredDir);
+
+        // Should include defaults
+        assert.ok(patterns.includes('node_modules/**'));
+        assert.ok(patterns.includes('.git/**'));
+
+        // Should include .gitignore patterns
+        assert.ok(patterns.includes('*.pyc'));
+        assert.ok(patterns.includes('__pycache__/**'));
+
+        // Should include .cwignore patterns
+        assert.ok(patterns.includes('docs/generated/**'));
+        assert.ok(patterns.includes('*.tmp'));
+      } finally {
+        clearIgnoreCache();
+        await rm(layeredDir, { recursive: true });
+      }
+    });
+  });
+
+  describe('createIgnoreFilter', () => {
+    it('creates an ignore filter with default patterns', async () => {
+      const filterDir = await mkdtemp(join(tmpdir(), 'cwignore-filter-'));
+      try {
+        const filter = await createIgnoreFilter(filterDir);
+
+        // Should ignore default patterns
+        assert.ok(filter.ignores('node_modules/package/index.js'));
+        assert.ok(filter.ignores('.git/config'));
+        assert.ok(filter.ignores('dist/bundle.js'));
+        assert.ok(filter.ignores('coverage/lcov.info'));
+
+        // Should not ignore regular source files
+        assert.ok(!filter.ignores('src/index.ts'));
+        assert.ok(!filter.ignores('README.md'));
+      } finally {
+        clearIgnoreCache();
+        await rm(filterDir, { recursive: true });
+      }
+    });
+
+    it('supports negation patterns in .cwignore', async () => {
+      const negationDir = await mkdtemp(join(tmpdir(), 'cwignore-negation-'));
+      try {
+        // First ignore all logs, but allow important.log
+        await writeFile(join(negationDir, '.cwignore'), '*.log\n!important.log');
+
+        const filter = await createIgnoreFilter(negationDir);
+
+        // Regular logs should be ignored
+        assert.ok(filter.ignores('debug.log'));
+        assert.ok(filter.ignores('error.log'));
+
+        // important.log should NOT be ignored (negation pattern)
+        assert.ok(!filter.ignores('important.log'));
+      } finally {
+        clearIgnoreCache();
+        await rm(negationDir, { recursive: true });
+      }
+    });
+
+    it('allows .cwignore to override .gitignore with negation', async () => {
+      const overrideDir = await mkdtemp(join(tmpdir(), 'cwignore-override-'));
+      try {
+        // .gitignore ignores all .env files
+        await writeFile(join(overrideDir, '.gitignore'), '.env*');
+        // .cwignore un-ignores .env.example for documentation
+        await writeFile(join(overrideDir, '.cwignore'), '!.env.example');
+
+        const filter = await createIgnoreFilter(overrideDir);
+
+        // .env files should be ignored
+        assert.ok(filter.ignores('.env'));
+        assert.ok(filter.ignores('.env.local'));
+        assert.ok(filter.ignores('.env.production'));
+
+        // .env.example should NOT be ignored (overridden by .cwignore)
+        assert.ok(!filter.ignores('.env.example'));
+      } finally {
+        clearIgnoreCache();
+        await rm(overrideDir, { recursive: true });
+      }
+    });
+
+    it('caches ignore filter instances', async () => {
+      const cacheDir = await mkdtemp(join(tmpdir(), 'cwignore-filtercache-'));
+      try {
+        await writeFile(join(cacheDir, '.cwignore'), '*.tmp');
+        const filter1 = await createIgnoreFilter(cacheDir);
+        const filter2 = await createIgnoreFilter(cacheDir);
+
+        // Should return the same cached instance
+        assert.strictEqual(filter1, filter2);
+      } finally {
+        clearIgnoreCache();
+        await rm(cacheDir, { recursive: true });
+      }
+    });
+  });
+
+  describe('DEFAULT_IGNORE_PATTERNS', () => {
+    it('includes essential patterns', () => {
+      // Version control
+      assert.ok(DEFAULT_IGNORE_PATTERNS.includes('.git/**'));
+
+      // Dependencies
+      assert.ok(DEFAULT_IGNORE_PATTERNS.includes('node_modules/**'));
+
+      // Build outputs
+      assert.ok(DEFAULT_IGNORE_PATTERNS.includes('dist/**'));
+      assert.ok(DEFAULT_IGNORE_PATTERNS.includes('build/**'));
+      assert.ok(DEFAULT_IGNORE_PATTERNS.includes('out/**'));
+
+      // Test coverage
+      assert.ok(DEFAULT_IGNORE_PATTERNS.includes('coverage/**'));
+
+      // Environment files
+      assert.ok(DEFAULT_IGNORE_PATTERNS.includes('.env*'));
     });
   });
 });

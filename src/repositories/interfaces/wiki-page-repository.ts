@@ -69,4 +69,9 @@ export interface WikiPageRepository {
    * Remove a backlink from a page.
    */
   removeBacklink(pageId: string, linkingPagePath: string): Promise<void>;
+
+  /**
+   * Update the links array on a page.
+   */
+  updateLinks(pageId: string, links: string[]): Promise<void>;
 }

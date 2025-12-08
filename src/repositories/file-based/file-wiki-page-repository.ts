@@ -109,4 +109,12 @@ export class FileWikiPageRepository implements WikiPageRepository {
       await this.store.set(page);
     }
   }
+
+  async updateLinks(pageId: string, links: string[]): Promise<void> {
+    const page = await this.store.get(pageId);
+    if (page) {
+      page.links = links;
+      await this.store.set(page);
+    }
+  }
 }
