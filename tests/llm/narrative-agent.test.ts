@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { NarrativeAgent } from '../../src/agents/analysis/narrative-agent.js';
+import { createCommitTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -69,7 +70,7 @@ console.log('Hello World');
       const agent = new NarrativeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // Verify structure
       assert.ok(result.result, 'result.result should exist');
@@ -133,7 +134,7 @@ We will use PostgreSQL as our primary database.
       const agent = new NarrativeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify ADR detection
       // Include summary and wiki updates (where the real content lives)
@@ -198,7 +199,7 @@ We will use PostgreSQL as our primary database.
       const agent = new NarrativeAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnCommit(commitSha, agentCtx);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
 
       // LLM-as-judge: Verify planning document detection
       // Include wiki updates which contain the processed content
