@@ -16,6 +16,7 @@ import {
 } from '../../queries/index.js';
 import { createLLM } from '../utils.js';
 import { createRepositoryServiceFactory } from '../../services/repository/repository-service.js';
+import { createUnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
 
 export async function processCommand(args: string[]): Promise<void> {
   const repoPath = args[0];
@@ -78,9 +79,15 @@ export async function processCommand(args: string[]): Promise<void> {
     gitService: git,
   });
 
+  // Create unified repo access factory for orchestrator
+  const repoAccessFactory = createUnifiedRepoAccessFactory({
+    repos,
+    repoServiceFactory,
+    gitService: git,
+  });
+
   // Create orchestrator and executor (always uses LLM-powered orchestration)
-  // Pass repoServiceFactory to orchestrator so it can calculate directory coverage
-  const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, git, repoServiceFactory);
+  const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, repoAccessFactory);
   const executor = createExecutor(repos, git, llm, orchestrator, repoServiceFactory);
 
   // Get or create the active wiki for this repo

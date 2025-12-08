@@ -18,6 +18,7 @@ import {
 } from '../../commands/repository.js';
 import { createOrchestrator } from '../../agents/orchestrator/orchestrator.js';
 import { createExecutor } from '../../executor/executor.js';
+import { createUnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
 import type { Dependencies } from './index.js';
 import { GITHUB_SESSION_COOKIE } from '../middleware/github-auth.js';
 import { createGitHubRepoService, type GitHubRepoService } from '../../services/github/github-repo-service.js';
@@ -449,10 +450,17 @@ export function createReposRoutes(deps: Dependencies): Router {
         repos
       );
 
+      // Create unified repo access factory for orchestrator
+      const repoAccessFactory = deps.repoServiceFactory
+        ? createUnifiedRepoAccessFactory({
+            repos,
+            repoServiceFactory: deps.repoServiceFactory,
+            gitService: git,
+          })
+        : undefined;
+
       // Create orchestrator and executor (uses LLM-powered orchestration)
-      // Pass git service and repoServiceFactory to orchestrator so it can calculate directory coverage
-      // for both local repos (via filesystem) and GitHub repos (via API)
-      const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, git, deps.repoServiceFactory);
+      const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, repoAccessFactory);
       const executor = createExecutor(repos, git, llm, orchestrator, deps.repoServiceFactory);
 
       // Run in background (don't await)

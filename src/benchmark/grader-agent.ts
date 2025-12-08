@@ -4,16 +4,12 @@
  * The grader uses tool calls to read code files and verify
  * whether the wiki's answer is accurate, partial, or incorrect.
  *
- * Supports both local repositories (via filesystem) and GitHub
- * repositories (via RepositoryService API).
+ * Uses UnifiedRepoAccess to support both local and GitHub repositories.
  */
 
 import type { LLMService } from '../services/llm/llm-service.js';
-import type { ToolContext, ToolDefinition } from '../services/llm/tools.js';
-import { readFileTool, searchFilesTool, listDirectoryTool } from '../services/llm/codebase-tools.js';
+import type { ToolDefinition } from '../services/llm/tools.js';
 import type { BenchmarkQuestion, BenchmarkGrade } from '../domain/benchmark.js';
-import type { RepositoryService } from '../services/repository/repository-service.js';
-import type { Repo } from '../domain/repo.js';
 import type { UnifiedRepoAccess } from '../services/repository/unified-repo-access.js';
 
 /**
@@ -33,26 +29,11 @@ export interface GradeResult {
 }
 
 /**
- * Context for grading - supports both local and GitHub repos.
+ * Context for grading - provides repository access.
  */
 export interface GradeContext {
-  /**
-   * Unified repository access - the preferred way to access repository files.
-   * Use this instead of repoPath, repoService, or repo.
-   */
-  repoAccess?: UnifiedRepoAccess;
-  /** Local filesystem path (for local repos)
-   * @deprecated Use repoAccess instead
-   */
-  repoPath?: string;
-  /** Repository service (for GitHub repos)
-   * @deprecated Use repoAccess instead
-   */
-  repoService?: RepositoryService;
-  /** Repository entity (required when using repoService)
-   * @deprecated Use repoAccess instead
-   */
-  repo?: Repo;
+  /** Unified repository access for file operations */
+  repoAccess: UnifiedRepoAccess;
 }
 
 /**
@@ -68,39 +49,20 @@ export class GraderAgent {
    *
    * @param question - The benchmark question being evaluated
    * @param wikiAnswer - The wiki's answer to the question
-   * @param context - Either a string (legacy repoPath) or GradeContext object
+   * @param context - Grading context with repository access
    */
   async grade(
     question: BenchmarkQuestion,
     wikiAnswer: string,
-    context: string | GradeContext
+    context: GradeContext
   ): Promise<GradeResult> {
     const filesChecked: string[] = [];
 
-    // Normalize context - support legacy string repoPath for backwards compatibility
-    const gradeContext: GradeContext = typeof context === 'string'
-      ? { repoPath: context }
-      : context;
-
     console.log(`[Grader] Starting grade for question: ${question.id}`);
-    console.log(`[Grader] Context type: ${typeof context === 'string' ? 'string (repoPath)' : 'GradeContext'}`);
-    console.log(`[Grader] Context details - repoPath: ${gradeContext.repoPath ?? 'none'}, repoService: ${!!gradeContext.repoService}, repo: ${gradeContext.repo?.fullName ?? 'none'}`);
+    console.log(`[Grader] Using unified repo access (isLocal: ${context.repoAccess.isLocal()})`);
 
-    // Create tools based on what's available
-    const toolSetup = this.createToolsForContext(gradeContext, filesChecked);
-
-    if (!toolSetup) {
-      // No tools available - return a result indicating we couldn't verify
-      return {
-        grade: 'partial',
-        confidence: 0.3,
-        reasoning: 'Unable to access repository to verify the wiki answer. No local path or repository service available.',
-        filesChecked: [],
-        costUsd: 0,
-      };
-    }
-
-    const { tools, executeTools } = toolSetup;
+    // Create tools using unified repo access
+    const { tools, executeTools } = this.createUnifiedTools(context.repoAccess, filesChecked);
     const toolDefs = tools.map(t => ({
       name: t.name,
       description: t.description,
@@ -165,204 +127,6 @@ Start by reading the relevant code files, then provide your grade.`;
       reasoning: parsed.reasoning,
       filesChecked,
       costUsd: result.costUsd,
-    };
-  }
-
-  /**
-   * Create tools for the given grading context.
-   * Returns null if no tools can be created (no access method available).
-   */
-  private createToolsForContext(
-    context: GradeContext,
-    filesChecked: string[]
-  ): {
-    tools: ToolDefinition[];
-    executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
-  } | null {
-    // Prefer unified repo access (works for both local and GitHub)
-    if (context.repoAccess) {
-      console.log(`[Grader] Creating unified tools via repoAccess (isLocal: ${context.repoAccess.isLocal()})`);
-      return this.createUnifiedTools(context.repoAccess, filesChecked);
-    }
-
-    // Fall back to local filesystem (if repoPath is provided)
-    if (context.repoPath) {
-      console.log(`[Grader] Creating filesystem tools for path: ${context.repoPath}`);
-      const toolContext: ToolContext = {
-        repoPath: context.repoPath,
-        maxFileSize: 50000, // 50KB per file for grading
-      };
-
-      const tools = [readFileTool, searchFilesTool, listDirectoryTool];
-
-      return {
-        tools,
-        executeTools: async (calls) => {
-          const results: Array<{ id: string; result: string }> = [];
-
-          for (const call of calls) {
-            const tool = tools.find(t => t.name === call.name);
-            if (tool) {
-              console.log(`[Grader] Executing filesystem tool: ${call.name}(${JSON.stringify(call.input)})`);
-              try {
-                const result = await tool.execute(call.input, toolContext);
-                // Log truncated result for debugging
-                const truncatedResult = result.length > 200 ? result.substring(0, 200) + '...' : result;
-                console.log(`[Grader] Tool ${call.name} result: ${truncatedResult}`);
-                results.push({ id: call.id, result });
-
-                // Track file reads
-                if (call.name === 'read_file' && call.input['path']) {
-                  filesChecked.push(call.input['path'] as string);
-                }
-              } catch (error) {
-                const errorMsg = `Error executing ${call.name}: ${error instanceof Error ? error.message : String(error)}`;
-                console.error(`[Grader] ${errorMsg}`);
-                results.push({ id: call.id, result: errorMsg });
-              }
-            } else {
-              console.warn(`[Grader] Unknown tool: ${call.name}`);
-              results.push({ id: call.id, result: `Unknown tool: ${call.name}` });
-            }
-          }
-
-          return results;
-        },
-      };
-    }
-
-    // Try GitHub API (if repoService and repo are provided)
-    if (context.repoService && context.repo) {
-      console.log(`[Grader] Creating API tools for repo: ${context.repo.fullName}`);
-      return this.createApiTools(context.repoService, context.repo, filesChecked);
-    }
-
-    // No access method available
-    console.error(`[Grader] No tools available - repoPath: ${context.repoPath}, repoService: ${!!context.repoService}, repo: ${!!context.repo}`);
-    return null;
-  }
-
-  /**
-   * Create API-based tools for GitHub repositories.
-   */
-  private createApiTools(
-    repoService: RepositoryService,
-    repo: Repo,
-    filesChecked: string[]
-  ): {
-    tools: ToolDefinition[];
-    executeTools: (calls: Array<{ id: string; name: string; input: Record<string, unknown> }>) => Promise<Array<{ id: string; result: string }>>;
-  } {
-    const apiTools: ToolDefinition[] = [
-      {
-        name: 'read_file',
-        description: 'Read the contents of a file from the repository.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: {
-              type: 'string',
-              description: 'Relative path from repository root',
-            },
-          },
-          required: ['path'],
-        },
-        execute: async (input) => {
-          const path = input['path'] as string;
-          console.log(`[Grader API] read_file: ${path}`);
-          try {
-            filesChecked.push(path);
-            const content = await repoService.getFileContent(repo, path);
-            const truncated = content.length > 200 ? content.substring(0, 200) + '...' : content;
-            console.log(`[Grader API] read_file success: ${truncated}`);
-            return content;
-          } catch (error) {
-            const errorMsg = `Error reading "${path}": ${error instanceof Error ? error.message : String(error)}`;
-            console.error(`[Grader API] ${errorMsg}`);
-            return errorMsg;
-          }
-        },
-      },
-      {
-        name: 'list_directory',
-        description: 'List contents of a directory.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: {
-              type: 'string',
-              description: 'Directory path relative to repo root',
-            },
-          },
-          required: ['path'],
-        },
-        execute: async (input) => {
-          const path = input['path'] as string;
-          console.log(`[Grader API] list_directory: ${path}`);
-          try {
-            const entries = await repoService.listDirectory(repo, path);
-            const result = entries.map(e => `${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n');
-            console.log(`[Grader API] list_directory success: ${result.substring(0, 200)}`);
-            return result;
-          } catch (error) {
-            const errorMsg = `Error listing "${path}": ${error instanceof Error ? error.message : String(error)}`;
-            console.error(`[Grader API] ${errorMsg}`);
-            return errorMsg;
-          }
-        },
-      },
-      {
-        name: 'search_files',
-        description: 'Search for files matching a pattern. Returns file paths.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            pattern: {
-              type: 'string',
-              description: 'Glob pattern (e.g., "**/*.ts")',
-            },
-          },
-          required: ['pattern'],
-        },
-        execute: async (input) => {
-          const pattern = input['pattern'] as string;
-          console.log(`[Grader API] search_files: ${pattern}`);
-          try {
-            const allFiles = await repoService.getFileTree(repo);
-            console.log(`[Grader API] getFileTree returned ${allFiles.length} files`);
-            // Simple glob matching (supports **, *, and ?)
-            const matches = filterByGlob(allFiles, pattern);
-            if (matches.length === 0) {
-              console.log(`[Grader API] search_files: no matches for ${pattern}`);
-              return `No files found matching "${pattern}"`;
-            }
-            console.log(`[Grader API] search_files: ${matches.length} matches`);
-            return matches.join('\n');
-          } catch (error) {
-            const errorMsg = `Error searching for "${pattern}": ${error instanceof Error ? error.message : String(error)}`;
-            console.error(`[Grader API] ${errorMsg}`);
-            return errorMsg;
-          }
-        },
-      },
-    ];
-
-    return {
-      tools: apiTools,
-      executeTools: async (calls) => {
-        console.log(`[Grader API] Executing ${calls.length} tool calls`);
-        const results = await Promise.all(calls.map(async (call) => {
-          const tool = apiTools.find(t => t.name === call.name);
-          if (!tool) {
-            console.warn(`[Grader API] Unknown tool: ${call.name}`);
-            return { id: call.id, result: `Error: Unknown tool "${call.name}"` };
-          }
-          // API tools don't need a toolContext, they use the repoService directly
-          const result = await tool.execute(call.input, { repoPath: '', maxFileSize: 100000 });
-          return { id: call.id, result };
-        }));
-        return results;
-      },
     };
   }
 

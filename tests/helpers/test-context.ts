@@ -17,6 +17,7 @@ import { clearIgnoreCache } from '../../src/services/cwignore.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import type { AgentContext } from '../../src/agents/base-agent.js';
 import type { Repositories } from '../../src/repositories/index.js';
+import type { UnifiedRepoAccessFactory } from '../../src/services/repository/unified-repo-access.js';
 
 export interface TestContext {
   /** Base directory for all test data */
@@ -31,6 +32,8 @@ export interface TestContext {
   git: FileSystemGitService;
   /** Mock LLM service */
   llm: MockLLMService;
+  /** Unified repo access factory */
+  repoAccessFactory: UnifiedRepoAccessFactory;
   /** Create an AgentContext for a repo (auto-creates wiki if needed) */
   agentContext(repoId: string): Promise<AgentContext>;
   /** Clean up all test data */
@@ -79,6 +82,7 @@ export async function createTestContext(): Promise<TestContext> {
     repos,
     git: gitService,
     llm,
+    repoAccessFactory,
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
 
@@ -143,6 +147,9 @@ export async function createTestRepo(
     message: 'Initial commit',
     author: { name: 'Test User', email: 'test@example.com' },
   });
+
+  // Register repo with git service for local access
+  ctx.git.registerLocalRepo(repoId, repoPath);
 
   // Register repo in the repositories
   await ctx.repos.repos.save({

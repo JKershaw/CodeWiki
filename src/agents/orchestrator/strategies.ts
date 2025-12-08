@@ -7,7 +7,6 @@
 
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
-import type { GitService } from '../../services/git/index.js';
 import { createWorkItem, type WorkItem } from '../../domain/work-item.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import type { AgentRun } from '../../domain/agent-run.js';
@@ -40,7 +39,6 @@ export interface StrategyContext {
   repoId: string;
   wikiId: string;
   existingWorkKeys: Set<string>;
-  git?: GitService;
   contextGatherer?: { gather: (repoId: string, wikiId: string) => Promise<OrchestratorContext> };
   /** Optional iteration phase for phase-aware prioritization */
   iterationPhase?: IterationPhase;
@@ -256,7 +254,7 @@ export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
  * - Late phase: Only explore truly undocumented areas
  */
 export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots) => {
-  if (remainingSlots <= 0 || !ctx.git || !ctx.contextGatherer) {
+  if (remainingSlots <= 0 || !ctx.contextGatherer) {
     return { workItems: [] };
   }
 

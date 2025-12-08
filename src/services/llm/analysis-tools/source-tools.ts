@@ -4,21 +4,12 @@
  * These tools allow exploring the actual source code repository to understand
  * what code exists that wiki-building agents should be documenting.
  *
- * Priority for repository access:
- * 1. repoAccess (UnifiedRepoAccess) - the new unified interface
- * 2. repoPath - local filesystem access (legacy)
- * 3. repoService + repo - GitHub API access (legacy)
+ * All tools use UnifiedRepoAccess for consistent repository access.
  */
 
 import { minimatch } from 'minimatch';
 import type { ToolDefinition, AnalysisToolContext } from '../tools.js';
-import {
-  readFileContent,
-  searchFiles,
-  listDirectory,
-  DEFAULT_MAX_FILE_SIZE,
-  DEFAULT_MAX_SEARCH_RESULTS,
-} from '../base-tools.js';
+import { DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_SEARCH_RESULTS } from '../base-tools.js';
 
 /**
  * Tool to read a source file from the repository.
@@ -41,57 +32,27 @@ export const readSourceFileTool: ToolDefinition<AnalysisToolContext> = {
   execute: async (input, context) => {
     const path = input['path'] as string;
 
-    // Prefer unified repo access (new interface)
-    if (context.repoAccess) {
-      try {
-        const content = await context.repoAccess.getFileContent(path);
+    if (!context.repoAccess) {
+      return 'Error: Source code access is not available for this repository.';
+    }
 
-        if (content.length > DEFAULT_MAX_FILE_SIZE) {
-          return `Error: File "${path}" is too large (${content.length} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
-        }
+    try {
+      const content = await context.repoAccess.getFileContent(path);
 
-        return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message.includes('Not Found') || error.message.includes('404')) {
-            return `Error: File "${path}" not found in repository`;
-          }
-          return `Error reading "${path}": ${error.message}`;
-        }
-        return `Error reading "${path}"`;
+      if (content.length > DEFAULT_MAX_FILE_SIZE) {
+        return `Error: File "${path}" is too large (${content.length} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
       }
-    }
 
-    // Fall back to local filesystem (legacy)
-    if (context.repoPath) {
-      return readFileContent(path, context.repoPath, {
-        maxFileSize: DEFAULT_MAX_FILE_SIZE,
-        formatOutput: true,
-      });
-    }
-
-    // Fall back to legacy repository service
-    if (context.repoService && context.repo) {
-      try {
-        const content = await context.repoService.getFileContent(context.repo, path);
-
-        if (content.length > DEFAULT_MAX_FILE_SIZE) {
-          return `Error: File "${path}" is too large (${content.length} bytes, limit is ${DEFAULT_MAX_FILE_SIZE})`;
+      return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Not Found') || error.message.includes('404')) {
+          return `Error: File "${path}" not found in repository`;
         }
-
-        return `## File: ${path}\n\n\`\`\`\n${content}\n\`\`\``;
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message.includes('Not Found') || error.message.includes('404')) {
-            return `Error: File "${path}" not found in repository`;
-          }
-          return `Error reading "${path}": ${error.message}`;
-        }
-        return `Error reading "${path}"`;
+        return `Error reading "${path}": ${error.message}`;
       }
+      return `Error reading "${path}"`;
     }
-
-    return 'Source code access is not available for this repository.';
   },
 };
 
@@ -116,71 +77,34 @@ export const searchSourceFilesTool: ToolDefinition<AnalysisToolContext> = {
   execute: async (input, context) => {
     const pattern = input['pattern'] as string;
 
-    // Prefer unified repo access (new interface)
-    if (context.repoAccess) {
-      try {
-        const allFiles = await context.repoAccess.getFileTree();
-        const matchingFiles = allFiles.filter(filePath => minimatch(filePath, pattern));
+    if (!context.repoAccess) {
+      return 'Error: Source code access is not available for this repository.';
+    }
 
-        if (matchingFiles.length === 0) {
-          return `No files found matching "${pattern}"`;
-        }
+    try {
+      const allFiles = await context.repoAccess.getFileTree();
+      const matchingFiles = allFiles.filter(filePath => minimatch(filePath, pattern));
 
-        const truncated = matchingFiles.length > DEFAULT_MAX_SEARCH_RESULTS;
-        const displayFiles = matchingFiles.slice(0, DEFAULT_MAX_SEARCH_RESULTS);
-
-        let result = `## Files matching: ${pattern}\n\nFound ${matchingFiles.length} files:\n\n`;
-        result += displayFiles.join('\n');
-        if (truncated) {
-          result += `\n\n... and ${matchingFiles.length - DEFAULT_MAX_SEARCH_RESULTS} more files`;
-        }
-
-        return result;
-      } catch (error) {
-        if (error instanceof Error) {
-          return `Error searching for "${pattern}": ${error.message}`;
-        }
-        return `Error searching for "${pattern}"`;
+      if (matchingFiles.length === 0) {
+        return `No files found matching "${pattern}"`;
       }
-    }
 
-    // Fall back to local filesystem (legacy)
-    if (context.repoPath) {
-      return searchFiles(pattern, context.repoPath, {
-        maxSearchResults: DEFAULT_MAX_SEARCH_RESULTS,
-        formatOutput: true,
-      });
-    }
+      const truncated = matchingFiles.length > DEFAULT_MAX_SEARCH_RESULTS;
+      const displayFiles = matchingFiles.slice(0, DEFAULT_MAX_SEARCH_RESULTS);
 
-    // Fall back to legacy repository service
-    if (context.repoService && context.repo) {
-      try {
-        const allFiles = await context.repoService.getFileTree(context.repo);
-        const matchingFiles = allFiles.filter(filePath => minimatch(filePath, pattern));
-
-        if (matchingFiles.length === 0) {
-          return `No files found matching "${pattern}"`;
-        }
-
-        const truncated = matchingFiles.length > DEFAULT_MAX_SEARCH_RESULTS;
-        const displayFiles = matchingFiles.slice(0, DEFAULT_MAX_SEARCH_RESULTS);
-
-        let result = `## Files matching: ${pattern}\n\nFound ${matchingFiles.length} files:\n\n`;
-        result += displayFiles.join('\n');
-        if (truncated) {
-          result += `\n\n... and ${matchingFiles.length - DEFAULT_MAX_SEARCH_RESULTS} more files`;
-        }
-
-        return result;
-      } catch (error) {
-        if (error instanceof Error) {
-          return `Error searching for "${pattern}": ${error.message}`;
-        }
-        return `Error searching for "${pattern}"`;
+      let result = `## Files matching: ${pattern}\n\nFound ${matchingFiles.length} files:\n\n`;
+      result += displayFiles.join('\n');
+      if (truncated) {
+        result += `\n\n... and ${matchingFiles.length - DEFAULT_MAX_SEARCH_RESULTS} more files`;
       }
-    }
 
-    return 'Source code access is not available for this repository.';
+      return result;
+    } catch (error) {
+      if (error instanceof Error) {
+        return `Error searching for "${pattern}": ${error.message}`;
+      }
+      return `Error searching for "${pattern}"`;
+    }
   },
 };
 
@@ -205,70 +129,34 @@ export const listSourceDirectoryTool: ToolDefinition<AnalysisToolContext> = {
   execute: async (input, context) => {
     const path = input['path'] as string;
 
-    // Prefer unified repo access (new interface)
-    if (context.repoAccess) {
-      try {
-        const entries = await context.repoAccess.listDirectory(path);
+    if (!context.repoAccess) {
+      return 'Error: Source code access is not available for this repository.';
+    }
 
-        const dirs = entries.filter(e => e.type === 'dir').map(e => e.name + '/');
-        const files = entries.filter(e => e.type === 'file').map(e => e.name);
+    try {
+      const entries = await context.repoAccess.listDirectory(path);
 
-        let result = `## Directory: ${path}\n\n`;
-        if (dirs.length > 0) {
-          result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
-        }
-        if (files.length > 0) {
-          result += '**Files:**\n' + files.sort().join('\n');
-        }
+      const dirs = entries.filter(e => e.type === 'dir').map(e => e.name + '/');
+      const files = entries.filter(e => e.type === 'file').map(e => e.name);
 
-        return result;
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message.includes('Not Found') || error.message.includes('404')) {
-            return `Error: Directory "${path}" not found in repository`;
-          }
-          return `Error listing "${path}": ${error.message}`;
-        }
-        return `Error listing "${path}"`;
+      let result = `## Directory: ${path}\n\n`;
+      if (dirs.length > 0) {
+        result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
       }
-    }
-
-    // Fall back to local filesystem (legacy)
-    if (context.repoPath) {
-      return listDirectory(path, context.repoPath, {
-        formatOutput: true,
-      });
-    }
-
-    // Fall back to legacy repository service
-    if (context.repoService && context.repo) {
-      try {
-        const entries = await context.repoService.listDirectory(context.repo, path);
-
-        const dirs = entries.filter(e => e.type === 'dir').map(e => e.name + '/');
-        const files = entries.filter(e => e.type === 'file').map(e => e.name);
-
-        let result = `## Directory: ${path}\n\n`;
-        if (dirs.length > 0) {
-          result += '**Directories:**\n' + dirs.sort().join('\n') + '\n\n';
-        }
-        if (files.length > 0) {
-          result += '**Files:**\n' + files.sort().join('\n');
-        }
-
-        return result;
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message.includes('Not Found') || error.message.includes('404')) {
-            return `Error: Directory "${path}" not found in repository`;
-          }
-          return `Error listing "${path}": ${error.message}`;
-        }
-        return `Error listing "${path}"`;
+      if (files.length > 0) {
+        result += '**Files:**\n' + files.sort().join('\n');
       }
-    }
 
-    return 'Source code access is not available for this repository.';
+      return result;
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('Not Found') || error.message.includes('404')) {
+          return `Error: Directory "${path}" not found in repository`;
+        }
+        return `Error listing "${path}": ${error.message}`;
+      }
+      return `Error listing "${path}"`;
+    }
   },
 };
 
