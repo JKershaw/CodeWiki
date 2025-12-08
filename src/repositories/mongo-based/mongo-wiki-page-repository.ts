@@ -68,6 +68,7 @@ export class MongoWikiPageRepository implements WikiPageRepository {
     id: string,
     updates: {
       content: string;
+      title?: string;
       confidence?: number;
       sourceCommitId?: string;
       sourceAgentRunId?: string;
@@ -78,6 +79,9 @@ export class MongoWikiPageRepository implements WikiPageRepository {
       updatedAt: new Date(),
     };
 
+    if (updates.title !== undefined) {
+      setFields.title = updates.title;
+    }
     if (updates.confidence !== undefined) {
       setFields.confidence = updates.confidence;
     }
