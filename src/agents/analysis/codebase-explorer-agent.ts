@@ -83,6 +83,12 @@ export class CodebaseExplorerAgent implements Agent {
     // Parse the LLM response
     const analysis = this.parseResponse(completion.content);
 
+    // Extract verified paths from tool calls
+    const verifiedPaths = extractVerifiedPaths(completion.toolCalls);
+
+    // Validate and filter paths in findings to prevent hallucinated paths
+    const validatedFindings = validateFindingPaths(analysis.findings, verifiedPaths);
+
     // Generate wiki updates based on the analysis
     const updates = this.generateUpdates(targetPath, analysis, existingPagePaths);
 
@@ -105,7 +111,7 @@ export class CodebaseExplorerAgent implements Agent {
       result: createAgentResult({
         summary: analysis.summary,
         findings: [
-          ...analysis.findings.map(f => createFinding({
+          ...validatedFindings.map(f => createFinding({
             type: f.type,
             description: f.description,
             relatedPaths: f.paths,
@@ -137,11 +143,18 @@ export class CodebaseExplorerAgent implements Agent {
 
 This directory/file has low wiki coverage, meaning the wiki doesn't have good documentation about it.
 
-Your task:
-1. Use list_directory to understand the structure
-2. Use read_file to read the key files (index.ts, main implementations, interfaces)
-3. Use search_files to find related tests and usage examples
-4. Create comprehensive wiki documentation
+## IMPORTANT: You MUST Use Tools to Read the Actual Code
+
+DO NOT write documentation based on assumptions or file name guessing.
+You MUST use the available tools to read the actual source code:
+
+1. **FIRST** - Use \`list_directory\` on "${targetPath}" to see what files actually exist
+2. **THEN** - Use \`read_file\` to read the key files (look for index.ts, main implementations, interfaces)
+3. **ALSO** - Use \`search_files\` to find related tests (e.g., "**/*.test.ts")
+4. **ONLY THEN** - Create documentation based on what you actually read
+
+If you skip these steps and guess based on the path name, you WILL produce inaccurate documentation
+that references files, classes, or patterns that don't exist in this codebase.
 
 Focus on:
 - What this code does and its purpose in the system
@@ -311,6 +324,109 @@ function pathToTitle(path: string): string {
     .join(' ');
 }
 
+/**
+ * Extract verified paths from tool calls.
+ *
+ * This collects all paths that were actually accessed via tools,
+ * which we can use to validate that claimed paths in findings exist.
+ */
+function extractVerifiedPaths(
+  toolCalls: Array<{ name: string; input: Record<string, unknown>; output?: string }>
+): Set<string> {
+  const verified = new Set<string>();
+
+  for (const call of toolCalls) {
+    if (call.name === 'read_file') {
+      const path = call.input['path'] as string;
+      if (path) {
+        verified.add(path);
+        // Also add parent directories as verified
+        const parts = path.split('/');
+        for (let i = 1; i < parts.length; i++) {
+          verified.add(parts.slice(0, i).join('/'));
+        }
+      }
+    } else if (call.name === 'list_directory') {
+      const path = call.input['path'] as string;
+      if (path) {
+        verified.add(path);
+        // Parse the output to get listed files/directories
+        if (call.output) {
+          const entries = call.output.split('\n').filter(Boolean);
+          for (const entry of entries) {
+            const entryPath = path === '.' || path === ''
+              ? entry.replace(/\/$/, '')
+              : `${path}/${entry.replace(/\/$/, '')}`;
+            verified.add(entryPath);
+          }
+        }
+      }
+    } else if (call.name === 'search_files') {
+      // Parse search results to get found file paths
+      if (call.output && !call.output.startsWith('No files found') && !call.output.startsWith('Error')) {
+        const foundPaths = call.output.split('\n').filter(Boolean);
+        for (const foundPath of foundPaths) {
+          verified.add(foundPath);
+        }
+      }
+    }
+  }
+
+  return verified;
+}
+
+/**
+ * Validate paths in findings against verified paths from tool calls.
+ *
+ * This prevents hallucinated file paths from entering the wiki data.
+ * Paths that weren't verified via tool calls are removed with a warning.
+ */
+function validateFindingPaths(
+  findings: Array<{
+    type: string;
+    importance: 'low' | 'medium' | 'high';
+    description: string;
+    paths: string[];
+  }>,
+  verifiedPaths: Set<string>
+): Array<{
+  type: string;
+  importance: 'low' | 'medium' | 'high';
+  description: string;
+  paths: string[];
+}> {
+  return findings.map(finding => {
+    const validatedPaths = finding.paths.filter(path => {
+      // Normalize path for comparison
+      const normalizedPath = path.replace(/^\/+/, '').replace(/\/+$/, '');
+
+      // Check if this exact path or a parent was verified
+      if (verifiedPaths.has(normalizedPath)) {
+        return true;
+      }
+
+      // Check if any verified path starts with this path (for directories)
+      for (const verified of verifiedPaths) {
+        if (verified.startsWith(normalizedPath + '/') || normalizedPath.startsWith(verified + '/')) {
+          return true;
+        }
+      }
+
+      // Path was not verified via tool calls - likely hallucinated
+      console.warn(
+        `[codebase-explorer] Removing unverified path from finding: ${path} ` +
+        `(verified ${verifiedPaths.size} paths via tools)`
+      );
+      return false;
+    });
+
+    return {
+      ...finding,
+      paths: validatedPaths,
+    };
+  });
+}
+
 const SYSTEM_PROMPT = `You are a technical documentation writer exploring and documenting a codebase.
 
 You have access to tools to explore the source code:
@@ -318,28 +434,48 @@ You have access to tools to explore the source code:
 - search_files: Find related files by glob pattern (e.g., find test files)
 - list_directory: Understand project structure
 
-WORKFLOW - Systematically explore the target area:
-1. Start with list_directory to understand the structure
-2. Read index.ts or main entry points first
-3. Read key interfaces and types
-4. Search for and read related test files for usage examples
-5. Read important implementations
-6. Create comprehensive documentation
+## CRITICAL: You MUST Use Tools Before Writing Any Documentation
 
-TEST-BASED EXAMPLES - Always look for tests:
-When documenting a module, search for test files (*.test.ts, *.spec.ts) and extract
-real usage examples. Test code shows how the component is actually used.
+You CANNOT write accurate documentation without reading the actual source code.
+DO NOT generate content based on assumptions, file names, or training data.
 
-CRITICAL: Write as encyclopedia articles.
-- Describe WHAT EXISTS and WHY it exists
+Before documenting ANYTHING, you MUST:
+1. Use list_directory to see what files actually exist
+2. Use read_file to read the actual file contents
+3. Verify every claim against the source code you read
+
+If you skip tool use and generate content from memory/assumptions, you WILL:
+- Invent file names that don't exist (e.g., "repository.service.ts" vs "repository-service.ts")
+- Describe frameworks not used (e.g., NestJS decorators in plain TypeScript)
+- Document APIs that don't match the actual implementation
+
+## WORKFLOW - Systematically Explore and Verify
+
+1. **FIRST**: Use list_directory on the target path to see the actual structure
+2. **THEN**: Read index.ts or main entry points with read_file
+3. **NEXT**: Read key interfaces and type definitions
+4. **ALSO**: Use search_files to find related test files (*.test.ts, *.spec.ts)
+5. **FINALLY**: Read implementation files to understand the details
+
+Only after reading the actual source code should you write documentation.
+
+## TEST-BASED EXAMPLES - Always Look for Tests
+
+When documenting a module, search for test files and extract real usage examples.
+Test code shows how the component is actually used with verified, working examples.
+
+## Documentation Style
+
+Write as encyclopedia articles:
+- Describe WHAT EXISTS and WHY it exists (based on what you READ)
 - Explain how components fit into the larger system
-- Include practical code examples (preferably from tests)
+- Include practical code examples (preferably from tests you read)
 - Help developers understand and use the code
 
 Your documentation should:
 - Be comprehensive but focused
-- Include code examples and interface definitions
-- Explain architectural decisions and patterns
+- Include code examples and interface definitions FROM THE ACTUAL CODE
+- Explain architectural decisions and patterns you observed
 - Be useful to a developer trying to understand the codebase
 
 When creating wiki pages:
@@ -347,9 +483,10 @@ When creating wiki pages:
 - Group related content by category
 - Create separate pages for major components (don't cram everything into one)
 - Each page should have a clear focus
+- Only reference file paths that you verified exist via tool calls
 
 Your confidence should reflect:
-- 0.9+: Clear implementation, comprehensive exploration, well-documented
-- 0.7-0.9: Good understanding but some parts unclear
-- 0.5-0.7: Partial understanding, might need more exploration
-- <0.5: Limited visibility, needs review`;
+- 0.9+: Read all key files, comprehensive exploration, well-documented
+- 0.7-0.9: Read most files but some parts unexplored
+- 0.5-0.7: Limited file reads, might need more exploration
+- <0.5: Insufficient tool use, documentation may be inaccurate`;

@@ -47,6 +47,7 @@ export const DEFAULT_TOOL_REQUIREMENTS: Partial<Record<AgentType, ToolEnforcemen
   'pattern': { minToolCalls: 1, requiredTools: ['read_file'] },
   'security': { minToolCalls: 1, requiredTools: ['read_file'] },
   'technical-debt': { minToolCalls: 1, requiredTools: ['read_file'] },
+  'codebase-explorer': { minToolCalls: 2, requiredTools: ['list_directory', 'read_file'] },
   'narrative': { minToolCalls: 1, warnOnly: true },
   'dependency': { minToolCalls: 1, warnOnly: true },
 
