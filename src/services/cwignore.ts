@@ -12,7 +12,8 @@
 
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import ignore, { Ignore } from 'ignore';
+import ignore from 'ignore';
+type Ignore = ignore.Ignore;
 
 const CWIGNORE_FILENAME = '.cwignore';
 const GITIGNORE_FILENAME = '.gitignore';
