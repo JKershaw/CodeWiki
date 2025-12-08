@@ -30,44 +30,28 @@ export interface CategoryFinding {
  * Parse categorization lines from LLM response.
  *
  * Expected format:
- * CATEGORIZATIONS:
- * - [page-path] | [current-category] | [suggested-category] | [confidence:0.85] | [reason]
+ * PAGE: [path] | CURRENT: [category] | SUGGESTED: [category] | MISMATCH: [yes/no]
  */
 export function parseCategorizations(response: string): Categorization[] {
   const results: Categorization[] = [];
 
-  // Extract CATEGORIZATIONS section
-  // Match from CATEGORIZATIONS: until we hit FINDINGS: or CONFIDENCE: at start of line, or end of string
-  const catMatch = response.match(/CATEGORIZATIONS:\s*([\s\S]*?)(?=\nFINDINGS:|\nCONFIDENCE:|$)/i);
-  if (!catMatch) {
-    return results;
-  }
-
-  const lines = catMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
+  // Find all PAGE: lines
+  const lines = response.split('\n').filter(l => l.trim().startsWith('PAGE:'));
 
   for (const line of lines) {
-    // Pattern: - [page-path] | [current] | [suggested] | [confidence:X.XX] | [reason]
+    // Pattern: PAGE: path | CURRENT: cat | SUGGESTED: cat | MISMATCH: yes/no
     const match = line.match(
-      /^-\s*\[([^\]]+)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*\[(?:confidence:)?([^\]]*)\]\s*\|\s*\[([^\]]*)\]/i
+      /PAGE:\s*([^|]+)\|\s*CURRENT:\s*([^|]+)\|\s*SUGGESTED:\s*([^|]+)\|\s*MISMATCH:\s*(\w+)/i
     );
 
     if (match) {
-      const confidenceStr = match[4]!.trim();
-      let confidence = 0.7; // default
-
-      if (confidenceStr) {
-        const parsed = parseFloat(confidenceStr);
-        if (!isNaN(parsed)) {
-          confidence = parsed;
-        }
-      }
-
+      const isMismatch = match[4]!.trim().toLowerCase() === 'yes';
       results.push({
         pagePath: match[1]!.trim(),
         currentCategory: match[2]!.trim(),
         suggestedCategory: match[3]!.trim(),
-        confidence,
-        reason: match[5]!.trim(),
+        confidence: isMismatch ? 0.85 : 0.95,
+        reason: isMismatch ? 'Category mismatch detected' : 'Correctly categorized',
       });
     }
   }
@@ -78,39 +62,32 @@ export function parseCategorizations(response: string): Categorization[] {
 /**
  * Parse category finding lines from LLM response.
  *
- * Expected format:
- * FINDINGS:
- * - [category_mismatch] [SEVERITY:high] [page-path] should be in [category] because [reason]
+ * Handles multiple formats:
+ * - MISMATCH: [path] should be in [category] - [reason]
+ * - [path] should be in [category] - [reason]
+ * - - [path] should be in [category] - [reason]
  */
 export function parseCategoryFindings(response: string): CategoryFinding[] {
   const results: CategoryFinding[] = [];
 
-  // Extract FINDINGS section
-  const findingsMatch = response.match(/FINDINGS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-  if (!findingsMatch) {
-    return results;
-  }
-
-  const lines = findingsMatch[1]!.trim().split('\n').filter(l => l.trim().startsWith('-'));
+  // Find all lines containing "should be in" (the key phrase)
+  const lines = response.split('\n').filter(l => l.includes('should be in'));
 
   for (const line of lines) {
-    // Pattern: - [category_mismatch] [SEVERITY:X] [page-path] should be in [category] because [reason]
+    // Skip PAGE: lines that have MISMATCH: yes/no
+    if (line.includes('PAGE:') && line.includes('MISMATCH:')) continue;
+
+    // Pattern: [optional prefix] path should be in category - reason
     const match = line.match(
-      /^-\s*\[category_mismatch\]\s*(?:\[SEVERITY:(\w+)\])?\s*\[([^\]]+)\]\s*should be in\s*\[([^\]]+)\]\s*because\s*\[([^\]]+)\]/i
+      /(?:MISMATCH:\s*|^-\s*)?([^\s]+)\s+should be in\s+(\w+)\s*[-–]\s*(.+)/i
     );
 
     if (match) {
-      const severityStr = (match[1] || 'medium').toLowerCase();
-      let severity: 'low' | 'medium' | 'high' = 'medium';
-      if (severityStr === 'low' || severityStr === 'high') {
-        severity = severityStr;
-      }
-
       results.push({
-        pagePath: match[2]!.trim(),
-        suggestedCategory: match[3]!.trim(),
-        severity,
-        reason: match[4]!.trim(),
+        pagePath: match[1]!.trim(),
+        suggestedCategory: match[2]!.trim(),
+        severity: 'medium',
+        reason: match[3]!.trim(),
       });
     }
   }
@@ -274,39 +251,22 @@ Analyze EACH page above using this process:
 4. **Compare topic to category** - Does the primary topic match the current category?
 5. **If mismatch → Report it!**
 
-## Example Output
+## Output Format
 
-ANALYSIS:
-Page "guides/xss-prevention": Content discusses XSS attacks, sanitization, CSP headers. PRIMARY TOPIC = Security. Current category = guides. MISMATCH → should be "security".
-Page "api/users": Content documents REST endpoints. PRIMARY TOPIC = API. Current category = api. MATCH.
+For each page, output ONE line in this EXACT format:
+PAGE: [path] | CURRENT: [category] | SUGGESTED: [category] | MISMATCH: [yes/no]
 
-CATEGORIZATIONS:
-- [guides/xss-prevention] | [guides] | [security] | [confidence:0.9] | [XSS prevention is a security topic, not a general guide]
-- [api/users] | [api] | [api] | [confidence:0.95] | [Correctly categorized as API documentation]
+Then list any mismatches:
+MISMATCH: [path] should be in [category] - [reason]
 
-FINDINGS:
-- [category_mismatch] [SEVERITY:high] [guides/xss-prevention] should be in [security] because [XSS is a security vulnerability and this page discusses attack prevention]
+## Example
 
-CONFIDENCE: 0.85
+PAGE: guides/xss-prevention | CURRENT: guides | SUGGESTED: security | MISMATCH: yes
+PAGE: api/users | CURRENT: api | SUGGESTED: api | MISMATCH: no
 
-## Required Output Format
+MISMATCH: guides/xss-prevention should be in security - XSS is a security vulnerability
 
-You MUST output in this exact format:
-
-ANALYSIS:
-(Brief analysis of each page's primary topic and whether it matches)
-
-CATEGORIZATIONS:
-- [page/path] | [current-category] | [suggested-category] | [confidence:X.X] | [reason]
-(One line per page)
-
-FINDINGS:
-- [category_mismatch] [SEVERITY:high/medium/low] [page/path] should be in [category] because [reason]
-(Only for pages that ARE miscategorized)
-
-CONFIDENCE: X.X
-
-Now analyze the pages above. Remember: Your job is to FIND miscategorizations, especially security content in non-security categories!
+Now analyze the pages. Output ONLY in the format above, nothing else:
 `;
   }
 

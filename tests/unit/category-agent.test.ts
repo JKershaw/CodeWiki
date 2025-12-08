@@ -145,12 +145,9 @@ describe('CategoryAgent', () => {
       }
 
       // Configure mock to return a categorization response
-      ctx.llm.setDefaultResponse(`CATEGORIZATIONS:
-- [security/auth] | [security] | [security] | [confidence:0.9] | [Correctly categorized as security]
-- [api/endpoints] | [api] | [api] | [confidence:0.85] | [Correctly categorized as API]
-- [guides/getting-started] | [guides] | [guides] | [confidence:0.95] | [Correctly categorized as guides]
-
-FINDINGS:
+      ctx.llm.setDefaultResponse(`PAGE: security/auth | CURRENT: security | SUGGESTED: security | MISMATCH: no
+PAGE: api/endpoints | CURRENT: api | SUGGESTED: api | MISMATCH: no
+PAGE: guides/getting-started | CURRENT: guides | SUGGESTED: guides | MISMATCH: no
 
 CONFIDENCE: 0.9`);
 
@@ -205,12 +202,10 @@ CONFIDENCE: 0.9`);
       }
 
       // Configure mock to return a mismatch finding
-      ctx.llm.setDefaultResponse(`CATEGORIZATIONS:
-- [guides/oauth-security] | [guides] | [security] | [confidence:0.85] | [Content is about security, not a guide]
-- [security/overview] | [security] | [security] | [confidence:0.95] | [Correctly categorized]
+      ctx.llm.setDefaultResponse(`PAGE: guides/oauth-security | CURRENT: guides | SUGGESTED: security | MISMATCH: yes
+PAGE: security/overview | CURRENT: security | SUGGESTED: security | MISMATCH: no
 
-FINDINGS:
-- [category_mismatch] [SEVERITY:medium] [guides/oauth-security] should be in [security] because [it discusses OAuth security implementation details, not a how-to guide]
+MISMATCH: guides/oauth-security should be in security - it discusses OAuth security implementation details, not a how-to guide
 
 CONFIDENCE: 0.85`);
 
