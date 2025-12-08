@@ -22,6 +22,7 @@ import { TestingGuideAgent } from '../../src/agents/synthesis/testing-guide-agen
 import { ProjectOverviewAgent } from '../../src/agents/synthesis/project-overview-agent.js';
 import { ExtensionGuideAgent } from '../../src/agents/synthesis/extension-guide-agent.js';
 import { OverviewAgent } from '../../src/agents/synthesis/overview-agent.js';
+import { createWikiTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -117,7 +118,7 @@ describe('Synthesis Agents with Real LLM', { timeout: 180000 }, () => {
       await createWikiPages(agentCtx.wikiId, pages);
 
       const agent = new GettingStartedAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should create a getting started guide
       if (result.updates.length > 0) {
@@ -182,7 +183,7 @@ describe('Example', () => {
       await createWikiPages(agentCtx.wikiId, pages);
 
       const agent = new TestingGuideAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       if (result.updates.length > 0) {
         const guide = result.updates[0]!;
@@ -249,7 +250,7 @@ npm run dev
       await createWikiPages(agentCtx.wikiId, pages);
 
       const agent = new ProjectOverviewAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       if (result.updates.length > 0) {
         const overview = result.updates[0]!;
@@ -324,7 +325,7 @@ export * from './reverse-plugin.js';
       await createWikiPages(agentCtx.wikiId, pages);
 
       const agent = new ExtensionGuideAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       if (result.updates.length > 0) {
         const guide = result.updates[0]!;
@@ -366,7 +367,7 @@ export * from './reverse-plugin.js';
       ]);
 
       const agent = new OverviewAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       if (result.updates.length > 0) {
         const overview = result.updates[0]!;
