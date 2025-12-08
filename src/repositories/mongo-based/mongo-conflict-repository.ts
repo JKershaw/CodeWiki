@@ -44,7 +44,7 @@ export class MongoConflictRepository implements ConflictRepository {
 
   async findByPage(wikiId: string, pagePath: string): Promise<Conflict[]> {
     const docs = await this.collection
-      .find({ wikiId, pagePath })
+      .find({ wikiId, pagePathaffected: pagePath })
       .toArray();
     return toEntities<Conflict>(docs);
   }
