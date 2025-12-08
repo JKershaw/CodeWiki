@@ -40,13 +40,13 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
     return item ? normalizeWorkItem(item) : null;
   }
 
-  async findPending(repoId: string, limit: number): Promise<WorkItem[]> {
+  async findPending(repoId: string, limit?: number): Promise<WorkItem[]> {
     const pending = (await this.store.find(w =>
       w.repoId === repoId && w.status === 'pending'
     )).map(normalizeWorkItem);
     // Sort by creation time (oldest first) - FIFO queue
     pending.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    return pending.slice(0, limit);
+    return limit !== undefined ? pending.slice(0, limit) : pending;
   }
 
   async findByRepo(repoId: string, options?: {
@@ -113,8 +113,8 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
     maxItems: number,
     processedCommits: Set<string>
   ): Promise<WorkItem[]> {
-    // Get extra pending items for filtering
-    const pending = await this.findPending(repoId, maxItems * 3);
+    // Get all pending items - selectItemsForBatch handles filtering
+    const pending = await this.findPending(repoId);
     if (pending.length === 0) return [];
 
     // Use shared business logic to select which items to claim

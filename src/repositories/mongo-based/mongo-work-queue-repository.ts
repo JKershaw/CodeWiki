@@ -18,14 +18,17 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
     return toEntity<WorkItem>(doc);
   }
 
-  async findPending(repoId: string, limit: number): Promise<WorkItem[]> {
+  async findPending(repoId: string, limit?: number): Promise<WorkItem[]> {
     // Sort by creation time (oldest first) - FIFO queue
-    const docs = await this.collection
+    let cursor = this.collection
       .find({ repoId, status: 'pending' })
-      .sort({ createdAt: 1 })
-      .limit(limit)
-      .toArray();
+      .sort({ createdAt: 1 });
 
+    if (limit !== undefined) {
+      cursor = cursor.limit(limit);
+    }
+
+    const docs = await cursor.toArray();
     return toEntities<WorkItem>(docs);
   }
 
@@ -109,8 +112,8 @@ export class MongoWorkQueueRepository implements WorkQueueRepository {
     maxItems: number,
     processedCommits: Set<string>
   ): Promise<WorkItem[]> {
-    // Get extra pending items for filtering
-    const pending = await this.findPending(repoId, maxItems * 3);
+    // Get all pending items - selectItemsForBatch handles filtering
+    const pending = await this.findPending(repoId);
     if (pending.length === 0) return [];
 
     // Use shared business logic to select which items to claim
