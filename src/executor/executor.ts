@@ -173,8 +173,17 @@ export class Executor {
         }
 
         // Check rate limits before claiming work
-        if (this.llm.isRateLimited()) {
-          console.log('Rate limited, waiting...');
+        const rateLimitStatus = this.llm.getRateLimitStatus();
+        if (rateLimitStatus.isLimited) {
+          const reason = rateLimitStatus.reason === 'requests_per_minute'
+            ? `${rateLimitStatus.currentRequests}/${rateLimitStatus.maxRequests} requests/min`
+            : `$${rateLimitStatus.currentHourlyCost.toFixed(2)}/$${rateLimitStatus.maxHourlyCost.toFixed(2)} hourly`;
+          const timeStr = rateLimitStatus.clearsInSeconds !== null
+            ? rateLimitStatus.clearsInSeconds >= 60
+              ? `~${Math.ceil(rateLimitStatus.clearsInSeconds / 60)}m`
+              : `~${rateLimitStatus.clearsInSeconds}s`
+            : '';
+          console.log(`⏳ Rate limited (${reason}), clears in ${timeStr}...`);
           await new Promise(resolve => setTimeout(resolve, 5000));
           continue;
         }

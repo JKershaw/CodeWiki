@@ -123,3 +123,25 @@ node --import tsx --test tests/llm/security-agent.test.ts
 - `tests/llm/e2e/` - Full wiki generation pipeline tests
 
 See `docs/REAL_LLM_TESTING_STRATEGY.md` for the full testing strategy.
+
+## Critical Rules
+
+### Data Protection
+
+- **Never delete data directories** (`.codewiki-data`, database files, etc.) without explicit user permission
+- **Never modify user configuration files** (`.env`, config files) without explicit user permission
+- If you believe data needs to be cleared or config needs changing, ask the user first
+
+### External Services and APIs
+
+- **Never assume an external service, API, or model doesn't exist** based on your training data
+- Your knowledge has a cutoff date - new models and services are released regularly
+- **Verify before acting**: Use web search, API calls, or ask the user to confirm
+- Observed behavior (successful API calls, costs being reported) is stronger evidence than your assumptions about what should or shouldn't exist
+
+### Rate Limiting and Retries
+
+- Rate limiting and retry messages are **normal operational behavior**, not failures
+- When you see "Rate limited, waiting..." or similar messages, the system is working correctly and will recover
+- Do not intervene or try to "fix" rate limiting - wait for it to clear
+- The system has built-in handling for rate limits and transient errors

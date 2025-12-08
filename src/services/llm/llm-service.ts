@@ -119,6 +119,11 @@ export interface LLMService {
   isRateLimited(): boolean;
 
   /**
+   * Get detailed rate limit status for observability.
+   */
+  getRateLimitStatus(): RateLimitStatus;
+
+  /**
    * Get the model name.
    */
   getModel(): string;
@@ -132,6 +137,26 @@ export interface RateLimitConfig {
   maxRequestsPerMinute: number;
   /** Maximum cost per hour in USD */
   maxCostPerHour: number;
+}
+
+/**
+ * Detailed rate limit status for better observability.
+ */
+export interface RateLimitStatus {
+  /** Whether currently rate limited */
+  isLimited: boolean;
+  /** Reason for rate limiting, if applicable */
+  reason: 'requests_per_minute' | 'cost_per_hour' | null;
+  /** Estimated seconds until rate limit clears */
+  clearsInSeconds: number | null;
+  /** Current requests in the last minute */
+  currentRequests: number;
+  /** Maximum requests per minute */
+  maxRequests: number;
+  /** Current hourly cost in USD */
+  currentHourlyCost: number;
+  /** Maximum hourly cost in USD */
+  maxHourlyCost: number;
 }
 
 /**
@@ -174,25 +199,48 @@ export abstract class BaseLLMService implements LLMService {
   }
 
   isRateLimited(): boolean {
+    return this.getRateLimitStatus().isLimited;
+  }
+
+  getRateLimitStatus(): RateLimitStatus {
     const now = Date.now();
 
     // Check requests per minute
     const oneMinuteAgo = now - 60_000;
     const recentRequests = this.requestTimestamps.filter(t => t > oneMinuteAgo);
-    if (recentRequests.length >= this.rateLimit.maxRequestsPerMinute) {
-      return true;
-    }
+    const requestLimited = recentRequests.length >= this.rateLimit.maxRequestsPerMinute;
 
     // Check cost per hour
     const oneHourAgo = now - 3600_000;
-    const hourlyTotal = this.hourlySpend
-      .filter(s => s.timestamp > oneHourAgo)
-      .reduce((sum, s) => sum + s.cost, 0);
-    if (hourlyTotal >= this.rateLimit.maxCostPerHour) {
-      return true;
+    const recentSpend = this.hourlySpend.filter(s => s.timestamp > oneHourAgo);
+    const hourlyTotal = recentSpend.reduce((sum, s) => sum + s.cost, 0);
+    const costLimited = hourlyTotal >= this.rateLimit.maxCostPerHour;
+
+    // Calculate time until rate limit clears
+    let clearsInSeconds: number | null = null;
+    let reason: 'requests_per_minute' | 'cost_per_hour' | null = null;
+
+    if (requestLimited && recentRequests.length > 0) {
+      // Find oldest request timestamp and calculate when it expires
+      const oldestRequest = Math.min(...recentRequests);
+      clearsInSeconds = Math.ceil((oldestRequest + 60_000 - now) / 1000);
+      reason = 'requests_per_minute';
+    } else if (costLimited && recentSpend.length > 0) {
+      // Find oldest spend entry and calculate when it expires
+      const oldestSpend = Math.min(...recentSpend.map(s => s.timestamp));
+      clearsInSeconds = Math.ceil((oldestSpend + 3600_000 - now) / 1000);
+      reason = 'cost_per_hour';
     }
 
-    return false;
+    return {
+      isLimited: requestLimited || costLimited,
+      reason,
+      clearsInSeconds,
+      currentRequests: recentRequests.length,
+      maxRequests: this.rateLimit.maxRequestsPerMinute,
+      currentHourlyCost: hourlyTotal,
+      maxHourlyCost: this.rateLimit.maxCostPerHour,
+    };
   }
 
   protected trackUsage(result: CompletionResult): void {
