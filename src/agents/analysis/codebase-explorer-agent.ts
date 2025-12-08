@@ -139,61 +139,55 @@ export class CodebaseExplorerAgent implements Agent {
       ? `\n\n## Existing Wiki Pages (avoid duplication)\n${sortedPaths.slice(0, 20).map(p => `- ${p}`).join('\n')}`
       : '';
 
-    return `Document the undocumented code in: ${targetPath}
+    return `## Your Task
 
-This directory/file has low wiki coverage, meaning the wiki doesn't have good documentation about it.
+Document the code in: ${targetPath}
 
-## IMPORTANT: You MUST Use Tools to Read the Actual Code
+## Step 1: EXPLORE (Required - Do This First)
 
-DO NOT write documentation based on assumptions or file name guessing.
-You MUST use the available tools to read the actual source code:
+Start by calling these tools to explore the directory:
 
-1. **FIRST** - Use \`list_directory\` on "${targetPath}" to see what files actually exist
-2. **THEN** - Use \`read_file\` to read the key files (look for index.ts, main implementations, interfaces)
-3. **ALSO** - Use \`search_files\` to find related tests (e.g., "**/*.test.ts")
-4. **ONLY THEN** - Create documentation based on what you actually read
+\`\`\`
+list_directory(path: "${targetPath}")
+\`\`\`
 
-If you skip these steps and guess based on the path name, you WILL produce inaccurate documentation
-that references files, classes, or patterns that don't exist in this codebase.
+Then read the key files you find:
 
+\`\`\`
+read_file(path: "<file you discovered>")
+\`\`\`
+
+## Step 2: DOCUMENT (Only After Tool Calls)
+
+After you have used list_directory and read_file, document what you found.
 Focus on:
-- What this code does and its purpose in the system
-- Key interfaces, types, and abstractions
-- Important functions and their responsibilities
-- How this code fits into the larger architecture
-- Usage patterns and examples (especially from tests)
-- Configuration options and extension points
+- Purpose and functionality of the code
+- Key interfaces, types, and classes
+- How this code fits into the larger system
+- Usage patterns (especially from tests if you find any)
 ${existingPagesInfo}
 
-IMPORTANT: Check what documentation already exists. Don't create pages that duplicate existing content.
-If a topic is already covered, either skip it or create a page that adds new information.
+Avoid duplicating existing wiki pages listed above.
 
-Format your response as follows:
+## Output Format (Only After Exploration)
 
 SUMMARY:
-[2-3 paragraph overview of what you found in this part of the codebase]
+[2-3 paragraph overview based on the files you read]
 
 FINDINGS:
-- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths comma-separated]
+- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
 
 WIKI_PAGES:
 ---PAGE---
 PATH: [category/page-name]
 TITLE: [Descriptive title]
 CONTENT:
-[Full markdown content for this wiki page, including headings, code examples, etc.]
+[Markdown content with code examples from the files you read]
 ---END_PAGE---
 
-(You can include multiple ---PAGE--- blocks if the code area needs multiple pages)
+CONFIDENCE: [0-1 value based on how many files you read]
 
-CONFIDENCE: [0-1 value]
-
-Guidelines for wiki pages:
-- Use lowercase paths with hyphens (e.g., "services/llm-service", "architecture/cqrs")
-- Write in encyclopedia style, not as documentation of exploration
-- Include code examples from actual tests when available
-- Explain WHY the code exists and how it fits the system
-- Each page should be 200-500 words minimum
+Remember: Call list_directory and read_file BEFORE writing any output above.
 `;
   }
 
@@ -427,67 +421,54 @@ function validateFindingPaths(
   });
 }
 
-const SYSTEM_PROMPT = `You are a technical documentation writer exploring and documenting a codebase.
+const SYSTEM_PROMPT = `You MUST use tools before generating any documentation. Your FIRST response MUST be a tool call, NOT text.
 
-You have access to tools to explore the source code:
-- read_file: Read the FULL contents of any file
-- search_files: Find related files by glob pattern (e.g., find test files)
-- list_directory: Understand project structure
+## MANDATORY TOOL USAGE - READ THIS FIRST
 
-## CRITICAL: You MUST Use Tools Before Writing Any Documentation
+You are REQUIRED to make AT LEAST 2 tool calls before writing any documentation:
+1. FIRST: Call \`list_directory\` to see what files exist
+2. THEN: Call \`read_file\` to read the actual source code
 
-You CANNOT write accurate documentation without reading the actual source code.
-DO NOT generate content based on assumptions, file names, or training data.
+NEVER output SUMMARY, FINDINGS, or WIKI_PAGES without first making these tool calls.
+If you skip tools and guess based on directory names, you WILL hallucinate incorrect content.
 
-Before documenting ANYTHING, you MUST:
-1. Use list_directory to see what files actually exist
-2. Use read_file to read the actual file contents
-3. Verify every claim against the source code you read
+## Available Tools
 
-If you skip tool use and generate content from memory/assumptions, you WILL:
-- Invent file names that don't exist (e.g., "repository.service.ts" vs "repository-service.ts")
-- Describe frameworks not used (e.g., NestJS decorators in plain TypeScript)
-- Document APIs that don't match the actual implementation
+- \`list_directory\`: See what files exist in a directory - ALWAYS call this first
+- \`read_file\`: Read the full contents of a source file - REQUIRED before documenting
+- \`search_files\`: Find files by glob pattern (e.g., find test files)
 
-## WORKFLOW - Systematically Explore and Verify
+## Required Workflow
 
-1. **FIRST**: Use list_directory on the target path to see the actual structure
-2. **THEN**: Read index.ts or main entry points with read_file
-3. **NEXT**: Read key interfaces and type definitions
-4. **ALSO**: Use search_files to find related test files (*.test.ts, *.spec.ts)
-5. **FINALLY**: Read implementation files to understand the details
+Your response pattern MUST be:
+1. Call \`list_directory\` on the target path (REQUIRED)
+2. Call \`read_file\` on key files you discover (REQUIRED - at least 1 file)
+3. Optionally call \`search_files\` for test files
+4. ONLY AFTER tool calls: Output your documentation in the requested format
 
-Only after reading the actual source code should you write documentation.
+## Why Tools Are Mandatory
 
-## TEST-BASED EXAMPLES - Always Look for Tests
+Without reading actual source code, you will:
+- Invent file names that don't exist
+- Describe frameworks not used in this codebase
+- Document APIs that don't match the implementation
+- Use wrong class/function/variable names
 
-When documenting a module, search for test files and extract real usage examples.
-Test code shows how the component is actually used with verified, working examples.
+## Documentation Style (ONLY after tool calls)
 
-## Documentation Style
+Once you have read the actual code:
+- Write encyclopedia-style documentation based on what you READ
+- Use EXACT names from the source code
+- Include code examples FROM THE ACTUAL FILES you read
+- Explain what the code does and why it exists
 
-Write as encyclopedia articles:
-- Describe WHAT EXISTS and WHY it exists (based on what you READ)
-- Explain how components fit into the larger system
-- Include practical code examples (preferably from tests you read)
-- Help developers understand and use the code
-
-Your documentation should:
-- Be comprehensive but focused
-- Include code examples and interface definitions FROM THE ACTUAL CODE
-- Use EXACT names for classes, functions, files, and variables as they appear in the source
-- Explain architectural decisions and patterns you observed
-- Be useful to a developer trying to understand the codebase
-
-When creating wiki pages:
+Wiki page guidelines:
 - Use lowercase paths with hyphens (e.g., "services/llm-service")
-- Group related content by category
-- Create separate pages for major components (don't cram everything into one)
-- Each page should have a clear focus
-- Only reference file paths that you verified exist via tool calls
+- Each page should be 200-500 words minimum
+- Only reference file paths you verified via tool calls
 
-Your confidence should reflect:
-- 0.9+: Read all key files, comprehensive exploration, well-documented
-- 0.7-0.9: Read most files but some parts unexplored
-- 0.5-0.7: Limited file reads, might need more exploration
+Confidence scoring:
+- 0.9+: Read all key files, comprehensive documentation
+- 0.7-0.9: Read most files but some unexplored
+- 0.5-0.7: Limited file reads, may need more exploration
 - <0.5: Insufficient tool use, documentation may be inaccurate`;
