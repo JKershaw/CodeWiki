@@ -11,23 +11,34 @@ import type { RequestInit as UndiciRequestInit } from 'undici';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-/** Maximum number of retry attempts for transient failures */
-const MAX_RETRIES = 3;
-
-/** Initial backoff delay in milliseconds (doubles each retry) */
-const INITIAL_BACKOFF_MS = 1000;
+/**
+ * Retry configuration for OpenRouter API calls.
+ * Exported for testing.
+ */
+export const RETRY_CONFIG = {
+  /** Maximum number of retry attempts for transient failures */
+  MAX_RETRIES: 6,
+  /** Initial backoff delay in milliseconds (doubles each retry) */
+  INITIAL_BACKOFF_MS: 2000,
+  /** Jitter factor (±20%) to prevent retry storms */
+  JITTER_FACTOR: 0.2,
+  /** Maximum backoff delay in milliseconds (1 minute) */
+  MAX_BACKOFF_MS: 60000,
+} as const;
 
 /**
  * Check if an HTTP status code is retryable.
+ * Exported for testing.
  */
-function isRetryableStatus(status: number): boolean {
+export function isRetryableStatus(status: number): boolean {
   return status === 429 || (status >= 500 && status <= 599);
 }
 
 /**
  * Check if an error is a retryable network error.
+ * Exported for testing.
  */
-function isNetworkError(error: unknown): boolean {
+export function isNetworkError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
   return (
@@ -40,6 +51,61 @@ function isNetworkError(error: unknown): boolean {
     message.includes('tls') ||
     message.includes('ssl')
   );
+}
+
+/**
+ * Calculate backoff delay with jitter to prevent retry storms.
+ * Uses exponential backoff with ±JITTER_FACTOR randomization.
+ * Exported for testing.
+ */
+export function calculateBackoffWithJitter(attempt: number): number {
+  // Base exponential backoff: INITIAL_BACKOFF_MS * 2^(attempt-1)
+  const baseBackoff = RETRY_CONFIG.INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+
+  // Cap at MAX_BACKOFF_MS before applying jitter
+  const cappedBackoff = Math.min(baseBackoff, RETRY_CONFIG.MAX_BACKOFF_MS);
+
+  // Apply jitter: multiply by random factor in range [1-JITTER_FACTOR, 1+JITTER_FACTOR]
+  const jitterMultiplier = 1 + (Math.random() * 2 - 1) * RETRY_CONFIG.JITTER_FACTOR;
+  const backoffWithJitter = cappedBackoff * jitterMultiplier;
+
+  // Ensure we don't exceed MAX_BACKOFF_MS after jitter
+  return Math.min(Math.round(backoffWithJitter), RETRY_CONFIG.MAX_BACKOFF_MS);
+}
+
+/**
+ * Check if an API response is empty (no content and no tool calls).
+ * This can happen during model warmup periods.
+ * Exported for testing.
+ */
+export function isEmptyResponse(response: unknown): boolean {
+  if (response === null || response === undefined) {
+    return true;
+  }
+
+  const resp = response as { choices?: Array<{ message?: { content?: string | null; tool_calls?: unknown[] } }> };
+
+  if (!resp.choices || resp.choices.length === 0) {
+    return true;
+  }
+
+  const message = resp.choices[0]?.message;
+  if (!message) {
+    return true;
+  }
+
+  // If there are tool calls, it's not empty
+  if (message.tool_calls && message.tool_calls.length > 0) {
+    return false;
+  }
+
+  // Check if content is empty or whitespace-only
+  const content = message.content;
+  if (content === null || content === undefined || content.trim() === '') {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -252,8 +318,9 @@ export class OpenRouterLLMService extends BaseLLMService {
   private async callAPI(body: Record<string, unknown>): Promise<ChatResponse> {
     const fetchFn = await this.getFetch();
     let lastError: Error | null = null;
+    const maxRetries = RETRY_CONFIG.MAX_RETRIES;
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const response = await fetchFn(OPENROUTER_API_URL, {
           method: 'POST',
@@ -269,9 +336,9 @@ export class OpenRouterLLMService extends BaseLLMService {
           lastError = new Error(`OpenRouter API error (${response.status}): ${errorText}`);
 
           // Retry on transient HTTP errors
-          if (isRetryableStatus(response.status) && attempt < MAX_RETRIES) {
-            const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
-            console.warn(`[LLM] Retry ${attempt}/${MAX_RETRIES} after ${response.status} error, waiting ${backoffMs}ms`);
+          if (isRetryableStatus(response.status) && attempt < maxRetries) {
+            const backoffMs = calculateBackoffWithJitter(attempt);
+            console.warn(`[LLM] Retry ${attempt}/${maxRetries} after ${response.status} error, waiting ${backoffMs}ms`);
             await sleep(backoffMs);
             continue;
           }
@@ -280,14 +347,24 @@ export class OpenRouterLLMService extends BaseLLMService {
           throw lastError;
         }
 
-        return response.json() as Promise<ChatResponse>;
+        const jsonResponse = await response.json() as ChatResponse;
+
+        // Handle empty responses (can happen during model warmup)
+        if (isEmptyResponse(jsonResponse) && attempt < maxRetries) {
+          const backoffMs = calculateBackoffWithJitter(attempt);
+          console.warn(`[LLM] Retry ${attempt}/${maxRetries} after empty response (model warmup), waiting ${backoffMs}ms`);
+          await sleep(backoffMs);
+          continue;
+        }
+
+        return jsonResponse;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
         // Retry on network errors
-        if (isNetworkError(error) && attempt < MAX_RETRIES) {
-          const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
-          console.warn(`[LLM] Retry ${attempt}/${MAX_RETRIES} after network error, waiting ${backoffMs}ms: ${lastError.message}`);
+        if (isNetworkError(error) && attempt < maxRetries) {
+          const backoffMs = calculateBackoffWithJitter(attempt);
+          console.warn(`[LLM] Retry ${attempt}/${maxRetries} after network error, waiting ${backoffMs}ms: ${lastError.message}`);
           await sleep(backoffMs);
           continue;
         }
