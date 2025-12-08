@@ -193,7 +193,7 @@ export class CategoryAgent implements Agent {
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
       maxTokens: 4000,
-      temperature: 0.2,
+      temperature: 0.4, // Higher temperature to encourage finding mismatches
     });
 
     const categorizations = parseCategorizations(completion.content);
@@ -241,16 +241,14 @@ export class CategoryAgent implements Agent {
     categoryStats: Record<string, number>
   ): string {
     // Limit pages to avoid overly long prompts
-    const limitedPages = pages.slice(0, 20);
+    const limitedPages = pages.slice(0, 15);
 
     const categoryList = Object.entries(categoryStats)
       .sort((a, b) => b[1] - a[1])
       .map(([cat, count]) => `- ${cat}: ${count} pages`)
       .join('\n');
 
-    return `You are analyzing wiki pages to determine if they are in the correct category.
-
-## Existing Categories
+    return `## Existing Categories in This Wiki
 
 ${categoryList}
 
@@ -261,39 +259,54 @@ ${limitedPages.map(p => {
   return `### ${p.path}
 **Title:** ${p.title}
 **Current Category:** ${category}
-**Content Preview:**
-${p.content.slice(0, 500)}
+**Content:**
+${p.content.slice(0, 1000)}
 ---`;
 }).join('\n\n')}
 
-## Your Task
+## Instructions
 
-For each page, determine if it is in the correct category based on its content.
-Consider:
-- Does the content match what you'd expect in that category?
-- Would the page be more discoverable in a different category?
-- Is the current category the best semantic fit?
+Analyze EACH page above using this process:
+
+1. **Identify the primary topic** - What is this page actually about?
+2. **Check for security keywords** - Does it mention: SQL injection, XSS, authentication, authorization, encryption, vulnerabilities, attacks, tokens, passwords?
+3. **Check for API keywords** - Does it mention: endpoints, REST, HTTP methods, request/response, routes?
+4. **Compare topic to category** - Does the primary topic match the current category?
+5. **If mismatch → Report it!**
+
+## Example Output
+
+ANALYSIS:
+Page "guides/xss-prevention": Content discusses XSS attacks, sanitization, CSP headers. PRIMARY TOPIC = Security. Current category = guides. MISMATCH → should be "security".
+Page "api/users": Content documents REST endpoints. PRIMARY TOPIC = API. Current category = api. MATCH.
+
+CATEGORIZATIONS:
+- [guides/xss-prevention] | [guides] | [security] | [confidence:0.9] | [XSS prevention is a security topic, not a general guide]
+- [api/users] | [api] | [api] | [confidence:0.95] | [Correctly categorized as API documentation]
+
+FINDINGS:
+- [category_mismatch] [SEVERITY:high] [guides/xss-prevention] should be in [security] because [XSS is a security vulnerability and this page discusses attack prevention]
+
+CONFIDENCE: 0.85
 
 ## Required Output Format
 
-You MUST use exactly this format:
+You MUST output in this exact format:
+
+ANALYSIS:
+(Brief analysis of each page's primary topic and whether it matches)
 
 CATEGORIZATIONS:
-- [page/path] | [current-category] | [suggested-category] | [confidence:0.85] | [Reason for suggestion]
+- [page/path] | [current-category] | [suggested-category] | [confidence:X.X] | [reason]
+(One line per page)
 
 FINDINGS:
-- [category_mismatch] [SEVERITY:low/medium/high] [page/path] should be in [category] because [detailed reason]
+- [category_mismatch] [SEVERITY:high/medium/low] [page/path] should be in [category] because [reason]
+(Only for pages that ARE miscategorized)
 
-CONFIDENCE: 0.8
+CONFIDENCE: X.X
 
-## Guidelines
-
-- Only report findings for pages that are clearly miscategorized
-- Use high severity only for obvious mismatches
-- If a page fits well in its current category, suggest the same category
-- Consider the existing category structure when making suggestions
-
-Now analyze the pages above:
+Now analyze the pages above. Remember: Your job is to FIND miscategorizations, especially security content in non-security categories!
 `;
   }
 
@@ -326,27 +339,54 @@ Now analyze the pages above:
   }
 }
 
-const SYSTEM_PROMPT = `You are a Category Agent for CodeWiki, a documentation system. Your job is to analyze wiki pages and determine if they are categorized correctly.
+const SYSTEM_PROMPT = `You are a Category Agent for CodeWiki. Your PRIMARY JOB is to FIND MISCATEGORIZED PAGES. You must actively look for pages that are in the wrong category.
 
-A wiki page's category is determined by the first segment of its path. For example:
-- "security/auth" is in the "security" category
-- "guides/getting-started" is in the "guides" category
-- "api/endpoints" is in the "api" category
+## How Categories Work
 
-Good categories are:
-- **architecture**: System design, patterns, architectural decisions
-- **security**: Authentication, authorization, vulnerabilities, security practices
-- **api**: API endpoints, request/response formats, API documentation
-- **guides**: How-to guides, tutorials, getting started docs
-- **decisions**: ADRs, technical decisions, rationale documents
-- **patterns**: Design patterns, coding conventions, best practices
-- **testing**: Test strategies, test utilities, testing guides
-- **commits**: Individual commit documentation (auto-generated)
+A wiki page's category is the first segment of its path:
+- "security/auth" → category is "security"
+- "guides/getting-started" → category is "guides"
+- "api/endpoints" → category is "api"
 
-Your task is to:
-1. Analyze each page's content
-2. Determine if the current category is appropriate
-3. Suggest a better category if the page is miscategorized
-4. Report findings for pages that should be moved
+## Category Definitions (with keywords)
 
-Be conservative - only flag pages as miscategorized when there's a clear mismatch. Minor overlap between categories is acceptable.`;
+- **security**: Authentication, authorization, vulnerabilities, SQL injection, XSS, CSRF, encryption, tokens, passwords, access control, attack prevention, CVE, security audits
+- **architecture**: System design, high-level patterns, service boundaries, data flow, infrastructure decisions
+- **api**: REST endpoints, GraphQL, request/response formats, HTTP methods, API documentation, routes
+- **guides**: Step-by-step tutorials, how-to instructions, getting started, walkthroughs for users
+- **decisions**: ADRs, technical decisions, rationale documents, why we chose X
+- **patterns**: Design patterns, coding conventions, reusable solutions, best practices
+- **testing**: Test strategies, test utilities, testing guides, QA processes
+- **misc/docs/other**: Catch-all categories - pages here often belong elsewhere!
+
+## Your Task
+
+You MUST actively identify pages where the content does NOT match the category. Pay special attention to:
+- Pages in "guides", "misc", "docs" that are actually about security, architecture, or API
+- Security-related content (vulnerabilities, authentication, encryption) that is NOT in "security"
+- API documentation that is NOT in "api"
+
+## Chain of Thought Process
+
+For EACH page:
+1. Read the content carefully
+2. Identify the PRIMARY topic (security? architecture? API? tutorial?)
+3. Compare to the current category
+4. If they don't match → FLAG IT as miscategorized
+
+## Example Analysis
+
+Page: "guides/sql-injection-prevention"
+Content discusses SQL injection attacks, parameterized queries, input validation...
+- Primary topic: SECURITY (SQL injection is a security vulnerability)
+- Current category: "guides"
+- MISMATCH! This should be in "security", not "guides"
+- Output: Flag as category_mismatch with high severity
+
+Page: "security/authentication"
+Content discusses login flows, JWT tokens, session management...
+- Primary topic: SECURITY
+- Current category: "security"
+- MATCH! No action needed
+
+IMPORTANT: If content is about security topics (attacks, vulnerabilities, authentication, encryption), it belongs in "security" even if it reads like a guide.`;
