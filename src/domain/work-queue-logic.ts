@@ -25,7 +25,7 @@ export const ANALYSIS_AGENTS: AgentType[] = [
 
 /**
  * Meta agents that process the wiki.
- * These should only run when no analysis work is pending.
+ * These can run alongside analysis agents, with priority determining order.
  */
 export const META_AGENTS: AgentType[] = [
   'link',
@@ -51,9 +51,12 @@ export interface BatchSelectionResult {
  *
  * This is a pure function that applies the following business rules:
  * 1. Bootstrap must run alone - if bootstrap is pending, only claim that
- * 2. Meta agents can only run when no analysis work is pending
- * 3. Non-code-change analysis agents can only run on commits that code-change has processed
- * 4. Same commit cannot be claimed twice in one batch (prevents race conditions)
+ * 2. Non-code-change analysis agents can only run on commits that code-change has processed
+ * 3. Same commit cannot be claimed twice in one batch (prevents race conditions)
+ *
+ * Note: Meta agents can run alongside analysis agents. Priority-based ordering
+ * ensures higher-priority work gets processed first, but meta agents are not
+ * blocked by pending analysis work.
  *
  * @param pendingItems - Array of pending work items, already sorted by priority
  * @param maxItems - Maximum number of items to claim
@@ -81,11 +84,6 @@ export function selectItemsForBatch(
     };
   }
 
-  // Check if there's any analysis work pending (for meta agent gating)
-  const hasAnalysisPending = pendingItems.some(w =>
-    ANALYSIS_AGENTS.includes(w.agentType as AgentType)
-  );
-
   // Track (commit, agentType) pairs to prevent duplicate work, but allow
   // different agents to process the same commit in parallel
   const claimedCommitAgentPairs = new Set<string>();
@@ -93,17 +91,9 @@ export function selectItemsForBatch(
   for (const item of pendingItems) {
     if (itemsToClaim.length >= maxItems) break;
 
-    // Rule 2: Meta agents can only run when no analysis work is pending
-    if (META_AGENTS.includes(item.agentType as AgentType)) {
-      if (hasAnalysisPending) {
-        skippedReasons.set(item.id, 'meta_agent_blocked_by_analysis');
-        continue;
-      }
-    }
-
     const targetCommitId = getTargetCommitId(item);
 
-    // Rule 3: For commit-targeted non-code-change analysis agents,
+    // Rule 2: For commit-targeted non-code-change analysis agents,
     // verify code-change has already processed this commit
     if (
       targetCommitId &&
@@ -116,7 +106,7 @@ export function selectItemsForBatch(
       }
     }
 
-    // Rule 4: Don't claim the same (commit, agentType) pair twice in one batch
+    // Rule 3: Don't claim the same (commit, agentType) pair twice in one batch
     // This prevents duplicate work while allowing different agents to process
     // the same commit in parallel for increased throughput
     if (targetCommitId) {
