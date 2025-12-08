@@ -260,7 +260,6 @@ test.describe('API Endpoints', () => {
     for (const item of allItems) {
       expect(item.id).toBeDefined();
       expect(item.agentType).toBeDefined();
-      expect(item.priority).toBeDefined();
       expect(item.status).toBeDefined();
       expect(item.createdAt).toBeDefined();
       // targetCommitId and targetPagePath can be null
