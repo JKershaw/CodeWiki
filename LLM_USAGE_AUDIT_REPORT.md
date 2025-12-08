@@ -14,21 +14,75 @@ This audit identifies **8 distinct LLM usage patterns** in CodeWiki, of which **
 
 ### 1.1 Agentic Tool-Calling Patterns (use `completeWithTools`)
 
-| Agent | Tools | Max Rounds | Purpose |
-|-------|-------|------------|---------|
-| SecurityAgent | `read_file`, `search_files`, `list_directory` | 5 | Audit commits for security issues |
-| CodeChangeAgent | `read_file`, `search_files`, `list_directory` | 5 | Analyze code changes in commits |
-| WriterAgent | `read_file`, `search_files`, `list_directory` | 3 | Rewrite wiki pages as articles |
-| ResearchAgent | `search_wiki`, `read_page`, `list_pages`, `get_related_pages` | 5 | Answer questions using wiki |
-| GraderAgent | `read_file`, `list_directory`, `search_files` | 5 | Grade wiki answers vs code |
-| SelfImprovementAgent | 22 analysis tools | 30 | Analyze benchmark trends |
+**Analysis Agents (process commits):**
+| Agent | Tools | Max Rounds | Purpose | Analyzed? |
+|-------|-------|------------|---------|-----------|
+| SecurityAgent | codebase tools | 5 | Security audit | ✅ Yes |
+| CodeChangeAgent | codebase tools | 5 | Code change analysis | ✅ Yes |
+| TechnicalDebtAgent | codebase tools | 5 | Detect tech debt | ❌ Similar to CodeChange |
+| PatternAgent | codebase tools | 5 | Identify patterns | ❌ Similar to CodeChange |
+| NarrativeAgent | codebase tools | 5 | ADRs, planning docs | ❌ Similar to CodeChange |
+| DependencyAgent | codebase tools | 5 | Dependency changes | ❌ Similar to CodeChange |
+| CodebaseExplorerAgent | codebase tools | 5 | Explore directories | ❌ Similar to CodeChange |
+
+**Synthesis Agents (generate wiki content):**
+| Agent | Tools | Max Rounds | Purpose | Analyzed? |
+|-------|-------|------------|---------|-----------|
+| WriterAgent | codebase tools | 3 | Rewrite pages | ✅ Yes |
+| BootstrapAgent | codebase tools | 5 | Initial wiki structure | ❌ One-time use |
+| OverviewAgent | codebase tools | 5 | Create overview (2 calls) | ❌ Similar to Writer |
+| ProjectOverviewAgent | codebase tools | 5 | Project overview | ❌ Similar to Writer |
+| GettingStartedAgent | codebase tools | 5 | Getting started guide | ❌ Similar to Writer |
+| TestingGuideAgent | codebase tools | 5 | Testing documentation | ❌ Similar to Writer |
+| ExtensionGuideAgent | codebase tools | 5 | Extension guides | ❌ Similar to Writer |
+
+**Research/Grading Agents:**
+| Agent | Tools | Max Rounds | Purpose | Analyzed? |
+|-------|-------|------------|---------|-----------|
+| ResearchAgent | wiki tools | 5 | Answer questions | ✅ Yes |
+| GraderAgent | codebase tools | 5 | Grade answers | ✅ Yes |
+| SelfImprovementAgent | 22 analysis tools | 30 | Analyze trends | ✅ Yes |
+| Orchestrator | exploration tools | 3 | Prioritize work | ❌ Optional LLM mode |
 
 ### 1.2 Single-Call Patterns (use `complete`)
 
-| Component | Purpose | Notes |
-|-----------|---------|-------|
-| PageEvaluator | Score wiki pages on 8 quality dimensions | Already optimized |
-| Orchestrator (optional) | Generate prioritized work lists | Falls back to deterministic |
+**Meta Agents (process wiki content):**
+| Component | Purpose | Notes | Analyzed? |
+|-----------|---------|-------|-----------|
+| WikiEditorAgent | Apply edit requests | All context in prompt | ❌ Already single-call |
+| LinkAgent | Manage cross-references | All context in prompt | ❌ Already single-call |
+| StructureAgent | Analyze wiki structure | All context in prompt | ❌ Already single-call |
+| QualityAgent | Review content quality | All context in prompt | ❌ Already single-call |
+| ConsistencyAgent | Check consistency | All context in prompt | ❌ Already single-call |
+| CategoryAgent | Category inference | All context in prompt | ❌ Already single-call |
+| SourceVerificationAgent | Verify wiki vs code | 2 calls: extract + verify | ❌ See note below |
+
+**Consolidation Handlers:**
+| Component | Purpose | Notes | Analyzed? |
+|-----------|---------|-------|-----------|
+| DuplicateHandler | Merge duplicate pages | Single call | ❌ Already optimized |
+| TerminologyHandler | Standardize terms | Single call | ❌ Already optimized |
+| ContradictionHandler | Resolve contradictions | Single call | ❌ Already optimized |
+| InaccuracyHandler | Correct inaccuracies | Single call | ❌ Already optimized |
+
+**Other:**
+| Component | Purpose | Notes | Analyzed? |
+|-----------|---------|-------|-----------|
+| PageEvaluator | Quality scoring | Single call | ✅ Reference pattern |
+| SpecAgent | Generate specs | Single call | ❌ Already optimized |
+
+### 1.3 Summary
+
+| Category | Total | Using Tools | Single Call | Analyzed |
+|----------|-------|-------------|-------------|----------|
+| Analysis Agents | 7 | 7 | 0 | 2 |
+| Synthesis Agents | 7 | 7 | 0 | 1 |
+| Meta Agents | 7 | 0 | 7 | 0 |
+| Consolidation | 4 | 0 | 4 | 0 |
+| Research/Other | 5 | 4 | 1 | 4 |
+| **Total** | **30** | **18** | **12** | **7** |
+
+**Key observation:** All 7 Meta Agents and 4 Consolidation Handlers already use single-call patterns. The optimization opportunity is primarily in the **18 tool-using agents**, of which the 7 Analysis Agents all share the same pattern (commit diff + codebase tools).
 
 ---
 
