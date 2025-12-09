@@ -128,6 +128,12 @@ export class FileWorkQueueRepository implements WorkQueueRepository {
     return itemsToClaim;
   }
 
+  async claimOne(repoId: string, processedCommits: Set<string>): Promise<WorkItem | null> {
+    // Use claimBatch with maxItems=1 - reuses the same business logic
+    const items = await this.claimBatch(repoId, 1, processedCommits);
+    return items.length > 0 ? items[0]! : null;
+  }
+
   async complete(id: string, agentRunId: string): Promise<void> {
     await this.store.update(id, {
       status: 'completed',

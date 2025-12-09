@@ -82,6 +82,17 @@ export interface WorkQueueRepository {
   ): Promise<WorkItem[]>;
 
   /**
+   * Claim a single work item for execution.
+   * Respects ordering constraints (bootstrap isolation, code-change dependency).
+   * Used by the continuous worker pool for one-at-a-time claiming.
+   *
+   * @param repoId - Repository to claim work for
+   * @param processedCommits - Set of commit SHAs already processed by code-change agent
+   * @returns A claimed work item, or null if no eligible work available
+   */
+  claimOne(repoId: string, processedCommits: Set<string>): Promise<WorkItem | null>;
+
+  /**
    * Complete a work item.
    */
   complete(id: string, agentRunId: string): Promise<void>;
