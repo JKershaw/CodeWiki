@@ -132,6 +132,31 @@ CONFIDENCE: 0.85`;
       assert.strictEqual(result.length, 1);
       assert.strictEqual(result[0]!.pagePath, 'auth/login');
     });
+
+    it('deduplicates findings for the same page path', () => {
+      // Sometimes LLMs output duplicate lines - we should deduplicate
+      const response = `- path: misc/jwt-validation | current: misc | suggested: security | reason: JWT is security related
+- path: misc/jwt-validation | current: misc | suggested: security | reason: Security topic
+- path: api/users | current: api | suggested: api | reason: correct`;
+
+      const result = parseCategoryFindings(response);
+
+      // Should only get ONE finding for jwt-validation, not two
+      assert.strictEqual(result.length, 1);
+      assert.strictEqual(result[0]!.pagePath, 'misc/jwt-validation');
+    });
+
+    it('keeps first finding when deduplicating', () => {
+      const response = `- path: guides/auth | current: guides | suggested: security | reason: First reason
+- path: guides/auth | current: guides | suggested: architecture | reason: Second reason`;
+
+      const result = parseCategoryFindings(response);
+
+      // Should keep the first suggestion
+      assert.strictEqual(result.length, 1);
+      assert.strictEqual(result[0]!.suggestedCategory, 'security');
+      assert.strictEqual(result[0]!.reason, 'First reason');
+    });
   });
 
   describe('parseConfidence', () => {

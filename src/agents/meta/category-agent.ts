@@ -70,15 +70,23 @@ export function parseCategorizations(response: string): Categorization[] {
 /**
  * Parse category finding lines from LLM response.
  * Extracts mismatches from the unified categorization format.
+ * Deduplicates findings by page path (keeps first occurrence).
  */
 export function parseCategoryFindings(response: string): CategoryFinding[] {
   const results: CategoryFinding[] = [];
+  const seenPaths = new Set<string>();
 
   // Use the same parsing as categorizations, but filter to mismatches
   const categorizations = parseCategorizations(response);
 
   for (const cat of categorizations) {
     if (cat.currentCategory.toLowerCase() !== cat.suggestedCategory.toLowerCase()) {
+      // Deduplicate by page path - keep first occurrence only
+      if (seenPaths.has(cat.pagePath)) {
+        continue;
+      }
+      seenPaths.add(cat.pagePath);
+
       results.push({
         pagePath: cat.pagePath,
         suggestedCategory: cat.suggestedCategory,
@@ -151,7 +159,7 @@ export class CategoryAgent implements Agent {
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
       maxTokens: 4000,
-      temperature: 0.4, // Higher temperature to encourage finding mismatches
+      temperature: 0.2, // Lower temperature for more consistent, accurate outputs
     });
 
     const categorizations = parseCategorizations(completion.content);
@@ -224,29 +232,39 @@ ${p.content.slice(0, 1000)}
 
 ## Instructions
 
-Analyze EACH page above using this process:
+Analyze EACH page above. For each page:
 
-1. **Identify the primary topic** - What is this page actually about?
-2. **Check for security keywords** - Does it mention: SQL injection, XSS, authentication, authorization, encryption, vulnerabilities, attacks, tokens, passwords?
-3. **Check for API keywords** - Does it mention: endpoints, REST, HTTP methods, request/response, routes?
-4. **Compare topic to category** - Does the primary topic match the current category?
-5. **If mismatch → Report it!**
+1. **What is the PRIMARY PURPOSE?** - Is this page teaching a concept, documenting an API, providing a tutorial, etc.?
+2. **Does the purpose match the category?**
+   - "guides" = tutorials, how-tos, getting started, walkthroughs
+   - "security" = security vulnerabilities, attack prevention, encryption
+   - "architecture" = system design, patterns at system level
+   - "api" = endpoint documentation, REST/GraphQL specs
+
+3. **Only flag CLEAR mismatches** - When uncertain, mark as "correct"
+
+IMPORTANT REMINDERS:
+- Getting started guides belong in "guides" even if they mention auth/security/APIs
+- Installation tutorials belong in "guides"
+- A page that TEACHES ABOUT a security vulnerability belongs in "security"
+- A page that shows HOW TO SET UP something is a "guide"
 
 ## Output Format
 
-For each page, output ONE line in this format:
+Output exactly ONE line per page in this format:
 - path: [path] | current: [category] | suggested: [category] | reason: [reason or "correct"]
 
-CONFIDENCE: [0-1]
+Then add your confidence score.
 
-## Example
+## Example Output
 
-- path: guides/xss-prevention | current: guides | suggested: security | reason: XSS is a security vulnerability
-- path: api/users | current: api | suggested: api | reason: correct
+- path: guides/getting-started | current: guides | suggested: guides | reason: correct
+- path: guides/xss-prevention | current: guides | suggested: security | reason: XSS is a security vulnerability topic
+- path: architecture/event-sourcing | current: architecture | suggested: architecture | reason: correct
 
-CONFIDENCE: 0.85
+CONFIDENCE: 0.9
 
-Now analyze the pages:
+Now analyze each page (one line per page, no duplicates):
 `;
   }
 
@@ -279,7 +297,7 @@ Now analyze the pages:
   }
 }
 
-const SYSTEM_PROMPT = `You are a Category Agent for CodeWiki. Your PRIMARY JOB is to FIND MISCATEGORIZED PAGES. You must actively look for pages that are in the wrong category.
+const SYSTEM_PROMPT = `You are a Category Agent for CodeWiki. Your job is to analyze page categorization with HIGH ACCURACY. Prioritize precision over recall - only flag pages when you are CONFIDENT they are miscategorized.
 
 ## How Categories Work
 
@@ -288,45 +306,41 @@ A wiki page's category is the first segment of its path:
 - "guides/getting-started" → category is "guides"
 - "api/endpoints" → category is "api"
 
-## Category Definitions (with keywords)
+## Category Definitions
 
-- **security**: Authentication, authorization, vulnerabilities, SQL injection, XSS, CSRF, encryption, tokens, passwords, access control, attack prevention, CVE, security audits
-- **architecture**: System design, high-level patterns, service boundaries, data flow, infrastructure decisions
-- **api**: REST endpoints, GraphQL, request/response formats, HTTP methods, API documentation, routes
-- **guides**: Step-by-step tutorials, how-to instructions, getting started, walkthroughs for users
-- **decisions**: ADRs, technical decisions, rationale documents, why we chose X
-- **patterns**: Design patterns, coding conventions, reusable solutions, best practices
-- **testing**: Test strategies, test utilities, testing guides, QA processes
-- **misc/docs/other**: Catch-all categories - pages here often belong elsewhere!
+- **security**: Content PRIMARILY about security concepts - vulnerabilities (SQL injection, XSS, CSRF), attack prevention, encryption algorithms, access control policies, security audits, CVEs
+- **architecture**: System design, high-level patterns, service boundaries, data flow diagrams, infrastructure decisions
+- **api**: REST endpoints, GraphQL schemas, request/response formats, HTTP methods, route definitions
+- **guides**: Step-by-step tutorials, how-to instructions, getting started guides, installation walkthroughs, user onboarding - even if they MENTION other topics
+- **decisions**: ADRs, technical decisions, rationale documents
+- **patterns**: Design patterns, coding conventions, reusable solutions
+- **testing**: Test strategies, test utilities, QA processes
+- **misc/docs/other**: Catch-all categories
 
-## Your Task
+## CRITICAL RULES - Read Carefully
 
-You MUST actively identify pages where the content does NOT match the category. Pay special attention to:
-- Pages in "guides", "misc", "docs" that are actually about security, architecture, or API
-- Security-related content (vulnerabilities, authentication, encryption) that is NOT in "security"
-- API documentation that is NOT in "api"
+1. **When in doubt, mark as "correct"** - Only flag clear mismatches
+2. **Guides stay in guides** - A getting started guide or installation tutorial belongs in "guides" even if it mentions security, API, or architecture concepts
+3. **Look at the PRIMARY purpose** - What is the page TEACHING? A guide that shows how to set up auth is a GUIDE, not security content
+4. **One suggestion per page** - Never output multiple lines for the same page path
+5. **Avoid false positives** - It's better to miss a mismatch than to wrongly flag a correct categorization
 
-## Chain of Thought Process
+## Examples
 
-For EACH page:
-1. Read the content carefully
-2. Identify the PRIMARY topic (security? architecture? API? tutorial?)
-3. Compare to the current category
-4. If they don't match → FLAG IT as miscategorized
-
-## Example Analysis
+Page: "guides/getting-started"
+Content: Installation steps, npm commands, project setup...
+- Primary purpose: USER ONBOARDING (how to set up the project)
+- Current category: "guides"
+- CORRECT! This is a getting started tutorial → belongs in guides
 
 Page: "guides/sql-injection-prevention"
-Content discusses SQL injection attacks, parameterized queries, input validation...
-- Primary topic: SECURITY (SQL injection is a security vulnerability)
+Content: SQL injection attacks, parameterized queries, security best practices...
+- Primary purpose: SECURITY EDUCATION (teaching about a vulnerability)
 - Current category: "guides"
-- MISMATCH! This should be in "security", not "guides"
-- Output: Flag as category_mismatch with high severity
+- MISMATCH → should be in "security"
 
-Page: "security/authentication"
-Content discusses login flows, JWT tokens, session management...
-- Primary topic: SECURITY
-- Current category: "security"
-- MATCH! No action needed
-
-IMPORTANT: If content is about security topics (attacks, vulnerabilities, authentication, encryption), it belongs in "security" even if it reads like a guide.`;
+Page: "architecture/cqrs"
+Content: CQRS pattern, read/write separation, architectural benefits...
+- Primary purpose: ARCHITECTURE DOCUMENTATION
+- Current category: "architecture"
+- CORRECT! Architecture content in architecture category`;

@@ -59,36 +59,43 @@ You have access to tools for exploring:
 
 ## Investigation Approach
 
-**Phase 1 - Wiki Assessment (3-5 rounds)**
-Start with the wiki itself:
-- List all wiki pages to understand structure
-- Sample content across categories to assess quality
-- Compare wiki structure to source code structure
-- Identify obvious coverage gaps
+**Phase 1 - Source & Wiki Structure Comparison (4-6 rounds)**
+CRITICAL: Start by comparing what EXISTS in source code vs what's IN the wiki:
+1. Use list_source_directory on root (src/, lib/, etc.) to see code structure
+2. Use list_wiki_pages to see wiki structure
+3. Map source directories/files to wiki pages - identify GAPS:
+   - Source exists, wiki missing → coverage gap (HIGH priority)
+   - Wiki exists, no matching source → potential orphan
+4. For each major source directory, check if corresponding wiki documentation exists
 
 **Phase 2 - Quality Deep-Dive (3-5 rounds)**
 Use quality benchmark data to validate impressions:
-- Which quality dimensions are weakest?
+- Which quality dimensions are weakest? Which are strongest? (NOTE BOTH!)
 - Which pages drag down scores?
 - What patterns emerge?
 
-**Phase 3 - Process Archaeology (5-8 rounds)**
+**Phase 3 - Benchmark Analysis (3-4 rounds)**
+ALWAYS use benchmark tools to identify stuck questions:
+1. Use get_question_trends to find questions that remain no_answer or inaccurate across runs
+2. Use get_benchmark_summary to understand overall progress
+3. Explicitly identify STUCK questions: questions that show no improvement across multiple runs
+4. Correlate stuck questions with coverage gaps from Phase 1
+
+**Phase 4 - Process Archaeology (4-6 rounds)**
 Understand WHY the wiki is this way:
 - What has the orchestrator been prioritizing? What has it missed?
 - Which agents contributed what? Are some more effective?
 - How have pages evolved? What patterns emerge in edits?
 - Read agent prompts to understand their instructions and limitations
 
-**Phase 4 - Benchmark Correlation (2-3 rounds)**
-Check accuracy benchmarks as validation:
-- Do stuck questions align with gaps you identified?
-- Are there quality issues benchmarks don't capture?
-- What additional blind spots do benchmark failures reveal?
-
 **Phase 5 - Synthesis**
 Write your comprehensive report with prioritized recommendations.
 
-**Use tools proactively.** You have up to 30 tool rounds. Explore the wiki, read source code, trace provenance. Don't just rely on summary data.
+**USE ALL AVAILABLE TOOLS.** You have up to 30 tool rounds. Don't just use list_wiki_pages - also use:
+- list_source_directory and read_source_file for source exploration
+- get_benchmark_summary and get_question_trends for benchmark analysis
+- get_quality_trends for quality progression
+Explore thoroughly. Don't just rely on summary data.
 
 ## Report Structure
 
@@ -115,6 +122,7 @@ Why is the wiki this way? Trace issues to:
 
 ### Benchmark Correlation
 How do accuracy benchmark results align with your findings?
+- **STUCK QUESTIONS**: Explicitly list questions that remain no_answer or inaccurate across ALL runs (by name/ID)
 - Do stuck questions match coverage gaps you identified?
 - What do benchmarks reveal that your assessment missed?
 - Are there quality issues benchmarks don't capture?
@@ -137,14 +145,16 @@ What couldn't you fully assess? What additional information would help?
 
 ## Guidelines
 
-- **Start with the wiki, not the benchmarks** - Let content quality drive investigation
-- **Compare to source** - Coverage gaps are found by comparing wiki to codebase
+- **Start with SOURCE CODE exploration** - Use list_source_directory FIRST to understand what exists
+- **Compare source to wiki explicitly** - For each source directory, check if wiki documentation exists
+- **Note BOTH strengths AND weaknesses** - Don't just identify problems, acknowledge what's working well
+- **Explicitly identify STUCK questions** - Use get_question_trends to find questions that never improve
 - **Trace to root causes** - Don't just identify issues, understand why they exist
 - **Think process, not content** - Recommendations should improve generation, not fix pages
-- **Be specific** - "Add X to agent Y's prompt" not "improve documentation"
+- **Be specific** - "Add X to agent Y prompt" not "improve documentation"
 - **Prioritize leverage** - Which single change would have the biggest impact?
 
-Remember: You're improving a documentation generation SYSTEM. The goal is better wikis for all future repositories.`;
+Remember: You are improving a documentation generation SYSTEM. The goal is better wikis for all future repositories.`;
 
 /**
  * Get the system prompt for self-improvement analysis.
