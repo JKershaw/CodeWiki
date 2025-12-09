@@ -267,6 +267,34 @@ export function calculateConfidence(page: WikiPage, factors: {
 
 ---
 
+## Fixes Applied (2025-12-09)
+
+### P0 Fixes (Critical)
+1. **Issue 1 - FIXED**: Applied `confidenceDelta` during page creation in `update-wiki-page.ts`
+   - Added `page.confidence = Math.min(1, page.confidence + update.confidenceDelta)` for both create and merge operations
+
+2. **Issue 2 - FIXED**: Link agent now re-analyzes pages when new pages exist
+   - Changed filter from `p.links.length === 0` to also include pages updated before the newest page was created
+
+### P1 Fixes (High)
+3. **Issue 3 - FIXED**: Switched to time-based cooldowns (5 min) in `strategies.ts`
+   - All meta agents now check `r.completedAt.getTime() > (now - META_AGENT_COOLDOWN_MS)`
+
+4. **Issue 4 - FIXED**: Added pre-creation similarity check in `update-wiki-page.ts`
+   - Pages with identical titles (case-insensitive) at different paths are now rejected
+
+### P2 Fixes (Medium)
+6. **Issue 6 - FIXED**: Added content validation in `src/utils/content-validation.ts`
+   - Rejects content with template placeholders like `[Descriptive title]`
+   - Enforces minimum content length (100 characters)
+   - `skipValidation` flag available for tests/programmatic use
+
+### Deferred (Lower Priority)
+7. **Issue 7**: Tool result validation in getting-started agent - deferred
+8. **Issue 8**: Use calculateConfidence function - deferred (requires architectural changes)
+
+---
+
 ## Appendix: Files Analyzed
 
 - `src/cli/commands/process.ts` - CLI entry point
