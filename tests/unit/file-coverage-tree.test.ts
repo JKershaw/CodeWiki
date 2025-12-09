@@ -9,97 +9,22 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-
-// Types we expect to implement - importing from future location
-// import { FileNode, DirectoryNode, buildFileTree } from '../../src/agents/orchestrator/file-coverage-tree.js';
-
-/**
- * Temporary type definitions for TDD - these will move to implementation.
- */
-interface FileNode {
-  type: 'file';
-  /** File name (e.g., "orchestrator.ts") */
-  name: string;
-  /** Full path from repo root (e.g., "src/agents/orchestrator/orchestrator.ts") */
-  path: string;
-  /** Lines of code */
-  loc: number;
-  /** Coverage percentage (0-100) based on wiki mentions */
-  coveragePercent: number;
-}
-
-interface DirectoryNode {
-  type: 'directory';
-  /** Directory name (e.g., "orchestrator") */
-  name: string;
-  /** Full path from repo root (e.g., "src/agents/orchestrator") */
-  path: string;
-  /** Direct child files */
-  files: FileNode[];
-  /** Child directories */
-  children: DirectoryNode[];
-  /** Total LOC including all descendants */
-  totalLoc: number;
-  /** Total file count including all descendants */
-  totalFileCount: number;
-  /** Aggregated coverage percentage from all descendant files */
-  coveragePercent: number;
-}
+import {
+  type FileNode,
+  type DirectoryNode,
+  createFileNode as createFileNodeImpl,
+  createDirectoryNode,
+} from '../../src/agents/orchestrator/file-coverage-tree.js';
 
 /**
- * Helper to create a file node for testing.
+ * Helper to create a file node for testing (without score calculation).
  */
 function createFileNode(
   path: string,
   loc: number,
   coveragePercent: number
 ): FileNode {
-  const name = path.split('/').pop() ?? path;
-  return {
-    type: 'file',
-    name,
-    path,
-    loc,
-    coveragePercent,
-  };
-}
-
-/**
- * Helper to create a directory node for testing.
- */
-function createDirectoryNode(
-  path: string,
-  files: FileNode[] = [],
-  children: DirectoryNode[] = []
-): DirectoryNode {
-  const name = path.split('/').pop() ?? path;
-
-  // Calculate totals from files and children
-  const directLoc = files.reduce((sum, f) => sum + f.loc, 0);
-  const childLoc = children.reduce((sum, c) => sum + c.totalLoc, 0);
-  const totalLoc = directLoc + childLoc;
-
-  const directFileCount = files.length;
-  const childFileCount = children.reduce((sum, c) => sum + c.totalFileCount, 0);
-  const totalFileCount = directFileCount + childFileCount;
-
-  // Coverage is weighted average by LOC
-  const directCoverageSum = files.reduce((sum, f) => sum + f.coveragePercent * f.loc, 0);
-  const childCoverageSum = children.reduce((sum, c) => sum + c.coveragePercent * c.totalLoc, 0);
-  const coveragePercent = totalLoc > 0
-    ? (directCoverageSum + childCoverageSum) / totalLoc
-    : 0;
-
-  return {
-    type: 'directory',
-    name,
-    path,
-    files,
-    children,
-    totalLoc,
-    totalFileCount,
-    coveragePercent,
-  };
+  return createFileNodeImpl(path, loc, coveragePercent);
 }
 
 describe('FileNode', () => {

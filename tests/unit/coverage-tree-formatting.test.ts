@@ -9,153 +9,17 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import {
+  formatCoverageTreeWithFiles,
+  createFileNode as createFileNodeImpl,
+  createDirectoryNode,
+  type FileNode,
+  type DirectoryNode,
+} from '../../src/agents/orchestrator/file-coverage-tree.js';
 
-// Future imports:
-// import { formatCoverageTreeWithFiles } from '../../src/agents/orchestrator/file-coverage-tree.js';
-
-/**
- * File node for formatting.
- */
-interface FileNode {
-  type: 'file';
-  name: string;
-  path: string;
-  loc: number;
-  coveragePercent: number;
-}
-
-/**
- * Directory node for formatting.
- */
-interface DirectoryNode {
-  type: 'directory';
-  name: string;
-  path: string;
-  files: FileNode[];
-  children: DirectoryNode[];
-  totalLoc: number;
-  totalFileCount: number;
-  coveragePercent: number;
-}
-
-/**
- * Truncation info for display.
- */
-interface TruncationInfo {
-  hiddenFileCount: number;
-  hiddenDirCount: number;
-  effectiveThreshold: number;
-  wasTruncated: boolean;
-}
-
-/**
- * Low coverage threshold for warning marker.
- */
-const LOW_COVERAGE_THRESHOLD = 40;
-
-/**
- * Format a coverage tree as ASCII text.
- */
-function formatCoverageTreeWithFiles(
-  root: DirectoryNode | null,
-  selectedFiles: FileNode[],
-  selectedDirs: string[],
-  truncationInfo: TruncationInfo
-): string {
-  if (!root) {
-    return '*No source directory found*';
-  }
-
-  const lines: string[] = [];
-  const selectedDirSet = new Set(selectedDirs);
-  const selectedFileSet = new Set(selectedFiles.map(f => f.path));
-
-  // Build a map of files by directory for quick lookup
-  const filesByDir = new Map<string, FileNode[]>();
-  for (const file of selectedFiles) {
-    const dirPath = file.path.split('/').slice(0, -1).join('/');
-    if (!filesByDir.has(dirPath)) {
-      filesByDir.set(dirPath, []);
-    }
-    filesByDir.get(dirPath)!.push(file);
-  }
-
-  function formatNode(
-    node: DirectoryNode,
-    prefix: string,
-    isLast: boolean,
-    isRoot: boolean
-  ): void {
-    const connector = isRoot ? '' : (isLast ? '└── ' : '├── ');
-    const childPrefix = isRoot ? '' : (isLast ? '    ' : '│   ');
-
-    // Format directory line
-    const warning = node.coveragePercent < LOW_COVERAGE_THRESHOLD ? ' ⚠️' : '';
-    const dirLine = `${prefix}${connector}${node.name}/ (${Math.round(node.coveragePercent)}%) - ${node.totalFileCount} files, ${node.totalLoc} loc${warning}`;
-    lines.push(dirLine);
-
-    // Get files for this directory
-    const dirFiles = filesByDir.get(node.path) ?? [];
-    // Sort files by coverage ascending (lowest first)
-    dirFiles.sort((a, b) => a.coveragePercent - b.coveragePercent);
-
-    // Get child directories that are selected
-    const visibleChildren = node.children.filter(c => selectedDirSet.has(c.path));
-    // Sort children by coverage ascending
-    visibleChildren.sort((a, b) => a.coveragePercent - b.coveragePercent);
-
-    const totalItems = dirFiles.length + visibleChildren.length;
-    let itemIndex = 0;
-
-    // Format files first
-    for (const file of dirFiles) {
-      itemIndex++;
-      const isLastItem = itemIndex === totalItems;
-      const fileConnector = isLastItem ? '└── ' : '├── ';
-      const fileWarning = file.coveragePercent < LOW_COVERAGE_THRESHOLD ? ' ⚠️' : '';
-      const fileLine = `${prefix}${childPrefix}${fileConnector}${file.name} (${Math.round(file.coveragePercent)}%) - ${file.loc} loc${fileWarning}`;
-      lines.push(fileLine);
-    }
-
-    // Format child directories
-    for (const child of visibleChildren) {
-      itemIndex++;
-      const isLastItem = itemIndex === totalItems;
-      formatNode(child, prefix + childPrefix, isLastItem, false);
-    }
-  }
-
-  formatNode(root, '', true, true);
-
-  // Add truncation summary if needed
-  if (truncationInfo.wasTruncated) {
-    lines.push('');
-    const parts: string[] = [];
-    if (truncationInfo.hiddenFileCount > 0) {
-      parts.push(`${truncationInfo.hiddenFileCount} files`);
-    }
-    if (truncationInfo.hiddenDirCount > 0) {
-      parts.push(`${truncationInfo.hiddenDirCount} directories`);
-    }
-    if (truncationInfo.effectiveThreshold < 100) {
-      lines.push(`Showing items with coverage ≤ ${truncationInfo.effectiveThreshold}% (${parts.join(', ')} hidden)`);
-    } else {
-      lines.push(`(${parts.join(', ')} hidden)`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
-// Helper to create test nodes
+// Helper to create test nodes (wraps implementation)
 function createFileNode(path: string, loc: number, coveragePercent: number): FileNode {
-  return {
-    type: 'file',
-    name: path.split('/').pop() ?? path,
-    path,
-    loc,
-    coveragePercent,
-  };
+  return createFileNodeImpl(path, loc, coveragePercent);
 }
 
 function createDirNode(
@@ -163,30 +27,7 @@ function createDirNode(
   files: FileNode[] = [],
   children: DirectoryNode[] = []
 ): DirectoryNode {
-  const directLoc = files.reduce((sum, f) => sum + f.loc, 0);
-  const childLoc = children.reduce((sum, c) => sum + c.totalLoc, 0);
-  const totalLoc = directLoc + childLoc;
-
-  const directFileCount = files.length;
-  const childFileCount = children.reduce((sum, c) => sum + c.totalFileCount, 0);
-  const totalFileCount = directFileCount + childFileCount;
-
-  const directCoverageSum = files.reduce((sum, f) => sum + f.coveragePercent * f.loc, 0);
-  const childCoverageSum = children.reduce((sum, c) => sum + c.coveragePercent * c.totalLoc, 0);
-  const coveragePercent = totalLoc > 0
-    ? (directCoverageSum + childCoverageSum) / totalLoc
-    : 0;
-
-  return {
-    type: 'directory',
-    name: path.split('/').pop() ?? path,
-    path,
-    files,
-    children,
-    totalLoc,
-    totalFileCount,
-    coveragePercent,
-  };
+  return createDirectoryNode(path, files, children);
 }
 
 describe('formatCoverageTreeWithFiles', () => {

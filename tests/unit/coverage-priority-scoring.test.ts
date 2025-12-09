@@ -11,26 +11,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-
-// Future import:
-// import { calculatePriorityScore } from '../../src/agents/orchestrator/file-coverage-tree.js';
-
-/**
- * Calculate priority score for a file or directory.
- *
- * Higher scores indicate higher priority for documentation.
- * - Uncovered items score higher than covered ones
- * - Larger items score higher than smaller ones (with log scaling)
- *
- * @param coveragePercent - Coverage percentage (0-100)
- * @param loc - Lines of code
- * @returns Priority score (higher = more important to document)
- */
-function calculatePriorityScore(coveragePercent: number, loc: number): number {
-  const coverageFactor = 1 - coveragePercent / 100;
-  const sizeFactor = Math.log(loc + 1);
-  return coverageFactor * sizeFactor;
-}
+import { calculatePriorityScore } from '../../src/agents/orchestrator/file-coverage-tree.js';
 
 describe('calculatePriorityScore', () => {
   describe('basic scoring', () => {
