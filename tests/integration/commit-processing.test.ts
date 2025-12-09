@@ -62,8 +62,7 @@ export function validateCredentials(user: string, pass: string) {
       });
 
       // Configure mock LLM response
-      ctx.llm.setDefaultResponse(`PAGE_TITLE:
-User Authentication System
+      ctx.llm.setDefaultResponse(`PAGE_TITLE: User Authentication System
 
 SUMMARY:
 The authentication system provides secure user login functionality.
@@ -71,11 +70,13 @@ It validates user credentials against stored values and returns
 authentication status.
 
 FINDINGS:
-- [SECURITY] [IMPORTANCE:high] Basic credential validation implemented [src/auth.ts]
-- [CODE_PATTERN] [IMPORTANCE:medium] Simple validation pattern used [src/auth.ts]
+- type: Security | importance: high | description: Basic credential validation implemented | paths: src/auth.ts
+- type: Code Pattern | importance: medium | description: Simple validation pattern used | paths: src/auth.ts
 
 WIKI_UPDATES:
-- [commits/${commitSha.slice(0, 8)}] [create] Authentication implementation
+=== path: commits/${commitSha.slice(0, 8)} | action: create ===
+Authentication implementation
+=== END ===
 
 CONFIDENCE: 0.8`);
 
@@ -129,17 +130,18 @@ CONFIDENCE: 0.8`);
         createdAt: new Date(),
       });
 
-      ctx.llm.setDefaultResponse(`PAGE_TITLE:
-Authentication Module
+      ctx.llm.setDefaultResponse(`PAGE_TITLE: Authentication Module
 
 SUMMARY:
 A complete authentication module with middleware support.
 
 FINDINGS:
-- [ARCHITECTURE] [IMPORTANCE:medium] Modular auth design [src/auth.ts, src/middleware.ts]
+- type: Architecture | importance: medium | description: Modular auth design | paths: src/auth.ts, src/middleware.ts
 
 WIKI_UPDATES:
-- [commits/${commitSha.slice(0, 8)}] [create] Auth module implementation
+=== path: commits/${commitSha.slice(0, 8)} | action: create ===
+Auth module implementation
+=== END ===
 
 CONFIDENCE: 0.75`);
 

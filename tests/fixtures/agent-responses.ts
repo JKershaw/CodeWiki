@@ -11,27 +11,23 @@
 export const securityAgentResponses = {
   /**
    * Response for a commit with security-relevant auth changes.
+   * Uses simplified pipe-separated format.
    */
   authChangesDetected: (commitSha: string) => `SUMMARY:
 This commit introduces authentication logic including password hashing and session token generation. The implementation uses bcrypt for password hashing which is secure.
 
-SECURITY_RELEVANCE:
-high
+SECURITY_RELEVANCE: high
 
 FINDINGS:
-- [AUTHENTICATION] [SEVERITY:high] New password hashing implementation using bcrypt [src/auth/password.ts]
-- [SESSION_MANAGEMENT] [SEVERITY:medium] Session token generation added [src/auth/session.ts]
+- category: Authentication | severity: high | New password hashing implementation using bcrypt | paths: src/auth/password.ts
+- category: Session Management | severity: medium | Session token generation added | paths: src/auth/session.ts
 
 VULNERABILITIES:
-- No critical vulnerabilities detected
+- No critical vulnerabilities | None detected | N/A
 
 RECOMMENDATIONS:
 - Consider adding rate limiting to authentication endpoints
 - Ensure session tokens have appropriate expiration
-
-WIKI_UPDATES:
-- [security/audit-${commitSha.slice(0, 8)}] [create] Security audit for authentication implementation
-- [security/overview] [update] Update security overview with auth changes
 
 CONFIDENCE: 0.85`,
 
@@ -41,24 +37,19 @@ CONFIDENCE: 0.85`,
   sqlInjectionDetected: (commitSha: string) => `SUMMARY:
 This commit introduces a database query that concatenates user input directly into SQL, creating a potential SQL injection vulnerability.
 
-SECURITY_RELEVANCE:
-critical
+SECURITY_RELEVANCE: critical
 
 FINDINGS:
-- [SQL_INJECTION] [SEVERITY:critical] User input directly concatenated into SQL query [src/db/queries.ts]
-- [INPUT_VALIDATION] [SEVERITY:high] No input sanitization before database operations [src/db/queries.ts]
+- category: SQL Injection | severity: critical | User input directly concatenated into SQL query | paths: src/db/queries.ts
+- category: Input Validation | severity: high | No input sanitization before database operations | paths: src/db/queries.ts
 
 VULNERABILITIES:
-- [SQL Injection] Query uses string concatenation with user input - CWE-89
+- SQL Injection | Query uses string concatenation with user input | CWE-89
 
 RECOMMENDATIONS:
 - Use parameterized queries or prepared statements
 - Add input validation layer before database operations
 - Consider using an ORM that handles escaping automatically
-
-WIKI_UPDATES:
-- [security/audit-${commitSha.slice(0, 8)}] [create] Critical security audit - SQL injection vulnerability
-- [security/overview] [update] Add critical vulnerability notice
 
 CONFIDENCE: 0.95`,
 
@@ -68,16 +59,13 @@ CONFIDENCE: 0.95`,
   noSecurityRelevance: () => `SUMMARY:
 This commit contains documentation updates and code formatting changes with no security implications.
 
-SECURITY_RELEVANCE:
-none
+SECURITY_RELEVANCE: none
 
 FINDINGS:
 
 VULNERABILITIES:
 
 RECOMMENDATIONS:
-
-WIKI_UPDATES:
 
 CONFIDENCE: 0.9`,
 
@@ -87,24 +75,19 @@ CONFIDENCE: 0.9`,
   xssVulnerabilityDetected: (commitSha: string) => `SUMMARY:
 This commit adds user content rendering without proper HTML escaping, creating potential XSS vulnerabilities.
 
-SECURITY_RELEVANCE:
-critical
+SECURITY_RELEVANCE: critical
 
 FINDINGS:
-- [XSS] [SEVERITY:critical] User content rendered with innerHTML without sanitization [src/components/UserContent.tsx]
-- [INPUT_VALIDATION] [SEVERITY:high] No content sanitization before rendering [src/components/UserContent.tsx]
+- category: XSS | severity: critical | User content rendered with innerHTML without sanitization | paths: src/components/UserContent.tsx
+- category: Input Validation | severity: high | No content sanitization before rendering | paths: src/components/UserContent.tsx
 
 VULNERABILITIES:
-- [Cross-Site Scripting] User input rendered without escaping - CWE-79
+- Cross-Site Scripting | User input rendered without escaping | CWE-79
 
 RECOMMENDATIONS:
 - Use textContent instead of innerHTML for user content
 - Implement a sanitization library like DOMPurify
 - Enable Content Security Policy headers
-
-WIKI_UPDATES:
-- [security/audit-${commitSha.slice(0, 8)}] [create] XSS vulnerability audit
-- [security/overview] [update] Document XSS prevention requirements
 
 CONFIDENCE: 0.92`,
 };
@@ -115,42 +98,30 @@ CONFIDENCE: 0.92`,
 export const patternAgentResponses = {
   /**
    * Response for detecting Repository pattern.
+   * Uses simplified pipe-separated format.
    */
   repositoryPatternDetected: (commitSha: string) => `SUMMARY:
 This commit introduces the Repository pattern for data access, providing a clean abstraction layer over the database.
 
-PATTERNS_FOUND:
-- [Repository Pattern] [CATEGORY:design] Clean data access abstraction separating domain from persistence [src/repositories/user-repository.ts]
+PATTERNS:
+- name: Repository Pattern | category: design | description: Clean data access abstraction separating domain from persistence | paths: src/repositories/user-repository.ts
 
 KEY_FILES:
-- [src/repositories/user-repository.ts] [PRIMARY] Main repository implementation
-- [src/repositories/base-repository.ts] [SUPPORTING] Base class with common CRUD operations
-- [src/domain/user.ts] [RELATED] Domain entity that the repository manages
+- path: src/repositories/user-repository.ts | role: primary | description: Main repository implementation
+- path: src/repositories/base-repository.ts | role: supporting | description: Base class with common CRUD operations
+- path: src/domain/user.ts | role: related | description: Domain entity that the repository manages
 
-CODE_SNIPPETS:
-- [Repository Interface] [src/repositories/user-repository.ts:1-10]
-\`\`\`typescript
-export interface UserRepository {
-  findById(id: string): Promise<User | null>;
-  save(user: User): Promise<void>;
-  delete(id: string): Promise<void>;
-}
-\`\`\`
-
-IMPLEMENTATION_EXPLANATION:
+IMPLEMENTATION:
 The Repository pattern encapsulates data access logic behind a clean interface. The UserRepository provides methods for finding, saving, and deleting users without exposing database details to the domain layer.
 
 TRADE_OFFS:
-- [Abstraction vs Performance] This design prioritizes clean separation over raw SQL performance, accepting some overhead for maintainability
+- This design prioritizes clean separation over raw SQL performance, accepting some overhead for maintainability
 
 CONVENTIONS:
 - Repository classes follow the naming pattern {Entity}Repository
 - All async methods return Promises
 
 ANTI_PATTERNS:
-
-WIKI_UPDATES:
-- [patterns/repository-pattern] [update] Document Repository pattern implementation
 
 CONFIDENCE: 0.88`,
 
@@ -160,38 +131,23 @@ CONFIDENCE: 0.88`,
   factoryPatternDetected: (commitSha: string) => `SUMMARY:
 This commit implements a Factory pattern for creating service instances based on configuration.
 
-PATTERNS_FOUND:
-- [Factory Pattern] [CATEGORY:design] Creates service instances without exposing creation logic [src/factories/service-factory.ts]
+PATTERNS:
+- name: Factory Pattern | category: design | description: Creates service instances without exposing creation logic | paths: src/factories/service-factory.ts
 
 KEY_FILES:
-- [src/factories/service-factory.ts] [PRIMARY] Factory implementation
-- [src/services/index.ts] [RELATED] Service exports
+- path: src/factories/service-factory.ts | role: primary | description: Factory implementation
+- path: src/services/index.ts | role: related | description: Service exports
 
-CODE_SNIPPETS:
-- [Factory Method] [src/factories/service-factory.ts:15-25]
-\`\`\`typescript
-export function createService(type: ServiceType): Service {
-  switch (type) {
-    case 'memory': return new MemoryService();
-    case 'database': return new DatabaseService();
-    default: throw new Error('Unknown service type');
-  }
-}
-\`\`\`
-
-IMPLEMENTATION_EXPLANATION:
+IMPLEMENTATION:
 The factory method pattern allows clients to create objects without specifying their concrete classes. This enables switching implementations easily for testing or configuration changes.
 
 TRADE_OFFS:
-- [Flexibility vs Simplicity] Adds indirection but enables easy implementation swapping
+- Adds indirection but enables easy implementation swapping
 
 CONVENTIONS:
 - Factory functions use create{Type} naming pattern
 
 ANTI_PATTERNS:
-
-WIKI_UPDATES:
-- [patterns/factory-pattern] [create] Document Factory pattern usage
 
 CONFIDENCE: 0.82`,
 
@@ -201,15 +157,13 @@ CONFIDENCE: 0.82`,
   antiPatternDetected: (commitSha: string) => `SUMMARY:
 This commit introduces a God class that handles too many responsibilities, violating the Single Responsibility Principle.
 
-PATTERNS_FOUND:
-- [God Class] [CATEGORY:anti-pattern] AppManager handles database, caching, auth, and business logic [src/app-manager.ts]
+PATTERNS:
+- name: God Class | category: anti-pattern | description: AppManager handles database, caching, auth, and business logic | paths: src/app-manager.ts
 
 KEY_FILES:
-- [src/app-manager.ts] [PRIMARY] The problematic God class
+- path: src/app-manager.ts | role: primary | description: The problematic God class
 
-CODE_SNIPPETS:
-
-IMPLEMENTATION_EXPLANATION:
+IMPLEMENTATION:
 The AppManager class has grown to handle database connections, caching, authentication, and business logic all in one place. This makes it difficult to test, maintain, and extend.
 
 TRADE_OFFS:
@@ -219,9 +173,6 @@ CONVENTIONS:
 ANTI_PATTERNS:
 - God Class: AppManager handles 5+ distinct responsibilities that should be separated into dedicated services
 
-WIKI_UPDATES:
-- [patterns/anti-patterns] [update] Document God class anti-pattern found in codebase
-
 CONFIDENCE: 0.9`,
 
   /**
@@ -230,13 +181,11 @@ CONFIDENCE: 0.9`,
   noPatternsFound: () => `SUMMARY:
 This commit contains straightforward utility functions with no notable design patterns.
 
-PATTERNS_FOUND:
+PATTERNS:
 
 KEY_FILES:
 
-CODE_SNIPPETS:
-
-IMPLEMENTATION_EXPLANATION:
+IMPLEMENTATION:
 
 TRADE_OFFS:
 
@@ -244,8 +193,6 @@ CONVENTIONS:
 - Function names use camelCase
 
 ANTI_PATTERNS:
-
-WIKI_UPDATES:
 
 CONFIDENCE: 0.7`,
 };
@@ -261,8 +208,8 @@ export const dependencyAgentResponses = {
 This commit adds two new dependencies: lodash for utility functions and axios for HTTP requests.
 
 CHANGES:
-- [ADDED] lodash [4.17.21] General-purpose utility library
-- [ADDED] axios [1.6.0] Promise-based HTTP client
+- action: ADDED | package: lodash | version: 4.17.21 | reason: General-purpose utility library
+- action: ADDED | package: axios | version: 1.6.0 | reason: Promise-based HTTP client
 
 BREAKING_CHANGES:
 - None
@@ -271,39 +218,13 @@ SECURITY_NOTES:
 - lodash has no known active vulnerabilities
 - axios is widely used and well-maintained
 
-IMPACT:
-moderate
+IMPACT: moderate
 
 DEPENDENCY_DETAILS:
-
-=== [lodash] ===
-PURPOSE:
-Lodash provides utility functions for common programming tasks like array manipulation, object operations, and string handling. It was chosen for its comprehensive feature set and proven reliability.
-
-USAGE:
-Used throughout the codebase for array operations (map, filter, groupBy) and object manipulation (merge, clone, pick). The library is imported selectively to minimize bundle size.
-
-CONSIDERATIONS:
-Consider using lodash-es for better tree-shaking. Bundle size impact is approximately 70KB minified if using full library.
-=== END ===
-
-WIKI_UPDATES:
-=== [dependencies/lodash] [create] ===
-# lodash
-
-## Purpose
-
-Lodash is a modern JavaScript utility library delivering modularity, performance, and extras.
-
-## Usage
-
-\`\`\`typescript
-import { groupBy, sortBy } from 'lodash';
-\`\`\`
-
-## Version
-
-4.17.21
+=== package: lodash ===
+PURPOSE: Lodash provides utility functions for common programming tasks like array manipulation, object operations, and string handling. It was chosen for its comprehensive feature set and proven reliability.
+USAGE: Used throughout the codebase for array operations (map, filter, groupBy) and object manipulation (merge, clone, pick). The library is imported selectively to minimize bundle size.
+CONSIDERATIONS: Consider using lodash-es for better tree-shaking. Bundle size impact is approximately 70KB minified if using full library.
 === END ===
 
 CONFIDENCE: 0.85`,
@@ -315,8 +236,8 @@ CONFIDENCE: 0.85`,
 This commit updates React from version 17 to version 18, introducing breaking changes related to concurrent rendering.
 
 CHANGES:
-- [UPDATED] react [17.0.2 -> 18.2.0] Major version upgrade with concurrent features
-- [UPDATED] react-dom [17.0.2 -> 18.2.0] Updated alongside React
+- action: UPDATED | package: react | version: 17.0.2 -> 18.2.0 | reason: Major version upgrade with concurrent features
+- action: UPDATED | package: react-dom | version: 17.0.2 -> 18.2.0 | reason: Updated alongside React
 
 BREAKING_CHANGES:
 - ReactDOM.render is deprecated, use createRoot instead
@@ -326,11 +247,7 @@ BREAKING_CHANGES:
 SECURITY_NOTES:
 - Fixes CVE-2022-XXXXX related to SSR vulnerability in React 17
 
-IMPACT:
-significant
-
-WIKI_UPDATES:
-- [architecture/dependencies] [update] Note React 18 upgrade and migration requirements
+IMPACT: significant
 
 CONFIDENCE: 0.9`,
 
@@ -346,10 +263,7 @@ BREAKING_CHANGES:
 
 SECURITY_NOTES:
 
-IMPACT:
-minimal
-
-WIKI_UPDATES:
+IMPACT: minimal
 
 CONFIDENCE: 1.0`,
 };
@@ -364,14 +278,12 @@ export const narrativeAgentResponses = {
   adrDetected: (commitSha: string) => `SUMMARY:
 This commit adds an Architecture Decision Record documenting the choice to use CQRS pattern for the application.
 
-NARRATIVE_TYPE:
-adr
+NARRATIVE_TYPE: adr
 
-PAGE_TITLE:
-CQRS Architecture Decision
+PAGE_TITLE: CQRS Architecture Decision
 
 FINDINGS:
-- [ARCHITECTURE_DECISION] [IMPORTANCE:high] Decision to adopt CQRS pattern for command/query separation [docs/adr/001-cqrs.md]
+- type: Architecture Decision | importance: high | description: Decision to adopt CQRS pattern for command/query separation | paths: docs/adr/001-cqrs.md
 
 KEY_DECISIONS:
 - Adopt CQRS pattern to separate read and write operations
@@ -379,7 +291,7 @@ KEY_DECISIONS:
 - Implement eventual consistency for read models
 
 WIKI_UPDATES:
-=== [decisions/cqrs-architecture] [create] ===
+=== path: decisions/cqrs-architecture | action: create ===
 # CQRS Architecture Decision
 
 ## Context
@@ -405,14 +317,12 @@ CONFIDENCE: 0.9`,
   planningDocDetected: (commitSha: string) => `SUMMARY:
 This commit introduces a project planning document outlining the roadmap for v2.0 features.
 
-NARRATIVE_TYPE:
-planning
+NARRATIVE_TYPE: planning
 
-PAGE_TITLE:
-Version 2.0 Roadmap
+PAGE_TITLE: Version 2.0 Roadmap
 
 FINDINGS:
-- [ROADMAP] [IMPORTANCE:high] Q1-Q2 feature planning for version 2.0 [PLAN.md]
+- type: Roadmap | importance: high | description: Q1-Q2 feature planning for version 2.0 | paths: PLAN.md
 
 KEY_DECISIONS:
 - Prioritize API redesign in Q1
@@ -420,7 +330,7 @@ KEY_DECISIONS:
 - Migrate to microservices architecture
 
 WIKI_UPDATES:
-=== [planning/v2-roadmap] [create] ===
+=== path: planning/v2-roadmap | action: create ===
 # Version 2.0 Roadmap
 
 ## Overview
@@ -446,8 +356,7 @@ CONFIDENCE: 0.85`,
   noNarrativeContent: () => `SUMMARY:
 No significant narrative content in this commit.
 
-NARRATIVE_TYPE:
-none
+NARRATIVE_TYPE: none
 
 PAGE_TITLE:
 
@@ -468,9 +377,9 @@ export const structureAgentResponses = {
    * Response with structure improvement suggestions.
    */
   structureImprovementsNeeded: () => `SUGGESTIONS:
-- [PRIORITY:high] | [patterns/repository-pattern, patterns/factory-pattern] | Create a patterns/overview page to help readers navigate pattern documentation
-- [PRIORITY:medium] | [architecture/overview] | Split the 8000-character overview into separate pages for each subsystem
-- [PRIORITY:low] | [guides/getting-started] | Add cross-references to related API documentation
+- priority: high | pages: patterns/repository-pattern, patterns/factory-pattern | Create a patterns/overview page to help readers navigate pattern documentation
+- priority: medium | pages: architecture/overview | Split the 8000-character overview into separate pages for each subsystem
+- priority: low | pages: guides/getting-started | Add cross-references to related API documentation
 
 OVERALL_ASSESSMENT: The wiki has good content but would benefit from better organization. Creating overview pages for major sections and adding cross-references would significantly improve navigation.`,
 
@@ -488,13 +397,14 @@ OVERALL_ASSESSMENT: The wiki is well-organized with appropriate page lengths, ba
 export const consistencyAgentResponses = {
   /**
    * Response with terminology inconsistencies found.
+   * Uses simplified pipe-separated format.
    */
   terminologyInconsistencies: () => `ISSUES:
-- [SEVERITY:medium] | [TYPE:terminology] | [architecture/overview, guides/api] | 'Service' and 'Provider' used interchangeably for the same concept
-- [SEVERITY:low] | [TYPE:style] | [guides/getting-started, guides/deployment] | Inconsistent heading capitalization
+- severity: medium | type: terminology | pages: architecture/overview, guides/api | Service and Provider used interchangeably for the same concept
+- severity: low | type: style | pages: guides/getting-started, guides/deployment | Inconsistent heading capitalization
 
-TERMINOLOGY_MAP:
-- Service = Provider = ServiceProvider: These all refer to the same dependency injection concept
+TERMINOLOGY:
+- preferred: Service | variants: Provider, ServiceProvider
 
 SUGGESTIONS:
 - Standardize on 'Service' terminology throughout the wiki
@@ -506,9 +416,9 @@ CONFIDENCE: 0.8`,
    * Response with contradictions detected.
    */
   contradictionsDetected: () => `ISSUES:
-- [SEVERITY:high] | [TYPE:contradiction] | [architecture/database, guides/deployment] | Database documentation says PostgreSQL is required but deployment guide mentions SQLite as default
+- severity: high | type: contradiction | pages: architecture/database, guides/deployment | Database documentation says PostgreSQL is required but deployment guide mentions SQLite as default
 
-TERMINOLOGY_MAP:
+TERMINOLOGY:
 
 SUGGESTIONS:
 - Clarify which database is the default and which are supported alternatives
@@ -521,7 +431,7 @@ CONFIDENCE: 0.85`,
    */
   consistentWiki: () => `ISSUES:
 
-TERMINOLOGY_MAP:
+TERMINOLOGY:
 
 SUGGESTIONS:
 

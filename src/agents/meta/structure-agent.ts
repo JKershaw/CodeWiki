@@ -260,8 +260,8 @@ Analyze the wiki structure and suggest specific improvements. Consider:
 ## Required Output Format
 
 SUGGESTIONS:
-- [PRIORITY:high/medium/low] | [affected-page-paths] | Specific improvement suggestion
-- [PRIORITY:high/medium/low] | [affected-page-paths] | Specific improvement suggestion
+- priority: high | pages: path1, path2 | Specific improvement suggestion
+- priority: medium | pages: path1 | Specific improvement suggestion
 
 OVERALL_ASSESSMENT: Brief assessment of wiki organization quality
 `;
@@ -270,9 +270,10 @@ OVERALL_ASSESSMENT: Brief assessment of wiki organization quality
   private parseResponse(response: string): StructureSuggestion[] {
     const ctx = createParseContext('structure', response);
 
+    // Pipe-separated format: - priority: X | pages: Y | Suggestion
     const suggestionPatterns: ItemPattern<StructureSuggestion>[] = [
       {
-        pattern: /^-\s*\[PRIORITY:(\w+)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*(.+)$/i,
+        pattern: /^-\s*priority:\s*(\w+)\s*\|\s*pages:\s*([^|]+)\s*\|\s*(.+)$/i,
         mapper: (m) => ({
           priority: m[1]!.toLowerCase() as 'high' | 'medium' | 'low',
           affectedPages: m[2]!.split(',').map(p => p.trim()).filter(Boolean),

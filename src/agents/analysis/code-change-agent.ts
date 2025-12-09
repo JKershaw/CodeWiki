@@ -236,20 +236,16 @@ Write documentation as wiki articles that a developer would find useful. Focus o
 
 Format your response as follows:
 
-PAGE_TITLE:
-[Descriptive title like "Multi-Agent Processing Pipeline" or "CQRS Architecture Implementation" - NOT "Commit abc123"]
+PAGE_TITLE: [Descriptive title like "Multi-Agent Processing Pipeline" - NOT "Commit abc123"]
 
 SUMMARY:
 [2-3 paragraph article written in encyclopedia style. Do NOT start with "This commit..." - write as if explaining the feature/change to someone who doesn't know it came from a commit. Focus on WHAT exists and WHY, not on the commit itself.]
 
 FINDINGS:
-- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths comma-separated]
+- type: Architecture | importance: high | description: [Text] | paths: file1.ts, file2.ts
 
 WIKI_UPDATES:
-For each additional wiki page that should be created or updated, provide FULL article content.
-Write each page as a complete, standalone article (2-4 paragraphs minimum).
-
-=== [PAGE_PATH] [ACTION:create/update/merge] ===
+=== path: category/page-name | action: create ===
 [Write the FULL markdown content for this wiki page here.
 Include:
 - A clear explanation of what this component/concept is
@@ -259,8 +255,6 @@ Include:
 
 Do NOT just write a brief description - write a complete article.]
 === END ===
-
-(Repeat for each page)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -310,20 +304,16 @@ Write documentation as wiki articles that a developer would find useful. Focus o
 
 Format your response as follows:
 
-PAGE_TITLE:
-[Descriptive title like "Multi-Agent Processing Pipeline" or "CQRS Architecture Implementation" - NOT "Commit abc123"]
+PAGE_TITLE: [Descriptive title like "Multi-Agent Processing Pipeline" - NOT "Commit abc123"]
 
 SUMMARY:
 [2-3 paragraph article written in encyclopedia style. Do NOT start with "This commit..." - write as if explaining the feature/change to someone who doesn't know it came from a commit. Focus on WHAT exists and WHY, not on the commit itself.]
 
 FINDINGS:
-- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths comma-separated]
+- type: Architecture | importance: high | description: [Text] | paths: file1.ts, file2.ts
 
 WIKI_UPDATES:
-For each additional wiki page that should be created or updated, provide FULL article content.
-Write each page as a complete, standalone article (2-4 paragraphs minimum).
-
-=== [PAGE_PATH] [ACTION:create/update/merge] ===
+=== path: category/page-name | action: create ===
 [Write the FULL markdown content for this wiki page here.
 Include:
 - A clear explanation of what this component/concept is
@@ -333,8 +323,6 @@ Include:
 
 Do NOT just write a brief description - write a complete article.]
 === END ===
-
-(Repeat for each page)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -349,10 +337,11 @@ CONFIDENCE: [0-1 value]
     // Parse summary
     const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i) ?? '';
 
-    // Define finding patterns
+    // Define finding patterns - pipe-separated format
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        // New format: - type: X | importance: Y | description: Z | paths: A, B
+        pattern: /^-\s*type:\s*([^|]+)\s*\|\s*importance:\s*(\w+)\s*\|\s*description:\s*([^|]+?)(?:\s*\|\s*paths:\s*(.+))?$/i,
         mapper: (m) => ({
           type: m[1]!.trim(),
           importance: m[2]!.toLowerCase() as 'low' | 'medium' | 'high',
@@ -369,12 +358,12 @@ CONFIDENCE: [0-1 value]
       findingPatterns
     );
 
-    // Parse wiki updates using block format
+    // Parse wiki updates using block format: === path: X | action: Y ===
     const wikiUpdates = parseBlocks<ParsedAnalysis['wikiUpdates'][0]>(
       ctx,
       'WIKI_UPDATES',
       /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-      /===\s*\[([^\]]+)\]\s*\[(create|update|merge)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      /===\s*path:\s*([^|=]+)\s*\|\s*action:\s*(create|update|merge)\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
       (m) => {
         const content = m[3]!.trim();
         if (content && content.length > 0) {

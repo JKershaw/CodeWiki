@@ -408,15 +408,12 @@ SUMMARY:
 [2-3 paragraph overview of this code module]
 
 FINDINGS:
-- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
+- type: Architecture | importance: high | description: [Text] | paths: file1.ts, file2.ts
 
 WIKI_PAGES:
----PAGE---
-PATH: [category/page-name]
-TITLE: [Descriptive title]
-CONTENT:
+=== path: category/page-name | title: Descriptive Title ===
 [Markdown content with code examples from the files above]
----END_PAGE---
+=== END ===
 
 CONFIDENCE: [0.8-1.0 since you have full file contents]
 `;
@@ -470,15 +467,12 @@ SUMMARY:
 [2-3 paragraph overview based on the files you read]
 
 FINDINGS:
-- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
+- type: Architecture | importance: high | description: [Text] | paths: file1.ts, file2.ts
 
 WIKI_PAGES:
----PAGE---
-PATH: [category/page-name]
-TITLE: [Descriptive title]
-CONTENT:
+=== path: category/page-name | title: Descriptive Title ===
 [Markdown content with code examples from the files you read]
----END_PAGE---
+=== END ===
 
 CONFIDENCE: [0-1 value based on how many files you read]
 
@@ -492,10 +486,11 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
     // Parse summary
     const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i) ?? '';
 
-    // Parse findings
+    // Parse findings - pipe-separated format
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        // New format: - type: X | importance: Y | description: Z | paths: A, B
+        pattern: /^-\s*type:\s*([^|]+)\s*\|\s*importance:\s*(\w+)\s*\|\s*description:\s*([^|]+?)(?:\s*\|\s*paths:\s*(.+))?$/i,
         mapper: (m) => ({
           type: m[1]!.trim(),
           importance: m[2]!.toLowerCase() as 'low' | 'medium' | 'high',
@@ -512,26 +507,19 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       findingPatterns
     );
 
-    // Parse wiki pages - uses custom ---PAGE--- block format
+    // Parse wiki pages - uses === path: X | title: Y === format
     const wikiPages: ParsedAnalysis['wikiPages'] = [];
     const pagesSection = parseSection(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
     if (pagesSection) {
-      const pageBlocks = pagesSection.split('---PAGE---').filter(b => b.trim());
+      const pageMatches = pagesSection.matchAll(/===\s*path:\s*([^|=]+)\s*(?:\|\s*title:\s*([^=]+))?\s*===\s*([\s\S]*?)===\s*END\s*===/gi);
 
-      for (const block of pageBlocks) {
-        const cleanBlock = block.replace(/---END_PAGE---/g, '').trim();
-        if (!cleanBlock) continue;
+      for (const match of pageMatches) {
+        const path = match[1]!.trim();
+        const title = match[2]?.trim() ?? pathToTitle(path);
+        const content = match[3]!.trim();
 
-        const pathMatch = cleanBlock.match(/PATH:\s*(.+?)(?:\n|$)/i);
-        const titleMatch = cleanBlock.match(/TITLE:\s*(.+?)(?:\n|$)/i);
-        const contentMatch = cleanBlock.match(/CONTENT:\s*([\s\S]*?)$/i);
-
-        if (pathMatch && contentMatch) {
-          wikiPages.push({
-            path: pathMatch[1]!.trim(),
-            title: titleMatch?.[1]?.trim() ?? pathToTitle(pathMatch[1]!.trim()),
-            content: contentMatch[1]!.trim(),
-          });
+        if (path && content) {
+          wikiPages.push({ path, title, content });
         }
       }
     }

@@ -209,56 +209,62 @@ You have access to tools to explore the source code:
 - **list_directory**: Explore project structure
 
 **Use these tools to**:
-- Read the full file (not just the diff) to understand the context around technical debt
+- Read the full file (not just the diff) to understand context
 - Verify if TODO/FIXME comments are still relevant
-- Check if similar patterns exist elsewhere (indicating systemic debt)
-- Understand dependencies and coupling between modules
+- Check if similar patterns exist elsewhere
 
 Analyze for:
 
-1. **Code Smells**: God classes, long methods (>50 lines), feature envy, data clumps
-2. **TODO/FIXME/HACK Comments**: Track with context about what needs to be done
-3. **Complexity Issues**: Deeply nested conditionals, high cyclomatic complexity, complex boolean expressions
-4. **SOLID Violations**:
-   - Single Responsibility: Classes doing too much
-   - Open/Closed: Code that requires modification for extension
-   - Liskov Substitution: Improper inheritance
-   - Interface Segregation: Fat interfaces
-   - Dependency Inversion: Concrete dependencies
-5. **Dead Code**: Unreachable code, unused variables, commented-out code
-6. **Duplication**: Copy-paste code, similar logic patterns
-7. **Naming Issues**: Unclear names, inconsistent conventions, magic numbers/strings
-8. **Error Handling**: Swallowed exceptions, missing error handling, overly broad catches
-9. **Performance Concerns**: N+1 queries, inefficient algorithms, unnecessary allocations
-10. **Testing Gaps**: Missing tests for complex logic, untestable code
+1. **Code Smells**: God classes, long methods (>50 lines), feature envy
+2. **TODO/FIXME/HACK Comments**: Track with context
+3. **Complexity Issues**: Deeply nested conditionals, high cyclomatic complexity
+4. **SOLID Violations**: SRP, OCP, LSP, ISP, DIP
+5. **Dead Code**: Unreachable code, unused variables
+6. **Duplication**: Copy-paste code
+7. **Naming Issues**: Unclear names, magic numbers
+8. **Error Handling**: Missing error handling, overly broad catches
 
 Format your response as:
 
 SUMMARY:
-[Brief assessment of technical debt in this commit - is it adding, reducing, or neutral?]
+[Brief assessment of technical debt - adding, reducing, or neutral]
 
-DEBT_TREND:
-[One of: adding_debt, reducing_debt, neutral, mixed]
+DEBT_TREND: [adding_debt/reducing_debt/neutral/mixed]
 
 FINDINGS:
-- [CATEGORY] [SEVERITY:critical/high/medium/low] [Description] [Affected paths]
+- category: [category] | severity: [critical/high/medium/low] | description: [what's wrong] | paths: [file1.ts]
 
 TODO_ITEMS:
-- [FILE:line] [TODO/FIXME/HACK] [Description of what needs to be done]
+- location: [file:line] | type: [TODO/FIXME/HACK] | description: [what needs doing]
 
 SOLID_VIOLATIONS:
-- [PRINCIPLE] [Description] [Affected paths]
+- principle: [SRP/OCP/LSP/ISP/DIP] | description: [violation] | paths: [files]
 
 REMEDIATION:
-- [Priority:high/medium/low] [Specific actionable recommendation]
+- priority: [high/medium/low] | recommendation: [specific action]
 
 HOTSPOTS:
-- [File path] [Reason it's a hotspot - e.g., "frequently modified, high complexity"]
+- path: [file path] | reason: [why it's a hotspot]
 
-WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+CONFIDENCE: [0-1]
 
-CONFIDENCE: [0-1 value]
+Example:
+
+SUMMARY:
+This commit adds debt via a 150-line method with complex conditionals.
+
+DEBT_TREND: adding_debt
+
+FINDINGS:
+- category: Long Method | severity: high | description: processOrder() is 150 lines | paths: src/orders.ts
+
+TODO_ITEMS:
+- location: src/orders.ts:45 | type: FIXME | description: Race condition
+
+REMEDIATION:
+- priority: high | recommendation: Extract payment logic into PaymentService
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -301,44 +307,50 @@ The full contents of affected files are provided above. Use them to:
 
 Analyze for:
 
-1. **Code Smells**: God classes, long methods (>50 lines), feature envy, data clumps
-2. **TODO/FIXME/HACK Comments**: Track with context about what needs to be done
-3. **Complexity Issues**: Deeply nested conditionals, high cyclomatic complexity
-4. **SOLID Violations**: Single Responsibility, Open/Closed, Liskov, Interface Segregation, Dependency Inversion
-5. **Dead Code**: Unreachable code, unused variables, commented-out code
-6. **Duplication**: Copy-paste code, similar logic patterns
-7. **Naming Issues**: Unclear names, inconsistent conventions, magic numbers/strings
-8. **Error Handling**: Swallowed exceptions, missing error handling
-9. **Performance Concerns**: N+1 queries, inefficient algorithms
-10. **Testing Gaps**: Missing tests for complex logic
+1. **Code Smells**: God classes, long methods (>50 lines), feature envy
+2. **TODO/FIXME/HACK Comments**: Track with context
+3. **Complexity Issues**: Deeply nested conditionals
+4. **SOLID Violations**: SRP, OCP, LSP, ISP, DIP
+5. **Dead Code**: Unreachable code, unused variables
+6. **Duplication**: Copy-paste code
+7. **Naming Issues**: Unclear names, magic numbers
+8. **Error Handling**: Missing error handling
 
 Format your response as:
 
 SUMMARY:
-[Brief assessment of technical debt in this commit - is it adding, reducing, or neutral?]
+[Brief assessment of technical debt - adding, reducing, or neutral]
 
-DEBT_TREND:
-[One of: adding_debt, reducing_debt, neutral, mixed]
+DEBT_TREND: [adding_debt/reducing_debt/neutral/mixed]
 
 FINDINGS:
-- [CATEGORY] [SEVERITY:critical/high/medium/low] [Description] [Affected paths]
+- category: [category] | severity: [critical/high/medium/low] | description: [what's wrong] | paths: [file1.ts]
 
 TODO_ITEMS:
-- [FILE:line] [TODO/FIXME/HACK] [Description of what needs to be done]
+- location: [file:line] | type: [TODO/FIXME/HACK] | description: [what needs doing]
 
 SOLID_VIOLATIONS:
-- [PRINCIPLE] [Description] [Affected paths]
+- principle: [SRP/OCP/LSP/ISP/DIP] | description: [violation] | paths: [files]
 
 REMEDIATION:
-- [Priority:high/medium/low] [Specific actionable recommendation]
+- priority: [high/medium/low] | recommendation: [specific action]
 
 HOTSPOTS:
-- [File path] [Reason it's a hotspot - e.g., "frequently modified, high complexity"]
+- path: [file path] | reason: [why it's a hotspot]
 
-WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+CONFIDENCE: [0-1]
 
-CONFIDENCE: [0-1 value]
+Example:
+
+SUMMARY:
+This commit adds debt via a 150-line method.
+
+DEBT_TREND: adding_debt
+
+FINDINGS:
+- category: Long Method | severity: high | description: processOrder() is 150 lines | paths: src/orders.ts
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -348,7 +360,7 @@ CONFIDENCE: [0-1 value]
     // Parse summary
     const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=DEBT_TREND:|FINDINGS:|$)/i) ?? '';
 
-    // Parse debt trend using parseChoice for underscore/hyphen normalization
+    // Parse debt trend
     const debtTrend = parseChoice(
       ctx,
       'DEBT_TREND',
@@ -357,245 +369,86 @@ CONFIDENCE: [0-1 value]
       { defaultValue: 'neutral' }
     ) ?? 'neutral';
 
-    // Define finding patterns with fallbacks
+    // Simplified format: - category: [cat] | severity: [sev] | description: [desc] | paths: [paths]
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
-      // Format: - [CATEGORY] [SEVERITY:level] Description [paths]
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        pattern: /^-\s*category:\s*([^|]+)\s*\|\s*severity:\s*(\w+)\s*\|\s*description:\s*([^|]+)\s*\|\s*paths:\s*(.+)$/i,
         mapper: (m) => ({
           type: m[1]!.trim(),
           importance: mapSeverity(m[2]!),
           description: m[3]!.trim(),
-          paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+          paths: m[4]!.split(',').map(p => p.trim()).filter(p => p),
         }),
-      },
-      // Format: - [CATEGORY] (severity) Description
-      {
-        pattern: /^-\s*\[([^\]]+)\]\s*\((\w+)\)\s*(.+)$/i,
-        mapper: (m) => ({
-          type: m[1]!.trim(),
-          importance: mapSeverity(m[2]!),
-          description: m[3]!.trim(),
-          paths: [],
-        }),
-      },
-      // Format: - **CATEGORY** (severity): Description
-      {
-        pattern: /^-\s*\*\*([^*]+)\*\*\s*\((\w+)\)[:\s]*(.+)$/i,
-        mapper: (m) => ({
-          type: m[1]!.trim(),
-          importance: mapSeverity(m[2]!),
-          description: m[3]!.trim(),
-          paths: [],
-        }),
-      },
-      // Format: - CATEGORY: Description (severity)
-      {
-        pattern: /^-\s*([^:]+):\s*(.+?)\s*\((\w+)\)\s*$/i,
-        mapper: (m) => ({
-          type: m[1]!.trim(),
-          importance: mapSeverity(m[3]!),
-          description: m[2]!.trim(),
-          paths: [],
-        }),
-      },
-      // Fallback: extract meaningful content
-      {
-        pattern: /^-\s*(.{10,})$/,
-        mapper: (m) => {
-          const content = m[1]!;
-          const severityMatch = content.match(/\b(critical|high|medium|low)\b/i);
-          const categoryMatch = content.match(/\[([^\]]+)\]|\*\*([^*]+)\*\*/);
-          const category = categoryMatch ? (categoryMatch[1] || categoryMatch[2])!.trim() : 'General';
-          const description = content
-            .replace(/\[([^\]]+)\]/g, '')
-            .replace(/\*\*([^*]+)\*\*/g, '')
-            .replace(/\b(critical|high|medium|low)\b/gi, '')
-            .replace(/SEVERITY:/gi, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          if (description.length > 5) {
-            return {
-              type: category,
-              importance: mapSeverity(severityMatch?.[1] ?? 'medium'),
-              description,
-              paths: [],
-            };
-          }
-          return null;
-        },
       },
     ];
 
     const findings = parseListItemsWithFallback(
       ctx,
       'FINDINGS',
-      /FINDINGS:\s*([\s\S]*?)(?=TODO_ITEMS:|SOLID_VIOLATIONS:|REMEDIATION:|HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      /FINDINGS:\s*([\s\S]*?)(?=TODO_ITEMS:|SOLID_VIOLATIONS:|REMEDIATION:|HOTSPOTS:|CONFIDENCE:|$)/i,
       findingPatterns
     );
 
-    // Define TODO item patterns with fallbacks
+    // Simplified format: - location: [file:line] | type: [TODO/FIXME/HACK] | description: [desc]
     const todoPatterns: ItemPattern<ParsedAnalysis['todoItems'][0]>[] = [
-      // Format: - [FILE:line] [TODO/FIXME/HACK] Description
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[(TODO|FIXME|HACK)\]\s*(.+)$/i,
+        pattern: /^-\s*location:\s*([^|]+)\s*\|\s*type:\s*(TODO|FIXME|HACK)\s*\|\s*description:\s*(.+)$/i,
         mapper: (m) => ({
           location: m[1]!.trim(),
           type: m[2]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK',
           description: m[3]!.trim(),
         }),
       },
-      // Format: - **TODO/FIXME/HACK** at location: Description
-      {
-        pattern: /^-\s*\*\*(TODO|FIXME|HACK)\*\*\s*(?:at\s+)?([^:]+):\s*(.+)$/i,
-        mapper: (m) => ({
-          location: m[2]!.trim(),
-          type: m[1]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK',
-          description: m[3]!.trim(),
-        }),
-      },
-      // Format: - TODO/FIXME/HACK: Description (location)
-      {
-        pattern: /^-\s*(TODO|FIXME|HACK)[:\s]+(.+?)\s*\(([^)]+)\)\s*$/i,
-        mapper: (m) => ({
-          location: m[3]!.trim(),
-          type: m[1]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK',
-          description: m[2]!.trim(),
-        }),
-      },
-      // Fallback: just look for TODO/FIXME/HACK anywhere
-      {
-        pattern: /^-\s*.*\b(TODO|FIXME|HACK)\b.*$/i,
-        mapper: (m) => {
-          const todoType = m[1]!.toUpperCase() as 'TODO' | 'FIXME' | 'HACK';
-          const description = m[0]!.replace(/^-\s*/, '').replace(/\b(TODO|FIXME|HACK)\b/i, '').trim();
-          return {
-            location: 'unknown',
-            type: todoType,
-            description: description || `${todoType} item detected`,
-          };
-        },
-      },
     ];
 
     const todoItems = parseListItemsWithFallback(
       ctx,
       'TODO_ITEMS',
-      /TODO_ITEMS:\s*([\s\S]*?)(?=SOLID_VIOLATIONS:|REMEDIATION:|HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      /TODO_ITEMS:\s*([\s\S]*?)(?=SOLID_VIOLATIONS:|REMEDIATION:|HOTSPOTS:|CONFIDENCE:|$)/i,
       todoPatterns
     );
 
-    // Define SOLID violation patterns
+    // Simplified format: - principle: [PRINCIPLE] | description: [desc] | paths: [paths]
     const solidPatterns: ItemPattern<ParsedAnalysis['solidViolations'][0]>[] = [
-      // Format: - [PRINCIPLE] Description [paths]
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        pattern: /^-\s*principle:\s*([^|]+)\s*\|\s*description:\s*([^|]+)\s*\|\s*paths:\s*(.+)$/i,
         mapper: (m) => ({
           principle: m[1]!.trim(),
           description: m[2]!.trim(),
-          paths: m[3]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+          paths: m[3]!.split(',').map(p => p.trim()).filter(p => p),
         }),
-      },
-      // Format: - **Principle**: Description
-      {
-        pattern: /^-\s*\*\*([^*]+)\*\*[:\s]+(.+)$/i,
-        mapper: (m) => ({
-          principle: m[1]!.trim(),
-          description: m[2]!.trim(),
-          paths: [],
-        }),
-      },
-      // Fallback: look for SOLID principle keywords
-      {
-        pattern: /^-\s*(.+)$/,
-        mapper: (m) => {
-          const line = m[1]!;
-          const principleKeywords = ['Single Responsibility', 'Open/Closed', 'Open-Closed', 'Liskov', 'Interface Segregation', 'Dependency Inversion', 'SRP', 'OCP', 'LSP', 'ISP', 'DIP'];
-          for (const keyword of principleKeywords) {
-            if (line.toLowerCase().includes(keyword.toLowerCase())) {
-              return {
-                principle: keyword,
-                description: line.trim(),
-                paths: [],
-              };
-            }
-          }
-          return null;
-        },
       },
     ];
 
     const solidViolations = parseListItemsWithFallback(
       ctx,
       'SOLID_VIOLATIONS',
-      /SOLID_VIOLATIONS:\s*([\s\S]*?)(?=REMEDIATION:|HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      /SOLID_VIOLATIONS:\s*([\s\S]*?)(?=REMEDIATION:|HOTSPOTS:|CONFIDENCE:|$)/i,
       solidPatterns
     );
 
-    // Define remediation patterns
+    // Simplified format: - priority: [level] | recommendation: [action]
     const remediationPatterns: ItemPattern<ParsedAnalysis['remediations'][0]>[] = [
-      // Format: - [Priority:level] Recommendation
       {
-        pattern: /^-\s*\[Priority:(\w+)\]\s*(.+)$/i,
+        pattern: /^-\s*priority:\s*(\w+)\s*\|\s*recommendation:\s*(.+)$/i,
         mapper: (m) => ({
           priority: mapPriority(m[1]!),
           recommendation: m[2]!.trim(),
         }),
-      },
-      // Format: - **Priority**: Recommendation or - (priority) Recommendation
-      {
-        pattern: /^-\s*(?:\*\*(\w+)\*\*|\((\w+)\))[:\s]+(.+)$/i,
-        mapper: (m) => ({
-          priority: mapPriority((m[1] || m[2])!),
-          recommendation: m[3]!.trim(),
-        }),
-      },
-      // Fallback: extract priority from content or default to medium
-      {
-        pattern: /^-\s*(.{10,})$/,
-        mapper: (m) => {
-          const content = m[1]!;
-          const priorityMatch = content.match(/\b(high|medium|low)\b/i);
-          const recommendation = content.replace(/\b(high|medium|low)\b/gi, '').trim();
-          if (recommendation.length > 5) {
-            return {
-              priority: mapPriority(priorityMatch?.[1] ?? 'medium'),
-              recommendation,
-            };
-          }
-          return null;
-        },
       },
     ];
 
     const remediations = parseListItemsWithFallback(
       ctx,
       'REMEDIATION',
-      /REMEDIATION:\s*([\s\S]*?)(?=HOTSPOTS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      /REMEDIATION:\s*([\s\S]*?)(?=HOTSPOTS:|CONFIDENCE:|$)/i,
       remediationPatterns
     );
 
-    // Define hotspot patterns
+    // Simplified format: - path: [file] | reason: [why]
     const hotspotPatterns: ItemPattern<ParsedAnalysis['hotspots'][0]>[] = [
-      // Format: - [path] Reason
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*(.+)$/,
-        mapper: (m) => ({
-          path: m[1]!.trim(),
-          reason: m[2]!.trim(),
-        }),
-      },
-      // Format: - `path`: Reason or - **path**: Reason
-      {
-        pattern: /^-\s*(?:`([^`]+)`|\*\*([^*]+)\*\*)[:\s]+(.+)$/,
-        mapper: (m) => ({
-          path: (m[1] || m[2])!.trim(),
-          reason: m[3]!.trim(),
-        }),
-      },
-      // Format: - path - Reason
-      {
-        pattern: /^-\s*([^\s-]+(?:\.[^\s]+)?)\s*[-–:]\s*(.+)$/,
+        pattern: /^-\s*path:\s*([^|]+)\s*\|\s*reason:\s*(.+)$/i,
         mapper: (m) => ({
           path: m[1]!.trim(),
           reason: m[2]!.trim(),
@@ -606,28 +459,12 @@ CONFIDENCE: [0-1 value]
     const hotspots = parseListItemsWithFallback(
       ctx,
       'HOTSPOTS',
-      /HOTSPOTS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      /HOTSPOTS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
       hotspotPatterns
     );
 
-    // Define wiki update patterns
-    const wikiUpdatePatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
-      {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
-        mapper: (m) => ({
-          path: m[1]!.trim(),
-          action: m[2]!.toLowerCase() as 'create' | 'update',
-          description: m[3]!.trim(),
-        }),
-      },
-    ];
-
-    const wikiUpdates = parseListItemsWithFallback(
-      ctx,
-      'WIKI_UPDATES',
-      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-      wikiUpdatePatterns
-    );
+    // Wiki updates are generated programmatically, not from LLM output
+    const wikiUpdates: ParsedAnalysis['wikiUpdates'] = [];
 
     // Parse confidence
     const confidence = parseConfidence(ctx, { defaultValue: 0.5 });

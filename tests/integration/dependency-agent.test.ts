@@ -270,17 +270,15 @@ export function main() {
 Added numpy for numerical computing.
 
 CHANGES:
-- [ADDED] numpy [1.24.0] Scientific computing library
+- action: ADDED | package: numpy | version: 1.24.0 | reason: Scientific computing library
 
 BREAKING_CHANGES:
+- None
 
 SECURITY_NOTES:
+- None
 
-IMPACT:
-moderate
-
-WIKI_UPDATES:
-- [architecture/dependencies] [update] Add numpy to dependencies
+IMPACT: moderate
 
 CONFIDENCE: 0.85`);
 

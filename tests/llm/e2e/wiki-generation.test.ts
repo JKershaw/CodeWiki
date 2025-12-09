@@ -17,7 +17,7 @@ import { BootstrapAgent } from '../../../src/agents/synthesis/bootstrap-agent.js
 import { ProjectOverviewAgent } from '../../../src/agents/synthesis/project-overview-agent.js';
 import { SecurityAgent } from '../../../src/agents/analysis/security-agent.js';
 import { CodeChangeAgent } from '../../../src/agents/analysis/code-change-agent.js';
-import { createCommitTarget } from '../../../src/domain/work-target.js';
+import { createCommitTarget, createWikiTarget } from '../../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -223,7 +223,7 @@ export class TaskService {
       // Step 1: Bootstrap the wiki
       console.log('Step 1: Running BootstrapAgent...');
       const bootstrapAgent = new BootstrapAgent();
-      const bootstrapResult = await bootstrapAgent.runOnWiki(agentCtx);
+      const bootstrapResult = await bootstrapAgent.run(createWikiTarget(), agentCtx);
 
       assert.ok(bootstrapResult.updates.length > 0, 'Bootstrap should create wiki pages');
 
@@ -234,7 +234,7 @@ export class TaskService {
       // Step 2: Run ProjectOverviewAgent to enrich (if conditions met)
       console.log('Step 2: Running ProjectOverviewAgent...');
       const overviewAgent = new ProjectOverviewAgent();
-      const overviewResult = await overviewAgent.runOnWiki(agentCtx);
+      const overviewResult = await overviewAgent.run(createWikiTarget(), agentCtx);
 
       if (overviewResult.updates.length > 0) {
         await saveWikiPages(agentCtx.wikiId, overviewResult.updates);
@@ -297,7 +297,7 @@ export function subtract(a: number, b: number): number {
       // Bootstrap initial wiki
       console.log('Bootstrapping initial wiki...');
       const bootstrapAgent = new BootstrapAgent();
-      const bootstrapResult = await bootstrapAgent.runOnWiki(agentCtx);
+      const bootstrapResult = await bootstrapAgent.run(createWikiTarget(), agentCtx);
       await saveWikiPages(agentCtx.wikiId, bootstrapResult.updates);
 
       const initialPages = await getWikiPages(agentCtx.wikiId);
@@ -466,7 +466,7 @@ export class NoteRepository {
 
       // 1. Bootstrap
       const bootstrapAgent = new BootstrapAgent();
-      const bootstrapResult = await bootstrapAgent.runOnWiki(agentCtx);
+      const bootstrapResult = await bootstrapAgent.run(createWikiTarget(), agentCtx);
       await saveWikiPages(agentCtx.wikiId, bootstrapResult.updates);
 
       // 2. Security analysis

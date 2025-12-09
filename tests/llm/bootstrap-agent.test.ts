@@ -14,6 +14,7 @@ import assert from 'node:assert';
 import 'dotenv/config';
 
 import { BootstrapAgent } from '../../src/agents/synthesis/bootstrap-agent.js';
+import { createWikiTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -63,7 +64,7 @@ describe('BootstrapAgent with Real LLM', { timeout: 120000 }, () => {
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Verify structure
       assert.ok(result.result, 'result.result should exist');
@@ -137,7 +138,7 @@ MIT License
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should create wiki pages
       assert.ok(result.updates.length > 0, 'Should create wiki updates');
@@ -172,7 +173,7 @@ MIT License
       const agent = new BootstrapAgent();
       const agentCtx = await ctx.agentContext(repoId);
 
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Should still create something useful
       assert.ok(result.updates.length > 0, 'Should create wiki updates even with minimal README');

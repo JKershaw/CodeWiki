@@ -52,10 +52,11 @@ describe('LinkAgent', () => {
 
   /**
    * Mock LLM response that suggests links between pages.
+   * Uses the simplified format: source -> target | strength | description
    */
   function linkSuggestionResponse(suggestions: Array<{ source: string; target: string; strength: string; reason: string }>) {
     const lines = suggestions.map(s =>
-      `- [${s.source}] -> [${s.target}] | [STRENGTH:${s.strength}] | ${s.reason}`
+      `- ${s.source} -> ${s.target} | ${s.strength} | ${s.reason}`
     ).join('\n');
 
     return `LINK_SUGGESTIONS:

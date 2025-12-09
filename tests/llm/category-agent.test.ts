@@ -14,6 +14,7 @@ import { describe, it, before, after } from 'node:test';
 import 'dotenv/config';
 
 import { CategoryAgent } from '../../src/agents/meta/category-agent.js';
+import { createWikiTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -161,7 +162,7 @@ Authorization: Bearer <token>
       ]);
 
       const agent = new CategoryAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify category mismatch detection
       const analysisText = JSON.stringify({
@@ -251,7 +252,7 @@ npm run dev
       ]);
 
       const agent = new CategoryAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify no false positives
       const analysisText = JSON.stringify({
@@ -335,7 +336,7 @@ function validateToken(token: string): boolean {
       ]);
 
       const agent = new CategoryAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify category suggestions
       const analysisText = JSON.stringify({
@@ -385,7 +386,7 @@ function validateToken(token: string): boolean {
       ]);
 
       const agent = new CategoryAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify handling of single-page categories
       const analysisText = JSON.stringify({
@@ -448,7 +449,7 @@ Also an architectural concern for large applications.
       ]);
 
       const agent = new CategoryAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify confidence appropriateness
       const analysisText = JSON.stringify({

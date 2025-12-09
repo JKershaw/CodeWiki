@@ -76,10 +76,10 @@ describe('Wiki Analysis', () => {
         updatedAt: new Date(),
       });
 
-      // Configure mock LLM response
+      // Configure mock LLM response (new simplified format)
       ctx.llm.setDefaultResponse(`LINK_SUGGESTIONS:
-- [commits/abc1234] -> [security/auth-review] | [STRENGTH:strong] | Both discuss JWT authentication
-- [commits/abc1234] -> [architecture/api-design] | [STRENGTH:medium] | Related auth middleware
+- commits/abc1234 -> security/auth-review | strong | Both discuss JWT authentication
+- commits/abc1234 -> architecture/api-design | medium | Related auth middleware
 
 CONFIDENCE: 0.85`);
 

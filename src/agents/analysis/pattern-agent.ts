@@ -7,12 +7,10 @@ import { getCommitDiff, createCodebaseToolExecutor, fetchAffectedFileContents, f
 import {
   createParseContext,
   parseSection,
-  parseSectionItems,
   parseListItemsWithFallback,
   parseStringList,
   parseConfidence,
   getParseStats,
-  type ParseContext,
   type ItemPattern,
 } from '../parsing/index.js';
 
@@ -192,45 +190,57 @@ You have access to tools to explore the codebase:
 
 Look for:
 1. **Design Patterns**: Factory, Singleton, Observer, Strategy, Repository, etc.
-2. **Architectural Patterns**: CQRS, Event Sourcing, Layered, Microservices, etc.
-3. **Coding Conventions**: Naming, file structure, error handling, logging
-4. **Testing Patterns**: Test organization, mocking approaches, test utilities
-5. **Anti-patterns**: God classes, spaghetti code, magic numbers, etc.
-6. **Emerging Patterns**: Recurring structures that could become conventions
+2. **Architectural Patterns**: CQRS, Event Sourcing, Layered, etc.
+3. **Coding Conventions**: Naming, file structure, error handling
+4. **Anti-patterns**: God classes, spaghetti code, magic numbers
 
 Format your response as:
 
 SUMMARY:
 [Brief description of patterns observed]
 
-PATTERNS_FOUND:
-- [PATTERN_NAME] [CATEGORY:design/architecture/convention/testing/anti-pattern] [Description] [Affected paths]
+PATTERNS:
+- name: [pattern name] | category: [design/architecture/convention/testing/anti-pattern] | description: [what it does] | paths: [file1.ts, file2.ts]
 
 KEY_FILES:
-- [FILE_PATH] [ROLE:PRIMARY/SUPPORTING/RELATED/EXAMPLE] [Description of the file's role in implementing the pattern]
+- path: [file path] | role: [primary/supporting/related] | description: [file's role]
 
-CODE_SNIPPETS:
-- [SNIPPET_NAME] [FILE_PATH:LINE_RANGE]
-\`\`\`language
-[Relevant code that exemplifies the pattern implementation]
-\`\`\`
-
-IMPLEMENTATION_EXPLANATION:
-[Explain how the code implements the pattern/concept. Describe the mechanics and how components interact.]
+IMPLEMENTATION:
+[How the pattern works - explain mechanics and component interaction]
 
 TRADE_OFFS:
-- [TRADE_OFF_NAME] [Analysis of implicit design decisions, e.g., "This design prioritizes X over Y because of Z implementation details"]
+- [Trade-off description]
 
 CONVENTIONS:
-- [Convention description with example]
+- [Convention with example]
 
 ANTI_PATTERNS:
-- [Anti-pattern with explanation of why it's problematic]
+- [Anti-pattern with explanation]
 
-WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+CONFIDENCE: [0-1]
 
-CONFIDENCE: [0-1 value]
+Example:
+
+SUMMARY:
+This commit implements the Repository pattern for database access.
+
+PATTERNS:
+- name: Repository Pattern | category: design | description: Abstracts data access behind interfaces | paths: src/repos/user-repo.ts
+
+KEY_FILES:
+- path: src/repos/user-repo.ts | role: primary | description: Main repository implementation
+- path: src/repos/interfaces.ts | role: supporting | description: Repository interfaces
+
+IMPLEMENTATION:
+The repository pattern is implemented using TypeScript interfaces. Each entity has a corresponding repository interface that defines CRUD operations.
+
+TRADE_OFFS:
+- Adds abstraction layer but improves testability
+
+CONVENTIONS:
+- Repositories are named with -repo.ts suffix
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -264,38 +274,30 @@ ${fileContext}
 
 The full contents of affected files are provided above. Use them to:
 - Identify design patterns, architectural patterns, and coding conventions
-- Extract actual code snippets that exemplify patterns
 - Understand how patterns are implemented in the codebase
 
 Look for:
 1. **Design Patterns**: Factory, Singleton, Observer, Strategy, Repository, etc.
 2. **Architectural Patterns**: CQRS, Event Sourcing, Layered, etc.
 3. **Coding Conventions**: Naming, file structure, error handling
-4. **Testing Patterns**: Test organization, mocking approaches
-5. **Anti-patterns**: God classes, magic numbers, etc.
+4. **Anti-patterns**: God classes, magic numbers, etc.
 
 Format your response as:
 
 SUMMARY:
 [Brief description of patterns observed]
 
-PATTERNS_FOUND:
-- [PATTERN_NAME] [CATEGORY:design/architecture/convention/testing/anti-pattern] [Description] [Affected paths]
+PATTERNS:
+- name: [pattern name] | category: [design/architecture/convention/testing/anti-pattern] | description: [what it does] | paths: [file1.ts, file2.ts]
 
 KEY_FILES:
-- [FILE_PATH] [ROLE:PRIMARY/SUPPORTING/RELATED/EXAMPLE] [Description]
+- path: [file path] | role: [primary/supporting/related] | description: [file's role]
 
-CODE_SNIPPETS:
-- [SNIPPET_NAME] [FILE_PATH:LINE_RANGE]
-\`\`\`language
-[Code that exemplifies the pattern]
-\`\`\`
-
-IMPLEMENTATION_EXPLANATION:
-[How the code implements the pattern]
+IMPLEMENTATION:
+[How the pattern works - explain mechanics and component interaction]
 
 TRADE_OFFS:
-- [TRADE_OFF_NAME] [Analysis]
+- [Trade-off description]
 
 CONVENTIONS:
 - [Convention with example]
@@ -303,10 +305,29 @@ CONVENTIONS:
 ANTI_PATTERNS:
 - [Anti-pattern with explanation]
 
-WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+CONFIDENCE: [0-1]
 
-CONFIDENCE: [0-1 value]
+Example:
+
+SUMMARY:
+This commit implements the Repository pattern for database access.
+
+PATTERNS:
+- name: Repository Pattern | category: design | description: Abstracts data access | paths: src/repos/user-repo.ts
+
+KEY_FILES:
+- path: src/repos/user-repo.ts | role: primary | description: Main implementation
+
+IMPLEMENTATION:
+The repository pattern uses TypeScript interfaces. Each entity has a corresponding repository.
+
+TRADE_OFFS:
+- Adds abstraction but improves testability
+
+CONVENTIONS:
+- Repositories use -repo.ts suffix
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -340,31 +361,34 @@ export function parsePatternResponse(response: string): ParsedPatternAnalysis {
 
   const ctx = createParseContext('pattern', response);
 
-  // Parse summary (important but not required - agent can still produce useful output without it)
+  // Parse summary
   const summary = parseSection(
     ctx,
     'SUMMARY',
-    /SUMMARY:\s*([\s\S]*?)(?=PATTERNS_FOUND:|KEY_FILES:|CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+    /SUMMARY:\s*([\s\S]*?)(?=PATTERNS:|KEY_FILES:|IMPLEMENTATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|CONFIDENCE:|$)/i
   );
   if (summary) {
     analysis.summary = summary;
   }
 
-  // Parse patterns using structured item parsing
-  analysis.patterns = parseSectionItems(
+  // Simplified format: - name: [name] | category: [cat] | description: [desc] | paths: [paths]
+  const patternPatterns: ItemPattern<Pattern>[] = [
+    {
+      pattern: /^-\s*name:\s*([^|]+)\s*\|\s*category:\s*([^|]+)\s*\|\s*description:\s*([^|]+)\s*\|\s*paths:\s*(.+)$/i,
+      mapper: (m) => ({
+        name: m[1]!.trim(),
+        category: m[2]!.toLowerCase().trim() as PatternCategory,
+        description: m[3]!.trim(),
+        paths: m[4]!.split(',').map(p => p.trim()).filter(p => p),
+      }),
+    },
+  ];
+
+  analysis.patterns = parseListItemsWithFallback(
     ctx,
-    'PATTERNS_FOUND',
-    /PATTERNS_FOUND:\s*([\s\S]*?)(?=KEY_FILES:|CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
-    /^-\s*\[([^\]]+)\]\s*\[CATEGORY:([^\]]+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
-    (match) => {
-      const pattern: Pattern = {
-        name: match[1]!.trim(),
-        category: match[2]!.toLowerCase().trim() as PatternCategory,
-        description: match[3]!.trim(),
-        paths: match[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
-      };
-      return pattern;
-    }
+    'PATTERNS',
+    /PATTERNS:\s*([\s\S]*?)(?=KEY_FILES:|IMPLEMENTATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|CONFIDENCE:|$)/i,
+    patternPatterns
   );
 
   // Convert patterns to findings
@@ -377,51 +401,61 @@ export function parsePatternResponse(response: string): ParsedPatternAnalysis {
     });
   }
 
-  // Parse key files with custom handling for role variants
-  analysis.keyFiles = parseKeyFiles(ctx, response);
+  // Simplified format: - path: [path] | role: [role] | description: [desc]
+  const keyFilePatterns: ItemPattern<KeyFile>[] = [
+    {
+      pattern: /^-\s*path:\s*([^|]+)\s*\|\s*role:\s*([^|]+)\s*\|\s*description:\s*(.+)$/i,
+      mapper: (m) => ({
+        path: m[1]!.trim(),
+        role: m[2]!.toUpperCase().trim() as KeyFileRole,
+        description: m[3]!.trim(),
+      }),
+    },
+  ];
 
-  // Parse code snippets (complex nested structure)
-  analysis.codeSnippets = parseCodeSnippets(ctx, response);
+  analysis.keyFiles = parseListItemsWithFallback(
+    ctx,
+    'KEY_FILES',
+    /KEY_FILES:\s*([\s\S]*?)(?=IMPLEMENTATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|CONFIDENCE:|$)/i,
+    keyFilePatterns
+  );
+
+  // Code snippets are no longer in the output format (too complex for LLMs)
+  analysis.codeSnippets = [];
 
   // Parse implementation explanation
   const impl = parseSection(
     ctx,
-    'IMPLEMENTATION_EXPLANATION',
-    /IMPLEMENTATION_EXPLANATION:\s*([\s\S]*?)(?=TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+    'IMPLEMENTATION',
+    /IMPLEMENTATION:\s*([\s\S]*?)(?=TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|CONFIDENCE:|$)/i
   );
   if (impl) {
     analysis.implementationExplanation = impl;
   }
 
-  // Parse trade-offs with custom handling
-  analysis.tradeOffs = parseTradeOffs(ctx, response);
+  // Parse trade-offs as simple string list
+  analysis.tradeOffs = parseStringList(
+    ctx,
+    'TRADE_OFFS',
+    /TRADE_OFFS:\s*([\s\S]*?)(?=CONVENTIONS:|ANTI_PATTERNS:|CONFIDENCE:|$)/i
+  ).map(t => ({ name: 'Trade-off', description: t }));
 
   // Parse conventions (simple list extraction)
   analysis.conventions = parseStringList(
     ctx,
     'CONVENTIONS',
-    /CONVENTIONS:\s*([\s\S]*?)(?=ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+    /CONVENTIONS:\s*([\s\S]*?)(?=ANTI_PATTERNS:|CONFIDENCE:|$)/i
   );
 
   // Parse anti-patterns (simple list extraction)
   analysis.antiPatterns = parseStringList(
     ctx,
     'ANTI_PATTERNS',
-    /ANTI_PATTERNS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i
+    /ANTI_PATTERNS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
   );
 
-  // Parse wiki updates
-  analysis.wikiUpdates = parseSectionItems(
-    ctx,
-    'WIKI_UPDATES',
-    /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-    /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
-    (match) => ({
-      path: match[1]!.trim(),
-      action: match[2]!.toLowerCase() as 'create' | 'update',
-      description: match[3]!.trim(),
-    })
-  );
+  // Wiki updates are generated programmatically, not from LLM output
+  analysis.wikiUpdates = [];
 
   // Parse confidence
   analysis.confidence = parseConfidence(ctx, { defaultValue: 0.5 });
@@ -436,102 +470,6 @@ export function parsePatternResponse(response: string): ParsedPatternAnalysis {
 
   return analysis;
 }
-
-/**
- * Parse key files with handling for role variants.
- */
-function parseKeyFiles(ctx: ParseContext, _response: string): KeyFile[] {
-  const keyFilePatterns: ItemPattern<KeyFile>[] = [
-    // Format: - [path] [ROLE] description
-    {
-      pattern: /^-\s*\[([^\]]+)\]\s*\[(PRIMARY|SUPPORTING|RELATED|EXAMPLE)\]\s*(.*)$/i,
-      mapper: (m) => ({
-        path: m[1]!.trim(),
-        role: m[2]!.toUpperCase().trim() as KeyFileRole,
-        description: m[3]!.trim(),
-      }),
-    },
-    // Format without role: - [path] description
-    {
-      pattern: /^-\s*\[([^\]]+)\]\s*(.*)$/i,
-      mapper: (m) => ({
-        path: m[1]!.trim(),
-        role: 'RELATED' as KeyFileRole,
-        description: m[2]!.trim(),
-      }),
-    },
-  ];
-
-  return parseListItemsWithFallback(
-    ctx,
-    'KEY_FILES',
-    /KEY_FILES:\s*([\s\S]*?)(?=CODE_SNIPPETS:|IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
-    keyFilePatterns
-  );
-}
-
-/**
- * Parse code snippets with complex nested structure.
- */
-function parseCodeSnippets(ctx: ParseContext, response: string): CodeSnippet[] {
-  const snippets: CodeSnippet[] = [];
-
-  const sectionMatch = response.match(
-    /CODE_SNIPPETS:\s*([\s\S]*?)(?=IMPLEMENTATION_EXPLANATION:|TRADE_OFFS:|CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
-  );
-
-  if (!sectionMatch) {
-    return snippets;
-  }
-
-  ctx.successfulSections.push('CODE_SNIPPETS');
-  const snippetContent = sectionMatch[1]!.trim();
-
-  // Match snippet blocks: - [Name] [location]\n```lang\ncode\n```
-  const snippetRegex = /^-\s*\[([^\]]+)\](?:\s*\[([^\]]*)\])?\s*\n```(\w*)\n([\s\S]*?)```/gm;
-  let snippetMatch;
-  while ((snippetMatch = snippetRegex.exec(snippetContent)) !== null) {
-    snippets.push({
-      name: snippetMatch[1]!.trim(),
-      location: snippetMatch[2]?.trim() ?? '',
-      code: snippetMatch[4]!.trim(),
-    });
-  }
-
-  return snippets;
-}
-
-/**
- * Parse trade-offs with fallback for entries without names.
- */
-function parseTradeOffs(ctx: ParseContext, _response: string): TradeOff[] {
-  const tradeOffPatterns: ItemPattern<TradeOff>[] = [
-    // Format: - [Name] description
-    {
-      pattern: /^-\s*\[([^\]]+)\]\s*(.+)$/,
-      mapper: (m) => ({
-        name: m[1]!.trim(),
-        description: m[2]!.trim(),
-      }),
-    },
-    // Fallback: - description (no name)
-    {
-      pattern: /^-\s*(.+)$/,
-      mapper: (m) => ({
-        name: 'Trade-off',
-        description: m[1]!.trim(),
-      }),
-    },
-  ];
-
-  return parseListItemsWithFallback(
-    ctx,
-    'TRADE_OFFS',
-    /TRADE_OFFS:\s*([\s\S]*?)(?=CONVENTIONS:|ANTI_PATTERNS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
-    tradeOffPatterns
-  );
-}
-
 
 /**
  * Generate wiki page updates from the parsed analysis.
