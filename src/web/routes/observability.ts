@@ -34,6 +34,50 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
+   * @swagger
+   * /api/repos/{id}/orchestrator-runs:
+   *   get:
+   *     summary: List orchestrator runs
+   *     description: Shows how the system prioritized and scheduled work through orchestrator decisions
+   *     tags: [Observability]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 20
+   *         description: Maximum number of orchestrator runs to return
+   *       - in: query
+   *         name: usedLLM
+   *         schema:
+   *           type: boolean
+   *         description: Filter by whether LLM was used for decision making
+   *     responses:
+   *       200:
+   *         description: List of orchestrator decision runs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 orchestratorRuns:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                 count:
+   *                   type: integer
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * List orchestrator runs (decisions) for a repository.
    * Shows how the system prioritized and scheduled work.
    */
@@ -74,6 +118,66 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/orchestrator-runs/{runId}:
+   *   get:
+   *     summary: Get specific orchestrator run
+   *     description: Includes the complete context snapshot and prompt sent to the LLM
+   *     tags: [Observability]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Orchestrator run ID
+   *     responses:
+   *       200:
+   *         description: Detailed orchestrator run information
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 orchestratorRun:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     repoId:
+   *                       type: string
+   *                     timestamp:
+   *                       type: string
+   *                     usedLLM:
+   *                       type: boolean
+   *                     model:
+   *                       type: string
+   *                     costUsd:
+   *                       type: number
+   *                     durationMs:
+   *                       type: number
+   *                     decision:
+   *                       type: object
+   *                     workItemsCreated:
+   *                       type: integer
+   *                     context:
+   *                       type: object
+   *                     promptSent:
+   *                       type: string
+   *                     rawResponse:
+   *                       type: string
+   *       404:
+   *         description: Repository or orchestrator run not found
+   *       500:
+   *         description: Internal server error
+   */
   /**
    * Get a specific orchestrator run with full details.
    * Includes the complete context snapshot and prompt sent to the LLM.
@@ -120,6 +224,93 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/agent-runs:
+   *   get:
+   *     summary: List agent runs
+   *     description: Shows individual agent executions with their outcomes
+   *     tags: [Observability]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 50
+   *         description: Maximum number of agent runs to return
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *           default: 0
+   *         description: Number of agent runs to skip for pagination
+   *       - in: query
+   *         name: agentType
+   *         schema:
+   *           type: string
+   *         description: Filter by agent type (e.g., 'security', 'quality', 'coverage')
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [pending, running, completed, failed]
+   *         description: Filter by agent run status
+   *     responses:
+   *       200:
+   *         description: List of agent runs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 agentRuns:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       id:
+   *                         type: string
+   *                       agentType:
+   *                         type: string
+   *                       status:
+   *                         type: string
+   *                       targetCommitId:
+   *                         type: string
+   *                       targetPath:
+   *                         type: string
+   *                       startedAt:
+   *                         type: string
+   *                       completedAt:
+   *                         type: string
+   *                       durationMs:
+   *                         type: number
+   *                       costUsd:
+   *                         type: number
+   *                       error:
+   *                         type: string
+   *                       resultSummary:
+   *                         type: string
+   *                       findingsCount:
+   *                         type: integer
+   *                       requestedUpdatesCount:
+   *                         type: integer
+   *                 count:
+   *                   type: integer
+   *                 offset:
+   *                   type: integer
+   *                 limit:
+   *                   type: integer
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
   /**
    * List agent runs for a repository.
    * Shows individual agent executions with their outcomes.
@@ -185,6 +376,41 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/agent-runs/{runId}:
+   *   get:
+   *     summary: Get specific agent run
+   *     description: Includes the complete result, findings, and requested updates
+   *     tags: [Observability]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Agent run ID
+   *     responses:
+   *       200:
+   *         description: Detailed agent run information
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 agentRun:
+   *                   $ref: '#/components/schemas/AgentRun'
+   *       404:
+   *         description: Repository or agent run not found
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Get a specific agent run with full details.
    * Includes the complete result, findings, and requested updates.
    */
@@ -215,6 +441,95 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/observability/summary:
+   *   get:
+   *     summary: Get observability summary
+   *     description: Aggregated stats including costs, success rates, and agent distribution
+   *     tags: [Observability]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     responses:
+   *       200:
+   *         description: Aggregated observability metrics
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 summary:
+   *                   type: object
+   *                   properties:
+   *                     costs:
+   *                       type: object
+   *                       properties:
+   *                         orchestrator:
+   *                           type: number
+   *                           description: Total cost of orchestrator decisions in USD
+   *                         agents:
+   *                           type: number
+   *                           description: Total cost of agent runs in USD
+   *                         total:
+   *                           type: number
+   *                           description: Total combined cost in USD
+   *                     agentRuns:
+   *                       type: object
+   *                       properties:
+   *                         pending:
+   *                           type: integer
+   *                           description: Number of pending agent runs
+   *                         running:
+   *                           type: integer
+   *                           description: Number of currently running agents
+   *                         completed:
+   *                           type: integer
+   *                           description: Number of successfully completed agent runs
+   *                         failed:
+   *                           type: integer
+   *                           description: Number of failed agent runs
+   *                         total:
+   *                           type: integer
+   *                           description: Total number of agent runs
+   *                         successRate:
+   *                           type: number
+   *                           description: Success rate percentage (0-100)
+   *                     orchestratorRuns:
+   *                       type: object
+   *                       properties:
+   *                         total:
+   *                           type: integer
+   *                           description: Total number of orchestrator runs
+   *                         llmDecisions:
+   *                           type: integer
+   *                           description: Number of decisions made using LLM
+   *                         deterministicDecisions:
+   *                           type: integer
+   *                           description: Number of deterministic decisions
+   *                     agentDistribution:
+   *                       type: object
+   *                       additionalProperties:
+   *                         type: object
+   *                         properties:
+   *                           count:
+   *                             type: integer
+   *                             description: Number of runs for this agent type
+   *                           cost:
+   *                             type: number
+   *                             description: Total cost for this agent type in USD
+   *                           avgDuration:
+   *                             type: number
+   *                             description: Average duration in milliseconds
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
   /**
    * Get observability summary for a repository.
    * Aggregated stats including costs, success rates, and agent distribution.

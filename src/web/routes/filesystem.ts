@@ -16,8 +16,63 @@ export function createFilesystemRoutes(_deps: Dependencies): Router {
   const router = Router();
 
   /**
-   * Browse filesystem directories.
-   * Restricted to home directory and subdirectories for security.
+   * @swagger
+   * /filesystem/browse:
+   *   get:
+   *     summary: Browse filesystem directories
+   *     tags: [Filesystem]
+   *     parameters:
+   *       - in: query
+   *         name: path
+   *         schema:
+   *           type: string
+   *         description: Directory path (defaults to home directory)
+   *     responses:
+   *       200:
+   *         description: Directory listing
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 currentPath:
+   *                   type: string
+   *                   description: Absolute path of current directory
+   *                 parent:
+   *                   type: string
+   *                   nullable: true
+   *                   description: Parent directory path (null if at home or root)
+   *                 directories:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/FileSystemEntry'
+   *       400:
+   *         description: Path is not a directory
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       403:
+   *         description: Access denied (outside home directory)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
    */
   router.get('/api/filesystem/browse', async (req: Request, res: Response) => {
     try {

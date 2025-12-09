@@ -28,8 +28,45 @@ export function createWikiContentRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
-   * Get wiki pages for a repository.
-   * Supports optional ?wikiId query param to get pages for a specific wiki.
+   * @swagger
+   * /api/repos/{id}/wiki:
+   *   get:
+   *     summary: Get wiki pages for a repository
+   *     tags: [Wiki Content]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: wikiId
+   *         schema:
+   *           type: string
+   *         description: Optional wiki ID (uses active wiki if not specified)
+   *     responses:
+   *       200:
+   *         description: Wiki pages grouped by category
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 pages:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/WikiPage'
+   *                 grouped:
+   *                   type: object
+   *                   additionalProperties:
+   *                     type: array
+   *                     items:
+   *                       $ref: '#/components/schemas/WikiPage'
+   *       404:
+   *         description: Repository or wiki not found
+   *       500:
+   *         description: Internal server error
    */
   router.get('/api/repos/:id/wiki', async (req: Request, res: Response) => {
     try {
@@ -76,8 +113,36 @@ export function createWikiContentRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Get wiki pages as a hierarchical tree structure.
-   * Supports optional ?wikiId query param to get tree for a specific wiki.
+   * @swagger
+   * /api/repos/{id}/wiki-tree:
+   *   get:
+   *     summary: Get wiki pages as a hierarchical tree structure
+   *     tags: [Wiki Content]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: wikiId
+   *         schema:
+   *           type: string
+   *         description: Optional wiki ID (uses active wiki if not specified)
+   *     responses:
+   *       200:
+   *         description: Wiki pages as tree structure
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/WikiTreeNode'
+   *       404:
+   *         description: Repository or wiki not found
+   *       500:
+   *         description: Internal server error
    */
   router.get('/api/repos/:id/wiki-tree', async (req: Request, res: Response) => {
     try {
@@ -115,8 +180,40 @@ export function createWikiContentRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Get a specific wiki page.
-   * Supports optional ?wikiId query param to get page from a specific wiki.
+   * @swagger
+   * /api/repos/{id}/wiki/{path}:
+   *   get:
+   *     summary: Get a specific wiki page by path
+   *     tags: [Wiki Content]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: path
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Wiki page path (can contain slashes for nested pages)
+   *       - in: query
+   *         name: wikiId
+   *         schema:
+   *           type: string
+   *         description: Optional wiki ID (uses active wiki if not specified)
+   *     responses:
+   *       200:
+   *         description: Wiki page content
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/WikiPage'
+   *       404:
+   *         description: Repository, wiki, or page not found
+   *       500:
+   *         description: Internal server error
    */
   router.get('/api/repos/:id/wiki/:path(*)', async (req: Request, res: Response) => {
     try {

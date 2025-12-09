@@ -187,6 +187,55 @@ export function createReposRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
+   * @swagger
+   * /api/repos:
+   *   get:
+   *     summary: List all repositories
+   *     description: Retrieves a list of all registered repositories with their status, active wiki information, and work summary
+   *     tags: [Repositories]
+   *     responses:
+   *       200:
+   *         description: Array of repositories
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *                 properties:
+   *                   id:
+   *                     type: string
+   *                     description: Repository unique identifier
+   *                   fullName:
+   *                     type: string
+   *                     description: Repository full name (e.g., owner/repo or local path)
+   *                   status:
+   *                     type: string
+   *                     enum: [pending, processing, ready, error]
+   *                     description: Current processing status
+   *                   activeWiki:
+   *                     type: object
+   *                     properties:
+   *                       id:
+   *                         type: string
+   *                       name:
+   *                         type: string
+   *                       slug:
+   *                         type: string
+   *                   wikiCount:
+   *                     type: number
+   *                     description: Number of wikis for this repository
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   */
+  /**
    * List all repositories.
    */
   router.get('/api/repos', async (_req: Request, res: Response) => {
@@ -226,6 +275,69 @@ export function createReposRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}:
+   *   get:
+   *     summary: Get repository details
+   *     description: Retrieves detailed information about a specific repository including status, active wiki, and work summary
+   *     tags: [Repositories]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository unique identifier
+   *     responses:
+   *       200:
+   *         description: Repository details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 id:
+   *                   type: string
+   *                   description: Repository unique identifier
+   *                 fullName:
+   *                   type: string
+   *                   description: Repository full name (e.g., owner/repo or local path)
+   *                 status:
+   *                   type: string
+   *                   enum: [pending, processing, ready, error]
+   *                   description: Current processing status
+   *                 activeWiki:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     name:
+   *                       type: string
+   *                     slug:
+   *                       type: string
+   *                 wikiCount:
+   *                   type: number
+   *                   description: Number of wikis for this repository
+   *       404:
+   *         description: Repository not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   */
+  /**
    * Get repository details.
    */
   router.get('/api/repos/:id', async (req: Request, res: Response) => {
@@ -264,6 +376,88 @@ export function createReposRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos:
+   *   post:
+   *     summary: Add a new repository
+   *     description: Registers a new repository for processing. Accepts either a local filesystem path or a GitHub URL. For GitHub repositories, the API will verify access and load commits.
+   *     tags: [Repositories]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             oneOf:
+   *               - type: object
+   *                 properties:
+   *                   path:
+   *                     type: string
+   *                     description: Absolute path to a local Git repository
+   *                 required:
+   *                   - path
+   *               - type: object
+   *                 properties:
+   *                   url:
+   *                     type: string
+   *                     description: GitHub repository URL (e.g., https://github.com/owner/repo)
+   *                 required:
+   *                   - url
+   *     responses:
+   *       200:
+   *         description: Repository added successfully (or already exists)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 id:
+   *                   type: string
+   *                   description: Repository unique identifier
+   *                 fullName:
+   *                   type: string
+   *                   description: Repository full name (e.g., owner/repo or local path)
+   *                 status:
+   *                   type: string
+   *                   enum: [pending, processing, ready, error]
+   *                   description: Current processing status
+   *       400:
+   *         description: Bad request (missing path/url, invalid GitHub URL, or registration error)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       403:
+   *         description: Repository is private or requires authentication
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       404:
+   *         description: GitHub repository not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   */
   /**
    * Add a new repository for processing.
    * Accepts either:
@@ -425,6 +619,64 @@ export function createReposRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/process:
+   *   post:
+   *     summary: Start processing a repository
+   *     description: Initiates background processing of a repository to generate wiki content. The orchestrator will analyze the codebase and create documentation pages. Processing runs asynchronously.
+   *     tags: [Repositories]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository unique identifier
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               iterations:
+   *                 type: number
+   *                 default: 5
+   *                 description: Number of processing iterations to run
+   *     responses:
+   *       200:
+   *         description: Processing started successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                   example: Processing started
+   *                 iterations:
+   *                   type: number
+   *                   description: Number of iterations that will be executed
+   *       404:
+   *         description: Repository not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   */
+  /**
    * Start processing a repository.
    */
   router.post('/api/repos/:id/process', async (req: Request, res: Response) => {
@@ -485,6 +737,65 @@ export function createReposRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/commits:
+   *   get:
+   *     summary: Get commits for a repository
+   *     description: Retrieves the list of commits for the specified repository
+   *     tags: [Repositories]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository unique identifier
+   *     responses:
+   *       200:
+   *         description: Array of commits
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *                 properties:
+   *                   sha:
+   *                     type: string
+   *                     description: Commit SHA hash
+   *                   message:
+   *                     type: string
+   *                     description: Commit message
+   *                   author:
+   *                     type: string
+   *                     description: Commit author
+   *                   date:
+   *                     type: string
+   *                     format: date-time
+   *                     description: Commit date
+   *                   repositoryId:
+   *                     type: string
+   *                     description: Repository ID this commit belongs to
+   *       404:
+   *         description: Repository not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   */
+  /**
    * Get commits for a repository.
    */
   router.get('/api/repos/:id/commits', async (req: Request, res: Response) => {
@@ -507,6 +818,51 @@ export function createReposRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}:
+   *   delete:
+   *     summary: Delete a repository
+   *     description: Deletes a repository and all associated data including wikis, pages, commits, and work items. This operation cannot be undone.
+   *     tags: [Repositories]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository unique identifier
+   *     responses:
+   *       204:
+   *         description: Repository deleted successfully (no content)
+   *       400:
+   *         description: Bad request (deletion error)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       404:
+   *         description: Repository not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   */
   /**
    * Delete a repository and all associated data.
    */

@@ -38,7 +38,22 @@ export function createConfigRoutes(): Router {
   const router = Router();
 
   /**
-   * Get server configuration.
+   * @swagger
+   * /config:
+   *   get:
+   *     summary: Get server configuration
+   *     tags: [Config]
+   *     responses:
+   *       200:
+   *         description: Server configuration
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 model:
+   *                   type: string
+   *                   description: Current model ID
    */
   router.get('/api/config', (_req: Request, res: Response) => {
     res.json({
@@ -47,7 +62,26 @@ export function createConfigRoutes(): Router {
   });
 
   /**
-   * Get available models and current selection.
+   * @swagger
+   * /config/models:
+   *   get:
+   *     summary: Get available models and current selection
+   *     tags: [Config]
+   *     responses:
+   *       200:
+   *         description: Available models and current selection
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 models:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/Model'
+   *                 current:
+   *                   type: string
+   *                   description: Current model ID
    */
   router.get('/api/config/models', (_req: Request, res: Response) => {
     res.json({
@@ -57,7 +91,45 @@ export function createConfigRoutes(): Router {
   });
 
   /**
-   * Set the current model.
+   * @swagger
+   * /config/model:
+   *   post:
+   *     summary: Set the current model
+   *     tags: [Config]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - model
+   *             properties:
+   *               model:
+   *                 type: string
+   *                 description: Model ID to set as current
+   *     responses:
+   *       200:
+   *         description: Model successfully updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 model:
+   *                   type: string
+   *                   description: Current model ID
+   *       400:
+   *         description: Invalid or missing model ID
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
    */
   router.post('/api/config/model', (req: Request, res: Response) => {
     const { model } = req.body as { model?: string };
@@ -79,8 +151,34 @@ export function createConfigRoutes(): Router {
   });
 
   /**
-   * Get version and build info.
-   * Uses Heroku dyno metadata when available, with fallbacks for local dev.
+   * @swagger
+   * /config/version:
+   *   get:
+   *     summary: Get version and build info
+   *     tags: [Config]
+   *     responses:
+   *       200:
+   *         description: Version and build information
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 version:
+   *                   type: string
+   *                   description: Package version
+   *                 commit:
+   *                   type: string
+   *                   nullable: true
+   *                   description: Git commit hash (short)
+   *                 releasedAt:
+   *                   type: string
+   *                   nullable: true
+   *                   description: Release timestamp (Heroku)
+   *                 releaseVersion:
+   *                   type: string
+   *                   nullable: true
+   *                   description: Release version (Heroku)
    */
   router.get('/api/config/version', (_req: Request, res: Response) => {
     // Heroku dyno metadata (requires: heroku labs:enable runtime-dyno-metadata)

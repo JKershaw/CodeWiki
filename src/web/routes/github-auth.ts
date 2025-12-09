@@ -14,6 +14,214 @@ import { createUser, updateUserTokens, isTokenExpired } from '../../domain/user.
 import { GITHUB_SESSION_COOKIE } from '../middleware/github-auth.js';
 import { ensureValidToken, TokenRefreshError } from '../../services/github/token-refresh.js';
 
+/**
+ * @swagger
+ * /auth/github:
+ *   get:
+ *     summary: Initiate GitHub OAuth flow
+ *     description: Redirects to GitHub to start the OAuth authentication process. Sets a state cookie for CSRF protection.
+ *     tags: [Authentication]
+ *     responses:
+ *       302:
+ *         description: Redirects to GitHub OAuth authorization page
+ */
+
+/**
+ * @swagger
+ * /auth/github/callback:
+ *   get:
+ *     summary: Handle GitHub OAuth callback
+ *     description: |
+ *       Handles two different flows:
+ *       1. OAuth login flow: Exchanges code for tokens and creates user session
+ *       2. GitHub App installation flow: Detects app installation and redirects to OAuth
+ *     tags: [Authentication]
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         schema:
+ *           type: string
+ *         description: Authorization code from GitHub
+ *       - in: query
+ *         name: state
+ *         schema:
+ *           type: string
+ *         description: State parameter for CSRF protection (OAuth flow)
+ *       - in: query
+ *         name: installation_id
+ *         schema:
+ *           type: string
+ *         description: GitHub App installation ID (installation flow)
+ *       - in: query
+ *         name: setup_action
+ *         schema:
+ *           type: string
+ *         description: Setup action type (installation flow)
+ *     responses:
+ *       302:
+ *         description: Redirects to home page on successful authentication or to /auth/github for installation flow
+ *       400:
+ *         description: Invalid state or missing authorization code
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Invalid or missing state parameter
+ *       500:
+ *         description: Authentication failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Authentication failed
+ */
+
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     summary: Get current user information
+ *     description: Returns the currently authenticated user's profile and token status
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: Current user information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       description: User's internal UUID
+ *                     githubId:
+ *                       type: integer
+ *                       description: GitHub user ID
+ *                     login:
+ *                       type: string
+ *                       description: GitHub username
+ *                     avatarUrl:
+ *                       type: string
+ *                       description: GitHub avatar URL
+ *                     name:
+ *                       type: string
+ *                       nullable: true
+ *                       description: User's display name
+ *                     email:
+ *                       type: string
+ *                       nullable: true
+ *                       description: User's email address
+ *                 tokenExpired:
+ *                   type: boolean
+ *                   description: Whether the user's GitHub access token is expired or about to expire
+ *       401:
+ *         description: Not authenticated or user not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Not authenticated
+ */
+
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Log out current user (POST)
+ *     description: Clears the session cookie and redirects to home page
+ *     tags: [Authentication]
+ *     responses:
+ *       302:
+ *         description: Redirects to home page after clearing session
+ *   get:
+ *     summary: Log out current user (GET)
+ *     description: Clears the session cookie and redirects to home page
+ *     tags: [Authentication]
+ *     responses:
+ *       302:
+ *         description: Redirects to home page after clearing session
+ */
+
+/**
+ * @swagger
+ * /auth/github/installation:
+ *   get:
+ *     summary: Get GitHub App installation URL
+ *     description: Returns the URL to install the CodeWiki GitHub App
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: GitHub App installation URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 url:
+ *                   type: string
+ *                   description: URL to install the GitHub App
+ */
+
+/**
+ * @swagger
+ * /auth/github/repos:
+ *   get:
+ *     summary: Get accessible repositories
+ *     description: Returns list of repositories accessible to the authenticated user via the GitHub App
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: List of accessible repositories
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 repos:
+ *                   type: array
+ *                   description: Array of repository objects
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated, user not found, or session expired
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Not authenticated
+ *                 requiresReauth:
+ *                   type: boolean
+ *                   description: Present when token refresh fails, indicating user needs to re-authenticate
+ *                 message:
+ *                   type: string
+ *                   description: Detailed error message when token refresh fails
+ *       500:
+ *         description: Failed to fetch repositories
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Failed to fetch repositories
+ */
+
 /** Cookie name for OAuth state */
 const OAUTH_STATE_COOKIE = 'github_oauth_state';
 

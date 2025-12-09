@@ -29,6 +29,68 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
+   * @swagger
+   * /api/repos/{id}/benchmarks:
+   *   post:
+   *     summary: Start a benchmark run
+   *     description: Starts a benchmark run for a repository and returns immediately with a run ID. Client should poll the progress endpoint for completion.
+   *     tags: [Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     requestBody:
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               questionIds:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 description: Optional array of specific question IDs to benchmark
+   *               maxConcurrency:
+   *                 type: integer
+   *                 description: Maximum number of concurrent benchmark executions
+   *     responses:
+   *       202:
+   *         description: Benchmark started successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 runId:
+   *                   type: string
+   *                 status:
+   *                   type: string
+   *                 message:
+   *                   type: string
+   *       201:
+   *         description: Benchmark completed immediately
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 runId:
+   *                   type: string
+   *                 status:
+   *                   type: string
+   *       400:
+   *         description: No active wiki for this repository
+   *       404:
+   *         description: Repository not found
+   *       409:
+   *         description: A benchmark is already running for this wiki
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Start a benchmark run for a repository.
    * Returns immediately with runId; client should poll for completion.
    */
@@ -112,6 +174,45 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/benchmarks:
+   *   get:
+   *     summary: Get benchmark history
+   *     description: Returns benchmark history for the repository's currently active wiki.
+   *     tags: [Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 20
+   *         description: Maximum number of benchmark runs to return
+   *     responses:
+   *       200:
+   *         description: Benchmark history retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 benchmarks:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/BenchmarkRun'
+   *       400:
+   *         description: No active wiki for this repository
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Get benchmark history for a repository.
    * Returns only benchmarks for the currently active wiki.
    */
@@ -153,6 +254,44 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/benchmarks/compare:
+   *   get:
+   *     summary: Compare multiple benchmark runs
+   *     description: Compares metrics across multiple benchmark runs.
+   *     tags: [Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: ids
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Comma-separated list of benchmark run IDs to compare (minimum 2)
+   *     responses:
+   *       200:
+   *         description: Comparison results retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 comparison:
+   *                   type: object
+   *                   description: Comparison data for the specified benchmark runs
+   *       400:
+   *         description: Missing ids parameter or less than 2 IDs provided
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
   /**
    * Compare multiple benchmark runs.
    * NOTE: This route must be defined BEFORE /:runId to avoid "compare" matching as a runId.
@@ -199,6 +338,41 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/benchmarks/{runId}:
+   *   get:
+   *     summary: Get a specific benchmark run
+   *     description: Retrieves detailed information about a specific benchmark run.
+   *     tags: [Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Benchmark run ID
+   *     responses:
+   *       200:
+   *         description: Benchmark run retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 benchmark:
+   *                   $ref: '#/components/schemas/BenchmarkRun'
+   *       404:
+   *         description: Repository or benchmark run not found
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Get a specific benchmark run.
    */
   router.get('/api/repos/:id/benchmarks/:runId', async (req: Request, res: Response) => {
@@ -237,6 +411,48 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/benchmarks/{runId}/progress:
+   *   get:
+   *     summary: Get live progress for a running benchmark
+   *     description: Returns in-memory progress data for a running benchmark. Available only while the benchmark is actively running.
+   *     tags: [Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Benchmark run ID
+   *     responses:
+   *       200:
+   *         description: Progress data retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 runId:
+   *                   type: string
+   *                 totalQuestions:
+   *                   type: integer
+   *                 completedCount:
+   *                   type: integer
+   *                 startedAt:
+   *                   type: string
+   *                   format: date-time
+   *       404:
+   *         description: No progress data available (benchmark completed or server restarted)
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Get live progress for a running benchmark.
    * Returns in-memory progress data if available.
    */
@@ -266,6 +482,36 @@ export function createBenchmarksRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/benchmarks/{runId}:
+   *   delete:
+   *     summary: Delete a benchmark run
+   *     description: Deletes a specific benchmark run and all associated data.
+   *     tags: [Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Benchmark run ID
+   *     responses:
+   *       204:
+   *         description: Benchmark run deleted successfully
+   *       400:
+   *         description: Failed to delete benchmark run
+   *       404:
+   *         description: Repository or benchmark run not found
+   *       500:
+   *         description: Internal server error
+   */
   /**
    * Delete a specific benchmark run.
    */

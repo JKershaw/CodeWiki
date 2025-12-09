@@ -29,6 +29,61 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
+   * @swagger
+   * /api/repos/{id}/quality-benchmarks:
+   *   post:
+   *     summary: Start a quality benchmark run
+   *     description: Starts a quality benchmark run for a repository's active wiki. Returns immediately with runId; client should poll for completion.
+   *     tags: [Quality Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     requestBody:
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               maxPages:
+   *                 type: integer
+   *                 description: Maximum number of pages to benchmark
+   *               includeLowestConfidence:
+   *                 type: integer
+   *                 description: Number of lowest confidence pages to include
+   *               includeRecentlyUpdated:
+   *                 type: integer
+   *                 description: Number of recently updated pages to include
+   *               maxConcurrency:
+   *                 type: integer
+   *                 description: Maximum concurrent benchmark operations
+   *     responses:
+   *       202:
+   *         description: Quality benchmark started
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 runId:
+   *                   type: string
+   *                 status:
+   *                   type: string
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Bad request (e.g., no active wiki)
+   *       404:
+   *         description: Repository not found
+   *       409:
+   *         description: A quality benchmark is already running
+   *       500:
+   *         description: Server error
+   */
+  /**
    * Start a quality benchmark run for a repository.
    * Returns immediately with runId; client should poll for completion.
    */
@@ -124,6 +179,45 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/quality-benchmarks:
+   *   get:
+   *     summary: Get quality benchmark history
+   *     description: Returns quality benchmark history for a repository's active wiki
+   *     tags: [Quality Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 20
+   *         description: Maximum number of benchmark runs to return
+   *     responses:
+   *       200:
+   *         description: Quality benchmark history retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 qualityBenchmarks:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/QualityBenchmarkRun'
+   *       400:
+   *         description: Bad request (e.g., no active wiki)
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Server error
+   */
+  /**
    * Get quality benchmark history for a repository.
    * Returns only benchmarks for the currently active wiki.
    */
@@ -165,6 +259,43 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/quality-benchmarks/compare:
+   *   get:
+   *     summary: Compare multiple quality benchmark runs
+   *     description: Compare results from multiple quality benchmark runs
+   *     tags: [Quality Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: ids
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Comma-separated list of benchmark run IDs to compare (at least 2)
+   *     responses:
+   *       200:
+   *         description: Comparison results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 comparison:
+   *                   type: object
+   *       400:
+   *         description: Bad request (e.g., missing or insufficient IDs)
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Server error
+   */
   /**
    * Compare multiple quality benchmark runs.
    * NOTE: This route must be defined BEFORE /:runId to avoid "compare" matching as a runId.
@@ -211,6 +342,41 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/quality-benchmarks/{runId}:
+   *   get:
+   *     summary: Get a specific quality benchmark run
+   *     description: Returns details for a specific quality benchmark run
+   *     tags: [Quality Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Quality benchmark run ID
+   *     responses:
+   *       200:
+   *         description: Quality benchmark run details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 qualityBenchmark:
+   *                   $ref: '#/components/schemas/QualityBenchmarkRun'
+   *       404:
+   *         description: Repository or quality benchmark run not found
+   *       500:
+   *         description: Server error
+   */
+  /**
    * Get a specific quality benchmark run.
    */
   router.get('/api/repos/:id/quality-benchmarks/:runId', async (req: Request, res: Response) => {
@@ -249,6 +415,48 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/quality-benchmarks/{runId}/progress:
+   *   get:
+   *     summary: Get live progress for a running quality benchmark
+   *     description: Returns in-memory progress data if available. Useful for polling during a running benchmark.
+   *     tags: [Quality Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Quality benchmark run ID
+   *     responses:
+   *       200:
+   *         description: Progress data for running quality benchmark
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 runId:
+   *                   type: string
+   *                 totalPages:
+   *                   type: integer
+   *                 completedCount:
+   *                   type: integer
+   *                 startedAt:
+   *                   type: string
+   *                   format: date-time
+   *       404:
+   *         description: No progress data available (benchmark may have completed or server restarted)
+   *       500:
+   *         description: Server error
+   */
+  /**
    * Get live progress for a running quality benchmark.
    * Returns in-memory progress data if available.
    */
@@ -278,6 +486,36 @@ export function createQualityBenchmarksRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/quality-benchmarks/{runId}:
+   *   delete:
+   *     summary: Delete a specific quality benchmark run
+   *     description: Deletes a quality benchmark run and all its associated data
+   *     tags: [Quality Benchmarks]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Quality benchmark run ID to delete
+   *     responses:
+   *       204:
+   *         description: Quality benchmark run deleted successfully
+   *       400:
+   *         description: Bad request (e.g., cannot delete running benchmark)
+   *       404:
+   *         description: Repository or quality benchmark run not found
+   *       500:
+   *         description: Server error
+   */
   /**
    * Delete a specific quality benchmark run.
    */
