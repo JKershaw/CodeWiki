@@ -85,14 +85,15 @@ Analyze the contradictions and determine:
 Respond in this format:
 
 RESOLUTION: [Brief explanation of the correct information]
-UPDATES:
-- [page-path]: [Description of what to change]
-UPDATED_CONTENT:
----[page-path]---
-[Complete updated content for this page]
 
 SUMMARY: [Brief description of resolution]
+
 CONFIDENCE: [0-1]
+
+UPDATED_PAGES:
+=== path: category/page-name ===
+[Complete updated content for this page]
+=== END ===
 `;
   }
 
@@ -100,20 +101,20 @@ CONFIDENCE: [0-1]
     const ctx = createParseContext('contradiction-handler', response);
 
     // Parse resolution
-    const resolution = parseSection(ctx, 'RESOLUTION', /RESOLUTION:\s*(.+?)(?=UPDATES:|UPDATED_CONTENT:|$)/is) ?? '';
-
-    // Parse updated content sections - uses custom block format
-    const updates = new Map<string, string>();
-    const contentMatches = response.matchAll(/---\[([^\]]+)\]---\s*([\s\S]*?)(?=---\[|SUMMARY:|CONFIDENCE:|$)/g);
-    for (const match of contentMatches) {
-      updates.set(match[1]!.trim(), match[2]!.trim());
-    }
+    const resolution = parseSection(ctx, 'RESOLUTION', /RESOLUTION:\s*(.+?)(?=SUMMARY:|CONFIDENCE:|UPDATED_PAGES:|$)/is) ?? '';
 
     // Parse summary
-    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*(.+?)(?=CONFIDENCE:|$)/is) ?? 'Contradiction resolution';
+    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*(.+?)(?=CONFIDENCE:|UPDATED_PAGES:|$)/is) ?? 'Contradiction resolution';
 
     // Parse confidence
     const confidence = parseConfidence(ctx, { defaultValue: 0.6 });
+
+    // Parse updated content sections - uses === path: X === format
+    const updates = new Map<string, string>();
+    const contentMatches = response.matchAll(/===\s*path:\s*([^\s=]+)\s*===\s*([\s\S]*?)===\s*END\s*===/gi);
+    for (const match of contentMatches) {
+      updates.set(match[1]!.trim(), match[2]!.trim());
+    }
 
     return {
       resolution,

@@ -290,14 +290,12 @@ The new API will use Apollo Server with the following schema...
       ctx.llm.setDefaultResponse(`SUMMARY:
 RFC proposing migration from REST to GraphQL API for better developer experience and type safety.
 
-NARRATIVE_TYPE:
-design
+NARRATIVE_TYPE: design
 
-PAGE_TITLE:
-GraphQL API Design RFC
+PAGE_TITLE: GraphQL API Design RFC
 
 FINDINGS:
-- [DESIGN_DOCUMENT] [IMPORTANCE:high] RFC for API redesign from REST to GraphQL [docs/rfcs/001-new-api.md]
+- type: Design Document | importance: high | description: RFC for API redesign from REST to GraphQL | paths: docs/rfcs/001-new-api.md
 
 KEY_DECISIONS:
 - Migrate from REST to GraphQL using Apollo Server
@@ -305,7 +303,7 @@ KEY_DECISIONS:
 - Type-safe query definitions
 
 WIKI_UPDATES:
-=== [architecture/graphql-api] [create] ===
+=== path: architecture/graphql-api | action: create ===
 # GraphQL API Design
 
 ## Overview

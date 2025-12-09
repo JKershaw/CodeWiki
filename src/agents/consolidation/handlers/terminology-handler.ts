@@ -107,10 +107,10 @@ For each set of inconsistent terms:
 Respond in this format:
 
 CANONICAL_TERMS:
-- [preferred-term]: replaces [term1, term2, term3]
+- preferred: Service | replaces: Provider, ServiceProvider
 
 REPLACEMENTS:
-- [page-path]: [old-term] → [new-term] (context: [brief context])
+- page: architecture/overview | old: Provider | new: Service
 
 SUMMARY: [Brief description of changes]
 CONFIDENCE: [0-1]
@@ -120,11 +120,12 @@ CONFIDENCE: [0-1]
   private parseDecision(response: string): TerminologyDecision {
     const ctx = createParseContext('terminology-handler', response);
 
-    // Parse canonical terms
+    // Parse canonical terms - pipe-separated format
     const canonicalTerms = new Map<string, string>();
     const canonicalPatterns: ItemPattern<{ canonical: string; replaced: string[] }>[] = [
       {
-        pattern: /^-\s*\[?([^\]:]+)\]?:\s*replaces\s*\[([^\]]+)\]/i,
+        // New format: - preferred: Service | replaces: Provider, ServiceProvider
+        pattern: /^-\s*preferred:\s*([^|]+)\s*\|\s*replaces:\s*(.+)$/i,
         mapper: (m) => ({
           canonical: m[1]!.trim(),
           replaced: m[2]!.split(',').map(t => t.trim()),
@@ -145,10 +146,11 @@ CONFIDENCE: [0-1]
       }
     }
 
-    // Parse replacements
+    // Parse replacements - pipe-separated format
     const replacementPatterns: ItemPattern<TerminologyDecision['replacements'][0]>[] = [
       {
-        pattern: /^-\s*\[?([^\]:]+)\]?:\s*\[?([^\]→]+)\]?\s*→\s*\[?([^\]]+)\]?/,
+        // New format: - page: X | old: Y | new: Z
+        pattern: /^-\s*page:\s*([^|]+)\s*\|\s*old:\s*([^|]+)\s*\|\s*new:\s*(.+)$/i,
         mapper: (m) => ({
           pagePath: m[1]!.trim(),
           oldTerm: m[2]!.trim(),

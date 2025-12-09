@@ -208,8 +208,8 @@ export const dependencyAgentResponses = {
 This commit adds two new dependencies: lodash for utility functions and axios for HTTP requests.
 
 CHANGES:
-- [ADDED] lodash [4.17.21] General-purpose utility library
-- [ADDED] axios [1.6.0] Promise-based HTTP client
+- action: ADDED | package: lodash | version: 4.17.21 | reason: General-purpose utility library
+- action: ADDED | package: axios | version: 1.6.0 | reason: Promise-based HTTP client
 
 BREAKING_CHANGES:
 - None
@@ -218,39 +218,13 @@ SECURITY_NOTES:
 - lodash has no known active vulnerabilities
 - axios is widely used and well-maintained
 
-IMPACT:
-moderate
+IMPACT: moderate
 
 DEPENDENCY_DETAILS:
-
-=== [lodash] ===
-PURPOSE:
-Lodash provides utility functions for common programming tasks like array manipulation, object operations, and string handling. It was chosen for its comprehensive feature set and proven reliability.
-
-USAGE:
-Used throughout the codebase for array operations (map, filter, groupBy) and object manipulation (merge, clone, pick). The library is imported selectively to minimize bundle size.
-
-CONSIDERATIONS:
-Consider using lodash-es for better tree-shaking. Bundle size impact is approximately 70KB minified if using full library.
-=== END ===
-
-WIKI_UPDATES:
-=== [dependencies/lodash] [create] ===
-# lodash
-
-## Purpose
-
-Lodash is a modern JavaScript utility library delivering modularity, performance, and extras.
-
-## Usage
-
-\`\`\`typescript
-import { groupBy, sortBy } from 'lodash';
-\`\`\`
-
-## Version
-
-4.17.21
+=== package: lodash ===
+PURPOSE: Lodash provides utility functions for common programming tasks like array manipulation, object operations, and string handling. It was chosen for its comprehensive feature set and proven reliability.
+USAGE: Used throughout the codebase for array operations (map, filter, groupBy) and object manipulation (merge, clone, pick). The library is imported selectively to minimize bundle size.
+CONSIDERATIONS: Consider using lodash-es for better tree-shaking. Bundle size impact is approximately 70KB minified if using full library.
 === END ===
 
 CONFIDENCE: 0.85`,
@@ -262,8 +236,8 @@ CONFIDENCE: 0.85`,
 This commit updates React from version 17 to version 18, introducing breaking changes related to concurrent rendering.
 
 CHANGES:
-- [UPDATED] react [17.0.2 -> 18.2.0] Major version upgrade with concurrent features
-- [UPDATED] react-dom [17.0.2 -> 18.2.0] Updated alongside React
+- action: UPDATED | package: react | version: 17.0.2 -> 18.2.0 | reason: Major version upgrade with concurrent features
+- action: UPDATED | package: react-dom | version: 17.0.2 -> 18.2.0 | reason: Updated alongside React
 
 BREAKING_CHANGES:
 - ReactDOM.render is deprecated, use createRoot instead
@@ -273,11 +247,7 @@ BREAKING_CHANGES:
 SECURITY_NOTES:
 - Fixes CVE-2022-XXXXX related to SSR vulnerability in React 17
 
-IMPACT:
-significant
-
-WIKI_UPDATES:
-- [architecture/dependencies] [update] Note React 18 upgrade and migration requirements
+IMPACT: significant
 
 CONFIDENCE: 0.9`,
 
@@ -293,10 +263,7 @@ BREAKING_CHANGES:
 
 SECURITY_NOTES:
 
-IMPACT:
-minimal
-
-WIKI_UPDATES:
+IMPACT: minimal
 
 CONFIDENCE: 1.0`,
 };
@@ -311,14 +278,12 @@ export const narrativeAgentResponses = {
   adrDetected: (commitSha: string) => `SUMMARY:
 This commit adds an Architecture Decision Record documenting the choice to use CQRS pattern for the application.
 
-NARRATIVE_TYPE:
-adr
+NARRATIVE_TYPE: adr
 
-PAGE_TITLE:
-CQRS Architecture Decision
+PAGE_TITLE: CQRS Architecture Decision
 
 FINDINGS:
-- [ARCHITECTURE_DECISION] [IMPORTANCE:high] Decision to adopt CQRS pattern for command/query separation [docs/adr/001-cqrs.md]
+- type: Architecture Decision | importance: high | description: Decision to adopt CQRS pattern for command/query separation | paths: docs/adr/001-cqrs.md
 
 KEY_DECISIONS:
 - Adopt CQRS pattern to separate read and write operations
@@ -326,7 +291,7 @@ KEY_DECISIONS:
 - Implement eventual consistency for read models
 
 WIKI_UPDATES:
-=== [decisions/cqrs-architecture] [create] ===
+=== path: decisions/cqrs-architecture | action: create ===
 # CQRS Architecture Decision
 
 ## Context
@@ -352,14 +317,12 @@ CONFIDENCE: 0.9`,
   planningDocDetected: (commitSha: string) => `SUMMARY:
 This commit introduces a project planning document outlining the roadmap for v2.0 features.
 
-NARRATIVE_TYPE:
-planning
+NARRATIVE_TYPE: planning
 
-PAGE_TITLE:
-Version 2.0 Roadmap
+PAGE_TITLE: Version 2.0 Roadmap
 
 FINDINGS:
-- [ROADMAP] [IMPORTANCE:high] Q1-Q2 feature planning for version 2.0 [PLAN.md]
+- type: Roadmap | importance: high | description: Q1-Q2 feature planning for version 2.0 | paths: PLAN.md
 
 KEY_DECISIONS:
 - Prioritize API redesign in Q1
@@ -367,7 +330,7 @@ KEY_DECISIONS:
 - Migrate to microservices architecture
 
 WIKI_UPDATES:
-=== [planning/v2-roadmap] [create] ===
+=== path: planning/v2-roadmap | action: create ===
 # Version 2.0 Roadmap
 
 ## Overview
@@ -393,8 +356,7 @@ CONFIDENCE: 0.85`,
   noNarrativeContent: () => `SUMMARY:
 No significant narrative content in this commit.
 
-NARRATIVE_TYPE:
-none
+NARRATIVE_TYPE: none
 
 PAGE_TITLE:
 
@@ -415,9 +377,9 @@ export const structureAgentResponses = {
    * Response with structure improvement suggestions.
    */
   structureImprovementsNeeded: () => `SUGGESTIONS:
-- [PRIORITY:high] | [patterns/repository-pattern, patterns/factory-pattern] | Create a patterns/overview page to help readers navigate pattern documentation
-- [PRIORITY:medium] | [architecture/overview] | Split the 8000-character overview into separate pages for each subsystem
-- [PRIORITY:low] | [guides/getting-started] | Add cross-references to related API documentation
+- priority: high | pages: patterns/repository-pattern, patterns/factory-pattern | Create a patterns/overview page to help readers navigate pattern documentation
+- priority: medium | pages: architecture/overview | Split the 8000-character overview into separate pages for each subsystem
+- priority: low | pages: guides/getting-started | Add cross-references to related API documentation
 
 OVERALL_ASSESSMENT: The wiki has good content but would benefit from better organization. Creating overview pages for major sections and adding cross-references would significantly improve navigation.`,
 

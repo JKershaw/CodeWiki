@@ -247,41 +247,24 @@ SUMMARY:
 [Brief summary of dependency changes]
 
 CHANGES:
-- [ADDED/REMOVED/UPDATED] [package-name] [old-version -> new-version if applicable] [Purpose/reason]
+- action: ADDED | package: express | version: ^4.17.0 | reason: Express web framework
+- action: REMOVED | package: lodash | reason: No longer needed
+- action: UPDATED | package: typescript | version: 4.9.0 -> 5.0.0 | reason: New features
 
 BREAKING_CHANGES:
-- [Description of potential breaking changes]
+- [Description of potential breaking changes, or "None"]
 
 SECURITY_NOTES:
-- [Security considerations for the dependency changes]
+- [Security considerations, or "None"]
 
-IMPACT:
-[Overall impact assessment: minimal/moderate/significant]
+IMPACT: minimal/moderate/significant
 
 DEPENDENCY_DETAILS:
-For each significant new dependency, provide detailed documentation.
-
-=== [PACKAGE_NAME] ===
-PURPOSE:
-[2-3 sentences explaining what problem this dependency solves and why it was chosen]
-
-USAGE:
-[How this dependency is used in the codebase - key functions, configuration, patterns]
-
-CONSIDERATIONS:
-[Any important notes: version constraints, security considerations, bundle size impact, alternatives considered]
+=== package: express ===
+PURPOSE: [What this dependency does and why it was chosen]
+USAGE: [How it's used in the codebase]
+CONSIDERATIONS: [Important notes, version constraints, alternatives]
 === END ===
-
-(Repeat for each significant dependency)
-
-WIKI_UPDATES:
-For each additional wiki page that should be created or updated, provide FULL article content.
-
-=== [PAGE_PATH] [ACTION:create/update] ===
-[Write the FULL markdown content for this wiki page here.]
-=== END ===
-
-(Repeat for each page)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -333,30 +316,23 @@ SUMMARY:
 [Brief summary of dependency changes]
 
 CHANGES:
-- [ADDED/REMOVED/UPDATED] [package-name] [old-version -> new-version if applicable] [Purpose/reason]
+- action: ADDED | package: express | version: ^4.17.0 | reason: Express web framework
+- action: REMOVED | package: lodash | reason: No longer needed
+- action: UPDATED | package: typescript | version: 4.9.0 -> 5.0.0 | reason: New features
 
 BREAKING_CHANGES:
-- [Description of potential breaking changes]
+- [Description of potential breaking changes, or "None"]
 
 SECURITY_NOTES:
-- [Security considerations]
+- [Security considerations, or "None"]
 
-IMPACT:
-[Overall impact: minimal/moderate/significant]
+IMPACT: minimal/moderate/significant
 
 DEPENDENCY_DETAILS:
-=== [PACKAGE_NAME] ===
-PURPOSE:
-[What this dependency does]
-USAGE:
-[How it's used]
-CONSIDERATIONS:
-[Important notes]
-=== END ===
-
-WIKI_UPDATES:
-=== [PAGE_PATH] [ACTION:create/update] ===
-[Full markdown content]
+=== package: express ===
+PURPOSE: [What this dependency does]
+USAGE: [How it's used]
+CONSIDERATIONS: [Important notes]
 === END ===
 
 CONFIDENCE: [0-1 value]
@@ -369,10 +345,11 @@ CONFIDENCE: [0-1 value]
     // Parse summary
     const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=CHANGES:|$)/i) ?? '';
 
-    // Parse changes
+    // Parse changes - pipe-separated format
     const changePatterns: ItemPattern<DependencyChange & { finding: ParsedAnalysis['findings'][0] }>[] = [
       {
-        pattern: /^-\s*\[(ADDED|REMOVED|UPDATED)]\s*([^\s[]+)\s*(?:\[([^\]]*)])?\s*(.*)$/i,
+        // New format: - action: ADDED | package: express | version: ^4.17.0 | reason: text
+        pattern: /^-\s*action:\s*(ADDED|REMOVED|UPDATED)\s*\|\s*package:\s*([^|]+?)(?:\s*\|\s*version:\s*([^|]+))?(?:\s*\|\s*reason:\s*(.+))?$/i,
         mapper: (m) => {
           const action = m[1]!.toLowerCase() as 'added' | 'removed' | 'updated';
           const packageName = m[2]!.trim();
@@ -443,12 +420,12 @@ CONFIDENCE: [0-1 value]
       { defaultValue: 'minimal' }
     ) ?? 'minimal';
 
-    // Parse dependency details using block format
+    // Parse dependency details using block format: === package: name ===
     const dependencyDetails = parseBlocks<DependencyDetail>(
       ctx,
       'DEPENDENCY_DETAILS',
-      /DEPENDENCY_DETAILS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i,
-      /===\s*\[([^\]]+)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      /DEPENDENCY_DETAILS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      /===\s*package:\s*([^=]+?)\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
       (m) => {
         const packageName = m[1]!.trim();
         const blockContent = m[2]!;
@@ -466,24 +443,8 @@ CONFIDENCE: [0-1 value]
       }
     );
 
-    // Parse wiki updates using block format
-    const wikiUpdates = parseBlocks<ParsedAnalysis['wikiUpdates'][0]>(
-      ctx,
-      'WIKI_UPDATES',
-      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-      /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
-      (m) => {
-        const content = m[3]!.trim();
-        if (content && content.length > 0) {
-          return {
-            path: m[1]!.trim(),
-            action: m[2]!.toLowerCase() as 'create' | 'update',
-            content,
-          };
-        }
-        return null;
-      }
-    );
+    // Wiki updates are now generated programmatically, not parsed from LLM output
+    const wikiUpdates: ParsedAnalysis['wikiUpdates'] = [];
 
     // Parse confidence
     const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
@@ -614,27 +575,6 @@ ${dep.versionChange || 'See package.json'}
           confidenceDelta: detail ? 0.25 : 0.15,
         });
       }
-    }
-
-    // Add any wiki updates suggested by the LLM
-    for (const wikiUpdate of analysis.wikiUpdates) {
-      // Use the full content provided by the LLM
-      let content = wikiUpdate.content;
-      if (!content.includes('*Updated from commit') && !content.includes('*Source:')) {
-        content = `${content}
-
----
-*Updated from commit ${commit.sha.slice(0, 8)}*`;
-      }
-
-      updates.push({
-        type: wikiUpdate.action,
-        path: wikiUpdate.path,
-        content,
-        sourceCommitId: commit.sha,
-        agentRunId: '',
-        confidenceDelta: 0.2,
-      });
     }
 
     return updates;

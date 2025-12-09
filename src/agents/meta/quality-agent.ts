@@ -255,10 +255,10 @@ FLAG pages that:
 ## Required Output Format
 
 ISSUES:
-- [SEVERITY:high/medium/low] | [page-path] | Description of the issue
+- severity: high | page: docs/auth | Description of the issue
 
 IMPROVEMENTS:
-- [page-path] | Specific improvement suggestion
+- page: docs/auth | Specific improvement suggestion
 
 CONFIDENCE: [0-1]
 `;
@@ -267,10 +267,11 @@ CONFIDENCE: [0-1]
   private parseResponse(response: string): QualityAnalysis {
     const ctx = createParseContext('quality', response);
 
-    // Parse issues
+    // Parse issues - pipe-separated format
     const issuePatterns: ItemPattern<QualityIssue>[] = [
       {
-        pattern: /^-\s*\[SEVERITY:(\w+)\]\s*\|\s*\[([^\]]+)\]\s*\|\s*(.+)$/i,
+        // New format: - severity: high | page: docs/auth | Description
+        pattern: /^-\s*severity:\s*(\w+)\s*\|\s*page:\s*([^|]+)\s*\|\s*(.+)$/i,
         mapper: (m) => ({
           pagePath: m[2]!.trim(),
           type: 'content_quality',
@@ -287,10 +288,11 @@ CONFIDENCE: [0-1]
       issuePatterns
     );
 
-    // Parse improvements
+    // Parse improvements - pipe-separated format
     const improvementPatterns: ItemPattern<{ pagePath: string; suggestion: string }>[] = [
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*\|\s*(.+)$/i,
+        // New format: - page: docs/auth | Suggestion
+        pattern: /^-\s*page:\s*([^|]+)\s*\|\s*(.+)$/i,
         mapper: (m) => ({
           pagePath: m[1]!.trim(),
           suggestion: m[2]!.trim(),

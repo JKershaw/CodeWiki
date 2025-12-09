@@ -212,16 +212,13 @@ PAGE_TITLE:
 [Short, descriptive title for this content - 3-6 words like "Web Interface Design" or "Multi-Agent Architecture"]
 
 FINDINGS:
-- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
+- type: Architecture Decision | importance: high | description: [Text] | paths: file1.ts, file2.ts
 
 KEY_DECISIONS:
 - [Decision description with context]
 
 WIKI_UPDATES:
-For each additional wiki page that should be created or updated, provide FULL article content.
-Write each page as a complete, standalone article (2-4 paragraphs minimum).
-
-=== [PAGE_PATH] [ACTION:create/update] ===
+=== path: category/page-name | action: create ===
 [Write the FULL markdown content for this wiki page here.
 Include:
 - What decision was made or what concept is being documented
@@ -231,8 +228,6 @@ Include:
 
 Do NOT just write a brief description - write a complete article.]
 === END ===
-
-(Repeat for each page)
 
 CONFIDENCE: [0-1 value]
 `;
@@ -290,13 +285,13 @@ PAGE_TITLE:
 [Short, descriptive title - 3-6 words]
 
 FINDINGS:
-- [TYPE] [IMPORTANCE:low/medium/high] [Description] [Related paths]
+- type: Architecture Decision | importance: high | description: [Text] | paths: file1.ts
 
 KEY_DECISIONS:
 - [Decision description with context]
 
 WIKI_UPDATES:
-=== [PAGE_PATH] [ACTION:create/update] ===
+=== path: category/page-name | action: create ===
 [Full markdown content]
 === END ===
 
@@ -322,10 +317,11 @@ CONFIDENCE: [0-1 value]
     // Parse page title
     const pageTitle = parseSection(ctx, 'PAGE_TITLE', /PAGE_TITLE:\s*(.+?)(?=\n|FINDINGS:|KEY_DECISIONS:|$)/i) ?? '';
 
-    // Parse findings
+    // Parse findings - pipe-separated format
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[IMPORTANCE:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        // New format: - type: X | importance: Y | description: Z | paths: A, B
+        pattern: /^-\s*type:\s*([^|]+)\s*\|\s*importance:\s*(\w+)\s*\|\s*description:\s*([^|]+?)(?:\s*\|\s*paths:\s*(.+))?$/i,
         mapper: (m) => ({
           type: m[1]!.trim(),
           importance: m[2]!.toLowerCase() as 'low' | 'medium' | 'high',
@@ -349,12 +345,12 @@ CONFIDENCE: [0-1 value]
       /KEY_DECISIONS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i
     );
 
-    // Parse wiki updates using block format
+    // Parse wiki updates using block format: === path: X | action: Y ===
     const wikiUpdates = parseBlocks<ParsedAnalysis['wikiUpdates'][0]>(
       ctx,
       'WIKI_UPDATES',
       /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-      /===\s*\[([^\]]+)\]\s*\[(create|update)\]\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
+      /===\s*path:\s*([^|=]+)\s*\|\s*action:\s*(create|update)\s*===\s*([\s\S]*?)\s*===\s*END\s*===/gi,
       (m) => {
         const content = m[3]!.trim();
         if (content && content.length > 0) {
