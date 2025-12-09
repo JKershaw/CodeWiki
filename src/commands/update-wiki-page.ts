@@ -59,6 +59,9 @@ export async function handleUpdateWikiPage(
       }
       const page = createWikiPage(createParams);
 
+      // Apply confidenceDelta to the page's confidence (base is 0.5, cap at 1.0)
+      page.confidence = Math.min(1, page.confidence + update.confidenceDelta);
+
       await repos.wikiPages.save(page);
 
       // Update links if provided
@@ -146,6 +149,9 @@ export async function handleUpdateWikiPage(
           createParams.sourceAgentRunId = update.agentRunId;
         }
         const page = createWikiPage(createParams);
+
+        // Apply confidenceDelta to the page's confidence (base is 0.5, cap at 1.0)
+        page.confidence = Math.min(1, page.confidence + update.confidenceDelta);
 
         await repos.wikiPages.save(page);
 

@@ -164,6 +164,7 @@ function createMockRepos(): Repositories & { _pages: Map<string, WikiPage> } {
     },
     addBacklink: async () => {},
     removeBacklink: async () => {},
+    updateLinks: async () => {},
   };
 
   const mockWikiPageHistory: Repositories['wikiPageHistory'] = {
@@ -257,6 +258,61 @@ describe('handleUpdateWikiPage', () => {
 
       assert.strictEqual(result.success, true);
       assert.strictEqual(result.data?.title, 'NoSpaceTitle');
+    });
+
+    it('applies confidenceDelta when creating a page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/high-confidence',
+        content: '# High Confidence Page\n\nContent here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5, // Should result in 0.5 (base) + 0.5 = 1.0
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Base confidence is 0.5, plus delta of 0.5 should give 1.0
+      assert.strictEqual(result.data?.confidence, 1.0);
+    });
+
+    it('caps confidence at 1.0 when delta exceeds maximum', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/over-confidence',
+        content: '# Very High Confidence Page\n\nContent here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.8, // 0.5 + 0.8 = 1.3, should cap at 1.0
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.confidence, 1.0);
+    });
+
+    it('applies small confidenceDelta correctly', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/low-confidence',
+        content: '# Low Confidence Page\n\nContent here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.1, // Should result in 0.5 + 0.1 = 0.6
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.confidence, 0.6);
     });
   });
 
@@ -355,6 +411,24 @@ describe('handleUpdateWikiPage', () => {
   });
 
   describe('merge operation', () => {
+    it('applies confidenceDelta when merge creates a new page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/merge-new',
+        content: '# Merge Created Page\n\nContent here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.3, // Should result in 0.5 + 0.3 = 0.8
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.confidence, 0.8);
+    });
+
     it('creates page with extracted title when page does not exist', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
