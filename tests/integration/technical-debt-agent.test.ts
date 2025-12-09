@@ -77,35 +77,31 @@ export class DataService {
         createdAt: new Date(),
       });
 
-      // Mock LLM response with TODO findings
+      // Mock LLM response with TODO findings (new simplified format)
       ctx.llm.setDefaultResponse(`SUMMARY:
 This commit introduces a data service with several technical debt indicators including TODO, FIXME, and HACK comments that need attention.
 
-DEBT_TREND:
-adding_debt
+DEBT_TREND: adding_debt
 
 FINDINGS:
-- [HACK_COMMENT] [SEVERITY:medium] Temporary workaround for API rate limiting that should be properly implemented [src/service.ts]
-- [INCOMPLETE_IMPLEMENTATION] [SEVERITY:medium] Caching strategy marked as TODO [src/service.ts]
-- [ERROR_HANDLING] [SEVERITY:high] Error handling is incomplete as noted by FIXME [src/service.ts]
+- category: HACK Comment | severity: medium | description: Temporary workaround for API rate limiting that should be properly implemented | paths: src/service.ts
+- category: Incomplete Implementation | severity: medium | description: Caching strategy marked as TODO | paths: src/service.ts
+- category: Error Handling | severity: high | description: Error handling is incomplete as noted by FIXME | paths: src/service.ts
 
 TODO_ITEMS:
-- [src/service.ts:9] [TODO] Implement proper caching strategy
-- [src/service.ts:3] [HACK] Temporary workaround for API rate limiting
-- [src/service.ts:14] [FIXME] Error handling is incomplete
+- location: src/service.ts:9 | type: TODO | description: Implement proper caching strategy
+- location: src/service.ts:3 | type: HACK | description: Temporary workaround for API rate limiting
+- location: src/service.ts:14 | type: FIXME | description: Error handling is incomplete
 
 SOLID_VIOLATIONS:
 
 REMEDIATION:
-- [Priority:high] Add proper error handling with try/catch and specific error types
-- [Priority:medium] Implement a proper caching strategy using a cache library or service
-- [Priority:medium] Replace the rate limiting hack with a proper throttling mechanism
+- priority: high | recommendation: Add proper error handling with try/catch and specific error types
+- priority: medium | recommendation: Implement a proper caching strategy using a cache library or service
+- priority: medium | recommendation: Replace the rate limiting hack with a proper throttling mechanism
 
 HOTSPOTS:
-- [src/service.ts] Contains multiple TODO/FIXME comments indicating incomplete implementation
-
-WIKI_UPDATES:
-- [technical-debt/todos] [update] Track new TODO/FIXME items from data service
+- path: src/service.ts | reason: Contains multiple TODO/FIXME comments indicating incomplete implementation
 
 CONFIDENCE: 0.85`);
 
@@ -195,33 +191,29 @@ export class ApplicationManager {
         createdAt: new Date(),
       });
 
-      // Mock LLM response with SOLID violations
+      // Mock LLM response with SOLID violations (new simplified format)
       ctx.llm.setDefaultResponse(`SUMMARY:
 This commit introduces an ApplicationManager class that violates multiple SOLID principles, particularly the Single Responsibility Principle. The class handles database, cache, user management, orders, and email - far too many responsibilities.
 
-DEBT_TREND:
-adding_debt
+DEBT_TREND: adding_debt
 
 FINDINGS:
-- [GOD_CLASS] [SEVERITY:critical] ApplicationManager handles 5+ different concerns [src/god-class.ts]
-- [SINGLE_RESPONSIBILITY_VIOLATION] [SEVERITY:critical] Class has multiple reasons to change [src/god-class.ts]
-- [TIGHT_COUPLING] [SEVERITY:high] All functionality is tightly coupled in one class [src/god-class.ts]
+- category: God Class | severity: critical | description: ApplicationManager handles 5+ different concerns | paths: src/god-class.ts
+- category: Single Responsibility Violation | severity: critical | description: Class has multiple reasons to change | paths: src/god-class.ts
+- category: Tight Coupling | severity: high | description: All functionality is tightly coupled in one class | paths: src/god-class.ts
 
 TODO_ITEMS:
 
 SOLID_VIOLATIONS:
-- [Single Responsibility] ApplicationManager class has at least 5 distinct responsibilities [src/god-class.ts]
-- [Dependency Inversion] Class creates its own dependencies instead of accepting them via DI [src/god-class.ts]
+- principle: SRP | description: ApplicationManager class has at least 5 distinct responsibilities | paths: src/god-class.ts
+- principle: DIP | description: Class creates its own dependencies instead of accepting them via DI | paths: src/god-class.ts
 
 REMEDIATION:
-- [Priority:high] Split ApplicationManager into separate services
-- [Priority:high] Implement dependency injection for loose coupling
+- priority: high | recommendation: Split ApplicationManager into separate services
+- priority: high | recommendation: Implement dependency injection for loose coupling
 
 HOTSPOTS:
-- [src/god-class.ts] Massive god class that will be difficult to maintain
-
-WIKI_UPDATES:
-- [technical-debt/reports/${commitSha.slice(0, 8)}] [create] Detailed report on SOLID violations
+- path: src/god-class.ts | reason: Massive god class that will be difficult to maintain
 
 CONFIDENCE: 0.92`);
 
@@ -390,16 +382,15 @@ export function processNumber(value: number): number {
         createdAt: new Date(),
       });
 
-      // Mock LLM response for refactoring
+      // Mock LLM response for refactoring (new simplified format)
       ctx.llm.setDefaultResponse(`SUMMARY:
 This commit significantly reduces technical debt by refactoring the problematic doEverything function into well-typed, single-purpose functions. Removes TODO and HACK comments.
 
-DEBT_TREND:
-reducing_debt
+DEBT_TREND: reducing_debt
 
 FINDINGS:
-- [REFACTORING] [SEVERITY:low] Legacy catch-all function replaced with typed functions [src/legacy.ts]
-- [DEBT_PAYDOWN] [SEVERITY:low] Removed TODO and HACK comments [src/legacy.ts]
+- category: Refactoring | severity: low | description: Legacy catch-all function replaced with typed functions | paths: src/legacy.ts
+- category: Debt Paydown | severity: low | description: Removed TODO and HACK comments | paths: src/legacy.ts
 
 TODO_ITEMS:
 
@@ -408,9 +399,6 @@ SOLID_VIOLATIONS:
 REMEDIATION:
 
 HOTSPOTS:
-
-WIKI_UPDATES:
-- [technical-debt/overview] [update] Note debt reduction from refactoring
 
 CONFIDENCE: 0.88`);
 
@@ -473,33 +461,26 @@ export class ProblematicClass {
       ctx.llm.setDefaultResponse(`SUMMARY:
 This commit introduces significant technical debt with multiple TODO, FIXME, and HACK comments indicating critical issues.
 
-DEBT_TREND:
-adding_debt
+DEBT_TREND: adding_debt
 
 FINDINGS:
-- [CRITICAL_TODO] [SEVERITY:critical] TODO marked as critical - fix before release [src/problematic.ts]
-- [MEMORY_LEAK] [SEVERITY:critical] FIXME indicates memory leak [src/problematic.ts]
-- [HACK_CODE] [SEVERITY:high] HACK comment indicates workaround [src/problematic.ts]
+- category: Critical TODO | severity: critical | description: TODO marked as critical - fix before release | paths: src/problematic.ts
+- category: Memory Leak | severity: critical | description: FIXME indicates memory leak | paths: src/problematic.ts
+- category: Hack Code | severity: high | description: HACK comment indicates workaround | paths: src/problematic.ts
 
 TODO_ITEMS:
-- [src/problematic.ts:1] [TODO] Critical - fix before release
-- [src/problematic.ts:2] [FIXME] Memory leak here
-- [src/problematic.ts:3] [HACK] Don't look at this
+- location: src/problematic.ts:1 | type: TODO | description: Critical - fix before release
+- location: src/problematic.ts:2 | type: FIXME | description: Memory leak here
+- location: src/problematic.ts:3 | type: HACK | description: Don't look at this
 
 SOLID_VIOLATIONS:
 
 REMEDIATION:
-- [Priority:high] Address the memory leak immediately
-- [Priority:high] Fix critical TODO before release
+- priority: high | recommendation: Address the memory leak immediately
+- priority: high | recommendation: Fix critical TODO before release
 
 HOTSPOTS:
-- [src/problematic.ts] Multiple critical issues in single file
-
-WIKI_UPDATES:
-- [technical-debt/reports/${commitSha.slice(0, 8)}] [create] Detailed debt report
-- [technical-debt/overview] [update] Update overview with new findings
-- [technical-debt/todos] [update] Track new TODO items
-- [technical-debt/hotspots] [update] Add problematic.ts as hotspot
+- path: src/problematic.ts | reason: Multiple critical issues in single file
 
 CONFIDENCE: 0.95`);
 

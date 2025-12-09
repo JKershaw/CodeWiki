@@ -33,29 +33,33 @@ export interface CategoryFinding {
 /**
  * Parse categorization lines from LLM response.
  *
- * Expected format:
- * PAGE: [path] | CURRENT: [category] | SUGGESTED: [category] | MISMATCH: [yes/no]
+ * Simplified format:
+ * - path: [path] | current: [category] | suggested: [category] | reason: [reason]
  */
 export function parseCategorizations(response: string): Categorization[] {
   const results: Categorization[] = [];
 
-  // Find all PAGE: lines
-  const lines = response.split('\n').filter(l => l.trim().startsWith('PAGE:'));
+  // Find all lines that start with "- path:"
+  const lines = response.split('\n').filter(l => l.trim().match(/^-\s*path:/i));
 
   for (const line of lines) {
-    // Pattern: PAGE: path | CURRENT: cat | SUGGESTED: cat | MISMATCH: yes/no
+    // Pattern: - path: [path] | current: [cat] | suggested: [cat] | reason: [reason]
     const match = line.match(
-      /PAGE:\s*([^|]+)\|\s*CURRENT:\s*([^|]+)\|\s*SUGGESTED:\s*([^|]+)\|\s*MISMATCH:\s*(\w+)/i
+      /^-\s*path:\s*([^|]+)\s*\|\s*current:\s*([^|]+)\s*\|\s*suggested:\s*([^|]+)\s*\|\s*reason:\s*(.+)$/i
     );
 
     if (match) {
-      const isMismatch = match[4]!.trim().toLowerCase() === 'yes';
+      const currentCat = match[2]!.trim();
+      const suggestedCat = match[3]!.trim();
+      const reason = match[4]!.trim();
+      const isMismatch = currentCat.toLowerCase() !== suggestedCat.toLowerCase();
+
       results.push({
         pagePath: match[1]!.trim(),
-        currentCategory: match[2]!.trim(),
-        suggestedCategory: match[3]!.trim(),
+        currentCategory: currentCat,
+        suggestedCategory: suggestedCat,
         confidence: isMismatch ? 0.85 : 0.95,
-        reason: isMismatch ? 'Category mismatch detected' : 'Correctly categorized',
+        reason: reason === 'correct' ? 'Correctly categorized' : reason,
       });
     }
   }
@@ -65,33 +69,21 @@ export function parseCategorizations(response: string): Categorization[] {
 
 /**
  * Parse category finding lines from LLM response.
- *
- * Handles multiple formats:
- * - MISMATCH: [path] should be in [category] - [reason]
- * - [path] should be in [category] - [reason]
- * - - [path] should be in [category] - [reason]
+ * Extracts mismatches from the unified categorization format.
  */
 export function parseCategoryFindings(response: string): CategoryFinding[] {
   const results: CategoryFinding[] = [];
 
-  // Find all lines containing "should be in" (the key phrase)
-  const lines = response.split('\n').filter(l => l.includes('should be in'));
+  // Use the same parsing as categorizations, but filter to mismatches
+  const categorizations = parseCategorizations(response);
 
-  for (const line of lines) {
-    // Skip PAGE: lines that have MISMATCH: yes/no
-    if (line.includes('PAGE:') && line.includes('MISMATCH:')) continue;
-
-    // Pattern: [optional prefix] path should be in category - reason
-    const match = line.match(
-      /(?:MISMATCH:\s*|^-\s*)?([^\s]+)\s+should be in\s+(\w+)\s*[-–]\s*(.+)/i
-    );
-
-    if (match) {
+  for (const cat of categorizations) {
+    if (cat.currentCategory.toLowerCase() !== cat.suggestedCategory.toLowerCase()) {
       results.push({
-        pagePath: match[1]!.trim(),
-        suggestedCategory: match[2]!.trim(),
+        pagePath: cat.pagePath,
+        suggestedCategory: cat.suggestedCategory,
         severity: 'medium',
-        reason: match[3]!.trim(),
+        reason: cat.reason,
       });
     }
   }
@@ -242,20 +234,19 @@ Analyze EACH page above using this process:
 
 ## Output Format
 
-For each page, output ONE line in this EXACT format:
-PAGE: [path] | CURRENT: [category] | SUGGESTED: [category] | MISMATCH: [yes/no]
+For each page, output ONE line in this format:
+- path: [path] | current: [category] | suggested: [category] | reason: [reason or "correct"]
 
-Then list any mismatches:
-MISMATCH: [path] should be in [category] - [reason]
+CONFIDENCE: [0-1]
 
 ## Example
 
-PAGE: guides/xss-prevention | CURRENT: guides | SUGGESTED: security | MISMATCH: yes
-PAGE: api/users | CURRENT: api | SUGGESTED: api | MISMATCH: no
+- path: guides/xss-prevention | current: guides | suggested: security | reason: XSS is a security vulnerability
+- path: api/users | current: api | suggested: api | reason: correct
 
-MISMATCH: guides/xss-prevention should be in security - XSS is a security vulnerability
+CONFIDENCE: 0.85
 
-Now analyze the pages. Output ONLY in the format above, nothing else:
+Now analyze the pages:
 `;
   }
 

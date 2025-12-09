@@ -468,25 +468,40 @@ Look for consistency issues:
 ## Required Output Format
 
 ISSUES:
-- [SEVERITY:high/medium/low] | [TYPE:terminology/contradiction/duplicate/style] | [affected-paths] | Description
+- severity: high | type: terminology | pages: page1, page2 | Description of the issue
 
-TERMINOLOGY_MAP:
-- [term1] = [term2] = [term3]: These all refer to the same concept
+TERMINOLOGY:
+- preferred: auth | variants: authentication, authn, login
 
 SUGGESTIONS:
 - Specific suggestion for improving consistency
 
 CONFIDENCE: [0-1]
+
+Example:
+
+ISSUES:
+- severity: high | type: terminology | pages: auth/overview, api/users | User vs Account inconsistency
+- severity: medium | type: duplicate | pages: guides/setup, docs/install | Overlapping installation content
+
+TERMINOLOGY:
+- preferred: user | variants: account, member, customer
+
+SUGGESTIONS:
+- Standardize on "user" throughout the wiki
+- Consolidate setup guides into a single page
+
+CONFIDENCE: 0.8
 `;
   }
 
   private parseResponse(response: string): ConsistencyAnalysis {
     const ctx = createParseContext('consistency', response);
 
-    // Parse issues
+    // Simplified format: - severity: high | type: terminology | pages: page1, page2 | description
     const issuePatterns: ItemPattern<ConsistencyIssue>[] = [
       {
-        pattern: /^-\s*\[SEVERITY:(\w+)\]\s*\|\s*\[TYPE:(\w+)\]\s*\|\s*\[([^\]]*)\]\s*\|\s*(.+)$/i,
+        pattern: /^-\s*severity:\s*(\w+)\s*\|\s*type:\s*(\w+)\s*\|\s*pages:\s*([^|]+)\s*\|\s*(.+)$/i,
         mapper: (m) => ({
           type: m[2]!.toLowerCase(),
           description: m[4]!.trim(),
@@ -499,25 +514,25 @@ CONFIDENCE: [0-1]
     const issues = parseListItemsWithFallback(
       ctx,
       'ISSUES',
-      /ISSUES:\s*([\s\S]*?)(?=TERMINOLOGY_MAP:|SUGGESTIONS:|CONFIDENCE:|$)/i,
+      /ISSUES:\s*([\s\S]*?)(?=TERMINOLOGY:|SUGGESTIONS:|CONFIDENCE:|$)/i,
       issuePatterns
     );
 
-    // Parse terminology map
+    // Simplified format: - preferred: auth | variants: authentication, authn, login
     const termPatterns: ItemPattern<{ terms: string[]; description: string }>[] = [
       {
-        pattern: /^-\s*(.+?):\s*(.+)$/,
+        pattern: /^-\s*preferred:\s*([^|]+)\s*\|\s*variants:\s*(.+)$/i,
         mapper: (m) => ({
-          terms: m[1]!.split('=').map(t => t.trim()),
-          description: m[2]!.trim(),
+          terms: [m[1]!.trim(), ...m[2]!.split(',').map(t => t.trim())],
+          description: `Prefer "${m[1]!.trim()}" over: ${m[2]!.trim()}`,
         }),
       },
     ];
 
     const terminologyMap = parseListItemsWithFallback(
       ctx,
-      'TERMINOLOGY_MAP',
-      /TERMINOLOGY_MAP:\s*([\s\S]*?)(?=SUGGESTIONS:|CONFIDENCE:|$)/i,
+      'TERMINOLOGY',
+      /TERMINOLOGY:\s*([\s\S]*?)(?=SUGGESTIONS:|CONFIDENCE:|$)/i,
       termPatterns
     );
 

@@ -14,8 +14,8 @@ import {
 
 describe('CategoryAgent Parsing', () => {
   describe('parseCategorizations', () => {
-    it('parses a single PAGE line', () => {
-      const response = `PAGE: auth/login | CURRENT: auth | SUGGESTED: security | MISMATCH: yes`;
+    it('parses a single categorization line', () => {
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Contains security-sensitive code`;
 
       const result = parseCategorizations(response);
 
@@ -24,12 +24,13 @@ describe('CategoryAgent Parsing', () => {
       assert.strictEqual(result[0]!.currentCategory, 'auth');
       assert.strictEqual(result[0]!.suggestedCategory, 'security');
       assert.strictEqual(result[0]!.confidence, 0.85); // mismatch confidence
+      assert.strictEqual(result[0]!.reason, 'Contains security-sensitive code');
     });
 
-    it('parses multiple PAGE lines', () => {
-      const response = `PAGE: auth/login | CURRENT: auth | SUGGESTED: security | MISMATCH: yes
-PAGE: docs/api | CURRENT: docs | SUGGESTED: api | MISMATCH: yes
-PAGE: utils/helpers | CURRENT: utils | SUGGESTED: utils | MISMATCH: no`;
+    it('parses multiple categorization lines', () => {
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Security content
+- path: docs/api | current: docs | suggested: api | reason: API documentation
+- path: utils/helpers | current: utils | suggested: utils | reason: correct`;
 
       const result = parseCategorizations(response);
 
@@ -40,28 +41,29 @@ PAGE: utils/helpers | CURRENT: utils | SUGGESTED: utils | MISMATCH: no`;
     });
 
     it('sets higher confidence for non-mismatches', () => {
-      const response = `PAGE: security/auth | CURRENT: security | SUGGESTED: security | MISMATCH: no`;
+      const response = `- path: security/auth | current: security | suggested: security | reason: correct`;
 
       const result = parseCategorizations(response);
 
       assert.strictEqual(result.length, 1);
       assert.strictEqual(result[0]!.confidence, 0.95); // no mismatch = higher confidence
+      assert.strictEqual(result[0]!.reason, 'Correctly categorized');
     });
 
     it('ignores invalid lines', () => {
-      const response = `PAGE: auth/login | CURRENT: auth | SUGGESTED: security | MISMATCH: yes
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Security code
 This is not a valid line
 Some random text
-PAGE: api/users | CURRENT: api | SUGGESTED: api | MISMATCH: no`;
+- path: api/users | current: api | suggested: api | reason: correct`;
 
       const result = parseCategorizations(response);
 
       assert.strictEqual(result.length, 2);
     });
 
-    it('returns empty array for response without PAGE lines', () => {
+    it('returns empty array for response without categorization lines', () => {
       const response = `Some random text
-No PAGE lines here`;
+No categorization lines here`;
 
       const result = parseCategorizations(response);
 
@@ -69,7 +71,7 @@ No PAGE lines here`;
     });
 
     it('handles whitespace variations', () => {
-      const response = `PAGE:  auth/login  |  CURRENT:  auth  |  SUGGESTED:  security  |  MISMATCH:  yes`;
+      const response = `-  path:  auth/login  |  current:  auth  |  suggested:  security  |  reason:  Some reason`;
 
       const result = parseCategorizations(response);
 
@@ -80,32 +82,23 @@ No PAGE lines here`;
   });
 
   describe('parseCategoryFindings', () => {
-    it('parses MISMATCH finding lines', () => {
-      const response = `PAGE: auth/login | CURRENT: auth | SUGGESTED: security | MISMATCH: yes
+    it('extracts mismatches from categorization lines', () => {
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Contains security code
 
-MISMATCH: auth/login should be in security - it contains security-sensitive code`;
+CONFIDENCE: 0.85`;
 
       const result = parseCategoryFindings(response);
 
       assert.strictEqual(result.length, 1);
       assert.strictEqual(result[0]!.pagePath, 'auth/login');
       assert.strictEqual(result[0]!.suggestedCategory, 'security');
-      assert.ok(result[0]!.reason.includes('security-sensitive'));
+      assert.strictEqual(result[0]!.reason, 'Contains security code');
     });
 
-    it('parses bullet point format', () => {
-      const response = `- auth/login should be in security - reason here`;
-
-      const result = parseCategoryFindings(response);
-
-      assert.strictEqual(result.length, 1);
-      assert.strictEqual(result[0]!.pagePath, 'auth/login');
-    });
-
-    it('parses multiple findings', () => {
-      const response = `MISMATCH: auth/login should be in security - reason 1
-MISMATCH: docs/api should be in api - reason 2
-MISMATCH: utils/test should be in testing - reason 3`;
+    it('parses multiple mismatches', () => {
+      const response = `- path: auth/login | current: auth | suggested: security | reason: reason 1
+- path: docs/api | current: docs | suggested: api | reason: reason 2
+- path: utils/test | current: utils | suggested: testing | reason: reason 3`;
 
       const result = parseCategoryFindings(response);
 
@@ -113,7 +106,7 @@ MISMATCH: utils/test should be in testing - reason 3`;
     });
 
     it('all findings default to medium severity', () => {
-      const response = `MISMATCH: auth/login should be in security - reason`;
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Some reason`;
 
       const result = parseCategoryFindings(response);
 
@@ -121,29 +114,29 @@ MISMATCH: utils/test should be in testing - reason 3`;
       assert.strictEqual(result[0]!.severity, 'medium');
     });
 
-    it('returns empty array when no findings', () => {
-      const response = `PAGE: security/auth | CURRENT: security | SUGGESTED: security | MISMATCH: no`;
+    it('returns empty array when no mismatches', () => {
+      const response = `- path: security/auth | current: security | suggested: security | reason: correct`;
 
       const result = parseCategoryFindings(response);
 
       assert.strictEqual(result.length, 0);
     });
 
-    it('ignores PAGE lines with MISMATCH field', () => {
-      const response = `PAGE: auth/login | CURRENT: auth | SUGGESTED: security | MISMATCH: yes
-MISMATCH: auth/login should be in security - real finding`;
+    it('filters out correctly categorized pages', () => {
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Security content
+- path: api/users | current: api | suggested: api | reason: correct`;
 
       const result = parseCategoryFindings(response);
 
-      // Should only get the real finding, not the PAGE line
+      // Should only get the mismatch
       assert.strictEqual(result.length, 1);
-      assert.ok(result[0]!.reason.includes('real finding'));
+      assert.strictEqual(result[0]!.pagePath, 'auth/login');
     });
   });
 
   describe('parseConfidence', () => {
     it('parses confidence value', () => {
-      const response = `PAGE: auth/login | CURRENT: auth | SUGGESTED: security | MISMATCH: yes
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Test
 
 CONFIDENCE: 0.75`;
 
@@ -153,7 +146,7 @@ CONFIDENCE: 0.75`;
     });
 
     it('returns default for missing confidence', () => {
-      const response = `PAGE: auth/login | CURRENT: auth | SUGGESTED: security | MISMATCH: yes`;
+      const response = `- path: auth/login | current: auth | suggested: security | reason: Test`;
 
       const result = parseConfidence(response);
 

@@ -144,10 +144,10 @@ describe('CategoryAgent', () => {
         await ctx.repos.wikiPages.save(page);
       }
 
-      // Configure mock to return a categorization response
-      ctx.llm.setDefaultResponse(`PAGE: security/auth | CURRENT: security | SUGGESTED: security | MISMATCH: no
-PAGE: api/endpoints | CURRENT: api | SUGGESTED: api | MISMATCH: no
-PAGE: guides/getting-started | CURRENT: guides | SUGGESTED: guides | MISMATCH: no
+      // Configure mock to return a categorization response (new simplified format)
+      ctx.llm.setDefaultResponse(`- path: security/auth | current: security | suggested: security | reason: correct
+- path: api/endpoints | current: api | suggested: api | reason: correct
+- path: guides/getting-started | current: guides | suggested: guides | reason: correct
 
 CONFIDENCE: 0.9`);
 
@@ -201,11 +201,9 @@ CONFIDENCE: 0.9`);
         await ctx.repos.wikiPages.save(page);
       }
 
-      // Configure mock to return a mismatch finding
-      ctx.llm.setDefaultResponse(`PAGE: guides/oauth-security | CURRENT: guides | SUGGESTED: security | MISMATCH: yes
-PAGE: security/overview | CURRENT: security | SUGGESTED: security | MISMATCH: no
-
-MISMATCH: guides/oauth-security should be in security - it discusses OAuth security implementation details, not a how-to guide
+      // Configure mock to return a mismatch finding (new simplified format)
+      ctx.llm.setDefaultResponse(`- path: guides/oauth-security | current: guides | suggested: security | reason: OAuth security implementation details, not a how-to guide
+- path: security/overview | current: security | suggested: security | reason: correct
 
 CONFIDENCE: 0.85`);
 

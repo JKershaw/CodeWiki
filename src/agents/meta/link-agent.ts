@@ -142,18 +142,18 @@ For each page above, suggest pages it should link to. Consider:
 You MUST use exactly this format:
 
 LINK_SUGGESTIONS:
-- [source/page-path] -> [target/page-path] | [STRENGTH:strong] | Description of relationship
-- [source/page-path] -> [target/page-path] | [STRENGTH:medium] | Description of relationship
-- [source/page-path] -> [target/page-path] | [STRENGTH:weak] | Description of relationship
+- source/page-path -> target/page-path | strong | Description of relationship
+- source/page-path -> target/page-path | medium | Description of relationship
+- source/page-path -> target/page-path | weak | Description of relationship
 
 CONFIDENCE: 0.8
 
 ## Example Output
 
 LINK_SUGGESTIONS:
-- [commits/abc123] -> [security/overview] | [STRENGTH:medium] | Commit introduces authentication changes relevant to security
-- [commits/abc123] -> [architecture/auth-design] | [STRENGTH:strong] | Both discuss authentication architecture
-- [architecture/api-design] -> [commits/def456] | [STRENGTH:weak] | API changes relate to design decisions
+- commits/abc123 -> security/overview | medium | Commit introduces authentication changes relevant to security
+- commits/abc123 -> architecture/auth-design | strong | Both discuss authentication architecture
+- architecture/api-design -> commits/def456 | weak | API changes relate to design decisions
 
 CONFIDENCE: 0.75
 
@@ -164,10 +164,12 @@ Now analyze the pages above and provide your link suggestions:
   private parseResponse(response: string): ParsedAnalysis {
     const ctx = createParseContext('link', response);
 
-    // Define patterns for link suggestions
+    // Simplified format: source -> target | strength | description
+    // No brackets, no STRENGTH: prefix - just simple pipe-separated values
     const linkPatterns: ItemPattern<ParsedAnalysis['linkSuggestions'][0]>[] = [
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*->\s*\[([^\]]+)\]\s*\|\s*\[STRENGTH:(\w+)\]\s*\|\s*(.+)$/i,
+        // Format: - source/path -> target/path | strength | description
+        pattern: /^-\s*(.+?)\s*->\s*(.+?)\s*\|\s*(\w+)\s*\|\s*(.+)$/i,
         mapper: (m) => ({
           sourcePath: m[1]!.trim(),
           targetPath: m[2]!.trim(),

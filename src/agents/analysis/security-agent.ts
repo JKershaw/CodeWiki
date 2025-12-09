@@ -230,22 +230,36 @@ Format your response as:
 SUMMARY:
 [Brief security assessment of the commit]
 
-SECURITY_RELEVANCE:
-[One of: critical, high, medium, low, none]
+SECURITY_RELEVANCE: [critical/high/medium/low/none]
 
 FINDINGS:
-- [CATEGORY] [SEVERITY:critical/high/medium/low] [Description] [Affected paths]
+- category: [name] | severity: [critical/high/medium/low] | [description] | paths: [file1.ts, file2.ts]
 
 VULNERABILITIES:
-- [Vulnerability type] [Description] [CWE if known]
+- [type] | [description] | [CWE if known]
 
 RECOMMENDATIONS:
-- [Recommendation for improving security]
+- [Recommendation]
 
-WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+CONFIDENCE: [0-1]
 
-CONFIDENCE: [0-1 value]
+Example:
+
+SUMMARY:
+Adds authentication with weak hashing.
+
+SECURITY_RELEVANCE: high
+
+FINDINGS:
+- category: Authentication | severity: high | Uses MD5 for passwords | paths: src/auth.ts
+
+VULNERABILITIES:
+- Weak Hashing | MD5 vulnerable to rainbow tables | CWE-328
+
+RECOMMENDATIONS:
+- Use bcrypt or argon2
+
+CONFIDENCE: 0.9
 `;
   }
 
@@ -303,22 +317,36 @@ Format your response as:
 SUMMARY:
 [Brief security assessment of the commit]
 
-SECURITY_RELEVANCE:
-[One of: critical, high, medium, low, none]
+SECURITY_RELEVANCE: [critical/high/medium/low/none]
 
 FINDINGS:
-- [CATEGORY] [SEVERITY:critical/high/medium/low] [Description] [Affected paths]
+- category: [name] | severity: [critical/high/medium/low] | [description] | paths: [file1.ts, file2.ts]
 
 VULNERABILITIES:
-- [Vulnerability type] [Description] [CWE if known]
+- [type] | [description] | [CWE if known]
 
 RECOMMENDATIONS:
-- [Recommendation for improving security]
+- [Recommendation]
 
-WIKI_UPDATES:
-- [PAGE_PATH] [ACTION:create/update] [Content description]
+CONFIDENCE: [0-1]
 
-CONFIDENCE: [0-1 value]
+Example:
+
+SUMMARY:
+Adds authentication with weak hashing.
+
+SECURITY_RELEVANCE: high
+
+FINDINGS:
+- category: Authentication | severity: high | Uses MD5 for passwords | paths: src/auth.ts
+
+VULNERABILITIES:
+- Weak Hashing | MD5 vulnerable to rainbow tables | CWE-328
+
+RECOMMENDATIONS:
+- Use bcrypt or argon2
+
+CONFIDENCE: 0.9
 `;
   }
 
@@ -337,15 +365,16 @@ CONFIDENCE: [0-1 value]
       { defaultValue: 'none' }
     ) ?? 'none';
 
-    // Define finding patterns
+    // Simplified format: - category: [name] | severity: [level] | [description] | paths: [files]
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
       {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[SEVERITY:(\w+)\]\s*(.+?)(?:\s*\[([^\]]*)\])?$/i,
+        // New pipe-separated format
+        pattern: /^-\s*category:\s*([^|]+)\s*\|\s*severity:\s*(\w+)\s*\|\s*([^|]+)\s*\|\s*paths:\s*(.+)$/i,
         mapper: (m) => ({
           type: m[1]!.trim(),
           importance: mapSeverity(m[2]!),
           description: m[3]!.trim(),
-          paths: m[4]?.split(',').map(p => p.trim()).filter(p => p) ?? [],
+          paths: m[4]!.split(',').map(p => p.trim()).filter(p => p),
         }),
       },
     ];
@@ -353,42 +382,26 @@ CONFIDENCE: [0-1 value]
     const findings = parseListItemsWithFallback(
       ctx,
       'FINDINGS',
-      /FINDINGS:\s*([\s\S]*?)(?=VULNERABILITIES:|RECOMMENDATIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i,
+      /FINDINGS:\s*([\s\S]*?)(?=VULNERABILITIES:|RECOMMENDATIONS:|CONFIDENCE:|$)/i,
       findingPatterns
     );
 
-    // Parse vulnerabilities as string list
+    // Parse vulnerabilities as string list (pipe-separated: type | description | CWE)
     const vulnerabilities = parseStringList(
       ctx,
       'VULNERABILITIES',
-      /VULNERABILITIES:\s*([\s\S]*?)(?=RECOMMENDATIONS:|WIKI_UPDATES:|CONFIDENCE:|$)/i
+      /VULNERABILITIES:\s*([\s\S]*?)(?=RECOMMENDATIONS:|CONFIDENCE:|$)/i
     );
 
     // Parse recommendations as string list
     const recommendations = parseStringList(
       ctx,
       'RECOMMENDATIONS',
-      /RECOMMENDATIONS:\s*([\s\S]*?)(?=WIKI_UPDATES:|CONFIDENCE:|$)/i
+      /RECOMMENDATIONS:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
     );
 
-    // Define wiki update patterns
-    const wikiUpdatePatterns: ItemPattern<ParsedAnalysis['wikiUpdates'][0]>[] = [
-      {
-        pattern: /^-\s*\[([^\]]+)\]\s*\[(create|update)\]\s*(.+)$/i,
-        mapper: (m) => ({
-          path: m[1]!.trim(),
-          action: m[2]!.toLowerCase() as 'create' | 'update',
-          description: m[3]!.trim(),
-        }),
-      },
-    ];
-
-    const wikiUpdates = parseListItemsWithFallback(
-      ctx,
-      'WIKI_UPDATES',
-      /WIKI_UPDATES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
-      wikiUpdatePatterns
-    );
+    // Wiki updates are no longer in the LLM output - they're generated programmatically
+    const wikiUpdates: ParsedAnalysis['wikiUpdates'] = [];
 
     // Parse confidence
     const confidence = parseConfidence(ctx, { defaultValue: 0.5 });
