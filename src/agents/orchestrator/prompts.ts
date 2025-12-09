@@ -122,17 +122,15 @@ Generate up to ${maxItems} work items that would make the wiki most useful right
 
 **Exploration priority:** Review the Directory Coverage tree above. Target directories with ⚠️ (low coverage) for codebase-explorer, prioritizing larger directories first.
 
-Consider:
-- Pending edit requests: ${ctx.pendingEditRequests}${ctx.pendingEditRequests > 0 ? ' - run wiki-editor agent FIRST!' : ''}
-- Pages needing rewrite: ${ctx.pagesNeedingRewrite} (writer agent improves readability)
-- Shallow pages (< 500 chars): ${ctx.shallowPages}${ctx.shallowPages > 0 ? ' - run writer agent to add depth!' : ''}
-- Pages without code examples: ${ctx.pagesLackingExamples}${ctx.pagesLackingExamples > 0 ? ' - run writer agent to add examples!' : ''}
-- Categories without overview: ${ctx.categoriesWithoutOverview.join(', ') || 'none'} (overview agent helps navigation)
-- Has project overview: ${ctx.hasProjectOverview ? 'YES' : 'NO - run project-overview agent!'}
-- Has getting started: ${ctx.hasGettingStarted ? 'YES' : 'NO - run getting-started agent!'}
-- Has testing guide: ${ctx.hasTestingGuide ? 'YES' : (pageCount >= 15 ? 'NO - run testing-guide agent!' : 'NO (need 15+ pages)')}
-- Has extension guide: ${ctx.hasExtensionGuide ? 'YES' : (pageCount >= 15 ? 'NO - run extension-guide agent!' : 'NO (need 15+ pages)')}
-- Pages without links: ${ctx.pagesWithoutLinks}${ctx.pagesWithoutLinks > 0 && ctx.wikiPages > 0 && (ctx.pagesWithoutLinks / ctx.wikiPages) > 0.3 ? ' - CRITICAL: >30% pages unlinked, run link agent!' : ' (link agent improves discoverability)'}
+**Action guidance:** Review the Quality Gaps section above for specific pages to improve. Key actions:
+${ctx.pendingEditRequests > 0 ? `- Run wiki-editor agent FIRST (${ctx.pendingEditRequests} pending requests)\n` : ''}\
+${!ctx.hasProjectOverview ? '- Run project-overview agent (missing)\n' : ''}\
+${!ctx.hasGettingStarted ? '- Run getting-started agent (missing)\n' : ''}\
+${!ctx.hasTestingGuide && pageCount >= 15 ? '- Run testing-guide agent (missing, 15+ pages)\n' : ''}\
+${!ctx.hasExtensionGuide && pageCount >= 15 ? '- Run extension-guide agent (missing, 15+ pages)\n' : ''}\
+${ctx.categoriesWithoutOverview.length > 0 ? `- Run overview agent for: ${ctx.categoriesWithoutOverview.join(', ')}\n` : ''}\
+${ctx.shallowPages > 0 || ctx.pagesLackingExamples > 0 ? '- Run writer agent on pages listed in Quality Gaps\n' : ''}\
+${ctx.pagesWithoutLinks > 0 && ctx.wikiPages > 0 && (ctx.pagesWithoutLinks / ctx.wikiPages) > 0.3 ? '- CRITICAL: >30% pages unlinked, run link agent!\n' : ''}
 ${coverageGaps.length > 0 ? `
 **COVERAGE GAPS - agents with 0% coverage:** ${coverageGaps.join(', ')}
 Consider including work for these agents to ensure diverse analysis.
