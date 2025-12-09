@@ -298,12 +298,28 @@ export class SelfImprovementAgent {
     sections.push('');
     sections.push('## Your Task');
     sections.push('');
-    sections.push('1. **Assess wiki quality** - Explore the wiki structure and sample content across categories');
-    sections.push('2. **Identify coverage gaps** - Compare wiki structure to source code to find undocumented areas');
-    sections.push('3. **Understand why** - Trace issues to orchestrator decisions, agent behavior, or process gaps');
-    sections.push('4. **Recommend improvements** - Specific, actionable changes to the generation process');
+    sections.push('Follow this investigation order:');
     sections.push('');
-    sections.push('Start by listing wiki pages and exploring source code structure to understand coverage.');
+    sections.push('**Step 1: Compare source to wiki (CRITICAL)**');
+    sections.push('- Use `list_source_directory` on `src/` to see what code exists');
+    sections.push('- Use `list_wiki_pages` to see what documentation exists');
+    sections.push('- Identify GAPS: source files/directories with NO wiki documentation');
+    sections.push('- Example: If `src/services/database.ts` exists but no `services/database` wiki page → COVERAGE GAP');
+    sections.push('');
+    sections.push('**Step 2: Analyze benchmark trends**');
+    sections.push('- Use `get_question_trends` to find STUCK questions (no_answer across multiple runs)');
+    sections.push('- Use `get_benchmark_summary` to understand overall accuracy');
+    sections.push('- Correlate stuck questions with coverage gaps');
+    sections.push('');
+    sections.push('**Step 3: Assess quality dimensions**');
+    sections.push('- Note both STRONG and WEAK dimensions');
+    sections.push('- Identify actionability, completeness, and structural issues');
+    sections.push('');
+    sections.push('**Step 4: Recommend process improvements**');
+    sections.push('- Specific changes to agents, orchestrator, or workflow');
+    sections.push('- Include verification criteria');
+    sections.push('');
+    sections.push('START NOW: Use `list_source_directory` with path `src/` to explore the source code structure.');
 
     return sections.join('\n');
   }
