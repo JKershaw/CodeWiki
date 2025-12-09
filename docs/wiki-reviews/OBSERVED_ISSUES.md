@@ -1,228 +1,405 @@
 # Observed Issues Holding the Wiki Back
 
-**Analysis Date:** 2025-12-09
+**Analysis Date:** 2025-12-09 (Updated with code-level root causes)
 **Iterations Analyzed:** 200 total (two runs of 100)
 **Model:** qwen/qwen-turbo
 **Repository:** CodeWiki (this repo)
 
+This document combines empirical observations with code-level analysis to identify the root causes preventing effective wiki growth.
+
 ---
 
-## Critical Issues (High Impact)
+## Critical Issues (Blocking Wiki Usefulness)
 
-### 1. Navigation/Connectivity Collapse
+### 1. Link Agent Creates Wrong Link Format
 
-**Problem:** The wiki becomes increasingly disconnected as it grows.
+**Severity:** CRITICAL
+**Location:** `src/agents/meta/link-agent.ts:237-241`
 
-| Metric | 100 Iterations | 200 Iterations |
-|--------|---------------|----------------|
-| Orphan pages (unreachable) | 38% | 45% |
-| Dead-end pages (no outlinks) | 83% | 85% |
+**Problem:** The link agent creates markdown links `[Title](path)` instead of wiki-style links `[[path]]`.
+
+**Current Code:**
+```typescript
+const relatedSection = `\n\n## Related Pages\n\n${newLinks.map(l => {
+  const targetPage = pageMap.get(l.target);
+  const targetTitle = targetPage?.title ?? l.target;
+  return `- [${targetTitle}](${l.target}) - ${l.reason}`;  // WRONG FORMAT
+}).join('\n')}`;
+```
+
+**Impact:**
+- Zero wiki-style links across all 145 pages
+- Wiki rendering systems expecting `[[links]]` won't create clickable navigation
+- Pages are completely disconnected
 
 **Evidence:**
-- Main overview page has only 3 outgoing links despite 173 pages existing
-- No global table of contents or sitemap page exists
-- 78 of 173 pages have zero incoming links
+```
+Total wiki-style links: 0
+Total markdown links: 78
+```
 
-**Root Cause:** The Link Agent runs infrequently and doesn't prioritize connecting orphaned pages. New pages are created without ensuring they're linked from somewhere.
-
-**Impact:** Users cannot discover content. The wiki feels like isolated islands rather than connected knowledge.
-
----
-
-### 2. Content Duplication
-
-**Problem:** Multiple pages are created for the same topic with identical or near-identical titles.
-
-**Evidence (4 duplicate pairs found):**
-- `agents/meta/category-agent` vs `architecture/category-agent`
-- `commits/049d5dd1` vs `architecture/test-coverage` (same title: "Test Coverage Configuration with c8")
-- `commits/cd544448` vs `architecture/e2e-testing` (same title: "End-to-End Testing Infrastructure")
-- `commands/agent-run-management` vs `domain/agent-run`
-
-**Root Cause:**
-- Commit analysis creates pages that overlap with codebase exploration pages
-- No similarity check before creating new pages
-- The "skip similar page" mechanism appears to only work on exact path matches
-
-**Impact:** Confusion, inconsistent information, wasted generation effort.
+**Fix Required:** Change link format to `[[${l.target}]]` or `[[${l.target}|${targetTitle}]]`
 
 ---
 
-### 3. Factual Inaccuracies Not Corrected
+### 2. Link Agent Skips Already-Linked Pages
 
-**Problem:** Pages contain verifiably wrong information that persists across iterations.
+**Severity:** CRITICAL
+**Location:** `src/agents/meta/link-agent.ts:243-246`
+
+**Problem:** Once a page has a "Related Pages" section, the link agent skips it forever:
+
+```typescript
+if (page.content.includes('## Related Pages')) {
+  continue;  // Never processes this page again
+}
+```
+
+**Impact:**
+- Pages created early never get links to newer pages
+- Link coverage frozen at first-pass state
+- As wiki grows, older pages become increasingly isolated
+- Only 4/145 pages have Related Pages sections after 200 iterations
+
+**Fix Required:**
+- Merge with existing Related Pages sections instead of skipping
+- Re-analyze pages when significant new content is added
+- Track "last linked at" timestamp to enable re-processing
+
+---
+
+### 3. Overview Agent Never Updates Existing Pages
+
+**Severity:** CRITICAL
+**Location:** `src/agents/synthesis/overview-agent.ts:164-192, 345`
+
+**Problem:** Two compounding issues:
+
+1. **Skips categories with existing overviews:**
+```typescript
+if (!hasOverview) {
+  needsOverview.push([category, pages]);  // Only processes missing overviews
+}
+```
+
+2. **Always uses 'create' type (would fail on existing pages anyway):**
+```typescript
+return {
+  type: 'create',  // Never 'update'
+  path: `${category}/overview`,
+  ...
+};
+```
+
+**Impact:**
+- The main overview page still shows: "a web application for managing tasks and projects"
+- Factually incorrect content persists indefinitely
+- No self-correction mechanism exists
+- Overview unchanged after 200 iterations despite overview agent running 6+ times
+
+**Fix Required:**
+- Check existing overview content quality before skipping
+- Use `type: 'update'` for existing pages that need correction
+- Pattern after wiki-index-agent which handles this correctly
+
+---
+
+### 4. Commit Processing Stalled at 3.2%
+
+**Severity:** HIGH
+**Location:** `src/agents/orchestrator/orchestrator.ts` (work prioritization)
+
+**Problem:** After 200 iterations, only 10/315 commits (3.2%) have been processed. The orchestrator consistently prioritizes codebase-explorer over commit analysis.
+
+**Evidence from logs:**
+- Agent distribution: codebase-explorer: ~190, code-change: ~30
+- Orchestrator messages mention "prioritize exploration" repeatedly
+- Commit coverage hasn't changed between iteration 100 and 200
+
+**Impact:**
+- Wiki lacks historical context for how code evolved
+- "Why did we do X?" questions can't be answered
+- Defeats the core value proposition of CodeWiki
+
+**Fix Required:**
+- Rebalance orchestrator priorities
+- Ensure minimum commit processing per cycle
+- Consider commit age/importance weighting
+
+---
+
+### 5. Quality Agent Doesn't Auto-Fix Issues
+
+**Severity:** HIGH
+**Location:** `src/agents/meta/quality-agent.ts:320-327`
+
+**Problem:** The quality agent can detect issues but returns empty updates:
+
+```typescript
+private generateUpdates(
+  _pages: WikiPage[],
+  _analysis: QualityAnalysis
+): WikiPageUpdate[] {
+  // Quality agent reports issues but doesn't auto-fix
+  return [];  // Always empty
+}
+```
+
+**Impact:**
+- Inaccurate content persists (e.g., "Project Name" in overview)
+- Shallow pages not expanded
+- No self-improvement loop
+
+**Fix Required:**
+- Generate improvement updates for low-quality pages
+- Integration with other agents to fix detected issues
+- Confidence-boosting updates for verified content
+
+---
+
+## High Priority Issues
+
+### 6. Edit Requests Accumulate Without Processing
+
+**Severity:** HIGH
+**Location:** `src/executor/executor.ts` (edit queue handling)
+
+**Problem:** Edit requests generated by code-change agent accumulate in pending state. After first 100 iterations, 28 were pending. wiki-editor eventually ran but 22 still remain.
+
+**Pattern observed:**
+```
+📝 Queued 2 edit request(s) for wiki-editor
+(repeated many times, wiki-editor runs infrequently)
+```
+
+**Impact:**
+- Generated content never reaches the wiki
+- Architecture documentation pages requested but not created
+- Wasted LLM calls for content that never gets used
+
+**Fix Required:**
+- Process edit queue more frequently
+- Higher priority for wiki-editor when queue exceeds threshold
+- Consider inline edit application vs batching
+
+---
+
+### 7. Topic Fragmentation Without Consolidation
+
+**Severity:** HIGH
+**Location:** `src/agents/consolidation/` (consolidation agent behavior)
+
+**Problem:** The same topics are documented across many pages without consolidation:
+- 6 pages about "bootstrap"
+- 14 pages about "link agent"
+- Duplicate: "Wiki Page Confidence Management" in 2 different paths
+
+**Impact:**
+- Information scattered, hard to find authoritative source
+- Users must read multiple pages for complete picture
+- Contradictions possible between fragmented content
+
+**Fix Required:**
+- Consolidation agent should merge related content
+- Canonical page designation for each topic
+- Redirect/link from fragment pages to canonical
+
+---
+
+### 8. Template/Placeholder Leakage
+
+**Problem:** Raw LLM template text appears in published wiki pages, and factual inaccuracies persist.
 
 **Evidence:**
-- `guides/testing` claims project uses Jest - it actually uses Node's built-in test runner
-- `guides/testing` references `npm run test:watch` - this command doesn't exist
-- `guides/getting-started` lists Node.js 18.18.0 - package.json specifies 24.x
-- Incorrect npm version listed
+- `overview` describes wrong project ("web application for managing tasks")
+- `guides/getting-started` references non-existent files (logger.ts, validation.ts)
+- Some pages contain template patterns like `[Descriptive title]`
 
 **Root Cause:**
-- No fact-checking against actual source files (package.json, scripts)
-- No agent specifically tasked with verifying claims against source code
+- Response parsing doesn't validate output quality
+- No fact-checking against actual source files
 - Getting Started agent appears to use generic templates
 
 **Impact:** Developers following the wiki will encounter errors and lose trust.
 
 ---
 
-### 4. Template/Placeholder Leakage
+## Medium Priority Issues
 
-**Problem:** Raw LLM template text appears in published wiki pages.
+### 9. Missing Navigation Aids
+
+**Severity:** MEDIUM
+
+**Problem:** No navigation infrastructure exists:
+- 0 pages with breadcrumbs
+- 0 pages with "See Also" sections
+- No category index pages
+- No site map
+
+**Impact:**
+- Users can't browse hierarchically
+- No way to discover related content
+- Lost in wiki without search
+
+**Fix Required:**
+- Generate category index pages
+- Add breadcrumb component to page template
+- Auto-generate "See Also" from semantic similarity
+
+---
+
+### 10. Technical Pages Lack Code Examples
+
+**Severity:** MEDIUM
+**Location:** Various agent pages
+
+**Problem:** 10 technical pages about agents, commands, etc. have no code examples.
 
 **Evidence:**
-Page `commits/86e24e23` contains:
 ```
-Title: [Descriptive title]`
-Content: # [Descriptive title]`
-[2-3 paragraph article]`
-### Findings
-`
+Technical pages without code: 10
+Example pages missing code: agents/orchestrator, agents/consistency-agent
 ```
 
-**Root Cause:**
-- Response parsing doesn't validate output quality
-- No rejection of responses containing obvious template patterns
-- Backticks included in template were not stripped
+**Impact:**
+- Hard to understand usage
+- Developers need to reference source anyway
+- Documentation incomplete
 
-**Impact:** Unprofessional, confusing content that damages wiki credibility.
+**Fix Required:**
+- Extract key code snippets during analysis
+- Include usage examples in agent documentation
+- Template requirement for technical pages
 
 ---
 
-### 5. Broken Links Never Fixed
+### 11. Short/Shallow Content
 
-**Problem:** The same 5 broken links persisted from 100 to 200 iterations with no attempt to fix them.
+**Severity:** MEDIUM
+
+**Problem:** 9 pages have fewer than 1000 characters. Many pages have surface-level descriptions without depth.
 
 **Evidence:**
-- `guides/getting-started` -> `wiki/understanding-cli` (doesn't exist)
-- `guides/getting-started` -> `wiki/environment-variables` (doesn't exist)
-- `agents/synthesis/project-overview-agent` links to file names not wiki pages
+```
+Pages under 1000 chars: 9
+Examples: agents/research-agent (831), agents/consistency-agent (854)
+```
 
-**Root Cause:**
-- Broken link handler exists but doesn't run effectively
-- No prioritization of fixing existing issues over creating new content
+**Impact:**
+- Not useful for understanding components
+- Questions remain unanswered
+- Feels like stub content
 
-**Impact:** Dead ends frustrate users, suggest wiki is unmaintained.
-
----
-
-## Moderate Issues (Medium Impact)
-
-### 6. Low Confidence Scores Universal
-
-**Problem:** Every single page (100%) has confidence below 0.6, with most at 0.5.
-
-**Evidence:** All 173 pages have confidence ≤ 0.55
-
-**Root Cause:**
-- Confidence appears to be a static default rather than dynamically calculated
-- No mechanism to improve confidence through iteration
-
-**Impact:** System can't distinguish high-quality from low-quality pages.
+**Fix Required:**
+- Minimum content length enforcement
+- Quality threshold for page acceptance
+- Expansion pass for shallow pages
 
 ---
 
-### 7. Short/Stub Pages Proliferating
+### 12. Codebase Explorer Path Errors
 
-**Problem:** Pages with minimal content (under 1000 chars) are published.
+**Severity:** MEDIUM
+**Location:** `src/agents/analysis/codebase-explorer-agent.ts`
 
-**Evidence:** 12 pages under 1000 characters including:
-- Architecture pages averaging ~850 chars
-- Handler documentation pages ~960 chars
-- Commit pages as low as 664 chars
+**Problem:** Many "Failed to list directory" and "Invalid path" errors in logs:
+- Trying to explore files as directories (ENOTDIR)
+- Trying to explore paths outside src/
+- Non-existent directories being requested
 
-**Root Cause:**
-- No minimum content threshold for publishing
-- Writer agent doesn't expand stub pages
+**Evidence from logs:**
+```
+[codebase-explorer] Failed to list directory src/executor/executor.ts: ENOTDIR
+Invalid path for codebase-explorer: scripts (must start with src/ or lib/)
+[codebase-explorer] Failed to list directory src/parsing: ENOENT
+```
 
-**Impact:** Pages provide little value, poor information density.
+**Impact:**
+- Wasted iterations on invalid work
+- Explorer behavior unpredictable
+- Some code areas never documented
+
+**Fix Required:**
+- Better path validation before claiming work
+- Handle file vs directory properly
+- Update path patterns for actual project structure
 
 ---
 
-### 8. Inconsistent Page Organization
+## Low Priority Issues
 
-**Problem:** Similar content placed in different category hierarchies.
+### 13. Generic Project Names in Content
+
+**Severity:** LOW
+**Location:** `overview` page, `architecture/overview`
+
+**Problem:** Some pages contain "Project Name" instead of "CodeWiki"
+
+**Impact:** Looks unprofessional, suggests template not filled in
+
+---
+
+### 14. Inconsistent .md Extensions in Links
+
+**Severity:** LOW
+**Location:** `architecture/overview`, `wiki-quality/agent-cooldowns`
+
+**Problem:** Some internal links include `.md` extension while most don't
 
 **Evidence:**
-- `agents/dependency-agent` should be `agents/analysis/dependency-agent`
-- `agents/quality-agent` should be `agents/meta/quality-agent`
-- `analysis/narrative-agent` vs `agents/analysis/narrative-agent` (two pages)
+```
+Links with .md extension:
+  architecture/overview -> overview.md
+  architecture/overview -> agents/orchestrator.md
+  wiki-quality/agent-cooldowns -> wiki-quality/duplicate-prevention.md
+```
 
-**Root Cause:**
-- No enforcement of category hierarchy rules
-- Different agents create pages in different locations
-
-**Impact:** Users can't predict where to find content.
-
----
-
-## Minor Issues (Low Impact)
-
-### 9. No Root Navigation
-
-**Problem:** Only 2 root-level pages exist (overview, web-server).
-
-**Root Cause:** Bootstrap agent creates minimal structure.
-
-**Impact:** No clear entry points to major wiki sections.
+**Impact:** Inconsistent linking conventions
 
 ---
 
-### 10. Category Overview Pages Incomplete
+## Summary: Root Causes
 
-**Problem:** Category pages like `commands/overview` exist but aren't comprehensive.
+The issues above stem from several architectural patterns:
 
-**Root Cause:** Overview agent runs but doesn't ensure all pages in category are listed.
-
-**Impact:** Missing cross-references within categories.
-
----
-
-## System Behavior Observations
-
-### What the System Does Well:
-1. Generates reasonable individual page content
-2. Explores codebase breadth efficiently
-3. Creates source code documentation
-4. Handles rate limiting/retries gracefully
-
-### What the System Does Poorly:
-1. **Prioritization**: Creates new content over fixing problems
-2. **Connectivity**: Pages created in isolation without links
-3. **Quality gates**: No rejection of low-quality output
-4. **Self-healing**: Known issues persist indefinitely
-5. **Deduplication**: Same topics documented multiple times
+| Root Cause | Affected Issues | Pattern |
+|------------|-----------------|---------|
+| **Create-Only Design** | #3, #5 | Agents create but don't update/improve |
+| **Skip-If-Exists Pattern** | #2, #3 | Skipping instead of merging causes stale content |
+| **Wrong Link Format** | #1 | Markdown links instead of wiki links |
+| **Weak Prioritization** | #4, #6 | Exploration prioritized over commits/quality |
+| **No Quality Feedback Loop** | #5, #8 | Detection without correction |
+| **Batch Processing** | #6 | Edit requests accumulate vs inline |
 
 ---
 
-## Recommended Priority Fixes
+## Recommended Priority Order
 
-### P0 (Critical):
-1. **Enforce connectivity**: New pages must link to/from existing content
-2. **Deduplicate**: Check for similar titles/content before creating pages
-3. **Validate output**: Reject responses with template patterns
+### P0 (Critical - Fix First):
+1. **Fix link format** in link-agent.ts (blocks navigation entirely)
+2. **Enable page updates** in overview-agent.ts (blocks improvement)
+3. **Enable Related Pages merging** in link-agent.ts (allows expansion)
 
-### P1 (High):
-4. **Fix broken links**: Prioritize broken link repair over new content
-5. **Fact verification**: Check claims against source files
-6. **Navigation structure**: Create global TOC, improve overview pages
+### P1 (High - Fix Soon):
+4. **Rebalance orchestrator priorities** (stalled commit processing)
+5. **Process edit queue inline** (wasted generation)
+6. **Implement quality auto-fix** (enable self-improvement)
 
-### P2 (Medium):
-7. **Minimum content threshold**: Don't publish pages under 1500 chars
-8. **Category enforcement**: Validate page paths match expected patterns
-9. **Confidence scoring**: Make confidence meaningful/dynamic
+### P2 (Medium - Fix Later):
+7. **Add navigation aids** (category indexes, breadcrumbs)
+8. **Implement content consolidation** (reduce fragmentation)
+9. **Expand shallow content** (completeness)
 
 ---
 
-## Appendix: Test Methodology
+## Test Methodology
 
-1. Cleared any existing wiki data
-2. Set up fresh .env with OpenRouter API key
-3. Ran `npm run cli -- process . 100` (first run)
-4. Analyzed wiki-pages.json for metrics
-5. Ran `npm run cli -- process . 100` (second run)
-6. Compared metrics before/after
-7. Manually reviewed problematic pages
+1. Set up fresh .env with OpenRouter API key (qwen/qwen-turbo)
+2. Ran `npm run cli process . 100` (first run)
+3. Analyzed wiki-pages.json for metrics
+4. Ran `npm run cli process . 100` (second run)
+5. Compared metrics before/after
+6. Used Task agent to explore link-agent.ts and overview-agent.ts implementation
+7. Identified code-level root causes for persistent issues
 
-Scripts used for analysis are in `scripts/analyze-wiki.cjs` and `scripts/check-nav.cjs`.
+Analysis scripts: `analyze-links.cjs` in project root.
