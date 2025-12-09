@@ -18,6 +18,7 @@ import { QualityAgent } from '../../src/agents/meta/quality-agent.js';
 import { LinkAgent } from '../../src/agents/meta/link-agent.js';
 import { StructureAgent } from '../../src/agents/meta/structure-agent.js';
 import { SourceVerificationAgent } from '../../src/agents/meta/source-verification-agent.js';
+import { createWikiTarget } from '../../src/domain/work-target.js';
 import {
   createLLMTestContext,
   createTestRepo,
@@ -100,7 +101,7 @@ describe('Meta Agents with Real LLM', { timeout: 180000 }, () => {
       ]);
 
       const agent = new ConsistencyAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify inconsistency detection
       const analysisText = JSON.stringify({
@@ -182,7 +183,7 @@ example.run();
       ]);
 
       const agent = new QualityAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify quality assessment
       const analysisText = JSON.stringify({
@@ -242,7 +243,7 @@ example.run();
       ]);
 
       const agent = new LinkAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify link suggestions
       const analysisText = JSON.stringify({
@@ -297,7 +298,7 @@ example.run();
       ]);
 
       const agent = new LinkAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // Structural assertion: updates should have links array populated
       assert.ok(result.updates.length > 0, 'Should generate link updates');
@@ -363,7 +364,7 @@ example.run();
       ]);
 
       const agent = new StructureAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify structure analysis
       const analysisText = JSON.stringify({
@@ -434,7 +435,7 @@ The \`authenticate\` function validates tokens by checking if they start with "B
       ]);
 
       const agent = new SourceVerificationAgent();
-      const result = await agent.runOnWiki(agentCtx);
+      const result = await agent.run(createWikiTarget(), agentCtx);
 
       // LLM-as-judge: Verify the verification process
       const analysisText = JSON.stringify({
