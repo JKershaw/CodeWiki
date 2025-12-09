@@ -13,6 +13,7 @@ import {
   createUnifiedRepoAccessFactory,
   type UnifiedRepoAccess,
 } from '../services/repository/unified-repo-access.js';
+import { runContinuousPool } from './continuous-worker-pool.js';
 
 // Import CQRS commands
 import {
@@ -40,8 +41,8 @@ import {
   handleFailIteration,
 } from '../commands/iteration.js';
 import {
-  createClaimWorkItemBatchCommand,
-  handleClaimWorkItemBatch,
+  createClaimWorkItemOneCommand,
+  handleClaimWorkItemOne,
   createSaveWorkItemsCommand,
   handleSaveWorkItems,
   createCompleteWorkItemCommand,
@@ -275,96 +276,109 @@ export class Executor {
           continue;
         }
 
-        // Check pending count and trigger proactive async refill if low
-        const pendingCount = await this.repos.workQueue.countPending(repoId);
-        if (pendingCount <= QUEUE_LOW_WATER_MARK && !this.refillInProgress) {
-          this.triggerAsyncRefill(repoId, wikiId, pendingCount);
-        }
-
         // Get commits already processed by code-change agent (for ordering constraints)
+        // This set is updated dynamically when code-change jobs complete
         const processedCommits = await this.getCodeChangeProcessedCommits(repoId);
 
-        // Calculate how many items we can process in this batch
-        // With a larger queue, we have more candidates to choose from after filtering
-        const remainingIterations = iterations - summary.iterations;
-        const batchSize = Math.min(maxConcurrency, remainingIterations);
+        // Track if we should exit the main loop
+        let workExhausted = false;
 
-        // Try to claim a batch of work items
-        let claimResult = await handleClaimWorkItemBatch(
-          createClaimWorkItemBatchCommand(repoId, batchSize, processedCommits),
-          this.repos
-        );
-        let workItems = claimResult.success ? claimResult.data ?? [] : [];
+        // Run the continuous worker pool
+        console.log(`\n▶ Starting continuous pool with max concurrency: ${maxConcurrency}`);
 
-        // If no work, wait for async refill or do synchronous generation
-        if (workItems.length === 0) {
-          // If async refill is in progress, wait for it
-          if (this.refillPromise) {
-            console.log('Waiting for async refill to complete...');
-            await this.refillPromise;
+        const poolResult = await runContinuousPool<WorkItem, WorkItemResult>({
+          maxConcurrency,
+          maxIterations: iterations - summary.iterations,
 
-            // Try claiming again after refill
-            const freshProcessedCommits = await this.getCodeChangeProcessedCommits(repoId);
-            claimResult = await handleClaimWorkItemBatch(
-              createClaimWorkItemBatchCommand(repoId, batchSize, freshProcessedCommits),
-              this.repos
-            );
-            workItems = claimResult.success ? claimResult.data ?? [] : [];
-          }
-
-          // Still no work? Do synchronous generation as fallback
-          if (workItems.length === 0) {
-            console.log('No work items claimed, generating more...');
-            // Request enough items to reach high water mark
-            const itemsToRequest = Math.max(10, QUEUE_HIGH_WATER_MARK);
-            const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, itemsToRequest);
-            if (newWork.length === 0) {
-              console.log('No more work to do');
-              break;
+          claimWork: async () => {
+            // Check for stop request
+            const currentRun = await this.repos.processingRuns.findById(processingRunId);
+            if (currentRun?.status === 'stopping' || this.shouldStop) {
+              return null;
             }
 
-            // Save new work items via CQRS command
-            await handleSaveWorkItems(
-              createSaveWorkItemsCommand(newWork),
-              this.repos
-            );
-
-            // Try claiming again with fresh processedCommits
-            const freshProcessedCommits = await this.getCodeChangeProcessedCommits(repoId);
-            claimResult = await handleClaimWorkItemBatch(
-              createClaimWorkItemBatchCommand(repoId, batchSize, freshProcessedCommits),
-              this.repos
-            );
-            workItems = claimResult.success ? claimResult.data ?? [] : [];
-
-            if (workItems.length === 0) {
-              console.log('Still no work items after generation, stopping');
-              break;
+            // Check rate limits
+            const rateLimitStatus = this.llm.getRateLimitStatus();
+            if (rateLimitStatus.isLimited) {
+              // Wait for rate limit to clear before claiming
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              return null; // Will retry claiming
             }
-          }
-        }
 
-        // Log batch info
-        const agentTypes = workItems.map(w => w.agentType).join(', ');
-        console.log(`\n▶ Processing batch of ${workItems.length} items: [${agentTypes}]`);
+            // Check pending count and trigger proactive async refill if low
+            const pendingCount = await this.repos.workQueue.countPending(repoId);
+            if (pendingCount <= QUEUE_LOW_WATER_MARK && !this.refillInProgress) {
+              this.triggerAsyncRefill(repoId, wikiId, pendingCount);
+            }
 
-        // Create iteration records for each work item in the batch
-        const iterationContexts: Array<{ iterationId: string; workItem: WorkItem }> = [];
-        for (const workItem of workItems) {
-          iterationNumber++;
-          const iterationId = uuid();
+            // Try to claim a work item
+            const claimResult = await handleClaimWorkItemOne(
+              createClaimWorkItemOneCommand(repoId, processedCommits),
+              this.repos
+            );
+            let workItem = claimResult.success ? claimResult.data : null;
 
-          const startIterResult = await handleStartIteration(
-            createStartIterationCommand({
-              id: iterationId,
-              processingRunId,
-              iterationNumber,
-            }),
-            this.repos
-          );
+            // If no work, try to generate more
+            if (!workItem) {
+              // If async refill is in progress, wait for it
+              if (this.refillPromise) {
+                await this.refillPromise;
 
-          if (startIterResult.success) {
-            // Update iteration with work item details
+                // Try claiming again after refill
+                const retryResult = await handleClaimWorkItemOne(
+                  createClaimWorkItemOneCommand(repoId, processedCommits),
+                  this.repos
+                );
+                workItem = retryResult.success ? retryResult.data : null;
+              }
+
+              // Still no work? Do synchronous generation as fallback
+              if (!workItem) {
+                const itemsToRequest = Math.max(10, QUEUE_HIGH_WATER_MARK);
+                const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, itemsToRequest);
+                if (newWork.length === 0) {
+                  workExhausted = true;
+                  return null;
+                }
+
+                // Save new work items via CQRS command
+                await handleSaveWorkItems(
+                  createSaveWorkItemsCommand(newWork),
+                  this.repos
+                );
+
+                // Try claiming again
+                const finalResult = await handleClaimWorkItemOne(
+                  createClaimWorkItemOneCommand(repoId, processedCommits),
+                  this.repos
+                );
+                workItem = finalResult.success ? finalResult.data : null;
+
+                if (!workItem) {
+                  workExhausted = true;
+                  return null;
+                }
+              }
+            }
+
+            console.log(`  ◆ Claimed: ${workItem.agentType}`);
+            return workItem;
+          },
+
+          executeWork: async (workItem) => {
+            // Create iteration record
+            iterationNumber++;
+            const iterationId = uuid();
+
+            await handleStartIteration(
+              createStartIterationCommand({
+                id: iterationId,
+                processingRunId,
+                iterationNumber,
+              }),
+              this.repos
+            );
+
             await handleUpdateIterationWorkItem(
               createUpdateIterationWorkItemCommand(iterationId, {
                 workItemId: workItem.id,
@@ -372,24 +386,13 @@ export class Executor {
               }),
               this.repos
             );
-            iterationContexts.push({ iterationId, workItem });
-          } else {
-            console.error(`Failed to start iteration: ${startIterResult.error}`);
-          }
-        }
 
-        // Execute all work items in parallel
-        const results = await Promise.allSettled(
-          iterationContexts.map(async ({ iterationId, workItem }) => {
             const result = await this.executeWorkItem(workItem, repoId, wikiId);
-            return { iterationId, workItem, result };
-          })
-        );
+            return { ...result, iterationId, workItem };
+          },
 
-        // Process results and update iteration records
-        for (const settledResult of results) {
-          if (settledResult.status === 'fulfilled') {
-            const { iterationId, result } = settledResult.value;
+          onComplete: async (workItem, result) => {
+            const { iterationId } = result as WorkItemResult & { iterationId: string; workItem: WorkItem };
 
             if (result.success) {
               await handleCompleteIteration(
@@ -403,6 +406,11 @@ export class Executor {
                 this.repos
               );
               summary.successful++;
+
+              // Dynamic processedCommits update: if code-change completed, add commit to set
+              if (workItem.agentType === 'code-change' && isCommitTarget(workItem.target)) {
+                processedCommits.add(workItem.target.commitId);
+              }
             } else {
               await handleFailIteration(
                 createFailIterationCommand(iterationId, result.error || 'Unknown error', result.durationMs),
@@ -415,26 +423,37 @@ export class Executor {
             summary.totalCost += result.cost;
             summary.wikiPagesCreated += result.pagesCreated;
             summary.wikiPagesUpdated += result.pagesUpdated;
-          } else {
-            // Promise rejected - unexpected error
-            console.error(`Unexpected error in parallel execution: ${settledResult.reason}`);
+
+            // Update processing run progress via CQRS command
+            await handleUpdateProcessingProgress(
+              createUpdateProcessingProgressCommand(processingRunId, {
+                completedIterations: summary.iterations,
+                successfulIterations: summary.successful,
+                failedIterations: summary.failed,
+                totalCostUsd: summary.totalCost,
+                wikiPagesCreated: summary.wikiPagesCreated,
+                wikiPagesUpdated: summary.wikiPagesUpdated,
+              }),
+              this.repos
+            );
+          },
+
+          onError: async (workItem, error) => {
+            console.error(`Unexpected error processing ${workItem.agentType}: ${error.message}`);
             summary.failed++;
             summary.iterations++;
-          }
-        }
+          },
 
-        // Update processing run progress via CQRS command
-        await handleUpdateProcessingProgress(
-          createUpdateProcessingProgressCommand(processingRunId, {
-            completedIterations: summary.iterations,
-            successfulIterations: summary.successful,
-            failedIterations: summary.failed,
-            totalCostUsd: summary.totalCost,
-            wikiPagesCreated: summary.wikiPagesCreated,
-            wikiPagesUpdated: summary.wikiPagesUpdated,
-          }),
-          this.repos
-        );
+          shouldStop: () => this.shouldStop || workExhausted,
+        });
+
+        console.log(`\n▶ Pool completed: ${poolResult.completed} successful, ${poolResult.failed} failed`);
+
+        // Exit the main loop if work is exhausted
+        if (workExhausted) {
+          console.log('No more work to do');
+          break;
+        }
       }
 
       // Mark processing run as completed via CQRS command

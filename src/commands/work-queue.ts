@@ -96,6 +96,51 @@ export async function handleClaimWorkItemBatch(
 }
 
 // ============================================================================
+// ClaimWorkItemOne Command
+// ============================================================================
+
+/**
+ * Command to claim a single work item for execution.
+ * Used by the continuous worker pool for one-at-a-time claiming.
+ */
+export interface ClaimWorkItemOneCommand extends Command {
+  readonly type: 'ClaimWorkItemOne';
+  readonly repoId: string;
+  /** Set of commit SHAs that have been processed by code-change agent */
+  readonly processedCommits: Set<string>;
+}
+
+export function createClaimWorkItemOneCommand(
+  repoId: string,
+  processedCommits: Set<string>
+): ClaimWorkItemOneCommand {
+  return {
+    type: 'ClaimWorkItemOne',
+    repoId,
+    processedCommits,
+  };
+}
+
+/**
+ * Handler for ClaimWorkItemOne command.
+ * Returns the claimed work item, or null if no eligible work is available.
+ */
+export async function handleClaimWorkItemOne(
+  command: ClaimWorkItemOneCommand,
+  repos: Repositories
+): Promise<CommandResult<WorkItem | null>> {
+  try {
+    const workItem = await repos.workQueue.claimOne(
+      command.repoId,
+      command.processedCommits
+    );
+    return success(workItem);
+  } catch (error) {
+    return failure(`Failed to claim work item: ${error}`);
+  }
+}
+
+// ============================================================================
 // SaveWorkItems Command
 // ============================================================================
 
