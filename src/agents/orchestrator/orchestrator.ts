@@ -217,8 +217,8 @@ export class Orchestrator {
     const context = await this.contextGatherer.gather(repoId, wikiId);
     const contextString = this.contextGatherer.formatForPrompt(context);
 
-    // Build valid paths set from coverage tree for validation
-    const validPaths = this.extractPathsFromTree(context.coverageTree);
+    // Note: Path validation via coverage tree removed - fileCoverageTree is pre-formatted string
+    const validPaths = new Set<string>();
 
     // Build prompt
     const userPrompt = buildUserPrompt(context, contextString, maxItems);
@@ -340,24 +340,6 @@ export class Orchestrator {
     );
 
     return allWorkItems;
-  }
-
-  /**
-   * Extract all valid directory paths from a coverage tree.
-   */
-  private extractPathsFromTree(tree: import('./context-gatherer.js').DirectoryNode | null): Set<string> {
-    const paths = new Set<string>();
-    if (!tree) return paths;
-
-    const traverse = (node: import('./context-gatherer.js').DirectoryNode): void => {
-      paths.add(node.path);
-      for (const child of node.children) {
-        traverse(child);
-      }
-    };
-
-    traverse(tree);
-    return paths;
   }
 
   /**
