@@ -38,12 +38,6 @@ import { v4 as uuid } from 'uuid';
 const DEFAULT_MAX_TOOL_ROUNDS = 30;
 const DEFAULT_MAX_TOKENS = 16000;
 
-/**
- * Analysis mode determines the agent's approach.
- * - 'benchmark-first': Start with benchmark failures, investigate why (original approach)
- * - 'wiki-quality-first': Start with wiki quality assessment, use benchmarks as supporting evidence
- */
-export type AnalysisMode = 'benchmark-first' | 'wiki-quality-first';
 
 // ============================================================================
 // Self-Improvement Agent
@@ -71,32 +65,24 @@ export class SelfImprovementAgent {
   /**
    * Run a self-improvement analysis.
    *
+   * Starts with wiki quality assessment and uses benchmarks as supporting evidence.
+   *
    * @param repoId - Repository ID
    * @param wikiId - Wiki ID
    * @param benchmarkRunIds - IDs of benchmark runs to analyze (can be empty for wiki-only mode)
-   * @param options - Analysis options
    */
   async analyze(
     repoId: string,
     wikiId: string,
-    benchmarkRunIds: string[],
-    options: { mode?: AnalysisMode } = {}
+    benchmarkRunIds: string[]
   ): Promise<SelfImprovementRun> {
-    const mode = options.mode ?? 'wiki-quality-first';
-
-    // Load benchmark runs
+    // Load benchmark runs (optional - used as supporting evidence)
     const benchmarkRuns: BenchmarkRun[] = [];
     for (const id of benchmarkRunIds) {
       const run = await this.repos.benchmarks.findById(id);
       if (run && run.status === 'completed') {
         benchmarkRuns.push(run);
       }
-    }
-
-    // In benchmark-first mode, require at least 2 benchmark runs
-    // In wiki-quality-first mode, benchmarks are optional
-    if (mode === 'benchmark-first' && benchmarkRuns.length < 2) {
-      throw new Error('At least 2 completed benchmark runs are required for benchmark-first analysis');
     }
 
     // Sort by iteration count
@@ -152,17 +138,15 @@ export class SelfImprovementAgent {
         ...(repoAccess && { repoAccess }),
       };
 
-      // Build warm-start context based on mode
-      const warmStartContext = mode === 'wiki-quality-first'
-        ? this.buildWikiQualityWarmStart(wikiPages, qualityBenchmarkRuns, benchmarkRuns, repoAccess)
-        : this.buildBenchmarkFirstWarmStart(benchmarkRuns, qualityBenchmarkRuns, wikiPages);
+      // Build warm-start context for wiki-quality-first analysis
+      const warmStartContext = this.buildWikiQualityWarmStart(wikiPages, qualityBenchmarkRuns, benchmarkRuns, repoAccess);
 
       // Create tool executor
       const executeTools = this.createToolExecutor(toolContext);
 
       // Run the agentic analysis
       const completion = await this.llm.completeWithTools({
-        system: getSystemPrompt(mode),
+        system: getSystemPrompt(),
         messages: [
           {
             role: 'user',
@@ -197,75 +181,7 @@ export class SelfImprovementAgent {
   }
 
   /**
-   * Build the warm-start context for benchmark-first mode (original approach).
-   */
-  private buildBenchmarkFirstWarmStart(
-    benchmarkRuns: BenchmarkRun[],
-    qualityRuns: QualityBenchmarkRun[],
-    wikiPages: WikiPage[]
-  ): string {
-    const sections: string[] = [];
-
-    sections.push('# Self-Improvement Analysis Request');
-    sections.push('');
-    sections.push('Analyze the following benchmark data and produce improvement recommendations.');
-    sections.push('');
-
-    // Overview
-    const firstBenchmark = benchmarkRuns[0]!;
-    const lastBenchmark = benchmarkRuns[benchmarkRuns.length - 1]!;
-
-    sections.push('## Analysis Scope');
-    sections.push(`- Benchmark runs: ${benchmarkRuns.length}`);
-    sections.push(`- Iteration range: ${firstBenchmark.iterationCount} to ${lastBenchmark.iterationCount}`);
-    sections.push(`- Quality runs in range: ${qualityRuns.length}`);
-    sections.push(`- Current wiki pages: ${wikiPages.length}`);
-    sections.push('');
-
-    // Score summary
-    sections.push('## Score Progression');
-    sections.push(`- Accuracy: ${firstBenchmark.summary.score.toFixed(1)}% → ${lastBenchmark.summary.score.toFixed(1)}% (${(lastBenchmark.summary.score - firstBenchmark.summary.score >= 0 ? '+' : '')}${(lastBenchmark.summary.score - firstBenchmark.summary.score).toFixed(1)})`);
-
-    if (qualityRuns.length >= 2) {
-      const firstQuality = qualityRuns[0]!;
-      const lastQuality = qualityRuns[qualityRuns.length - 1]!;
-      sections.push(`- Quality: ${firstQuality.summary.overallScore.toFixed(1)} → ${lastQuality.summary.overallScore.toFixed(1)} (${(lastQuality.summary.overallScore - firstQuality.summary.overallScore >= 0 ? '+' : '')}${(lastQuality.summary.overallScore - firstQuality.summary.overallScore).toFixed(1)})`);
-    }
-    sections.push('');
-
-    // Question overview from latest run
-    sections.push('## Latest Benchmark Results');
-    sections.push(`- Total questions: ${lastBenchmark.summary.totalQuestions}`);
-    sections.push(`- Accurate: ${lastBenchmark.summary.accurate}`);
-    sections.push(`- Partial: ${lastBenchmark.summary.partial}`);
-    sections.push(`- Inaccurate: ${lastBenchmark.summary.inaccurate}`);
-    sections.push(`- No answer: ${lastBenchmark.summary.noAnswer}`);
-    sections.push('');
-
-    // List questions with their latest grades
-    sections.push('## Questions');
-    sections.push('');
-    for (const result of lastBenchmark.results) {
-      const icon = result.grade === 'accurate' ? '✓' : result.grade === 'partial' ? '○' : result.grade === 'inaccurate' ? '✗' : '?';
-      sections.push(`- ${icon} \`${result.questionId}\`: ${result.grade}`);
-    }
-    sections.push('');
-
-    // Instructions
-    sections.push('## Your Task');
-    sections.push('');
-    sections.push('1. Use the available tools to investigate the benchmark trends');
-    sections.push('2. Identify what\'s working well and what needs improvement');
-    sections.push('3. Correlate changes with agent activity');
-    sections.push('4. Produce a detailed analysis report with actionable recommendations');
-    sections.push('');
-    sections.push('Start by getting an overview of the trends to see which questions improved or got stuck, then investigate the interesting cases.');
-
-    return sections.join('\n');
-  }
-
-  /**
-   * Build the warm-start context for wiki-quality-first mode.
+   * Build the warm-start context for wiki-quality-first analysis.
    * Focuses on wiki structure and quality, with benchmarks as supporting evidence.
    */
   private buildWikiQualityWarmStart(
