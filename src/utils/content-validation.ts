@@ -85,6 +85,64 @@ export function hasTemplatePlaceholders(content: string): boolean {
 }
 
 /**
+ * Check if content contains instruction text that should be replaced.
+ *
+ * Looks for patterns like "Write a description...", "Describe the feature...",
+ * that indicate the LLM output instructions instead of actual content.
+ *
+ * @param content - The content to check
+ * @returns true if instruction text is detected
+ */
+export function hasInstructionText(content: string): boolean {
+  // Split into lines and check each
+  const lines = content.split('\n');
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    // Skip headings and code blocks
+    if (trimmedLine.startsWith('#') || trimmedLine.startsWith('```')) {
+      continue;
+    }
+
+    // Check for standalone ellipsis or trailing ellipsis (placeholder indicator)
+    // Standalone: just "..." on its own line
+    // Trailing: "Content goes here: ..." at end of line
+    if (/^\.\.\.+$/.test(trimmedLine) || /:\s*\.\.\.+\s*$/.test(trimmedLine)) {
+      return true;
+    }
+
+    // Check for instruction patterns at sentence start
+    // These patterns indicate the LLM is telling someone what to write vs actual content
+    const sentenceStartPatterns = [
+      /^Write a\b/i,
+      /^Describe the\b/i,
+      /^Add your\b/i,
+      /^Insert the\b/i,
+      /^Fill in\b/i,
+      /^Replace with\b/i,
+      /^Put your\b/i,
+      /^Enter the\b/i,
+    ];
+
+    for (const pattern of sentenceStartPatterns) {
+      if (pattern.test(trimmedLine)) {
+        return true;
+      }
+    }
+
+    // Check for sentences starting with instruction verbs after punctuation
+    // e.g., "Title. Write a description here."
+    const afterPunctuationPattern = /[.!?]\s+(Write a|Describe the|Add your|Insert the|Fill in|Replace with)\b/i;
+    if (afterPunctuationPattern.test(trimmedLine)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if content is too short to be valid wiki content.
  *
  * @param content - The content to check
@@ -100,6 +158,7 @@ export function isContentTooShort(content: string, minLength: number = DEFAULT_M
  *
  * Checks for:
  * - Template placeholders
+ * - Instruction text
  * - Content length
  *
  * @param content - The content to validate
@@ -119,6 +178,10 @@ export function validateContent(
 
   if (hasTemplatePlaceholders(content)) {
     errors.push('Content contains template placeholder text that should be replaced');
+  }
+
+  if (hasInstructionText(content)) {
+    errors.push('Content contains instruction text that should be replaced with actual content');
   }
 
   return {

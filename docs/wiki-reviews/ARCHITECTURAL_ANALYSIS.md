@@ -287,6 +287,8 @@ export function calculateConfidence(page: WikiPage, factors: {
 ### P2 Fixes (Medium)
 6. **Issue 6 - FIXED**: Added content validation in `src/utils/content-validation.ts`
    - Rejects content with template placeholders like `[Descriptive title]`
+   - Rejects instruction text like "Write a description...", "Describe the..."
+   - Detects placeholder ellipsis (`...`) indicators
    - Enforces minimum content length (100 characters)
    - `skipValidation` flag available for tests/programmatic use
 

@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import {
   validateContent,
   hasTemplatePlaceholders,
+  hasInstructionText,
   isContentTooShort,
   type ContentValidationResult,
 } from '../../src/utils/content-validation.js';
@@ -38,6 +39,33 @@ describe('Content Validation', () => {
     it('returns false for normal content', () => {
       assert.strictEqual(hasTemplatePlaceholders('# Getting Started\n\nThis is a guide.'), false);
       assert.strictEqual(hasTemplatePlaceholders('The function returns an array.'), false);
+    });
+  });
+
+  describe('hasInstructionText', () => {
+    it('detects instruction patterns at sentence start', () => {
+      assert.strictEqual(hasInstructionText('Write a description of the feature.'), true);
+      assert.strictEqual(hasInstructionText('Describe the architecture below.'), true);
+      assert.strictEqual(hasInstructionText('Add your content here.'), true);
+    });
+
+    it('detects ellipsis placeholders', () => {
+      assert.strictEqual(hasInstructionText('# Title\n\n...'), true);
+      assert.strictEqual(hasInstructionText('Content goes here: ...'), true);
+    });
+
+    it('allows normal content with similar words', () => {
+      // "describe" in middle of sentence is okay
+      assert.strictEqual(hasInstructionText('This document will describe the API endpoints.'), false);
+      // "write" as part of normal prose
+      assert.strictEqual(hasInstructionText('Users can write data to the database.'), false);
+      // "add" in normal context
+      assert.strictEqual(hasInstructionText('The function will add two numbers together.'), false);
+    });
+
+    it('returns false for normal documentation', () => {
+      const content = '# Architecture Overview\n\nThis document describes the system.';
+      assert.strictEqual(hasInstructionText(content), false);
     });
   });
 
@@ -74,6 +102,14 @@ describe('Content Validation', () => {
 
       assert.strictEqual(result.isValid, false);
       assert.ok(result.errors.some(e => e.includes('template placeholder')));
+    });
+
+    it('returns invalid for content with instruction text', () => {
+      const content = '# Feature Overview\n\nWrite a description of the feature here. Describe how it works and what it does for the user. This section should be comprehensive.';
+      const result = validateContent(content);
+
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.errors.some(e => e.includes('instruction')));
     });
 
     it('returns invalid for too short content', () => {
