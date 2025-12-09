@@ -116,7 +116,7 @@ describe('Link Agent Scheduling', () => {
       assert.ok(!linkWorkItem, 'Should not schedule link agent when all pages have links');
     });
 
-    it('respects recent link agent run cooldown', async () => {
+    it('respects recent link agent run cooldown (time-based)', async () => {
       const repoId = 'link-sched-3';
 
       await createTestRepo(ctx, repoId, {
@@ -125,22 +125,29 @@ describe('Link Agent Scheduling', () => {
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      // Create pages without links
+      // Create 10 pages, 4 without links (40% unlinked - above 30% threshold but below 50% override)
       await createWikiPages(wiki.id, [
-        { path: 'page1', title: 'Page 1', content: '# Page 1', links: [] },
-        { path: 'page2', title: 'Page 2', content: '# Page 2', links: [] },
-        { path: 'page3', title: 'Page 3', content: '# Page 3', links: [] },
+        { path: 'page1', title: 'Page 1', content: '# Page 1', links: ['page2'] },
+        { path: 'page2', title: 'Page 2', content: '# Page 2', links: ['page1'] },
+        { path: 'page3', title: 'Page 3', content: '# Page 3', links: ['page1'] },
+        { path: 'page4', title: 'Page 4', content: '# Page 4', links: ['page1'] },
+        { path: 'page5', title: 'Page 5', content: '# Page 5', links: ['page1'] },
+        { path: 'page6', title: 'Page 6', content: '# Page 6', links: ['page1'] },
+        { path: 'page7', title: 'Page 7', content: '# Page 7', links: [] },  // no links
+        { path: 'page8', title: 'Page 8', content: '# Page 8', links: [] },  // no links
+        { path: 'page9', title: 'Page 9', content: '# Page 9', links: [] },  // no links
+        { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
       ]);
 
-      // Record a recent link agent run
+      // Record a RECENT link agent run (completed just now)
       await ctx.repos.agentRuns.save({
         id: uuid(),
         repoId,
         wikiId: wiki.id,
         agentType: 'link',
         status: 'completed',
-        startedAt: new Date(),
-        completedAt: new Date(),
+        startedAt: new Date(Date.now() - 1000), // 1 second ago
+        completedAt: new Date(), // Just now
         durationMs: 1000,
         inputTokens: 100,
         outputTokens: 50,
@@ -152,10 +159,55 @@ describe('Link Agent Scheduling', () => {
       const result = await metaAgentsStrategy(strategyCtx, 10);
 
       const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // With cooldown, should not immediately re-schedule
-      // But if many pages are unlinked, it might override cooldown
-      // This test documents current behavior
-      assert.ok(true, 'Cooldown behavior is tested');
+      // With very recent run and less than 50% unlinked, should NOT reschedule
+      assert.ok(!linkWorkItem, 'Should respect cooldown for very recent run');
+    });
+
+    it('allows scheduling after cooldown expires (old completed run)', async () => {
+      const repoId = 'link-sched-3b';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create 10 pages, 4 without links (40% unlinked - above 30% threshold but below 50% override)
+      await createWikiPages(wiki.id, [
+        { path: 'page1', title: 'Page 1', content: '# Page 1', links: ['page2'] },
+        { path: 'page2', title: 'Page 2', content: '# Page 2', links: ['page1'] },
+        { path: 'page3', title: 'Page 3', content: '# Page 3', links: ['page1'] },
+        { path: 'page4', title: 'Page 4', content: '# Page 4', links: ['page1'] },
+        { path: 'page5', title: 'Page 5', content: '# Page 5', links: ['page1'] },
+        { path: 'page6', title: 'Page 6', content: '# Page 6', links: ['page1'] },
+        { path: 'page7', title: 'Page 7', content: '# Page 7', links: [] },  // no links
+        { path: 'page8', title: 'Page 8', content: '# Page 8', links: [] },  // no links
+        { path: 'page9', title: 'Page 9', content: '# Page 9', links: [] },  // no links
+        { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
+      ]);
+
+      // Record an OLD link agent run (completed 10 minutes ago - past cooldown)
+      await ctx.repos.agentRuns.save({
+        id: uuid(),
+        repoId,
+        wikiId: wiki.id,
+        agentType: 'link',
+        status: 'completed',
+        startedAt: new Date(Date.now() - 11 * 60 * 1000), // 11 minutes ago
+        completedAt: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
+        durationMs: 1000,
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.001,
+        toolCalls: [],
+      });
+
+      const strategyCtx = createStrategyContext(repoId, wiki.id);
+      const result = await metaAgentsStrategy(strategyCtx, 10);
+
+      const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
+      // After cooldown expires, should schedule again even if previous run exists
+      assert.ok(linkWorkItem, 'Should allow scheduling after cooldown expires');
     });
 
     it('reschedules link agent when high percentage of pages are unlinked', async () => {

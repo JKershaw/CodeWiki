@@ -8,6 +8,7 @@ import {
   type WikiPageHistoryOperation,
   type WikiPageHistoryAgentType,
 } from '../domain/wiki-page-history.js';
+import { validateContent } from '../utils/content-validation.js';
 
 /**
  * Command to update a wiki page.
@@ -42,6 +43,27 @@ export async function handleUpdateWikiPage(
     if (update.type === 'create') {
       if (existing) {
         return failure(`Page already exists at path: ${update.path}`);
+      }
+
+      // Validate content quality (check for template placeholders, minimum length)
+      // Skip validation if explicitly disabled (for tests and programmatic updates)
+      if (!update.skipValidation) {
+        const validation = validateContent(update.content);
+        if (!validation.isValid) {
+          return failure(`Invalid content: ${validation.errors.join('; ')}`);
+        }
+      }
+
+      // Check for pages with similar titles to prevent duplicates
+      const newTitle = update.title ?? extractTitleWithFallback(update.content, update.path);
+      const existingPages = await repos.wikiPages.findByWiki(wikiId);
+      const duplicatePage = existingPages.find(
+        page => page.title.toLowerCase() === newTitle.toLowerCase()
+      );
+      if (duplicatePage) {
+        return failure(
+          `A page with similar title "${newTitle}" already exists at path: ${duplicatePage.path}`
+        );
       }
 
       const createParams: Parameters<typeof createWikiPage>[0] = {
@@ -134,7 +156,26 @@ export async function handleUpdateWikiPage(
 
     if (update.type === 'merge') {
       if (!existing) {
-        // If page doesn't exist, create it
+        // Validate content quality when creating via merge
+        if (!update.skipValidation) {
+          const validation = validateContent(update.content);
+          if (!validation.isValid) {
+            return failure(`Invalid content: ${validation.errors.join('; ')}`);
+          }
+        }
+
+        // If page doesn't exist, create it - but first check for duplicates
+        const newTitle = update.title ?? extractTitleWithFallback(update.content, update.path);
+        const existingPages = await repos.wikiPages.findByWiki(wikiId);
+        const duplicatePage = existingPages.find(
+          page => page.title.toLowerCase() === newTitle.toLowerCase()
+        );
+        if (duplicatePage) {
+          return failure(
+            `A page with similar title "${newTitle}" already exists at path: ${duplicatePage.path}`
+          );
+        }
+
         const createParams: Parameters<typeof createWikiPage>[0] = {
           id: uuid(),
           wikiId,

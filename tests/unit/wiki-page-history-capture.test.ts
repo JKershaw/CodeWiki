@@ -36,6 +36,7 @@ describe('Wiki Page History Capture', () => {
         content: '# API Documentation\n\nNew page content.',
         agentRunId: 'run-1',
         confidenceDelta: 0.5,
+        skipValidation: true,
       };
 
       const command = createUpdateWikiPageCommand(update);
@@ -64,6 +65,7 @@ describe('Wiki Page History Capture', () => {
         content: '# Overview',
         agentRunId: 'bootstrap-run-1',
         confidenceDelta: 0.5,
+        skipValidation: true,
       };
 
       const command = createUpdateWikiPageCommand(update);
@@ -139,6 +141,7 @@ describe('Wiki Page History Capture', () => {
         content: '## Additional Section\n\nMerged content.',
         agentRunId: 'run-3',
         confidenceDelta: 0.1,
+        skipValidation: true,
       };
 
       const command = createUpdateWikiPageCommand(update);
@@ -166,6 +169,7 @@ describe('Wiki Page History Capture', () => {
         content: '# New Page\n\nContent.',
         agentRunId: 'run-4',
         confidenceDelta: 0.5,
+        skipValidation: true,
       };
 
       const command = createUpdateWikiPageCommand(update);
@@ -233,6 +237,7 @@ describe('Wiki Page History Capture', () => {
         content: '# Feature',
         agentRunId: 'run-6',
         confidenceDelta: 0.5,
+        skipValidation: true,
       };
 
       // Note: workItemId would need to be passed through the command
@@ -258,6 +263,7 @@ describe('Wiki Page History Capture', () => {
           content: '# Page v1',
           agentRunId: 'run-1',
           confidenceDelta: 0.5,
+          skipValidation: true,
         }),
         repos,
         wikiId

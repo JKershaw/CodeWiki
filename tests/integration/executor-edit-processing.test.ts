@@ -112,10 +112,10 @@ describe('Executor Edit Request Processing', () => {
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
       // Create a wiki page so bootstrap doesn't trigger
-      await createPage(wiki.id, 'overview', '# Overview\n\nExisting content.');
+      await createPage(wiki.id, 'overview', '# Overview\n\nExisting content that is long enough to pass validation requirements.');
 
       // Create just ONE pending edit request - should still trigger processing
-      await createPendingEdit(wiki.id, repoId, 'docs/single-page', '# Single Page');
+      await createPendingEdit(wiki.id, repoId, 'docs/single-page', '# Single Page\n\nThis is comprehensive documentation for the single page that explains the feature in detail.');
 
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
@@ -227,7 +227,7 @@ describe('Executor Edit Request Processing', () => {
       // But if there are pending edits, they should be processed first
 
       // Create a pending edit
-      await createPendingEdit(wiki.id, repoId, 'docs/from-edit', '# From Edit Request');
+      await createPendingEdit(wiki.id, repoId, 'docs/from-edit', '# From Edit Request\n\nThis is comprehensive documentation that explains the feature in detail for new developers.');
 
       const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);

@@ -184,6 +184,11 @@ function createMockRepos(): Repositories & { _pages: Map<string, WikiPage> } {
   } as Repositories & { _pages: Map<string, WikiPage> };
 }
 
+// Helper to create valid content that passes validation (min 100 chars)
+function validContent(title: string, body = 'This is comprehensive documentation that explains the feature in detail. It provides enough content to pass validation requirements for wiki pages.'): string {
+  return `# ${title}\n\n${body}`;
+}
+
 describe('handleUpdateWikiPage', () => {
   describe('create operation', () => {
     it('extracts title from content when title not provided', async () => {
@@ -193,7 +198,7 @@ describe('handleUpdateWikiPage', () => {
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'test/page',
-        content: '# Auto Extracted Title\n\nPage content here.',
+        content: validContent('Auto Extracted Title'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
       });
@@ -212,7 +217,7 @@ describe('handleUpdateWikiPage', () => {
         type: 'create',
         path: 'test/page',
         title: 'Explicit Title',
-        content: '# Content Title\n\nPage content here.',
+        content: validContent('Content Title'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
       });
@@ -227,10 +232,11 @@ describe('handleUpdateWikiPage', () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
+      // Content without H1 but long enough to pass validation
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'architecture/system-design',
-        content: 'No heading here, just text.',
+        content: 'No heading here, just text. This is comprehensive documentation that explains the system design in detail. It provides enough content to pass validation.',
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
       });
@@ -249,7 +255,7 @@ describe('handleUpdateWikiPage', () => {
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'test/page',
-        content: '#NoSpaceTitle\n\nContent without space after hash.',
+        content: '#NoSpaceTitle\n\nThis is comprehensive documentation that explains the feature in detail. It provides enough content to pass validation requirements.',
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
       });
@@ -267,7 +273,7 @@ describe('handleUpdateWikiPage', () => {
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'test/high-confidence',
-        content: '# High Confidence Page\n\nContent here.',
+        content: validContent('High Confidence Page'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5, // Should result in 0.5 (base) + 0.5 = 1.0
       });
@@ -286,7 +292,7 @@ describe('handleUpdateWikiPage', () => {
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'test/over-confidence',
-        content: '# Very High Confidence Page\n\nContent here.',
+        content: validContent('Very High Confidence Page'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.8, // 0.5 + 0.8 = 1.3, should cap at 1.0
       });
@@ -304,7 +310,7 @@ describe('handleUpdateWikiPage', () => {
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'test/low-confidence',
-        content: '# Low Confidence Page\n\nContent here.',
+        content: validContent('Low Confidence Page'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.1, // Should result in 0.5 + 0.1 = 0.6
       });
@@ -421,6 +427,7 @@ describe('handleUpdateWikiPage', () => {
         content: '# Merge Created Page\n\nContent here.',
         agentRunId: 'agent-1',
         confidenceDelta: 0.3, // Should result in 0.5 + 0.3 = 0.8
+        skipValidation: true,
       });
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
@@ -439,6 +446,7 @@ describe('handleUpdateWikiPage', () => {
         content: '# Merged Page Title\n\nMerged content.',
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
+        skipValidation: true,
       });
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
@@ -476,6 +484,184 @@ describe('handleUpdateWikiPage', () => {
       assert.strictEqual(result.success, true);
       // The merged content keeps the original H1, so title should be "Original Title"
       assert.strictEqual(result.data?.title, 'Original Title');
+    });
+  });
+
+  describe('duplicate prevention', () => {
+    it('prevents creating a page with an identical title at a different path', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create first page
+      const initialPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'architecture/test-coverage',
+        title: 'Test Coverage',
+        content: validContent('Test Coverage', 'Architectural overview of test coverage and how it impacts the system quality. This covers all aspects of testing.'),
+      });
+      repos._pages.set(initialPage.id, initialPage);
+
+      // Try to create a second page with the same title at a different path
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'commits/abc123',
+        title: 'Test Coverage',
+        content: validContent('Test Coverage', 'Commit introducing test coverage with detailed explanation of the changes and their impact on quality.'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      // Should fail due to duplicate title
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('similar title'));
+    });
+
+    it('prevents creating a page with case-insensitive matching title', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create first page
+      const initialPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'guides/getting-started',
+        title: 'Getting Started',
+        content: validContent('Getting Started', 'How to get started with the project and configure your environment properly for development.'),
+      });
+      repos._pages.set(initialPage.id, initialPage);
+
+      // Try to create with different case
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'docs/getting-started-guide',
+        title: 'GETTING STARTED',
+        content: validContent('GETTING STARTED', 'Another getting started guide with different formatting and approach for new developers.'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('similar title'));
+    });
+
+    it('allows creating pages with different titles', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create first page
+      const initialPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'architecture/overview',
+        title: 'Architecture Overview',
+        content: validContent('Architecture Overview', 'System architecture description with all components and their relationships in detail.'),
+      });
+      repos._pages.set(initialPage.id, initialPage);
+
+      // Create second page with different title
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'guides/quick-start',
+        title: 'Quick Start Guide',
+        content: validContent('Quick Start Guide', 'How to get started quickly with step by step instructions for new users of the system.'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.title, 'Quick Start Guide');
+    });
+
+    it('allows update even if title matches existing page (same path)', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'docs/setup',
+        title: 'Setup Guide',
+        content: '# Setup Guide\n\nOriginal content.',
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Update the same page - should work even though title "exists"
+      const command = createUpdateWikiPageCommand({
+        type: 'update',
+        path: 'docs/setup',
+        title: 'Setup Guide',
+        content: '# Setup Guide\n\nUpdated content.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.1,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+    });
+  });
+
+  describe('template validation', () => {
+    it('rejects content with template placeholders on create', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/bad-page',
+        content: '# [Descriptive title]\n\n[2-3 paragraph article describing the feature]',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('template placeholder'));
+    });
+
+    it('rejects content that is too short on create', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/short-page',
+        content: '# Title\n\nShort.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('too short'));
+    });
+
+    it('allows valid content on create', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/good-page',
+        content: '# Architecture Overview\n\nThis document describes the system architecture. The application follows a clean architecture pattern with clear separation of concerns.\n\n## Components\n\nThe system consists of several key components that work together.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
     });
   });
 });
