@@ -164,80 +164,9 @@ export type Strategy = (
   remainingSlots: number
 ) => Promise<StrategyResult>;
 
-/**
- * Strategy 0: Bootstrap empty wikis.
- * This must run before any commit processing to establish foundation pages.
- */
-export const bootstrapStrategy: Strategy = async (ctx, remainingSlots) => {
-  if (remainingSlots <= 0) return { workItems: [] };
-
-  // Check wiki pages
-  const pagesQuery = createListWikiPagesQuery(ctx.wikiId);
-  const pagesResult = await handleListWikiPages(pagesQuery, ctx.repos);
-  const wikiPages = pagesResult.data || [];
-
-  if (wikiPages.length > 0) {
-    return { workItems: [] };  // Wiki has content, skip bootstrap
-  }
-
-  // Check if bootstrap work already pending
-  const bootstrapWorkQuery = createListWorkItemsQuery(ctx.repoId, {
-    agentType: 'bootstrap',
-    status: 'pending',
-  });
-  const bootstrapWorkResult = await handleListWorkItems(bootstrapWorkQuery, ctx.repos);
-  const bootstrapWorkExists = bootstrapWorkResult.data || [];
-
-  if (bootstrapWorkExists.length > 0) {
-    return { workItems: [], stopProcessing: true };  // Bootstrap pending, wait for it
-  }
-
-  // Check if bootstrap work has failed (don't auto-retry to prevent infinite loop)
-  const failedBootstrapQuery = createListWorkItemsQuery(ctx.repoId, {
-    agentType: 'bootstrap',
-    status: 'failed',
-  });
-  const failedBootstrapResult = await handleListWorkItems(failedBootstrapQuery, ctx.repos);
-  const bootstrapWorkFailed = failedBootstrapResult.data || [];
-
-  if (bootstrapWorkFailed.length > 0) {
-    return { workItems: [], stopProcessing: true };  // Bootstrap failed, don't auto-retry
-  }
-
-  // Check if bootstrap has already run
-  const runsQuery = createListAgentRunsQuery(ctx.repoId);
-  const runsResult = await handleListAgentRuns(runsQuery, ctx.repos);
-  const recentRuns = runsResult.data || [];
-  const bootstrapCompleted = recentRuns.some(
-    r => r.agentType === 'bootstrap' && r.status === 'completed'
-  );
-
-  if (bootstrapCompleted) {
-    return { workItems: [] };  // Already done
-  }
-
-  // Check if bootstrap has failed (don't auto-retry to prevent infinite loop)
-  const bootstrapFailed = recentRuns.some(
-    r => r.agentType === 'bootstrap' && r.status === 'failed'
-  );
-
-  if (bootstrapFailed) {
-    return { workItems: [], stopProcessing: true };  // Bootstrap failed, don't auto-retry
-  }
-
-  // Need to bootstrap
-  return {
-    workItems: [
-      createWorkItem({
-        id: uuid(),
-        repoId: ctx.repoId,
-        agentType: 'bootstrap',
-        target: { type: 'wiki' },
-      }),
-    ],
-    stopProcessing: true,  // Bootstrap must complete before other work
-  };
-};
+// Note: Bootstrap is handled by Orchestrator.checkBootstrapNeeded() BEFORE strategies run.
+// This ensures bootstrap is checked for both LLM and deterministic modes, and avoids code duplication.
+// The bootstrap check happens before generateDeterministic() is called, so no bootstrap strategy is needed here.
 
 /**
  * Strategy 1: Codebase exploration.
@@ -808,15 +737,16 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
  * before asking the Orchestrator for work. This simplifies the Orchestrator's
  * responsibility to focus on "what new work to generate".
  *
+ * Note: Bootstrap is handled by Orchestrator.checkBootstrapNeeded() BEFORE
+ * these strategies run, so it's not included here.
+ *
  * Order:
- * 1. Bootstrap - foundation for empty wikis
- * 2. Codebase Exploration - PRIMARY early: document what exists NOW
- * 3. Synthesis - ELEVATED: create overviews/guides early from exploration pages
- * 4. Meta Agents - improve quality and linking
- * 5. Commit Analysis - DEMOTED: add historical context after wiki is useful
+ * 1. Codebase Exploration - PRIMARY early: document what exists NOW
+ * 2. Synthesis - ELEVATED: create overviews/guides early from exploration pages
+ * 3. Meta Agents - improve quality and linking
+ * 4. Commit Analysis - DEMOTED: add historical context after wiki is useful
  */
 export const deterministicStrategies: Strategy[] = [
-  bootstrapStrategy,
   codebaseExplorationStrategy,
   synthesisStrategy,           // Elevated: create structure early
   metaAgentsStrategy,
