@@ -163,7 +163,7 @@ CONFIDENCE: 0.85`;
       assert.ok(mainUpdate.links!.includes('target-3'), 'Should include target-3');
     });
 
-    it('should skip pages that already have links', async () => {
+    it('should re-analyze pages with links when new pages are created', async () => {
       const repoId = 'link-agent-test-3';
 
       await createTestRepo(ctx, repoId, {
@@ -172,32 +172,59 @@ CONFIDENCE: 0.85`;
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      // Create pages where one already has links
-      await createWikiPages(wiki.id, [
-        {
-          path: 'has-links',
-          title: 'Page With Links',
-          content: '# Has Links\n\nAlready has links.',
-          links: ['some/other/page'],  // Already has links
-        },
-        {
-          path: 'no-links',
-          title: 'Page Without Links',
-          content: '# No Links\n\nNeeds links.',
-          links: [],
-        },
-        {
-          path: 'some/other/page',
-          title: 'Other Page',
-          content: '# Other\n\nOther content.',
-          links: [],
-        },
-      ]);
+      // Create an "old" page that was updated in the past and has links
+      const oldDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 1 day ago
+      await ctx.repos.wikiPages.save({
+        id: 'page-old-with-links',
+        wikiId: wiki.id,
+        path: 'old-with-links',
+        title: 'Old Page With Links',
+        content: '# Old Page\n\nHas existing links but might need more.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['some/existing/page'],  // Has links
+        backlinks: [],
+        createdAt: oldDate,
+        updatedAt: oldDate,  // Updated in the past
+      });
 
-      // Mock LLM to suggest links
+      // Create a "new" page that was just created
+      await ctx.repos.wikiPages.save({
+        id: 'page-new-page',
+        wikiId: wiki.id,
+        path: 'new-page',
+        title: 'New Page',
+        content: '# New Page\n\nJust created, might be relevant to old page.',
+        confidence: 0.8,
+        sourceCommits: ['commit-2'],
+        sourceAgentRunIds: [],
+        links: [],
+        backlinks: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),  // Just created
+      });
+
+      // Also create the existing link target
+      await ctx.repos.wikiPages.save({
+        id: 'page-some-existing-page',
+        wikiId: wiki.id,
+        path: 'some/existing/page',
+        title: 'Existing Page',
+        content: '# Existing\n\nExisting content.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: [],
+        backlinks: [],
+        createdAt: oldDate,
+        updatedAt: oldDate,
+      });
+
+      // Mock LLM to suggest a link from old page to new page
       ctx.llm.setDefaultResponse(linkSuggestionResponse([
-        { source: 'no-links', target: 'has-links', strength: 'medium', reason: 'Related' },
-        { source: 'some/other/page', target: 'no-links', strength: 'weak', reason: 'Also related' },
+        { source: 'old-with-links', target: 'new-page', strength: 'strong', reason: 'Old page should link to newly created page' },
+        { source: 'new-page', target: 'old-with-links', strength: 'medium', reason: 'New page references old content' },
       ]));
 
       const agent = new LinkAgent();
@@ -205,13 +232,61 @@ CONFIDENCE: 0.85`;
 
       const result = await agent.run(createWikiTarget(), agentCtx);
 
-      // Should not have update for page that already has links
-      const hasLinksUpdate = result.updates.find(u => u.path === 'has-links');
-      assert.ok(!hasLinksUpdate, 'Should not update page that already has links');
+      // Should have update for old page that already had links (because new pages exist)
+      const oldPageUpdate = result.updates.find(u => u.path === 'old-with-links');
+      assert.ok(oldPageUpdate, 'Should re-analyze old page when newer pages exist');
+      assert.ok(oldPageUpdate.links?.includes('new-page'), 'Should add link to new page');
+    });
 
-      // Should have update for page without links
-      const noLinksUpdate = result.updates.find(u => u.path === 'no-links');
-      assert.ok(noLinksUpdate, 'Should have update for page without links');
+    it('should not re-analyze recently updated pages with links', async () => {
+      const repoId = 'link-agent-test-3b';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create pages all updated at the same time
+      const now = new Date();
+      await ctx.repos.wikiPages.save({
+        id: 'page-has-recent-links',
+        wikiId: wiki.id,
+        path: 'has-recent-links',
+        title: 'Page With Recent Links',
+        content: '# Has Links\n\nRecently analyzed.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['other-page'],  // Has links
+        backlinks: [],
+        createdAt: now,
+        updatedAt: now,  // Just updated
+      });
+
+      await ctx.repos.wikiPages.save({
+        id: 'page-other-page',
+        wikiId: wiki.id,
+        path: 'other-page',
+        title: 'Other Page',
+        content: '# Other\n\nOther content.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: [],
+        backlinks: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Page with recent links should not be re-analyzed (no newer pages exist)
+      const hasRecentLinksUpdate = result.updates.find(u => u.path === 'has-recent-links');
+      assert.ok(!hasRecentLinksUpdate, 'Should not re-analyze page with recent links when no newer pages exist');
     });
 
     it('should skip analysis when not enough pages', async () => {
