@@ -11,7 +11,7 @@ import assert from 'node:assert';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 import type { UnifiedRepoAccessFactory, UnifiedRepoAccess } from '../../src/services/repository/unified-repo-access.js';
 import type { Repo } from '../../src/domain/repo.js';
-import { ContextGatherer, type DirectoryNode, type DirectoryCoverage } from '../../src/agents/orchestrator/context-gatherer.js';
+import { ContextGatherer, type DirectoryCoverage } from '../../src/agents/orchestrator/context-gatherer.js';
 
 // Suppress console output during tests
 mock.method(console, 'warn', () => {});
@@ -353,161 +353,6 @@ describe('ContextGatherer Unified Directory Coverage', () => {
     });
   });
 
-  describe('buildCoverageTree via RepositoryService', () => {
-    it('builds coverage tree for local repo using RepositoryService', async () => {
-      const repos = createMockRepos({
-        id: 'repo-1',
-        isGitHubRepo: false,
-      } as Repo);
-
-      const fileTree = [
-        'src/agents/base-agent.ts',
-        'src/agents/code-change/agent.ts',
-        'src/services/llm/llm-service.ts',
-      ];
-
-      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoAccessFactory);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      assert.ok(context.coverageTree, 'Should have coverage tree');
-      assert.strictEqual(context.coverageTree.name, 'src');
-      assert.strictEqual(context.coverageTree.totalFileCount, 3);
-      assert.ok(context.coverageTree.children.length > 0, 'Should have children');
-    });
-
-    it('builds identical tree structure for local and GitHub repos', async () => {
-      const fileTree = [
-        'src/domain/entity.ts',
-        'src/domain/value-object.ts',
-        'src/services/api/client.ts',
-      ];
-
-      // Local repo
-      const localRepos = createMockRepos({
-        id: 'local-repo',
-        isGitHubRepo: false,
-      } as Repo);
-      const localFactory = createMockRepoAccessFactory(fileTree);
-      const localGatherer = new ContextGatherer(localRepos, localFactory);
-      const localContext = await localGatherer.gather('local-repo', 'wiki-1');
-
-      // GitHub repo
-      const githubRepos = createMockRepos({
-        id: 'github-repo',
-        isGitHubRepo: true,
-        owner: 'owner',
-        repoName: 'repo',
-      } as Repo);
-      const githubFactory = createMockRepoAccessFactory(fileTree);
-      const githubGatherer = new ContextGatherer(githubRepos, githubFactory);
-      const githubContext = await githubGatherer.gather('github-repo', 'wiki-1');
-
-      // Tree structure should be identical
-      assert.ok(localContext.coverageTree, 'Local should have tree');
-      assert.ok(githubContext.coverageTree, 'GitHub should have tree');
-      assert.strictEqual(
-        localContext.coverageTree.totalFileCount,
-        githubContext.coverageTree.totalFileCount,
-        'File counts should match'
-      );
-      assert.strictEqual(
-        localContext.coverageTree.children.length,
-        githubContext.coverageTree.children.length,
-        'Child counts should match'
-      );
-    });
-
-    it('builds tree for non-src directories like lib/', async () => {
-      const repos = createMockRepos({
-        id: 'repo-1',
-        isGitHubRepo: false,
-      } as Repo);
-
-      const fileTree = [
-        'lib/utils/helper.ts',
-        'lib/core/engine.ts',
-      ];
-
-      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoAccessFactory);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      assert.ok(context.coverageTree, 'Should have coverage tree for lib/');
-      assert.strictEqual(context.coverageTree.name, 'lib');
-      assert.strictEqual(context.coverageTree.totalFileCount, 2);
-    });
-
-    it('returns null tree when no source files in directories', async () => {
-      const repos = createMockRepos({
-        id: 'repo-1',
-        isGitHubRepo: false,
-      } as Repo);
-
-      // Only root-level files
-      const fileTree = [
-        'index.ts',
-        'config.ts',
-      ];
-
-      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoAccessFactory);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      assert.strictEqual(context.coverageTree, null);
-    });
-
-    it('returns null tree when repoAccessFactory not provided', async () => {
-      const repos = createMockRepos({
-        id: 'repo-1',
-        isGitHubRepo: false,
-      } as Repo);
-
-      const gatherer = new ContextGatherer(repos);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      assert.strictEqual(context.coverageTree, null);
-    });
-
-    it('builds nested tree structure correctly', async () => {
-      const repos = createMockRepos({
-        id: 'repo-1',
-        isGitHubRepo: false,
-      } as Repo);
-
-      const fileTree = [
-        'src/services/llm/openai/client.ts',
-        'src/services/llm/openai/types.ts',
-        'src/services/llm/anthropic/client.ts',
-        'src/services/git/git-service.ts',
-      ];
-
-      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoAccessFactory);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      assert.ok(context.coverageTree, 'Should have coverage tree');
-
-      // Find services node
-      const servicesNode = context.coverageTree.children.find(c => c.name === 'services');
-      assert.ok(servicesNode, 'Should have services node');
-
-      // Services should have llm and git children
-      const llmNode = servicesNode.children.find(c => c.name === 'llm');
-      const gitNode = servicesNode.children.find(c => c.name === 'git');
-      assert.ok(llmNode, 'Should have llm node');
-      assert.ok(gitNode, 'Should have git node');
-
-      // LLM should have openai and anthropic children
-      assert.strictEqual(llmNode.children.length, 2);
-    });
-  });
-
   describe('error handling', () => {
     it('handles getFileTree errors gracefully', async () => {
       const repos = createMockRepos({
@@ -532,7 +377,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       // Should return empty coverage instead of throwing
       assert.strictEqual(context.directoryCoverage.length, 0);
-      assert.strictEqual(context.coverageTree, null);
+      assert.strictEqual(context.fileCoverageTree, null);
     });
 
     it('handles repo not found', async () => {
@@ -543,7 +388,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
       const context = await gatherer.gather('nonexistent-repo', 'wiki-1');
 
       assert.strictEqual(context.directoryCoverage.length, 0);
-      assert.strictEqual(context.coverageTree, null);
+      assert.strictEqual(context.fileCoverageTree, null);
     });
   });
 });

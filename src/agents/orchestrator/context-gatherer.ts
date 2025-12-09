@@ -4,8 +4,11 @@ import type { UnifiedRepoAccessFactory } from '../../services/repository/unified
 // Import agent type definitions from central registry
 import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 
-// Import smart coverage filtering
-import { filterCoverageItems } from './smart-coverage-filter.js';
+// Import file-level coverage tree
+import {
+  buildPrioritizedCoverageTree,
+  type FileData,
+} from './file-coverage-tree.js';
 
 // Import CQRS queries
 import {
@@ -67,25 +70,6 @@ export interface DirectoryCoverage {
 }
 
 /**
- * Tree node for deep directory coverage visualization.
- * Used to show the LLM a hierarchical view of coverage.
- */
-export interface DirectoryNode {
-  /** Directory name (e.g., "llm") */
-  name: string;
-  /** Full path from repo root (e.g., "src/services/llm") */
-  path: string;
-  /** Number of source files directly in this directory (not recursive) */
-  fileCount: number;
-  /** Total source files including all subdirectories */
-  totalFileCount: number;
-  /** Coverage percentage for this directory and its contents */
-  coveragePercent: number;
-  /** Child directories */
-  children: DirectoryNode[];
-}
-
-/**
  * Snapshot of wiki state for orchestrator decision-making.
  */
 export interface OrchestratorContext {
@@ -134,8 +118,8 @@ export interface OrchestratorContext {
   // Directory coverage - which parts of the codebase are documented
   directoryCoverage: DirectoryCoverage[];
 
-  // Directory coverage tree - deep hierarchical view for LLM prompt
-  coverageTree: DirectoryNode | null;
+  // File-level coverage tree - prioritized view with individual files
+  fileCoverageTree: string | null;
 
   // Project overview content (truncated) for LLM context
   projectOverviewContent: string | null;
@@ -319,8 +303,8 @@ export class ContextGatherer {
     // Calculate directory coverage (which parts of the codebase are documented)
     const directoryCoverage = await this.calculateDirectoryCoverage(repoId, wikiPages);
 
-    // Build deep coverage tree for LLM prompt
-    const coverageTree = await this.buildCoverageTree(repoId, wikiPages);
+    // Build file-level coverage tree (prioritized view with individual files)
+    const fileCoverageTree = await this.buildFileCoverageTree(repoId, wikiPages);
 
     // Fetch project overview content (if exists)
     // Try multiple paths in order of preference:
@@ -367,7 +351,7 @@ export class ContextGatherer {
       hasTestingGuide,
       hasExtensionGuide,
       directoryCoverage,
-      coverageTree,
+      fileCoverageTree,
       projectOverviewContent,
       pendingEditRequests,
     };
@@ -505,215 +489,49 @@ export class ContextGatherer {
   }
 
   /**
-   * Build a deep coverage tree for LLM visualization.
-   * Returns a hierarchical view of all directories with coverage data.
+   * Build a file-level coverage tree with prioritized output.
    *
-   * Uses UnifiedRepoAccess to work uniformly with both local and GitHub repositories.
+   * Uses the new file-coverage-tree module for file-level detail,
+   * priority scoring, and budget-aware truncation.
+   *
+   * @param repoId - Repository ID
+   * @param wikiPages - Wiki pages for coverage calculation
+   * @returns Formatted coverage tree string, or null if unavailable
    */
-  private async buildCoverageTree(
+  private async buildFileCoverageTree(
     repoId: string,
     wikiPages: Array<{ path: string; content: string }>
-  ): Promise<DirectoryNode | null> {
+  ): Promise<string | null> {
     if (!this.repoAccessFactory) {
-      console.warn(`buildCoverageTree: repoAccessFactory not available`);
       return null;
     }
 
     try {
-      // Get unified access for this repository
       const repoAccess = await this.repoAccessFactory.create(repoId);
-
-      // Get all files via unified interface
       const allFiles = await repoAccess.getFileTree();
 
-      if (allFiles.length === 0) {
-        console.warn(`buildCoverageTree: getFileTree returned empty for ${repoId}`);
-        return null;
-      }
-
-      // Filter to source files only (any directory, not just src/)
+      // Filter to source files only
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
-        console.warn(`buildCoverageTree: no source files found in ${allFiles.length} files for ${repoId}`);
         return null;
       }
 
-      // Find the predominant top-level directory to use as root
-      const topLevelCounts = new Map<string, number>();
-      for (const filePath of sourceFiles) {
-        const parts = filePath.split('/');
-        if (parts.length >= 2) {
-          const topLevel = parts[0]!;
-          topLevelCounts.set(topLevel, (topLevelCounts.get(topLevel) ?? 0) + 1);
-        }
-      }
+      // Convert to FileData format
+      // Use estimated LOC based on file type (fetching actual content would be expensive)
+      // TypeScript/JavaScript files average ~50-100 LOC, use 75 as default
+      const DEFAULT_LOC = 75;
+      const fileData: FileData[] = sourceFiles.map(path => ({
+        path,
+        loc: DEFAULT_LOC,
+      }));
 
-      if (topLevelCounts.size === 0) {
-        return null;
-      }
-
-      // Use the top-level directory with the most files as root
-      const rootDir = Array.from(topLevelCounts.entries())
-        .sort((a, b) => b[1] - a[1])[0]![0];
-
-      // Filter to files in this root directory
-      const rootFiles = sourceFiles.filter(f => f.startsWith(`${rootDir}/`));
-
-      // Build tree from file paths
-      return this.buildTreeFromPaths(rootFiles, wikiPages, rootDir);
+      // Use the new prioritized coverage tree builder
+      return buildPrioritizedCoverageTree(fileData, wikiPages, 100);
     } catch (error) {
-      console.warn(`Failed to build coverage tree: ${error}`);
+      console.warn(`Failed to build file coverage tree: ${error}`);
       return null;
     }
-  }
-
-  /**
-   * Build a directory tree from a list of file paths.
-   */
-  private buildTreeFromPaths(
-    filePaths: string[],
-    wikiPages: Array<{ path: string; content: string }>,
-    rootDir: string = 'src'
-  ): DirectoryNode {
-    // Build intermediate structure
-    interface BuildNode {
-      name: string;
-      path: string;
-      fileCount: number;
-      children: Map<string, BuildNode>;
-    }
-
-    const root: BuildNode = { name: rootDir, path: rootDir, fileCount: 0, children: new Map() };
-
-    for (const filePath of filePaths) {
-      const parts = filePath.split('/');
-      let current = root;
-
-      // Navigate/create directories (skip last part which is the file)
-      for (let i = 1; i < parts.length - 1; i++) {
-        const part = parts[i]!;
-        const currentPath = parts.slice(0, i + 1).join('/');
-
-        if (!current.children.has(part)) {
-          current.children.set(part, {
-            name: part,
-            path: currentPath,
-            fileCount: 0,
-            children: new Map(),
-          });
-        }
-        current = current.children.get(part)!;
-      }
-
-      // Count file in its direct parent
-      current.fileCount++;
-    }
-
-    // Convert BuildNode to DirectoryNode with coverage
-    const convertNode = (node: BuildNode): DirectoryNode => {
-      const children = Array.from(node.children.values())
-        .map(convertNode)
-        .filter(c => c.totalFileCount > 0)
-        .sort((a, b) => b.totalFileCount - a.totalFileCount);
-
-      const totalFileCount = node.fileCount + children.reduce((sum, c) => sum + c.totalFileCount, 0);
-      const wikiMentions = this.countWikiMentions(node.name, node.path, wikiPages);
-      const coveragePercent = totalFileCount > 0
-        ? Math.min(100, Math.round((wikiMentions / totalFileCount) * 100))
-        : 0;
-
-      return {
-        name: node.name,
-        path: node.path,
-        fileCount: node.fileCount,
-        totalFileCount,
-        coveragePercent,
-        children,
-      };
-    };
-
-    return convertNode(root);
-  }
-
-  /**
-   * Format coverage tree as a visual tree string for LLM prompt.
-   *
-   * Uses smart filtering to prioritize low-coverage directories:
-   * 1. Flattens tree to collect all directory nodes
-   * 2. Filters using coveragePercent (lowest first, up to maxLines)
-   * 3. Formats only filtered nodes while preserving tree structure
-   *
-   * This ensures undocumented areas are always visible regardless of repo size.
-   */
-  formatCoverageTree(tree: DirectoryNode | null, maxLines: number = 100): string {
-    if (!tree) {
-      return '*No source directory found*';
-    }
-
-    // Step 1: Flatten tree to get all nodes with their coverage
-    const allNodes: DirectoryNode[] = [];
-    const flattenTree = (node: DirectoryNode): void => {
-      allNodes.push(node);
-      for (const child of node.children) {
-        flattenTree(child);
-      }
-    };
-    flattenTree(tree);
-
-    // Step 2: Apply smart filtering - prioritize lowest coverage
-    const filterResult = filterCoverageItems(allNodes, { targetCount: maxLines });
-
-    // Step 3: Build set of paths to include (filtered nodes + their ancestors)
-    const includedPaths = new Set<string>();
-    for (const node of filterResult.items) {
-      // Add the node's path
-      includedPaths.add(node.path);
-      // Add all ancestor paths to maintain tree structure
-      const parts = node.path.split('/');
-      for (let i = 1; i <= parts.length; i++) {
-        includedPaths.add(parts.slice(0, i).join('/'));
-      }
-    }
-
-    // Step 4: Format tree, only showing included paths
-    const lines: string[] = [];
-
-    // Use effective threshold for marking low coverage (or 50% if all included)
-    const lowCoverageThreshold = filterResult.truncated
-      ? filterResult.effectiveThreshold
-      : 50;
-
-    const formatNode = (node: DirectoryNode, prefix: string, isLast: boolean, isRoot: boolean): void => {
-      const connector = isRoot ? '' : (isLast ? '└── ' : '├── ');
-      const coverageMarker = node.coveragePercent < lowCoverageThreshold ? ' ⚠️' : '';
-      const line = `${prefix}${connector}${node.name}/ (${node.coveragePercent}%) - ${node.totalFileCount} files${coverageMarker}`;
-      lines.push(line);
-
-      // Prepare prefix for children
-      const childPrefix = isRoot ? '' : (prefix + (isLast ? '    ' : '│   '));
-
-      // Filter children to only included paths, sort by coverage ascending
-      const includedChildren = node.children
-        .filter(child => includedPaths.has(child.path))
-        .sort((a, b) => a.coveragePercent - b.coveragePercent);
-
-      // Process children
-      for (let i = 0; i < includedChildren.length; i++) {
-        const child = includedChildren[i]!;
-        const childIsLast = i === includedChildren.length - 1;
-        formatNode(child, childPrefix, childIsLast, false);
-      }
-    };
-
-    formatNode(tree, '', true, true);
-
-    // Add summary line showing filtering info
-    if (filterResult.truncated) {
-      lines.push(`[Showing ${filterResult.items.length} directories with coverage ≤${filterResult.effectiveThreshold}% | ${filterResult.truncatedCount} higher-coverage directories hidden]`);
-    }
-
-    return lines.join('\n');
   }
 
   /**
@@ -764,8 +582,8 @@ export class ContextGatherer {
 
     // 3. CODEBASE STRUCTURE - what code exists and what's covered
     lines.push('## Codebase Structure\n');
-    lines.push('Directories marked with ⚠️ have low coverage. Target these with `codebase-explorer`.\n');
-    lines.push(this.formatCoverageTree(ctx.coverageTree, 100));
+    lines.push('Files marked with ⚠️ have low coverage. Target these with `codebase-explorer`.\n');
+    lines.push(ctx.fileCoverageTree ?? '*No source files found*');
     lines.push('');
 
     // 4. WIKI STATE - what's already documented
