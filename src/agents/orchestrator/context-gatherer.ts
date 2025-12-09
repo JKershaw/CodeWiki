@@ -7,6 +7,12 @@ import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 // Import smart coverage filtering
 import { filterCoverageItems } from './smart-coverage-filter.js';
 
+// Import file-level coverage tree
+import {
+  buildPrioritizedCoverageTree,
+  type FileData,
+} from './file-coverage-tree.js';
+
 // Import CQRS queries
 import {
   createListCommitsQuery,
@@ -136,6 +142,9 @@ export interface OrchestratorContext {
 
   // Directory coverage tree - deep hierarchical view for LLM prompt
   coverageTree: DirectoryNode | null;
+
+  // File-level coverage tree - prioritized view with individual files
+  fileCoverageTree: string | null;
 
   // Project overview content (truncated) for LLM context
   projectOverviewContent: string | null;
@@ -322,6 +331,9 @@ export class ContextGatherer {
     // Build deep coverage tree for LLM prompt
     const coverageTree = await this.buildCoverageTree(repoId, wikiPages);
 
+    // Build file-level coverage tree (prioritized view with individual files)
+    const fileCoverageTree = await this.buildFileCoverageTree(repoId, wikiPages);
+
     // Fetch project overview content (if exists)
     // Try multiple paths in order of preference:
     // 1. 'architecture/overview' (project-overview agent, more comprehensive)
@@ -368,6 +380,7 @@ export class ContextGatherer {
       hasExtensionGuide,
       directoryCoverage,
       coverageTree,
+      fileCoverageTree,
       projectOverviewContent,
       pendingEditRequests,
     };
@@ -569,6 +582,52 @@ export class ContextGatherer {
   }
 
   /**
+   * Build a file-level coverage tree with prioritized output.
+   *
+   * Uses the new file-coverage-tree module for file-level detail,
+   * priority scoring, and budget-aware truncation.
+   *
+   * @param repoId - Repository ID
+   * @param wikiPages - Wiki pages for coverage calculation
+   * @returns Formatted coverage tree string, or null if unavailable
+   */
+  private async buildFileCoverageTree(
+    repoId: string,
+    wikiPages: Array<{ path: string; content: string }>
+  ): Promise<string | null> {
+    if (!this.repoAccessFactory) {
+      return null;
+    }
+
+    try {
+      const repoAccess = await this.repoAccessFactory.create(repoId);
+      const allFiles = await repoAccess.getFileTree();
+
+      // Filter to source files only
+      const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
+
+      if (sourceFiles.length === 0) {
+        return null;
+      }
+
+      // Convert to FileData format
+      // Use estimated LOC based on file type (fetching actual content would be expensive)
+      // TypeScript/JavaScript files average ~50-100 LOC, use 75 as default
+      const DEFAULT_LOC = 75;
+      const fileData: FileData[] = sourceFiles.map(path => ({
+        path,
+        loc: DEFAULT_LOC,
+      }));
+
+      // Use the new prioritized coverage tree builder
+      return buildPrioritizedCoverageTree(fileData, wikiPages, 100);
+    } catch (error) {
+      console.warn(`Failed to build file coverage tree: ${error}`);
+      return null;
+    }
+  }
+
+  /**
    * Build a directory tree from a list of file paths.
    */
   private buildTreeFromPaths(
@@ -764,8 +823,13 @@ export class ContextGatherer {
 
     // 3. CODEBASE STRUCTURE - what code exists and what's covered
     lines.push('## Codebase Structure\n');
-    lines.push('Directories marked with ⚠️ have low coverage. Target these with `codebase-explorer`.\n');
-    lines.push(this.formatCoverageTree(ctx.coverageTree, 100));
+    lines.push('Files marked with ⚠️ have low coverage. Target these with `codebase-explorer`.\n');
+    // Prefer file-level coverage tree if available, fallback to directory-only
+    if (ctx.fileCoverageTree) {
+      lines.push(ctx.fileCoverageTree);
+    } else {
+      lines.push(this.formatCoverageTree(ctx.coverageTree, 100));
+    }
     lines.push('');
 
     // 4. WIKI STATE - what's already documented

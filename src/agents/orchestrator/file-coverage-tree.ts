@@ -5,7 +5,14 @@
  * helping the Orchestrator identify the most important documentation gaps.
  */
 
-import type { WikiPage } from '../../domain/wiki-page.js';
+/**
+ * Minimal wiki page interface for coverage calculation.
+ * Only requires path and content for checking mentions.
+ */
+export interface WikiPageLike {
+  path: string;
+  content: string;
+}
 
 // ============================================================================
 // Types
@@ -132,7 +139,7 @@ export function calculatePriorityScore(coveragePercent: number, loc: number): nu
  * @param wikiPages - Wiki pages to search for mentions
  * @returns Coverage percentage (0 or 100 for now - binary)
  */
-export function calculateFileCoverage(filePath: string, wikiPages: WikiPage[]): number {
+export function calculateFileCoverage(filePath: string, wikiPages: WikiPageLike[]): number {
   const fileName = filePath.split('/').pop() ?? '';
   const fileNameWithoutExt = fileName.replace(/\.[^.]+$/, '');
 
@@ -248,7 +255,7 @@ export function createDirectoryNode(
  */
 export function buildCoverageTreeWithFiles(
   files: FileData[],
-  wikiPages: WikiPage[]
+  wikiPages: WikiPageLike[]
 ): DirectoryNode | null {
   if (files.length === 0) {
     return null;
@@ -506,7 +513,7 @@ export function formatCoverageTreeWithFiles(
  */
 export function buildPrioritizedCoverageTree(
   files: FileData[],
-  wikiPages: WikiPage[],
+  wikiPages: WikiPageLike[],
   budget: number = DEFAULT_LINE_BUDGET
 ): string {
   // Build the full tree
