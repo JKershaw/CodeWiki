@@ -176,19 +176,16 @@ function createMockLLM(responseContent: string): LLMService {
 
 describe('SelfImprovementAgent', () => {
   describe('analyze', () => {
-    it('requires at least 2 completed benchmark runs', async () => {
-      const benchmarks = [
-        createMockBenchmarkRun('run-1', 10, 50, [{ questionId: 'q1', grade: 'partial' }]),
-      ];
-
-      const repos = createMockRepos(benchmarks) as Repositories;
-      const llm = createMockLLM('Test report');
+    it('allows wiki-only analysis without benchmarks', async () => {
+      const repos = createMockRepos([]) as Repositories;
+      const llm = createMockLLM('Wiki quality report');
       const agent = new SelfImprovementAgent(repos, llm);
 
-      await assert.rejects(
-        () => agent.analyze('test-repo', 'test-wiki', ['run-1']),
-        /at least 2/i
-      );
+      // Wiki-quality-first approach doesn't require benchmarks
+      const result = await agent.analyze('test-repo', 'test-wiki', []);
+
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(result.report, 'Wiki quality report');
     });
 
     it('produces a report for valid benchmark runs', async () => {
