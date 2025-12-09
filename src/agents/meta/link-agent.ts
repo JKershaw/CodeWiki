@@ -54,8 +54,22 @@ export class LinkAgent implements Agent {
       };
     }
 
-    // Find pages that need link analysis (no links yet or low confidence)
-    const pagesToAnalyze = pages.filter(p => p.links.length === 0);
+    // Find the newest page creation time to determine if older pages need re-analysis
+    const newestPageCreation = Math.max(...pages.map(p => p.createdAt.getTime()));
+
+    // Find pages that need link analysis:
+    // 1. Pages with no links (always need analysis)
+    // 2. Pages with links but updated before a newer page was created (might need new links)
+    const pagesToAnalyze = pages.filter(p => {
+      // Always analyze pages with no links
+      if (p.links.length === 0) {
+        return true;
+      }
+      // Re-analyze pages with links if they were updated before a newer page was created
+      // This ensures old pages can get links to newly created pages
+      const pageUpdatedAt = p.updatedAt.getTime();
+      return pageUpdatedAt < newestPageCreation;
+    });
 
     if (pagesToAnalyze.length === 0) {
       return {

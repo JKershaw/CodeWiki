@@ -229,6 +229,7 @@ describe('handleUpdateWikiPage with links', () => {
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
         links: ['existing/target'],
+        skipValidation: true,
       });
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);

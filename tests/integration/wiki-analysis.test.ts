@@ -101,12 +101,14 @@ CONFIDENCE: 0.85`);
       );
     });
 
-    it('skips analysis when pages already have links', async () => {
+    it('skips analysis when pages already have links and no newer pages exist', async () => {
       const repoWithLinks = 'link-test-repo-2';
       await createTestRepo(ctx, repoWithLinks);
       const wiki = await getOrCreateActiveWiki(repoWithLinks, ctx.repos);
 
-      // Create pages that already have links
+      // Create pages that already have links at the same timestamp
+      // (no newer pages exist, so no re-analysis needed)
+      const sameTime = new Date();
       await ctx.repos.wikiPages.save({
         id: 'linked-1',
         wikiId: wiki.id,
@@ -115,10 +117,11 @@ CONFIDENCE: 0.85`);
         content: '# Page A',
         confidence: 0.7,
         sourceCommits: [],
+        sourceAgentRunIds: [],
         links: ['page-b'],
         backlinks: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: sameTime,
+        updatedAt: sameTime,
       });
 
       await ctx.repos.wikiPages.save({
@@ -129,10 +132,11 @@ CONFIDENCE: 0.85`);
         content: '# Page B',
         confidence: 0.7,
         sourceCommits: [],
+        sourceAgentRunIds: [],
         links: ['page-a'],
         backlinks: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: sameTime,
+        updatedAt: sameTime,
       });
 
       const agent = new LinkAgent();

@@ -52,6 +52,8 @@ export interface WikiPageUpdate {
   findingId?: string;
   /** Links to other wiki pages (paths) to set on this page */
   links?: string[];
+  /** Skip content validation (for tests and programmatic updates) */
+  skipValidation?: boolean;
 }
 
 export function createWikiPage(params: {
