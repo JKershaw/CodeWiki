@@ -176,7 +176,7 @@ function createMockLLM(responseContent: string): LLMService {
 
 describe('SelfImprovementAgent', () => {
   describe('analyze', () => {
-    it('requires at least 2 completed benchmark runs', async () => {
+    it('requires at least 2 completed benchmark runs in benchmark-first mode', async () => {
       const benchmarks = [
         createMockBenchmarkRun('run-1', 10, 50, [{ questionId: 'q1', grade: 'partial' }]),
       ];
@@ -186,9 +186,21 @@ describe('SelfImprovementAgent', () => {
       const agent = new SelfImprovementAgent(repos, llm);
 
       await assert.rejects(
-        () => agent.analyze('test-repo', 'test-wiki', ['run-1']),
+        () => agent.analyze('test-repo', 'test-wiki', ['run-1'], { mode: 'benchmark-first' }),
         /at least 2/i
       );
+    });
+
+    it('allows wiki-only analysis in wiki-quality-first mode (default)', async () => {
+      const repos = createMockRepos([]) as Repositories;
+      const llm = createMockLLM('Wiki quality report');
+      const agent = new SelfImprovementAgent(repos, llm);
+
+      // Should not throw - wiki-quality-first mode doesn't require benchmarks
+      const result = await agent.analyze('test-repo', 'test-wiki', []);
+
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(result.report, 'Wiki quality report');
     });
 
     it('produces a report for valid benchmark runs', async () => {

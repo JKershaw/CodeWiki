@@ -12,6 +12,7 @@ import type { RepositoryServiceFactory } from '../services/repository/repository
 import {
   createUnifiedRepoAccessFactory,
   type UnifiedRepoAccessFactory,
+  type UnifiedRepoAccess,
 } from '../services/repository/unified-repo-access.js';
 import type { BenchmarkRun } from '../domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../domain/quality-benchmark.js';
@@ -20,7 +21,7 @@ import {
   analysisTools,
   type AnalysisToolContext,
 } from '../services/llm/analysis-tools.js';
-import { SELF_IMPROVEMENT_SYSTEM_PROMPT } from './prompts.js';
+import { getSystemPrompt } from './prompts.js';
 import {
   createSelfImprovementRun,
   completeSelfImprovementRun,
@@ -36,6 +37,13 @@ import { v4 as uuid } from 'uuid';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 30;
 const DEFAULT_MAX_TOKENS = 16000;
+
+/**
+ * Analysis mode determines the agent's approach.
+ * - 'benchmark-first': Start with benchmark failures, investigate why (original approach)
+ * - 'wiki-quality-first': Start with wiki quality assessment, use benchmarks as supporting evidence
+ */
+export type AnalysisMode = 'benchmark-first' | 'wiki-quality-first';
 
 // ============================================================================
 // Self-Improvement Agent
@@ -61,13 +69,21 @@ export class SelfImprovementAgent {
   }
 
   /**
-   * Run a self-improvement analysis on the specified benchmark runs.
+   * Run a self-improvement analysis.
+   *
+   * @param repoId - Repository ID
+   * @param wikiId - Wiki ID
+   * @param benchmarkRunIds - IDs of benchmark runs to analyze (can be empty for wiki-only mode)
+   * @param options - Analysis options
    */
   async analyze(
     repoId: string,
     wikiId: string,
-    benchmarkRunIds: string[]
+    benchmarkRunIds: string[],
+    options: { mode?: AnalysisMode } = {}
   ): Promise<SelfImprovementRun> {
+    const mode = options.mode ?? 'wiki-quality-first';
+
     // Load benchmark runs
     const benchmarkRuns: BenchmarkRun[] = [];
     for (const id of benchmarkRunIds) {
@@ -77,19 +93,21 @@ export class SelfImprovementAgent {
       }
     }
 
-    if (benchmarkRuns.length < 2) {
-      throw new Error('At least 2 completed benchmark runs are required for analysis');
+    // In benchmark-first mode, require at least 2 benchmark runs
+    // In wiki-quality-first mode, benchmarks are optional
+    if (mode === 'benchmark-first' && benchmarkRuns.length < 2) {
+      throw new Error('At least 2 completed benchmark runs are required for benchmark-first analysis');
     }
 
     // Sort by iteration count
     benchmarkRuns.sort((a, b) => a.iterationCount - b.iterationCount);
 
-    // Load quality benchmark runs for the same wiki in the same iteration range
-    const minIteration = benchmarkRuns[0]!.iterationCount;
-    const maxIteration = benchmarkRuns[benchmarkRuns.length - 1]!.iterationCount;
+    // Determine iteration range
+    // If no benchmarks, use all available quality benchmarks
+    const minIteration = benchmarkRuns.length > 0 ? benchmarkRuns[0]!.iterationCount : 0;
+    const maxIteration = benchmarkRuns.length > 0 ? benchmarkRuns[benchmarkRuns.length - 1]!.iterationCount : Infinity;
 
-    // Use findByWiki to ensure we only get quality benchmarks for the same wiki
-    // as the accuracy benchmarks being analyzed (not orphaned data from deleted wikis)
+    // Load quality benchmark runs for the same wiki
     const allQualityRuns = await this.repos.qualityBenchmarks.findByWiki(wikiId);
     const qualityBenchmarkRuns = allQualityRuns
       .filter(r =>
@@ -134,19 +152,17 @@ export class SelfImprovementAgent {
         ...(repoAccess && { repoAccess }),
       };
 
-      // Build warm-start context
-      const warmStartContext = this.buildWarmStartContext(
-        benchmarkRuns,
-        qualityBenchmarkRuns,
-        wikiPages
-      );
+      // Build warm-start context based on mode
+      const warmStartContext = mode === 'wiki-quality-first'
+        ? this.buildWikiQualityWarmStart(wikiPages, qualityBenchmarkRuns, benchmarkRuns, repoAccess)
+        : this.buildBenchmarkFirstWarmStart(benchmarkRuns, qualityBenchmarkRuns, wikiPages);
 
       // Create tool executor
       const executeTools = this.createToolExecutor(toolContext);
 
       // Run the agentic analysis
       const completion = await this.llm.completeWithTools({
-        system: SELF_IMPROVEMENT_SYSTEM_PROMPT,
+        system: getSystemPrompt(mode),
         messages: [
           {
             role: 'user',
@@ -181,9 +197,9 @@ export class SelfImprovementAgent {
   }
 
   /**
-   * Build the warm-start context that gives the agent an overview before it starts exploring.
+   * Build the warm-start context for benchmark-first mode (original approach).
    */
-  private buildWarmStartContext(
+  private buildBenchmarkFirstWarmStart(
     benchmarkRuns: BenchmarkRun[],
     qualityRuns: QualityBenchmarkRun[],
     wikiPages: WikiPage[]
@@ -244,6 +260,134 @@ export class SelfImprovementAgent {
     sections.push('4. Produce a detailed analysis report with actionable recommendations');
     sections.push('');
     sections.push('Start by getting an overview of the trends to see which questions improved or got stuck, then investigate the interesting cases.');
+
+    return sections.join('\n');
+  }
+
+  /**
+   * Build the warm-start context for wiki-quality-first mode.
+   * Focuses on wiki structure and quality, with benchmarks as supporting evidence.
+   */
+  private buildWikiQualityWarmStart(
+    wikiPages: WikiPage[],
+    qualityRuns: QualityBenchmarkRun[],
+    benchmarkRuns: BenchmarkRun[],
+    repoAccess?: UnifiedRepoAccess
+  ): string {
+    const sections: string[] = [];
+
+    sections.push('# Wiki Quality Self-Assessment');
+    sections.push('');
+    sections.push('Assess the quality of this generated wiki and identify opportunities to improve the generation process.');
+    sections.push('');
+
+    // Wiki Overview
+    sections.push('## Wiki Overview');
+    sections.push('');
+    sections.push(`**Total pages:** ${wikiPages.length}`);
+
+    // Group pages by category
+    const pagesByCategory = new Map<string, WikiPage[]>();
+    for (const page of wikiPages) {
+      const category = page.path.includes('/') ? page.path.split('/')[0]! : 'root';
+      if (!pagesByCategory.has(category)) {
+        pagesByCategory.set(category, []);
+      }
+      pagesByCategory.get(category)!.push(page);
+    }
+
+    // Show category breakdown
+    sections.push('');
+    sections.push('**Categories:**');
+    const sortedCategories = [...pagesByCategory.entries()].sort((a, b) => b[1].length - a[1].length);
+    for (const [category, pages] of sortedCategories.slice(0, 8)) {
+      const bar = '█'.repeat(Math.min(pages.length, 20));
+      sections.push(`- ${category}/ (${pages.length} pages) ${bar}`);
+    }
+    if (sortedCategories.length > 8) {
+      sections.push(`- ... and ${sortedCategories.length - 8} more categories`);
+    }
+
+    // Confidence distribution
+    const avgConfidence = wikiPages.length > 0
+      ? wikiPages.reduce((sum, p) => sum + p.confidence, 0) / wikiPages.length
+      : 0;
+    const lowConfidencePages = wikiPages.filter(p => p.confidence < 0.5);
+    sections.push('');
+    sections.push(`**Average confidence:** ${(avgConfidence * 100).toFixed(0)}%`);
+    if (lowConfidencePages.length > 0) {
+      sections.push(`**Low confidence pages (< 50%):** ${lowConfidencePages.length}`);
+    }
+
+    // Quality Snapshot (if available)
+    if (qualityRuns.length > 0) {
+      const latestQuality = qualityRuns[qualityRuns.length - 1]!;
+      sections.push('');
+      sections.push('## Quality Snapshot (Latest Assessment)');
+      sections.push('');
+      sections.push('| Dimension | Score |');
+      sections.push('|-----------|-------|');
+
+      const dimensions = Object.entries(latestQuality.summary.byDimension)
+        .sort((a, b) => a[1] - b[1]); // Sort by score ascending (worst first)
+
+      for (const [dimension, score] of dimensions) {
+        const displayName = dimension.replace(/_/g, ' ');
+        sections.push(`| ${displayName} | ${score.toFixed(0)} |`);
+      }
+
+      sections.push('');
+      sections.push(`**Overall quality score:** ${latestQuality.summary.overallScore.toFixed(0)}/100`);
+
+      if (latestQuality.summary.strengths.length > 0) {
+        sections.push(`**Strengths:** ${latestQuality.summary.strengths.join(', ')}`);
+      }
+      if (latestQuality.summary.weaknesses.length > 0) {
+        sections.push(`**Weaknesses:** ${latestQuality.summary.weaknesses.join(', ')}`);
+      }
+    }
+
+    // Repository context
+    sections.push('');
+    sections.push('## Repository Context');
+    sections.push('');
+    if (repoAccess) {
+      sections.push('Source code access is available. Use `list_source_directory` and `read_source_file` to explore.');
+    } else {
+      sections.push('Source code access is not available for this analysis.');
+    }
+
+    // Available Benchmark Data (as supporting evidence)
+    if (benchmarkRuns.length > 0) {
+      sections.push('');
+      sections.push('## Available Benchmark Data');
+      sections.push('');
+      sections.push(`You have access to ${benchmarkRuns.length} accuracy benchmark run(s) that test whether the wiki can answer specific questions.`);
+      sections.push('Use these to validate your findings, but let your assessment of the wiki itself drive the analysis.');
+
+      const lastBenchmark = benchmarkRuns[benchmarkRuns.length - 1]!;
+      sections.push('');
+      sections.push(`Latest benchmark: ${lastBenchmark.summary.score.toFixed(0)}% accuracy`);
+      sections.push(`- Accurate: ${lastBenchmark.summary.accurate}/${lastBenchmark.summary.totalQuestions}`);
+      sections.push(`- Partial: ${lastBenchmark.summary.partial}/${lastBenchmark.summary.totalQuestions}`);
+      sections.push(`- Inaccurate/No answer: ${lastBenchmark.summary.inaccurate + lastBenchmark.summary.noAnswer}/${lastBenchmark.summary.totalQuestions}`);
+    } else {
+      sections.push('');
+      sections.push('## Benchmark Data');
+      sections.push('');
+      sections.push('No accuracy benchmarks are available. Focus on wiki structure and quality assessment.');
+    }
+
+    // Instructions
+    sections.push('');
+    sections.push('## Your Task');
+    sections.push('');
+    sections.push('1. **Assess wiki quality** - Explore the wiki structure and sample content across categories');
+    sections.push('2. **Identify coverage gaps** - Compare wiki structure to source code to find undocumented areas');
+    sections.push('3. **Understand why** - Trace issues to orchestrator decisions, agent behavior, or process gaps');
+    sections.push('4. **Recommend improvements** - Specific, actionable changes to the generation process');
+    sections.push('');
+    sections.push('Start by listing wiki pages and exploring source code structure to understand coverage.');
 
     return sections.join('\n');
   }
