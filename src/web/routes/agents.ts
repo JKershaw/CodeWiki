@@ -16,7 +16,65 @@ export function createAgentsRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
-   * Query the wiki.
+   * @swagger
+   * /api/repos/{id}/query:
+   *   post:
+   *     summary: Query the wiki with a question
+   *     description: Queries the wiki using the research agent to find answers and relevant sources
+   *     tags: [Agents]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - question
+   *             properties:
+   *               question:
+   *                 type: string
+   *                 description: The question to ask about the repository
+   *     responses:
+   *       200:
+   *         description: Query result with answer and sources
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/QueryResult'
+   *       400:
+   *         description: Missing required field (question)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       404:
+   *         description: Repository not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
    */
   router.post('/api/repos/:id/query', async (req: Request, res: Response) => {
     try {
@@ -44,7 +102,65 @@ export function createAgentsRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Generate a spec for a coding agent task.
+   * @swagger
+   * /api/repos/{id}/spec:
+   *   post:
+   *     summary: Generate a coding spec for a task
+   *     description: Uses the spec agent to generate a detailed specification for a coding task
+   *     tags: [Agents]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - task
+   *             properties:
+   *               task:
+   *                 type: string
+   *                 description: Description of the coding task
+   *     responses:
+   *       200:
+   *         description: Specification result with generated spec
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/SpecResult'
+   *       400:
+   *         description: Missing required field (task)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       404:
+   *         description: Repository not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
    */
   router.post('/api/repos/:id/spec', async (req: Request, res: Response) => {
     try {

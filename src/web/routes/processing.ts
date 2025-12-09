@@ -26,6 +26,89 @@ export function createProcessingRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
+   * @swagger
+   * /api/repos/{id}/work-queue:
+   *   get:
+   *     summary: Get work queue for a repository
+   *     description: Returns pending, claimed, completed, and failed work items grouped by status
+   *     tags: [Processing]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     responses:
+   *       200:
+   *         description: Work queue with items grouped by status
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 workQueue:
+   *                   type: object
+   *                   properties:
+   *                     pending:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           agentType:
+   *                             type: string
+   *                           targetCommitId:
+   *                             type: string
+   *                             nullable: true
+   *                           targetPagePath:
+   *                             type: string
+   *                             nullable: true
+   *                           status:
+   *                             type: string
+   *                           createdAt:
+   *                             type: string
+   *                             format: date-time
+   *                           claimedAt:
+   *                             type: string
+   *                             format: date-time
+   *                             nullable: true
+   *                           completedAt:
+   *                             type: string
+   *                             format: date-time
+   *                             nullable: true
+   *                     claimed:
+   *                       type: array
+   *                       items:
+   *                         $ref: '#/components/schemas/WorkItem'
+   *                     completed:
+   *                       type: array
+   *                       description: Limited to last 20 items
+   *                       items:
+   *                         $ref: '#/components/schemas/WorkItem'
+   *                     failed:
+   *                       type: array
+   *                       description: Limited to last 10 items
+   *                       items:
+   *                         $ref: '#/components/schemas/WorkItem'
+   *                     counts:
+   *                       type: object
+   *                       properties:
+   *                         pending:
+   *                           type: integer
+   *                         claimed:
+   *                           type: integer
+   *                         completed:
+   *                           type: integer
+   *                         failed:
+   *                           type: integer
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Get the work queue (job list) for a repository.
    * Returns pending, claimed, completed, and failed work items.
    */
@@ -97,6 +180,100 @@ export function createProcessingRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/processing:
+   *   get:
+   *     summary: Get processing status for a repository
+   *     description: Returns the active or most recent processing run with iteration details
+   *     tags: [Processing]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     responses:
+   *       200:
+   *         description: Processing status with iteration details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 processing:
+   *                   type: object
+   *                   nullable: true
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     status:
+   *                       type: string
+   *                       enum: [running, completed, failed, stopping]
+   *                     totalIterations:
+   *                       type: integer
+   *                     completedIterations:
+   *                       type: integer
+   *                     successfulIterations:
+   *                       type: integer
+   *                     failedIterations:
+   *                       type: integer
+   *                     totalCostUsd:
+   *                       type: number
+   *                       format: float
+   *                     wikiPagesCreated:
+   *                       type: integer
+   *                     wikiPagesUpdated:
+   *                       type: integer
+   *                     startedAt:
+   *                       type: string
+   *                       format: date-time
+   *                     completedAt:
+   *                       type: string
+   *                       format: date-time
+   *                       nullable: true
+   *                     error:
+   *                       type: string
+   *                       nullable: true
+   *                     currentIteration:
+   *                       type: object
+   *                       nullable: true
+   *                       properties:
+   *                         iterationNumber:
+   *                           type: integer
+   *                         agentType:
+   *                           type: string
+   *                         startedAt:
+   *                           type: string
+   *                           format: date-time
+   *                     iterations:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           iterationNumber:
+   *                             type: integer
+   *                           status:
+   *                             type: string
+   *                             enum: [running, completed, failed]
+   *                           agentType:
+   *                             type: string
+   *                           durationMs:
+   *                             type: integer
+   *                             nullable: true
+   *                           costUsd:
+   *                             type: number
+   *                             format: float
+   *                           pagesCreated:
+   *                             type: integer
+   *                           pagesUpdated:
+   *                             type: integer
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Get processing status for a repository.
    * Returns the active or most recent processing run with iteration details.
    */
@@ -166,6 +343,40 @@ export function createProcessingRoutes(deps: Dependencies): Router {
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/processing/stop:
+   *   patch:
+   *     summary: Request to stop active processing run
+   *     description: Sets status to 'stopping', allowing current work to finish gracefully
+   *     tags: [Processing]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     responses:
+   *       200:
+   *         description: Stop request accepted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                   example: Stop requested, finishing current work...
+   *                 processingRunId:
+   *                   type: string
+   *       400:
+   *         description: Processing run is not running
+   *       404:
+   *         description: Repository not found or no active processing run found
+   *       500:
+   *         description: Internal server error
+   */
+  /**
    * Request to stop the active processing run for a repository.
    * Sets status to 'stopping', allowing current work to finish.
    */
@@ -212,6 +423,44 @@ export function createProcessingRoutes(deps: Dependencies): Router {
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/page-history:
+   *   get:
+   *     summary: Get page count history for the active wiki
+   *     description: Returns cumulative page counts at each iteration, computed from iteration data
+   *     tags: [Processing]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     responses:
+   *       200:
+   *         description: Page count history
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 pageHistory:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       iteration:
+   *                         type: integer
+   *                         description: Global iteration number across all processing runs
+   *                       pageCount:
+   *                         type: integer
+   *                         description: Cumulative number of pages created
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
+   */
   /**
    * Get page count history for the active wiki.
    * Returns cumulative page counts at each iteration, computed from iteration data.

@@ -62,6 +62,56 @@ export function createSelfImprovementRoutes(
   const router = Router({ mergeParams: true });
 
   /**
+   * @swagger
+   * /api/repos/{id}/self-improvements:
+   *   get:
+   *     summary: List self-improvement analysis history
+   *     description: Retrieve the self-improvement analysis history for a repository
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 10
+   *         description: Maximum number of analysis runs to return
+   *     responses:
+   *       200:
+   *         description: List of analysis runs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 analyses:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       id:
+   *                         type: string
+   *                       repoId:
+   *                         type: string
+   *                       status:
+   *                         type: string
+   *                         enum: [running, completed, failed]
+   *                       hasReport:
+   *                         type: boolean
+   *                       createdAt:
+   *                         type: string
+   *                         format: date-time
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Failed to list analyses
+   */
+  /**
    * GET /api/repos/:id/self-improvements
    * List self-improvement analysis history for a repository.
    */
@@ -98,6 +148,41 @@ export function createSelfImprovementRoutes(
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/self-improvements/{runId}:
+   *   get:
+   *     summary: Get a specific self-improvement analysis run
+   *     description: Retrieve details and report for a specific self-improvement analysis run
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Analysis run ID
+   *     responses:
+   *       200:
+   *         description: Analysis run details with report
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 run:
+   *                   $ref: '#/components/schemas/SelfImprovementAnalysis'
+   *       404:
+   *         description: Analysis run not found
+   *       500:
+   *         description: Failed to get analysis run
+   */
+  /**
    * GET /api/repos/:id/self-improvements/:runId
    * Get a specific self-improvement analysis run with its report.
    */
@@ -120,6 +205,60 @@ export function createSelfImprovementRoutes(
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/self-improvements:
+   *   post:
+   *     summary: Start a new self-improvement analysis
+   *     description: Begin a new self-improvement analysis run comparing benchmark runs
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - benchmarkRunIds
+   *             properties:
+   *               benchmarkRunIds:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 minItems: 2
+   *                 description: Array of benchmark run IDs to analyze (minimum 2 required)
+   *     responses:
+   *       200:
+   *         description: Analysis started successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 runId:
+   *                   type: string
+   *                   description: ID of the created analysis run
+   *                 status:
+   *                   type: string
+   *                   enum: [running]
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Invalid request (insufficient benchmark runs, no active wiki, or invalid benchmarks)
+   *       404:
+   *         description: Repository not found
+   *       409:
+   *         description: An analysis is already running
+   *       500:
+   *         description: Failed to start analysis
+   */
   /**
    * POST /api/repos/:id/self-improvements
    * Start a new self-improvement analysis.
@@ -224,6 +363,47 @@ export function createSelfImprovementRoutes(
   const chatService = new SelfImprovementChatService(repos, llm, git, repoServiceFactory);
 
   /**
+   * @swagger
+   * /api/repos/{id}/self-improvements/{runId}/chat:
+   *   post:
+   *     summary: Start a new chat session
+   *     description: Create a new chat session for a completed self-improvement analysis
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Analysis run ID
+   *     responses:
+   *       201:
+   *         description: Chat session created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 sessionId:
+   *                   type: string
+   *                   description: ID of the created chat session
+   *                 status:
+   *                   type: string
+   *                   enum: [active]
+   *       400:
+   *         description: Can only chat about completed analyses
+   *       404:
+   *         description: Self-improvement run not found
+   *       500:
+   *         description: Failed to create chat session
+   */
+  /**
    * POST /api/repos/:id/self-improvements/:runId/chat
    * Start a new chat session for a completed analysis.
    */
@@ -262,6 +442,57 @@ export function createSelfImprovementRoutes(
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/self-improvements/{runId}/chat:
+   *   get:
+   *     summary: List chat sessions for a run
+   *     description: Retrieve all chat sessions associated with a self-improvement analysis run
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Analysis run ID
+   *     responses:
+   *       200:
+   *         description: List of chat sessions
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 sessions:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       id:
+   *                         type: string
+   *                       status:
+   *                         type: string
+   *                         enum: [active, closed]
+   *                       messageCount:
+   *                         type: integer
+   *                       createdAt:
+   *                         type: string
+   *                         format: date-time
+   *                       updatedAt:
+   *                         type: string
+   *                         format: date-time
+   *                       totalCostUsd:
+   *                         type: number
+   *       500:
+   *         description: Failed to list chat sessions
+   */
+  /**
    * GET /api/repos/:id/self-improvements/:runId/chat
    * List chat sessions for a run.
    */
@@ -287,6 +518,47 @@ export function createSelfImprovementRoutes(
   });
 
   /**
+   * @swagger
+   * /api/repos/{id}/self-improvements/{runId}/chat/{sessionId}:
+   *   get:
+   *     summary: Get a specific chat session
+   *     description: Retrieve details and messages for a specific chat session
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Analysis run ID
+   *       - in: path
+   *         name: sessionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Chat session ID
+   *     responses:
+   *       200:
+   *         description: Chat session details with messages
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 session:
+   *                   $ref: '#/components/schemas/ChatSession'
+   *       404:
+   *         description: Chat session not found
+   *       500:
+   *         description: Failed to get chat session
+   */
+  /**
    * GET /api/repos/:id/self-improvements/:runId/chat/:sessionId
    * Get a specific chat session with messages.
    */
@@ -306,6 +578,62 @@ export function createSelfImprovementRoutes(
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/self-improvements/{runId}/chat/{sessionId}/messages:
+   *   post:
+   *     summary: Send a chat message
+   *     description: Send a message in a chat session and receive an AI response
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Analysis run ID
+   *       - in: path
+   *         name: sessionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Chat session ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - message
+   *             properties:
+   *               message:
+   *                 type: string
+   *                 description: The message to send
+   *     responses:
+   *       200:
+   *         description: Message sent successfully with AI response
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: object
+   *                   description: The AI response message
+   *       400:
+   *         description: Invalid request (missing message or session closed)
+   *       404:
+   *         description: Chat session not found
+   *       500:
+   *         description: Failed to send message
+   */
   /**
    * POST /api/repos/:id/self-improvements/:runId/chat/:sessionId/messages
    * Send a message in a chat session.
@@ -338,6 +666,48 @@ export function createSelfImprovementRoutes(
     }
   });
 
+  /**
+   * @swagger
+   * /api/repos/{id}/self-improvements/{runId}/chat/{sessionId}/close:
+   *   post:
+   *     summary: Close a chat session
+   *     description: Close an active chat session
+   *     tags: [Self Improvement]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: runId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Analysis run ID
+   *       - in: path
+   *         name: sessionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Chat session ID
+   *     responses:
+   *       200:
+   *         description: Chat session closed successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   enum: [closed]
+   *       404:
+   *         description: Chat session not found
+   *       500:
+   *         description: Failed to close chat session
+   */
   /**
    * POST /api/repos/:id/self-improvements/:runId/chat/:sessionId/close
    * Close a chat session.

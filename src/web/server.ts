@@ -7,6 +7,7 @@
 import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
 import cookieParser from 'cookie-parser';
+import swaggerUi from 'swagger-ui-express';
 import { randomBytes } from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -24,6 +25,7 @@ import { createGitHubAuthService } from '../services/github/github-auth-service.
 import { createGitHubRepoService, type GitHubRepoService } from '../services/github/github-repo-service.js';
 import { createGitHubApiCache, createCachedGitHubRepoService } from '../services/github/github-api-cache.js';
 import { createRepositoryServiceFactory } from '../services/repository/repository-service.js';
+import { swaggerSpec } from './swagger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -157,6 +159,13 @@ export async function startServer(port = PORT) {
 
   // Static files (after password protection)
   app.use(express.static(join(__dirname, 'public')));
+
+  // Swagger API documentation
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.get('/api-docs.json', (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
 
   // Create repository service factory with support for authenticated GitHub access
   const repoServiceFactory = createRepositoryServiceFactory({

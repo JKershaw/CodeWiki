@@ -33,7 +33,31 @@ export function createWikisRoutes(deps: Dependencies): Router {
   const router = Router();
 
   /**
-   * List all wikis for a repository.
+   * @swagger
+   * /api/repos/{id}/wikis:
+   *   get:
+   *     summary: List all wikis for a repository
+   *     tags: [Wikis]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     responses:
+   *       200:
+   *         description: Array of wikis
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
    */
   router.get('/api/repos/:id/wikis', async (req: Request, res: Response) => {
     try {
@@ -56,7 +80,57 @@ export function createWikisRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Create a new wiki for a repository.
+   * @swagger
+   * /api/repos/{id}/wikis:
+   *   post:
+   *     summary: Create a new wiki for a repository
+   *     tags: [Wikis]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - name
+   *             properties:
+   *               name:
+   *                 type: string
+   *                 description: Wiki name
+   *               description:
+   *                 type: string
+   *                 description: Wiki description
+   *               branchFilter:
+   *                 type: string
+   *                 description: Branch filter pattern
+   *               pathFilters:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 description: Path filter patterns
+   *               setActive:
+   *                 type: boolean
+   *                 description: Set as active wiki after creation
+   *     responses:
+   *       201:
+   *         description: Wiki created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *       400:
+   *         description: Invalid request or wiki name is required
+   *       404:
+   *         description: Repository not found
+   *       500:
+   *         description: Internal server error
    */
   router.post('/api/repos/:id/wikis', async (req: Request, res: Response) => {
     try {
@@ -97,7 +171,45 @@ export function createWikisRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Get a specific wiki with stats.
+   * @swagger
+   * /api/repos/{id}/wikis/{wikiId}:
+   *   get:
+   *     summary: Get a specific wiki with stats
+   *     tags: [Wikis]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: wikiId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Wiki ID
+   *     responses:
+   *       200:
+   *         description: Wiki details with statistics
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 stats:
+   *                   type: object
+   *                   properties:
+   *                     pageCount:
+   *                       type: number
+   *                       description: Number of pages in the wiki
+   *                     avgConfidence:
+   *                       type: number
+   *                       description: Average confidence score across all pages
+   *       404:
+   *         description: Wiki not found
+   *       500:
+   *         description: Internal server error
    */
   router.get('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
     try {
@@ -130,7 +242,58 @@ export function createWikisRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Update a wiki's settings.
+   * @swagger
+   * /api/repos/{id}/wikis/{wikiId}:
+   *   put:
+   *     summary: Update a wiki's settings
+   *     tags: [Wikis]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: wikiId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Wiki ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               name:
+   *                 type: string
+   *                 description: Wiki name
+   *               description:
+   *                 type: string
+   *                 description: Wiki description
+   *               branchFilter:
+   *                 type: string
+   *                 description: Branch filter pattern
+   *               pathFilters:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 description: Path filter patterns
+   *     responses:
+   *       200:
+   *         description: Wiki updated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *       400:
+   *         description: Invalid request
+   *       404:
+   *         description: Wiki not found
+   *       500:
+   *         description: Internal server error
    */
   router.put('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
     try {
@@ -171,7 +334,33 @@ export function createWikisRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Delete a wiki.
+   * @swagger
+   * /api/repos/{id}/wikis/{wikiId}:
+   *   delete:
+   *     summary: Delete a wiki
+   *     tags: [Wikis]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: wikiId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Wiki ID
+   *     responses:
+   *       204:
+   *         description: Wiki deleted successfully
+   *       400:
+   *         description: Invalid request (e.g., cannot delete active wiki)
+   *       404:
+   *         description: Wiki not found
+   *       500:
+   *         description: Internal server error
    */
   router.delete('/api/repos/:id/wikis/:wikiId', async (req: Request, res: Response) => {
     try {
@@ -202,7 +391,37 @@ export function createWikisRoutes(deps: Dependencies): Router {
   });
 
   /**
-   * Set a wiki as active.
+   * @swagger
+   * /api/repos/{id}/wikis/{wikiId}/activate:
+   *   post:
+   *     summary: Set a wiki as active
+   *     tags: [Wikis]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: path
+   *         name: wikiId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Wiki ID
+   *     responses:
+   *       200:
+   *         description: Wiki activated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *       400:
+   *         description: Invalid request
+   *       404:
+   *         description: Wiki not found
+   *       500:
+   *         description: Internal server error
    */
   router.post('/api/repos/:id/wikis/:wikiId/activate', async (req: Request, res: Response) => {
     try {
