@@ -138,27 +138,25 @@ export class Orchestrator {
       return null;
     }
 
-    // Check if bootstrap work already pending
+    // Check if bootstrap work already pending or in progress (claimed)
+    // This prevents race conditions when multiple workers try to fill slots concurrently
     const workQuery = createListWorkItemsQuery(repoId, {
       agentType: 'bootstrap',
-      status: 'pending',
     });
     const workResult = await handleListWorkItems(workQuery, this.repos);
-    const bootstrapWorkExists = workResult.data || [];
+    const allBootstrapWork = workResult.data || [];
 
-    if (bootstrapWorkExists.length > 0) {
+    // If any bootstrap work is pending or currently being processed, don't create more
+    const activeBootstrap = allBootstrapWork.filter(
+      w => w.status === 'pending' || w.status === 'claimed'
+    );
+    if (activeBootstrap.length > 0) {
       return null;
     }
 
     // Check if bootstrap work has failed (don't auto-retry to prevent infinite loop)
-    const failedWorkQuery = createListWorkItemsQuery(repoId, {
-      agentType: 'bootstrap',
-      status: 'failed',
-    });
-    const failedWorkResult = await handleListWorkItems(failedWorkQuery, this.repos);
-    const bootstrapWorkFailed = failedWorkResult.data || [];
-
-    if (bootstrapWorkFailed.length > 0) {
+    const failedBootstrap = allBootstrapWork.filter(w => w.status === 'failed');
+    if (failedBootstrap.length > 0) {
       return null;
     }
 

@@ -214,6 +214,37 @@ code-change,${sha},Analyze new commit`);
       assert.strictEqual(bootstrapItems.length, 0, 'Should not duplicate bootstrap work');
     });
 
+    it('does not duplicate bootstrap work if already claimed (race condition prevention)', async () => {
+      const repoId = 'orchestrator-no-duplicate-claimed-bootstrap';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      // Get the wiki for this repo
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Pre-create a CLAIMED bootstrap work item (simulates race condition where
+      // one worker has claimed bootstrap but another worker is checking for work)
+      const claimedBootstrap = createWorkItem({
+        id: 'claimed-bootstrap-work',
+        repoId,
+        agentType: 'bootstrap',
+        target: createWikiTarget(),
+      });
+      claimedBootstrap.status = 'claimed';
+      claimedBootstrap.claimedAt = new Date();
+      await ctx.repos.workQueue.save(claimedBootstrap);
+
+      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
+
+      // Should not create another bootstrap item - the claimed one is in progress
+      const bootstrapItems = workItems.filter(w => w.agentType === 'bootstrap');
+      assert.strictEqual(bootstrapItems.length, 0,
+        'Should not duplicate bootstrap work when one is already claimed/in-progress');
+    });
+
     it('does not regenerate bootstrap if previous bootstrap work item failed', async () => {
       const repoId = 'orchestrator-no-retry-failed-bootstrap-work';
 
