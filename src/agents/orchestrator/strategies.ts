@@ -290,9 +290,20 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   const runsResult = await handleListAgentRuns(runsQuery, ctx.repos);
   const recentRuns = runsResult.data || [];
 
-  // Time-based cooldown: only consider runs completed within the last 5 minutes as "recent"
-  const META_AGENT_COOLDOWN_MS = 5 * 60 * 1000;
-  const now = Date.now();
+  // Iteration-based cooldown: only consider runs within the last N completed runs as "recent"
+  // This approximates "hasn't run in last 20 iterations" by counting completed runs
+  const META_AGENT_COOLDOWN_RUNS = 20;
+
+  // Get all completed runs sorted by completion time (newest first)
+  const completedRuns = recentRuns
+    .filter(r => r.status === 'completed' && r.completedAt)
+    .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
+
+  // Helper to check if an agent type has run within the cooldown window
+  const hasRunWithinCooldown = (agentType: string): boolean => {
+    const recentWindow = completedRuns.slice(0, META_AGENT_COOLDOWN_RUNS);
+    return recentWindow.some(r => r.agentType === agentType);
+  };
 
   // Check for pages without links (need link agent)
   // Link agent scheduling is more aggressive than other meta agents because
@@ -310,11 +321,8 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     if (needsLinking) {
       const linkKey = 'link:wiki';
 
-      // Check for recent link runs (time-based cooldown)
-      const recentLinkRuns = recentRuns
-        .filter(r => r.agentType === 'link' && r.status === 'completed')
-        .filter(r => r.completedAt && r.completedAt.getTime() > (now - META_AGENT_COOLDOWN_MS));
-      const hasRecentRun = recentLinkRuns.length > 0;
+      // Check for recent link runs (iteration-based cooldown)
+      const hasRecentRun = hasRunWithinCooldown('link');
 
       // Override cooldown if unlinked ratio is very high (> 50%)
       // This ensures link agent runs frequently when wiki is poorly linked
@@ -336,12 +344,8 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
 
   // Run structure agent periodically (when wiki has at least 5 pages)
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
-    const recentStructureRuns = recentRuns
-      .filter(r => r.agentType === 'structure' && r.status === 'completed')
-      .filter(r => r.completedAt && r.completedAt.getTime() > (now - META_AGENT_COOLDOWN_MS));
-
     const structureKey = 'structure:wiki';
-    if (!ctx.existingWorkKeys.has(structureKey) && recentStructureRuns.length === 0) {
+    if (!ctx.existingWorkKeys.has(structureKey) && !hasRunWithinCooldown('structure')) {
       ctx.existingWorkKeys.add(structureKey);
       workItems.push(
         createWorkItem({
@@ -358,12 +362,8 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   if (workItems.length < remainingSlots && wikiPages.length >= 3) {
     const lowConfidencePages = wikiPages.filter(p => p.confidence < 0.7);
     if (lowConfidencePages.length > 0) {
-      const recentQualityRuns = recentRuns
-        .filter(r => r.agentType === 'quality' && r.status === 'completed')
-        .filter(r => r.completedAt && r.completedAt.getTime() > (now - META_AGENT_COOLDOWN_MS));
-
       const qualityKey = 'quality:wiki';
-      if (!ctx.existingWorkKeys.has(qualityKey) && recentQualityRuns.length === 0) {
+      if (!ctx.existingWorkKeys.has(qualityKey) && !hasRunWithinCooldown('quality')) {
         ctx.existingWorkKeys.add(qualityKey);
         workItems.push(
           createWorkItem({
@@ -379,12 +379,8 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
 
   // Run consistency agent when wiki has enough pages (5+)
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
-    const recentConsistencyRuns = recentRuns
-      .filter(r => r.agentType === 'consistency' && r.status === 'completed')
-      .filter(r => r.completedAt && r.completedAt.getTime() > (now - META_AGENT_COOLDOWN_MS));
-
     const consistencyKey = 'consistency:wiki';
-    if (!ctx.existingWorkKeys.has(consistencyKey) && recentConsistencyRuns.length === 0) {
+    if (!ctx.existingWorkKeys.has(consistencyKey) && !hasRunWithinCooldown('consistency')) {
       ctx.existingWorkKeys.add(consistencyKey);
       workItems.push(
         createWorkItem({
@@ -404,12 +400,8 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     const openFindings = findingsResult.data || [];
 
     if (openFindings.length > 0) {
-      const recentConsolidationRuns = recentRuns
-        .filter(r => r.agentType === 'consolidation' && r.status === 'completed')
-        .filter(r => r.completedAt && r.completedAt.getTime() > (now - META_AGENT_COOLDOWN_MS));
-
       const consolidationKey = 'consolidation:wiki';
-      if (!ctx.existingWorkKeys.has(consolidationKey) && recentConsolidationRuns.length === 0) {
+      if (!ctx.existingWorkKeys.has(consolidationKey) && !hasRunWithinCooldown('consolidation')) {
         ctx.existingWorkKeys.add(consolidationKey);
         workItems.push(
           createWorkItem({

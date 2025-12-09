@@ -277,8 +277,9 @@ export function calculateConfidence(page: WikiPage, factors: {
    - Changed filter from `p.links.length === 0` to also include pages updated before the newest page was created
 
 ### P1 Fixes (High)
-3. **Issue 3 - FIXED**: Switched to time-based cooldowns (5 min) in `strategies.ts`
-   - All meta agents now check `r.completedAt.getTime() > (now - META_AGENT_COOLDOWN_MS)`
+3. **Issue 3 - FIXED**: Switched to iteration-based cooldowns (20 runs) in `strategies.ts`
+   - All meta agents now check if they've run within the last 20 completed runs
+   - Uses `hasRunWithinCooldown(agentType)` helper function
 
 4. **Issue 4 - FIXED**: Added pre-creation similarity check in `update-wiki-page.ts`
    - Pages with identical titles (case-insensitive) at different paths are now rejected

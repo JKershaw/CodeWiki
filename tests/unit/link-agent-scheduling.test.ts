@@ -116,7 +116,7 @@ describe('Link Agent Scheduling', () => {
       assert.ok(!linkWorkItem, 'Should not schedule link agent when all pages have links');
     });
 
-    it('respects recent link agent run cooldown (time-based)', async () => {
+    it('respects recent link agent run cooldown (iteration-based)', async () => {
       const repoId = 'link-sched-3';
 
       await createTestRepo(ctx, repoId, {
@@ -139,15 +139,15 @@ describe('Link Agent Scheduling', () => {
         { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
       ]);
 
-      // Record a RECENT link agent run (completed just now)
+      // Record a link agent run (will be in recent 20 runs window)
       await ctx.repos.agentRuns.save({
         id: uuid(),
         repoId,
         wikiId: wiki.id,
         agentType: 'link',
         status: 'completed',
-        startedAt: new Date(Date.now() - 1000), // 1 second ago
-        completedAt: new Date(), // Just now
+        startedAt: new Date(Date.now() - 1000),
+        completedAt: new Date(),
         durationMs: 1000,
         inputTokens: 100,
         outputTokens: 50,
@@ -159,11 +159,11 @@ describe('Link Agent Scheduling', () => {
       const result = await metaAgentsStrategy(strategyCtx, 10);
 
       const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // With very recent run and less than 50% unlinked, should NOT reschedule
-      assert.ok(!linkWorkItem, 'Should respect cooldown for very recent run');
+      // With link run in recent window and less than 50% unlinked, should NOT reschedule
+      assert.ok(!linkWorkItem, 'Should respect cooldown for recent run within window');
     });
 
-    it('allows scheduling after cooldown expires (old completed run)', async () => {
+    it('allows scheduling after cooldown expires (pushed out of window)', async () => {
       const repoId = 'link-sched-3b';
 
       await createTestRepo(ctx, repoId, {
@@ -186,15 +186,15 @@ describe('Link Agent Scheduling', () => {
         { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
       ]);
 
-      // Record an OLD link agent run (completed 10 minutes ago - past cooldown)
+      // Record an old link agent run
       await ctx.repos.agentRuns.save({
         id: uuid(),
         repoId,
         wikiId: wiki.id,
         agentType: 'link',
         status: 'completed',
-        startedAt: new Date(Date.now() - 11 * 60 * 1000), // 11 minutes ago
-        completedAt: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
+        startedAt: new Date(Date.now() - 100000),
+        completedAt: new Date(Date.now() - 99000),
         durationMs: 1000,
         inputTokens: 100,
         outputTokens: 50,
@@ -202,11 +202,29 @@ describe('Link Agent Scheduling', () => {
         toolCalls: [],
       });
 
+      // Add 25 other completed runs to push link agent out of the 20-run window
+      for (let i = 0; i < 25; i++) {
+        await ctx.repos.agentRuns.save({
+          id: uuid(),
+          repoId,
+          wikiId: wiki.id,
+          agentType: 'code-change', // Different agent type
+          status: 'completed',
+          startedAt: new Date(Date.now() - 50000 + i * 1000),
+          completedAt: new Date(Date.now() - 49000 + i * 1000),
+          durationMs: 1000,
+          inputTokens: 100,
+          outputTokens: 50,
+          costUsd: 0.001,
+          toolCalls: [],
+        });
+      }
+
       const strategyCtx = createStrategyContext(repoId, wiki.id);
       const result = await metaAgentsStrategy(strategyCtx, 10);
 
       const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // After cooldown expires, should schedule again even if previous run exists
+      // After link run is pushed out of 20-run window, should schedule again
       assert.ok(linkWorkItem, 'Should allow scheduling after cooldown expires');
     });
 
