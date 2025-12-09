@@ -102,12 +102,18 @@ export interface OrchestratorContext {
 
   // Quality Indicators
   pagesWithoutLinks: number;
+  /** Page paths without any links */
+  pagesWithoutLinksList: string[];
 
   // Depth Indicators (heuristic-based)
   /** Pages with < 500 chars content (excluding overview/index pages) */
   shallowPages: number;
+  /** Page paths that are shallow */
+  shallowPagesList: string[];
   /** Pages without fenced code blocks (excluding overview/index pages) */
   pagesLackingExamples: number;
+  /** Page paths lacking code examples */
+  pagesLackingExamplesList: string[];
 
   // Key pages existence
   hasProjectOverview: boolean;
@@ -259,20 +265,29 @@ export class ContextGatherer {
       }));
 
     // Pages without links
-    const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0).length;
+    const pagesWithoutLinksList = wikiPages
+      .filter(p => p.links.length === 0)
+      .map(p => p.path);
+    const pagesWithoutLinks = pagesWithoutLinksList.length;
 
     // Depth metrics (heuristic-based)
     // Shallow pages: content < 500 chars, excluding overview/index pages
-    const shallowPages = wikiPages.filter(p => {
-      if (p.path.endsWith('/overview') || p.path.endsWith('/index')) return false;
-      return p.content.length < 500;
-    }).length;
+    const shallowPagesList = wikiPages
+      .filter(p => {
+        if (p.path.endsWith('/overview') || p.path.endsWith('/index')) return false;
+        return p.content.length < 500;
+      })
+      .map(p => p.path);
+    const shallowPages = shallowPagesList.length;
 
     // Pages lacking examples: no fenced code blocks, excluding overview/index pages
-    const pagesLackingExamples = wikiPages.filter(p => {
-      if (p.path.endsWith('/overview') || p.path.endsWith('/index')) return false;
-      return !p.content.includes('```');
-    }).length;
+    const pagesLackingExamplesList = wikiPages
+      .filter(p => {
+        if (p.path.endsWith('/overview') || p.path.endsWith('/index')) return false;
+        return !p.content.includes('```');
+      })
+      .map(p => p.path);
+    const pagesLackingExamples = pagesLackingExamplesList.length;
 
     // Key pages existence
     // Check for project overview in either location:
@@ -344,8 +359,11 @@ export class ContextGatherer {
       lowConfidencePages,
       recentRuns,
       pagesWithoutLinks,
+      pagesWithoutLinksList,
       shallowPages,
+      shallowPagesList,
       pagesLackingExamples,
+      pagesLackingExamplesList,
       hasProjectOverview,
       hasGettingStarted,
       hasTestingGuide,
@@ -612,17 +630,35 @@ export class ContextGatherer {
     }
     lines.push('');
 
-    // 5. QUALITY GAPS - grouped together for clear prioritization
+    // 5. QUALITY GAPS - grouped together for clear prioritization with specific pages
     lines.push('## Quality Gaps\n');
-    const qualityIssues: string[] = [];
-    if (ctx.shallowPages > 0) qualityIssues.push(`${ctx.shallowPages} shallow (< 500 chars)`);
-    if (ctx.pagesLackingExamples > 0) qualityIssues.push(`${ctx.pagesLackingExamples} without code examples`);
-    if (ctx.pagesWithoutLinks > 0) qualityIssues.push(`${ctx.pagesWithoutLinks} without links`);
-    if (ctx.lowConfidencePages > 0) qualityIssues.push(`${ctx.lowConfidencePages} low confidence`);
-    if (ctx.pagesNeedingRewrite > 0) qualityIssues.push(`${ctx.pagesNeedingRewrite} need rewrite (commit-style)`);
 
-    if (qualityIssues.length > 0) {
-      lines.push(`**Issues:** ${qualityIssues.join(', ')}`);
+    // Helper to format a list of pages with truncation
+    const formatPageList = (pages: string[], maxShow: number = 5): string => {
+      if (pages.length === 0) return '';
+      if (pages.length <= maxShow) return pages.join(', ');
+      return pages.slice(0, maxShow).join(', ') + ` (+${pages.length - maxShow} more)`;
+    };
+
+    const hasIssues = ctx.shallowPages > 0 || ctx.pagesLackingExamples > 0 ||
+      ctx.pagesWithoutLinks > 0 || ctx.lowConfidencePages > 0 || ctx.pagesNeedingRewrite > 0;
+
+    if (hasIssues) {
+      if (ctx.shallowPages > 0) {
+        lines.push(`**Shallow pages (< 500 chars):** ${formatPageList(ctx.shallowPagesList)}`);
+      }
+      if (ctx.pagesLackingExamples > 0) {
+        lines.push(`**Without code examples:** ${formatPageList(ctx.pagesLackingExamplesList)}`);
+      }
+      if (ctx.pagesWithoutLinks > 0) {
+        lines.push(`**Without links:** ${formatPageList(ctx.pagesWithoutLinksList)}`);
+      }
+      if (ctx.lowConfidencePages > 0) {
+        lines.push(`**Low confidence:** ${ctx.lowConfidencePages} pages`);
+      }
+      if (ctx.pagesNeedingRewrite > 0) {
+        lines.push(`**Need rewrite (commit-style):** ${ctx.pagesNeedingRewrite} pages`);
+      }
     } else {
       lines.push('**Issues:** none ✓');
     }
