@@ -161,6 +161,7 @@ export function isValidToolCall(tc: unknown): tc is { id: string; function: { na
 /**
  * Attempt to extract a tool call from text content.
  * Some models output tool calls as JSON text instead of using the tool_calls API.
+ * Other models (like llama) output function-call syntax like: tool_name(param: "value")
  * Returns the parsed tool call or null if not found.
  * Exported for testing.
  */
@@ -175,17 +176,17 @@ export function extractToolCallFromText(content: string, toolNames: string[]): {
   // Pattern: {"type": "function", "name": "tool_name", "parameters": {...}}
   // Or simpler: {"name": "tool_name", "parameters": {...}}
   const jsonPattern = /\{[^{}]*"(?:type"\s*:\s*"function"\s*,\s*)?"name"\s*:\s*"([^"]+)"[^{}]*"parameters"\s*:\s*(\{[^{}]*\})[^{}]*\}/;
-  const match = content.match(jsonPattern);
+  const jsonMatch = content.match(jsonPattern);
 
-  if (match) {
-    const toolName = match[1];
-    const paramsJson = match[2];
+  if (jsonMatch) {
+    const toolName = jsonMatch[1];
+    const paramsJson = jsonMatch[2];
 
     // Verify this is a known tool
     if (toolName && paramsJson && toolNames.includes(toolName)) {
       try {
         const params = JSON.parse(paramsJson);
-        const remainingContent = content.replace(match[0], '').trim();
+        const remainingContent = content.replace(jsonMatch[0], '').trim();
         console.log(`[LLM] Extracted text-based tool call: ${toolName}`);
         return {
           name: toolName,
@@ -193,8 +194,64 @@ export function extractToolCallFromText(content: string, toolNames: string[]): {
           remainingContent,
         };
       } catch {
-        // JSON parse failed, ignore
+        // JSON parse failed, try next pattern
       }
+    }
+  }
+
+  // Try function-call syntax: tool_name(param: "value") or tool_name(param="value")
+  // This is commonly output by models like llama that don't understand native tool calling
+  // Build a pattern that matches any of the known tool names
+  const toolNamesPattern = toolNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  // Match: tool_name(param1: "val1", param2: "val2") or tool_name(param1="val1", param2="val2")
+  // Parameters can use : or = as separator, and values can be in double or single quotes
+  const funcCallPattern = new RegExp(
+    `(${toolNamesPattern})\\s*\\(([^)]*)\\)`,
+    'i'
+  );
+  const funcMatch = content.match(funcCallPattern);
+
+  if (funcMatch) {
+    const toolName = funcMatch[1];
+    const paramsStr = funcMatch[2];
+
+    // Find the actual tool name (case-insensitive match)
+    const actualToolName = toolNames.find(n => n.toLowerCase() === toolName?.toLowerCase());
+
+    if (actualToolName && paramsStr !== undefined) {
+      // Parse the parameters: handle both "param: value" and "param=value" formats
+      // Values can be quoted with single or double quotes
+      const params: Record<string, unknown> = {};
+
+      // Match individual parameters: name: "value" or name="value" or name: 'value' or name='value'
+      const paramPattern = /(\w+)\s*[:=]\s*["']([^"']*)["']/g;
+      let paramMatch;
+
+      while ((paramMatch = paramPattern.exec(paramsStr)) !== null) {
+        const paramName = paramMatch[1];
+        const paramValue = paramMatch[2];
+        if (paramName) {
+          params[paramName] = paramValue;
+        }
+      }
+
+      // Remove the function call from the content (including code block markers if present)
+      let remainingContent = content;
+      // Try to remove with code block first
+      const codeBlockPattern = new RegExp(
+        '```[^`]*' + funcMatch[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^`]*```',
+        'g'
+      );
+      remainingContent = remainingContent.replace(codeBlockPattern, '');
+      // Also remove the raw match
+      remainingContent = remainingContent.replace(funcMatch[0], '').trim();
+
+      console.log(`[LLM] Extracted function-call syntax tool call: ${actualToolName}`);
+      return {
+        name: actualToolName,
+        input: params,
+        remainingContent,
+      };
     }
   }
 
