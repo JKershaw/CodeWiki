@@ -371,15 +371,36 @@ export function parsePatternResponse(response: string): ParsedPatternAnalysis {
     analysis.summary = summary;
   }
 
-  // Simplified format: - name: [name] | category: [cat] | description: [desc] | paths: [paths]
+  // Multiple formats to handle different LLM output styles
   const patternPatterns: ItemPattern<Pattern>[] = [
     {
+      // Full format: - name: [name] | category: [cat] | description: [desc] | paths: [paths]
       pattern: /^-\s*name:\s*([^|]+)\s*\|\s*category:\s*([^|]+)\s*\|\s*description:\s*([^|]+)\s*\|\s*paths:\s*(.+)$/i,
       mapper: (m) => ({
         name: m[1]!.trim(),
         category: m[2]!.toLowerCase().trim() as PatternCategory,
         description: m[3]!.trim(),
         paths: m[4]!.split(',').map(p => p.trim()).filter(p => p),
+      }),
+    },
+    {
+      // Bold name format: - **Pattern Name**: description
+      pattern: /^-\s*\*\*([^*]+)\*\*\s*:\s*(.+)$/i,
+      mapper: (m) => ({
+        name: m[1]!.trim(),
+        category: 'design' as PatternCategory,
+        description: m[2]!.trim(),
+        paths: [],
+      }),
+    },
+    {
+      // Simple format: - Pattern Name - description
+      pattern: /^-\s*([^-:]+(?:Pattern|Convention|Architecture)?)\s*[-:]\s*(.+)$/i,
+      mapper: (m) => ({
+        name: m[1]!.trim(),
+        category: 'design' as PatternCategory,
+        description: m[2]!.trim(),
+        paths: [],
       }),
     },
   ];
