@@ -25,6 +25,7 @@ export * from './file-self-improvement-repository.js';
 export * from './file-chat-session-repository.js';
 export * from './file-user-repository.js';
 export * from './file-wiki-page-history-repository.js';
+export * from './file-auto-benchmark-repository.js';
 
 import type { Repositories } from '../interfaces/index.js';
 import { FileRepoRepository } from './file-repo-repository.js';
@@ -46,6 +47,7 @@ import { FileSelfImprovementRepository } from './file-self-improvement-repositor
 import { FileChatSessionRepository } from './file-chat-session-repository.js';
 import { FileUserRepository } from './file-user-repository.js';
 import { FileWikiPageHistoryRepository } from './file-wiki-page-history-repository.js';
+import { FileAutoBenchmarkRepository } from './file-auto-benchmark-repository.js';
 
 /**
  * Create all file-based repositories.
@@ -74,5 +76,6 @@ export function createFileRepositories(baseDir = '.codewiki-data'): Repositories
     chatSessions: new FileChatSessionRepository(baseDir),
     users: new FileUserRepository(baseDir),
     wikiPageHistory: new FileWikiPageHistoryRepository(baseDir),
+    autoBenchmarks: new FileAutoBenchmarkRepository(baseDir),
   };
 }
