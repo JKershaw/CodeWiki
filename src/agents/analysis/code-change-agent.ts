@@ -257,6 +257,44 @@ Do NOT just write a brief description - write a complete article.]
 === END ===
 
 CONFIDENCE: [0-1 value]
+
+## Example
+
+PAGE_TITLE: Multi-Agent Processing Pipeline
+
+SUMMARY:
+The multi-agent architecture distributes code analysis across specialized agents, each focused on a specific aspect of the codebase. This design enables parallel processing and allows each agent to develop deep expertise in its domain.
+
+The pipeline coordinates agent execution, manages their outputs, and synthesizes results into cohesive wiki documentation. Each agent produces structured findings that are aggregated and deduplicated before wiki pages are generated.
+
+FINDINGS:
+- type: Architecture | importance: high | description: Multi-agent coordination with parallel execution | paths: src/pipeline/coordinator.ts, src/agents/base-agent.ts
+
+WIKI_UPDATES:
+=== path: architecture/multi-agent-pipeline | action: create ===
+# Multi-Agent Processing Pipeline
+
+The processing pipeline coordinates multiple specialized agents to analyze code changes.
+
+## How It Works
+
+1. **Work Distribution**: The coordinator receives commits and assigns them to relevant agents
+2. **Parallel Execution**: Agents run concurrently, each analyzing their specialty
+3. **Result Aggregation**: Findings are merged and deduplicated
+4. **Wiki Generation**: Aggregated results become wiki pages
+
+## Key Components
+
+- \`Coordinator\`: Manages agent lifecycle and work distribution
+- \`BaseAgent\`: Abstract base class defining the agent interface
+- \`AgentResult\`: Structured output format for agent findings
+
+## Usage
+
+Agents are registered with the coordinator at startup and automatically invoked for relevant commits.
+=== END ===
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -325,6 +363,25 @@ Do NOT just write a brief description - write a complete article.]
 === END ===
 
 CONFIDENCE: [0-1 value]
+
+## Example
+
+PAGE_TITLE: Multi-Agent Processing Pipeline
+
+SUMMARY:
+The multi-agent architecture distributes code analysis across specialized agents...
+
+FINDINGS:
+- type: Architecture | importance: high | description: Multi-agent coordination | paths: src/pipeline/coordinator.ts
+
+WIKI_UPDATES:
+=== path: architecture/multi-agent-pipeline | action: create ===
+# Multi-Agent Processing Pipeline
+
+The processing pipeline coordinates multiple specialized agents...
+=== END ===
+
+CONFIDENCE: 0.85
 `;
   }
 
