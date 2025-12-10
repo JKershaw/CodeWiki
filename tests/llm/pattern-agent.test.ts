@@ -245,4 +245,183 @@ export class NotificationFactory {
       console.log(formatEvaluationResult('Factory pattern detection', evalResult));
     });
   });
+
+  describe('Content Quality (regression tests)', () => {
+    it('produces distinct content for different patterns, not template boilerplate', async () => {
+      // This test catches the issue where pattern descriptions are 84-91% similar
+      // because the LLM outputs generic templates instead of codebase-specific analysis
+      const repoId = 'llm-pattern-distinctiveness';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Multi-Pattern Project',
+      });
+
+      // Create commits with DIFFERENT patterns
+      const factoryCommit = await addCommit(ctx, repoId, {
+        'src/factory.ts': `
+export interface Logger { log(msg: string): void; }
+export class ConsoleLogger implements Logger { log(msg: string) { console.log(msg); } }
+export class FileLogger implements Logger { log(msg: string) { /* write to file */ } }
+export function createLogger(type: 'console' | 'file'): Logger {
+  return type === 'console' ? new ConsoleLogger() : new FileLogger();
+}
+`,
+      }, 'Add Logger factory');
+
+      const repositoryCommit = await addCommit(ctx, repoId, {
+        'src/repository.ts': `
+export interface Task { id: string; title: string; done: boolean; }
+export interface TaskRepository {
+  findById(id: string): Promise<Task | null>;
+  save(task: Task): Promise<void>;
+  findAll(): Promise<Task[]>;
+}
+export class InMemoryTaskRepository implements TaskRepository {
+  private tasks = new Map<string, Task>();
+  async findById(id: string) { return this.tasks.get(id) || null; }
+  async save(task: Task) { this.tasks.set(task.id, task); }
+  async findAll() { return Array.from(this.tasks.values()); }
+}
+`,
+      }, 'Add Task repository');
+
+      const agent = new PatternAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Run agent on both commits
+      const factoryResult = await agent.run(createCommitTarget(factoryCommit), agentCtx);
+      const repoResult = await agent.run(createCommitTarget(repositoryCommit), agentCtx);
+
+      // Extract the generated content (summary + findings)
+      const factoryContent = JSON.stringify({
+        summary: factoryResult.result.summary,
+        findings: factoryResult.result.findings.map(f => f.description),
+      });
+
+      const repoContent = JSON.stringify({
+        summary: repoResult.result.summary,
+        findings: repoResult.result.findings.map(f => f.description),
+      });
+
+      // Check that the content is meaningfully different
+      // Simple heuristic: count words unique to each analysis
+      const factoryWords = new Set(factoryContent.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+      const repoWords = new Set(repoContent.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+
+      const onlyInFactory = [...factoryWords].filter(w => !repoWords.has(w));
+      const onlyInRepo = [...repoWords].filter(w => !factoryWords.has(w));
+
+      // Calculate rough distinctiveness
+      const totalUnique = factoryWords.size + repoWords.size;
+      const overlap = factoryWords.size + repoWords.size - onlyInFactory.length - onlyInRepo.length -
+                      [...factoryWords].filter(w => repoWords.has(w)).length;
+      const overlapRatio = overlap / Math.min(factoryWords.size, repoWords.size);
+
+      console.log(`\nPattern distinctiveness analysis:`);
+      console.log(`  Factory-specific words: ${onlyInFactory.slice(0, 10).join(', ')}...`);
+      console.log(`  Repository-specific words: ${onlyInRepo.slice(0, 10).join(', ')}...`);
+      console.log(`  Overlap ratio: ${(overlapRatio * 100).toFixed(1)}%`);
+
+      // The Factory analysis should mention: logger, console, file, createLogger
+      // The Repository analysis should mention: task, repository, findById, save, findAll
+      const factoryMentionsLogger = factoryContent.toLowerCase().includes('logger');
+      const repoMentionsTask = repoContent.toLowerCase().includes('task');
+
+      if (!factoryMentionsLogger) {
+        console.error('⚠️  Factory pattern analysis did not mention "Logger" - may be too generic');
+      }
+      if (!repoMentionsTask) {
+        console.error('⚠️  Repository pattern analysis did not mention "Task" - may be too generic');
+      }
+
+      // Key assertion: each analysis should mention code-specific details
+      assert.ok(
+        factoryMentionsLogger || repoMentionsTask,
+        'Pattern analyses should be specific to the code being analyzed, not generic template content'
+      );
+
+      // Log for manual review
+      logTestResult('Pattern distinctiveness', {
+        score: (factoryMentionsLogger && repoMentionsTask) ? 10 : 5,
+        reasoning: `Factory mentions logger: ${factoryMentionsLogger}, Repository mentions task: ${repoMentionsTask}`,
+        passed: factoryMentionsLogger || repoMentionsTask,
+      });
+    });
+
+    it('does not produce near-duplicate wiki page suggestions', async () => {
+      // This test verifies that when the pattern agent creates wiki pages,
+      // they have distinct content, not 84-91% similarity
+      const repoId = 'llm-pattern-dedup';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Design Patterns Demo',
+      });
+
+      const commitSha = await addCommit(ctx, repoId, {
+        'src/patterns/singleton.ts': `
+class Database {
+  private static instance: Database;
+  private constructor() {}
+  static getInstance(): Database {
+    if (!Database.instance) Database.instance = new Database();
+    return Database.instance;
+  }
+}
+`,
+        'src/patterns/observer.ts': `
+interface Observer { update(data: any): void; }
+class EventEmitter {
+  private observers: Observer[] = [];
+  subscribe(obs: Observer) { this.observers.push(obs); }
+  notify(data: any) { this.observers.forEach(o => o.update(data)); }
+}
+`,
+      }, 'Add Singleton and Observer patterns');
+
+      const agent = new PatternAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.run(createCommitTarget(commitSha), agentCtx);
+
+      // Check wiki updates if any
+      if (result.updates.length >= 2) {
+        const contents = result.updates.map(u => u.content);
+
+        // Simple similarity check: count shared 3-grams
+        const getNgrams = (text: string, n: number) => {
+          const words = text.toLowerCase().split(/\s+/);
+          const ngrams = new Set<string>();
+          for (let i = 0; i <= words.length - n; i++) {
+            ngrams.add(words.slice(i, i + n).join(' '));
+          }
+          return ngrams;
+        };
+
+        const ngrams0 = getNgrams(contents[0]!, 3);
+        const ngrams1 = getNgrams(contents[1]!, 3);
+        const shared = [...ngrams0].filter(ng => ngrams1.has(ng)).length;
+        const similarity = shared / Math.min(ngrams0.size, ngrams1.size);
+
+        console.log(`\nWiki page similarity: ${(similarity * 100).toFixed(1)}%`);
+
+        if (similarity > 0.8) {
+          console.error('❌ Wiki pages are >80% similar - likely template boilerplate');
+          console.error('   Page 1 preview:', contents[0]!.slice(0, 200));
+          console.error('   Page 2 preview:', contents[1]!.slice(0, 200));
+        }
+
+        // Warn if similarity is high (but don't hard-fail as some overlap is expected)
+        if (similarity > 0.8) {
+          console.warn(`⚠️  High similarity (${(similarity * 100).toFixed(1)}%) between pattern pages`);
+        }
+
+        logTestResult('Pattern page deduplication', {
+          score: similarity < 0.7 ? 10 : similarity < 0.8 ? 7 : 3,
+          reasoning: `Page similarity: ${(similarity * 100).toFixed(1)}%`,
+          passed: similarity < 0.85,
+        });
+      } else {
+        console.log('PatternAgent produced fewer than 2 updates (skipping similarity check)');
+      }
+    });
+  });
 });

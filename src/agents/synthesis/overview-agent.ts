@@ -237,6 +237,31 @@ READING_ORDER:
 [Suggested order for reading the pages, if applicable]
 
 CONFIDENCE: [0-1]
+
+## Example
+
+TITLE:
+Architecture Patterns Overview
+
+INTRODUCTION:
+The codebase employs several well-established architectural patterns to maintain separation of concerns and testability. The Repository pattern abstracts data access, allowing business logic to remain independent of storage mechanisms. CQRS separates read and write operations for better scalability.
+
+These patterns work together to create a maintainable, testable codebase where each component has a clear responsibility.
+
+KEY_CONCEPTS:
+- Repository Pattern: Abstracts data access behind interfaces for testability
+- CQRS: Separates queries (reads) from commands (writes)
+- Dependency Injection: Components receive dependencies rather than creating them
+
+PAGES:
+- architecture/repository-pattern: Explains how repositories abstract database operations
+- architecture/cqrs-implementation: Details the command and query separation approach
+- architecture/dependency-injection: Shows how DI is configured and used
+
+READING_ORDER:
+Start with repository-pattern for foundational concepts, then cqrs-implementation to understand data flow, finally dependency-injection to see how components are wired together.
+
+CONFIDENCE: 0.85
 `;
   }
 

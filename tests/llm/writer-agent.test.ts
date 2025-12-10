@@ -259,4 +259,154 @@ All endpoints require authentication via JWT tokens.
       console.log(formatEvaluationResult('Fact preservation during rewrite', evalResult));
     });
   });
+
+  describe('Content Sanitization (regression tests)', () => {
+    it('does not leak meta-content markers into wiki pages', async () => {
+      // This test catches the issue where LLM "thinking" steps leak into final content
+      // e.g., "## Step 1: Analyze", "DECISION: MERGE", "REASONING:"
+      const repoId = 'llm-writer-sanitization-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Sanitization Test',
+        'src/main.ts': 'console.log("hello");',
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create a page that needs rewriting
+      await createWikiPage(
+        agentCtx.wikiId,
+        'features/main',
+        'Main Feature',
+        `# Main Feature
+
+This commit adds the main entry point for the application.
+
+This change introduces the primary console output functionality.
+`,
+        0.4
+      );
+
+      const agent = new WriterAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      if (result.updates.length > 0) {
+        const update = result.updates[0]!;
+        const content = update.content;
+
+        // Check for meta-content markers that should NEVER appear in final wiki content
+        const forbiddenPatterns = [
+          /##\s*Step\s*\d+/i,              // "## Step 1:", "## Step 2:", etc.
+          /\bDECISION:\s*\w+/i,            // "DECISION: MERGE", "DECISION: SKIP"
+          /\bREASONING:/i,                 // "REASONING:"
+          /\bMERGE:/i,                     // "MERGE:" as a section header
+          /\bSKIP:/i,                      // "SKIP:" as a section header
+          /\bHISTORY:/i,                   // "HISTORY:" as raw section
+          /Let's\s+(CONCLUDE|analyze|proceed)/i,  // LLM self-talk
+          /The\s+final\s+answer\s+is/i,    // LLM completion phrase
+          /\bCONTENT:\s*$/m,               // "CONTENT:" as section header
+        ];
+
+        const foundMarkers: string[] = [];
+        for (const pattern of forbiddenPatterns) {
+          const match = content.match(pattern);
+          if (match) {
+            foundMarkers.push(match[0]);
+          }
+        }
+
+        if (foundMarkers.length > 0) {
+          console.error('\n❌ META-CONTENT LEAKED INTO WIKI PAGE:');
+          console.error('   Found markers:', foundMarkers.join(', '));
+          console.error('   Content preview:', content.slice(0, 500));
+        }
+
+        assert.strictEqual(
+          foundMarkers.length,
+          0,
+          `Wiki content should not contain meta-content markers. Found: ${foundMarkers.join(', ')}`
+        );
+
+        console.log('✓ No meta-content markers found in wiki output');
+        logTestResult('Meta-content sanitization', {
+          score: 10,
+          reasoning: 'No meta-content markers found in output',
+          passed: true,
+        });
+      } else {
+        console.log('WriterAgent produced no updates (skipping sanitization check)');
+      }
+    });
+
+    it('does not include external URLs when internal wiki links expected', async () => {
+      // This test catches hallucinated external URLs like https://wiki.com/...
+      const repoId = 'llm-writer-url-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# URL Test Project',
+        'src/app.ts': 'export const app = {};',
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create pages that might get linked
+      await createWikiPage(
+        agentCtx.wikiId,
+        'overview',
+        'Project Overview',
+        `# Project Overview
+
+This commit creates the project overview page.
+
+Related: architecture, configuration
+`,
+        0.4
+      );
+
+      const agent = new WriterAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      if (result.updates.length > 0) {
+        const update = result.updates[0]!;
+        const content = update.content;
+
+        // Check for hallucinated external URLs
+        const externalUrlPatterns = [
+          /\bhttps?:\/\/wiki\.com\//i,     // Hallucinated wiki.com domain
+          /\bhttps?:\/\/docs\.com\//i,     // Hallucinated docs.com domain
+          /\bhttps?:\/\/example\.com\/(?!api)/i,  // example.com (except API examples)
+          /\[.*?\]\(https?:\/\/(?!github\.com|npmjs\.com|nodejs\.org|developer\.mozilla\.org)/i, // External links to unknown domains
+        ];
+
+        const foundUrls: string[] = [];
+        for (const pattern of externalUrlPatterns) {
+          const match = content.match(pattern);
+          if (match) {
+            foundUrls.push(match[0]);
+          }
+        }
+
+        if (foundUrls.length > 0) {
+          console.error('\n❌ HALLUCINATED EXTERNAL URLS FOUND:');
+          console.error('   Found:', foundUrls.join(', '));
+          console.error('   Wiki content should use internal paths like [Page Title](path/to/page)');
+        }
+
+        assert.strictEqual(
+          foundUrls.length,
+          0,
+          `Wiki content should not contain hallucinated external URLs. Found: ${foundUrls.join(', ')}`
+        );
+
+        console.log('✓ No hallucinated external URLs found');
+        logTestResult('External URL prevention', {
+          score: 10,
+          reasoning: 'No hallucinated external URLs found',
+          passed: true,
+        });
+      } else {
+        console.log('WriterAgent produced no updates (skipping URL check)');
+      }
+    });
+  });
 });

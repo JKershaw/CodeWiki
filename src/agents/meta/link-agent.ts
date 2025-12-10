@@ -178,17 +178,27 @@ Now analyze the pages above and provide your link suggestions:
   private parseResponse(response: string): ParsedAnalysis {
     const ctx = createParseContext('link', response);
 
-    // Simplified format: source -> target | strength | description
-    // No brackets, no STRENGTH: prefix - just simple pipe-separated values
+    // Multiple patterns to handle different LLM output formats
     const linkPatterns: ItemPattern<ParsedAnalysis['linkSuggestions'][0]>[] = [
       {
-        // Format: - source/path -> target/path | strength | description
+        // Full format: - source/path -> target/path | strength | description
         pattern: /^-\s*(.+?)\s*->\s*(.+?)\s*\|\s*(\w+)\s*\|\s*(.+)$/i,
         mapper: (m) => ({
           sourcePath: m[1]!.trim(),
           targetPath: m[2]!.trim(),
           strength: m[3]!.toLowerCase() as 'strong' | 'medium' | 'weak',
           reason: m[4]!.trim(),
+        }),
+      },
+      {
+        // Simple format without strength/reason: - source/path -> target/path
+        // Many LLMs output this simpler format despite instructions
+        pattern: /^-\s*(.+?)\s*->\s*([^\s|]+)\s*$/i,
+        mapper: (m) => ({
+          sourcePath: m[1]!.trim(),
+          targetPath: m[2]!.trim(),
+          strength: 'medium' as const,
+          reason: 'Related content',
         }),
       },
     ];

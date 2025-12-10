@@ -335,6 +335,265 @@ example.run();
         passed: updatesWithLinks > 0,
       });
     });
+
+    it('produces links for obviously-related same-category pages (regression test)', async () => {
+      // This test catches the "zero links" issue where the link agent runs
+      // but produces no links due to LLM output parsing failures.
+      const repoId = 'llm-link-obvious-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Obvious Links Test',
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create pages with OBVIOUS relationships that any LLM should connect
+      await createWikiPages(agentCtx.wikiId, [
+        {
+          path: 'auth/login',
+          title: 'Login System',
+          content: '# Login System\n\nHandles user authentication. Users enter credentials and receive a JWT token for session management.',
+        },
+        {
+          path: 'auth/logout',
+          title: 'Logout System',
+          content: '# Logout System\n\nHandles user logout. Invalidates the JWT token and clears the session.',
+        },
+        {
+          path: 'auth/jwt',
+          title: 'JWT Token Management',
+          content: '# JWT Token Management\n\nManages JSON Web Tokens for authentication. Creates, validates, and refreshes tokens used by login and logout.',
+        },
+        {
+          path: 'auth/session',
+          title: 'Session Management',
+          content: '# Session Management\n\nTracks user sessions. Sessions are created on login and destroyed on logout.',
+        },
+        {
+          path: 'auth/password',
+          title: 'Password Handling',
+          content: '# Password Handling\n\nSecure password hashing and validation. Used by the login system to verify credentials.',
+        },
+      ]);
+
+      const agent = new LinkAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Count total links across all updates
+      let totalLinks = 0;
+      for (const update of result.updates) {
+        if (update.links) {
+          totalLinks += update.links.length;
+        }
+      }
+
+      // With 5 auth-related pages, we should get AT LEAST 3 links
+      // (being conservative - some LLMs may not link every page)
+      const minimumExpectedLinks = 3;
+
+      // If we got zero links, log diagnostic information
+      if (totalLinks === 0) {
+        console.error('\n❌ ZERO LINKS PRODUCED - Diagnostic Information:');
+        console.error('   Summary:', result.result.summary);
+        console.error('   Updates count:', result.updates.length);
+        console.error('   Findings count:', result.result.findings.length);
+        console.error('   Confidence:', result.result.confidence);
+
+        // Check if it's a parse failure (no updates but agent ran)
+        if (result.updates.length === 0 && result.costUsd > 0) {
+          console.error('   ⚠️  LLM was called but no updates generated - likely OUTPUT PARSING FAILURE');
+          console.error('   The LLM response did not match expected format: - source -> target | strength | reason');
+        }
+      }
+
+      assert.ok(
+        totalLinks >= minimumExpectedLinks,
+        `Expected at least ${minimumExpectedLinks} links for 5 obviously-related auth pages, got ${totalLinks}. ` +
+        `This may indicate the LLM output is not being parsed correctly. ` +
+        `Summary: "${result.result.summary}"`
+      );
+
+      // Log success details
+      console.log(`\n✓ LinkAgent produced ${totalLinks} links for 5 auth pages`);
+      for (const update of result.updates) {
+        if (update.links && update.links.length > 0) {
+          console.log(`  - ${update.path}: ${update.links.length} links -> [${update.links.join(', ')}]`);
+        }
+      }
+
+      logTestResult('Obvious same-category links', {
+        score: totalLinks >= minimumExpectedLinks ? 10 : Math.floor((totalLinks / minimumExpectedLinks) * 10),
+        reasoning: `Produced ${totalLinks} links (minimum expected: ${minimumExpectedLinks})`,
+        passed: totalLinks >= minimumExpectedLinks,
+      });
+    });
+
+    it('detects and reports when LLM output format is not parseable', async () => {
+      // This test verifies we can detect parse failures vs genuine "no links needed"
+      const repoId = 'llm-link-parse-detection-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Parse Detection Test',
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create pages that DEFINITELY need linking
+      await createWikiPages(agentCtx.wikiId, [
+        {
+          path: 'api/users',
+          title: 'Users API',
+          content: '# Users API\n\nREST endpoints for user management. GET /users, POST /users, etc.',
+        },
+        {
+          path: 'api/posts',
+          title: 'Posts API',
+          content: '# Posts API\n\nREST endpoints for blog posts. Users create posts via this API.',
+        },
+        {
+          path: 'api/comments',
+          title: 'Comments API',
+          content: '# Comments API\n\nREST endpoints for comments on posts. Users can comment on any post.',
+        },
+      ]);
+
+      const agent = new LinkAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // The result summary should NOT indicate "not enough pages" (we have 3)
+      assert.ok(
+        !result.result.summary.toLowerCase().includes('not enough'),
+        `With 3 pages, should not say "not enough pages": "${result.result.summary}"`
+      );
+
+      // The result should show some activity (findings or updates)
+      const hasActivity = result.updates.length > 0 || result.result.findings.length > 0;
+
+      // If there's cost but no activity, that indicates a parse failure
+      if (result.costUsd > 0 && !hasActivity) {
+        console.warn('\n⚠️  LLM was called but produced no updates or findings');
+        console.warn('   This strongly suggests the LLM output format was not parseable');
+        console.warn('   Summary:', result.result.summary);
+      }
+
+      // With 3 related API pages, we should get at least some links
+      let totalLinks = 0;
+      for (const update of result.updates) {
+        if (update.links) {
+          totalLinks += update.links.length;
+        }
+      }
+
+      assert.ok(
+        totalLinks >= 2,
+        `Expected at least 2 links for 3 related API pages, got ${totalLinks}. ` +
+        `Cost: $${result.costUsd.toFixed(4)}, Updates: ${result.updates.length}, Findings: ${result.result.findings.length}`
+      );
+
+      logTestResult('Parse detection', {
+        score: totalLinks >= 2 ? 10 : 0,
+        reasoning: `Produced ${totalLinks} links with proper parsing`,
+        passed: totalLinks >= 2,
+      });
+    });
+
+    it('achieves minimum link efficiency ratio (regression for zero-link at scale)', async () => {
+      // This test catches the production issue where 55 pages had 0 links.
+      // At scale, the link agent was producing zero links even though it "ran successfully".
+      // We test with more pages to simulate scale effects.
+      const repoId = 'llm-link-efficiency-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Link Efficiency Test',
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create 10 pages across different categories - simulating a more realistic wiki
+      await createWikiPages(agentCtx.wikiId, [
+        { path: 'api/users', title: 'Users API', content: '# Users API\n\nREST endpoints for user CRUD operations.' },
+        { path: 'api/auth', title: 'Auth API', content: '# Auth API\n\nAuthentication endpoints. Login returns JWT token.' },
+        { path: 'api/posts', title: 'Posts API', content: '# Posts API\n\nBlog post endpoints. Users create posts.' },
+        { path: 'models/user', title: 'User Model', content: '# User Model\n\nUser entity with email, password hash, name.' },
+        { path: 'models/post', title: 'Post Model', content: '# Post Model\n\nBlog post with title, content, author (User).' },
+        { path: 'services/auth', title: 'Auth Service', content: '# Auth Service\n\nHandles JWT creation, validation, password hashing.' },
+        { path: 'services/email', title: 'Email Service', content: '# Email Service\n\nSends emails to users for notifications.' },
+        { path: 'guides/setup', title: 'Setup Guide', content: '# Setup Guide\n\nHow to set up the development environment.' },
+        { path: 'guides/testing', title: 'Testing Guide', content: '# Testing Guide\n\nHow to run tests and write new ones.' },
+        { path: 'architecture/overview', title: 'Architecture Overview', content: '# Architecture\n\nSystem uses layered architecture: API -> Services -> Models.' },
+      ]);
+
+      const agent = new LinkAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Count metrics
+      const totalPages = 10;
+      let totalLinks = 0;
+      let pagesWithLinks = 0;
+
+      for (const update of result.updates) {
+        if (update.links && update.links.length > 0) {
+          totalLinks += update.links.length;
+          pagesWithLinks++;
+        }
+      }
+
+      // Calculate efficiency metrics
+      const linksPerPage = totalLinks / totalPages;
+      const linkCoverage = pagesWithLinks / totalPages;
+
+      console.log(`\nLink Efficiency Metrics (${totalPages} pages):`);
+      console.log(`  Total links: ${totalLinks}`);
+      console.log(`  Pages with links: ${pagesWithLinks}/${totalPages} (${(linkCoverage * 100).toFixed(1)}%)`);
+      console.log(`  Links per page: ${linksPerPage.toFixed(2)}`);
+      console.log(`  Summary: ${result.result.summary}`);
+
+      // Production issue: 0 links for 55 pages = 0% efficiency
+      // Healthy wiki: At least 50% of pages should have links
+      // And at least 0.5 links per page on average
+      const minLinkCoverage = 0.3;  // At least 30% of pages should get links
+      const minLinksPerPage = 0.3;  // At least 0.3 links per page average
+
+      if (linkCoverage < minLinkCoverage) {
+        console.error(`\n❌ LOW LINK COVERAGE: Only ${(linkCoverage * 100).toFixed(1)}% of pages have links`);
+        console.error(`   This is the issue seen in production where 55 pages had 0 links`);
+      }
+
+      if (linksPerPage < minLinksPerPage) {
+        console.error(`\n❌ LOW LINK DENSITY: Only ${linksPerPage.toFixed(2)} links per page`);
+        console.error(`   Expected at least ${minLinksPerPage} links per page for a connected wiki`);
+      }
+
+      // Parse the summary to check for detected relationships
+      const summaryMatch = result.result.summary.match(/Found (\d+) link relationships/);
+      const detectedRelationships = summaryMatch ? parseInt(summaryMatch[1]!, 10) : 0;
+
+      console.log(`  Detected relationships: ${detectedRelationships}`);
+
+      // If LLM detected relationships but few links created, it's a parse issue
+      if (detectedRelationships > 0 && totalLinks === 0) {
+        console.error(`\n❌ PARSE FAILURE: LLM detected ${detectedRelationships} relationships but 0 links created`);
+      }
+
+      assert.ok(
+        linkCoverage >= minLinkCoverage,
+        `Link coverage too low: ${(linkCoverage * 100).toFixed(1)}% (expected >= ${minLinkCoverage * 100}%). ` +
+        `This indicates the link agent is not connecting pages effectively.`
+      );
+
+      assert.ok(
+        linksPerPage >= minLinksPerPage,
+        `Link density too low: ${linksPerPage.toFixed(2)} links/page (expected >= ${minLinksPerPage}). ` +
+        `Wiki will feel disconnected.`
+      );
+
+      logTestResult('Link efficiency at scale', {
+        score: (linkCoverage >= minLinkCoverage && linksPerPage >= minLinksPerPage) ? 10 :
+               (linkCoverage >= minLinkCoverage * 0.5) ? 5 : 0,
+        reasoning: `Coverage: ${(linkCoverage * 100).toFixed(1)}%, Density: ${linksPerPage.toFixed(2)} links/page`,
+        passed: linkCoverage >= minLinkCoverage && linksPerPage >= minLinksPerPage,
+      });
+    });
   });
 
   describe('StructureAgent', () => {

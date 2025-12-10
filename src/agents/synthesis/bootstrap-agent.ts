@@ -127,8 +127,17 @@ export class BootstrapAgent implements Agent {
     );
     const confidenceDelta = hasReadme ? 0.6 : 0.5;
 
+    // Clean and validate content
+    let cleanContent = this.extractMarkdownContent(content);
+
+    // If content is too short, generate a minimal placeholder
+    if (cleanContent.length < 50) {
+      console.warn(`[bootstrap] Content too short (${cleanContent.length} chars), generating placeholder`);
+      cleanContent = this.generatePlaceholderOverview(toolCalls);
+    }
+
     // Extract title from content or use default
-    const titleMatch = content.match(/^#\s+(.+?)(?:\s+-\s+Overview)?$/m);
+    const titleMatch = cleanContent.match(/^#\s+(.+?)(?:\s+-\s+Overview)?$/m);
     const title = titleMatch ? titleMatch[1]!.trim() : 'Project Overview';
 
     // Create the main overview page
@@ -136,13 +145,79 @@ export class BootstrapAgent implements Agent {
       type: 'create',
       path: 'overview',
       title: `${title} - Overview`,
-      content: content,
+      content: cleanContent,
       sourceCommitId: '', // Bootstrap has no source commit
       agentRunId: '',
       confidenceDelta,
     });
 
     return updates;
+  }
+
+  /**
+   * Extract markdown content from LLM response, handling tool call artifacts.
+   */
+  private extractMarkdownContent(content: string): string {
+    // If content starts with a markdown heading, it's likely good
+    if (content.trim().startsWith('#')) {
+      return content.trim();
+    }
+
+    // Try to find markdown content starting with a heading
+    const markdownMatch = content.match(/(#\s+[^\n]+[\s\S]*)/);
+    if (markdownMatch && markdownMatch[1] && markdownMatch[1].length > 50) {
+      return markdownMatch[1].trim();
+    }
+
+    // Return whatever we have, cleaned up
+    return content.trim();
+  }
+
+  /**
+   * Generate a minimal overview when LLM fails to produce content.
+   */
+  private generatePlaceholderOverview(
+    toolCalls: Array<{ name: string; input: Record<string, unknown> }>
+  ): string {
+    // Extract project info from tool calls
+    const filesRead = toolCalls
+      .filter(c => c.name === 'read_file')
+      .map(c => c.input['path'] as string)
+      .filter(Boolean);
+
+    const dirsListed = toolCalls
+      .filter(c => c.name === 'list_directory')
+      .map(c => c.input['path'] as string || '.')
+      .filter(Boolean);
+
+    const sections: string[] = ['# Project Overview'];
+    sections.push('');
+    sections.push('This wiki provides documentation for this project.');
+    sections.push('');
+
+    if (filesRead.length > 0) {
+      sections.push('## Key Files');
+      sections.push('');
+      for (const file of filesRead.slice(0, 5)) {
+        sections.push(`- \`${file}\``);
+      }
+      sections.push('');
+    }
+
+    if (dirsListed.length > 0) {
+      sections.push('## Project Structure');
+      sections.push('');
+      sections.push('The project contains the following directories:');
+      for (const dir of dirsListed.slice(0, 5)) {
+        sections.push(`- \`${dir}/\``);
+      }
+      sections.push('');
+    }
+
+    sections.push('---');
+    sections.push('*This overview was auto-generated. More detailed documentation will be added as commits are analyzed.*');
+
+    return sections.join('\n');
   }
 }
 

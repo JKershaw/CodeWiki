@@ -404,6 +404,8 @@ Based on the directory structure and source files above, create comprehensive do
 
 ## Output Format
 
+You MUST use this EXACT format with colons after section names:
+
 SUMMARY:
 [2-3 paragraph overview of this code module]
 
@@ -415,7 +417,27 @@ WIKI_PAGES:
 [Markdown content with code examples from the files above]
 === END ===
 
-CONFIDENCE: [0.8-1.0 since you have full file contents]
+CONFIDENCE: 0.85
+
+## Example Output
+
+SUMMARY:
+The user-service module provides authentication and user management functionality. It implements JWT-based authentication with bcrypt password hashing.
+
+The service follows a clean separation of concerns with interfaces for testability.
+
+FINDINGS:
+- type: Architecture | importance: high | description: Repository pattern for data access | paths: user-repository.ts
+- type: Convention | importance: medium | description: All service methods are async | paths: user-service.ts
+
+WIKI_PAGES:
+=== path: services/user-service | title: User Service ===
+# User Service
+
+The user service handles authentication and user management...
+=== END ===
+
+CONFIDENCE: 0.9
 `;
   }
 
@@ -463,18 +485,20 @@ Avoid duplicating existing wiki pages listed above.
 
 ## Output Format (Only After Exploration)
 
+Use this EXACT format with colons:
+
 SUMMARY:
 [2-3 paragraph overview based on the files you read]
 
 FINDINGS:
-- type: Architecture | importance: high | description: [Text] | paths: file1.ts, file2.ts
+- type: Architecture | importance: high | description: [Text] | paths: file1.ts
 
 WIKI_PAGES:
-=== path: category/page-name | title: Descriptive Title ===
-[Markdown content with code examples from the files you read]
+=== path: category/page-name | title: Title ===
+[Content]
 === END ===
 
-CONFIDENCE: [0-1 value based on how many files you read]
+CONFIDENCE: 0.85
 
 Remember: Call list_directory and read_file BEFORE writing any output above.
 `;
@@ -483,8 +507,16 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
   private parseResponse(response: string): ParsedAnalysis {
     const ctx = createParseContext('codebase-explorer', response);
 
-    // Parse summary
-    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i) ?? '';
+    // Parse summary - try colon format first, then markdown heading format
+    let summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|##|$)/i);
+    if (!summary || summary.length < 20) {
+      // Fallback: try markdown heading format (## SUMMARY)
+      const mdMatch = response.match(/##\s*SUMMARY\s*\n([\s\S]*?)(?=##\s*FINDINGS|##\s*WIKI|FINDINGS:|WIKI_PAGES:|CONFIDENCE:|$)/i);
+      if (mdMatch && mdMatch[1]) {
+        summary = mdMatch[1].trim();
+      }
+    }
+    summary = summary ?? '';
 
     // Parse findings - pipe-separated format
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
@@ -500,16 +532,34 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       },
     ];
 
-    const findings = parseListItemsWithFallback(
+    // Try colon format first, then markdown heading format
+    let findings = parseListItemsWithFallback(
       ctx,
       'FINDINGS',
-      /FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|CONFIDENCE:|$)/i,
+      /FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|CONFIDENCE:|##|$)/i,
       findingPatterns
     );
+    if (findings.length === 0) {
+      // Fallback: try markdown heading format
+      findings = parseListItemsWithFallback(
+        ctx,
+        'FINDINGS (markdown)',
+        /##\s*FINDINGS\s*\n([\s\S]*?)(?=##\s*WIKI|WIKI_PAGES:|CONFIDENCE:|$)/i,
+        findingPatterns
+      );
+    }
 
     // Parse wiki pages - uses === path: X | title: Y === format
     const wikiPages: ParsedAnalysis['wikiPages'] = [];
-    const pagesSection = parseSection(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    // Try colon format first
+    let pagesSection = parseSection(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    if (!pagesSection || pagesSection.length < 20) {
+      // Fallback: try markdown heading format
+      const mdPagesMatch = response.match(/##\s*WIKI_PAGES\s*\n([\s\S]*?)(?=CONFIDENCE:|$)/i);
+      if (mdPagesMatch && mdPagesMatch[1]) {
+        pagesSection = mdPagesMatch[1].trim();
+      }
+    }
     if (pagesSection) {
       const pageMatches = pagesSection.matchAll(/===\s*path:\s*([^|=]+)\s*(?:\|\s*title:\s*([^=]+))?\s*===\s*([\s\S]*?)===\s*END\s*===/gi);
 

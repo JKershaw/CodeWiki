@@ -203,6 +203,103 @@ describe('Example', () => {
         console.log('TestingGuideAgent skipped (conditions not met)');
       }
     });
+
+    it('correctly identifies the actual test framework from package.json (factual accuracy)', async () => {
+      // This test catches the issue where the testing guide claims wrong test framework
+      // e.g., claiming "Vitest" when project actually uses Node's built-in test runner
+      const repoId = 'llm-testing-accuracy-test';
+
+      // Create a project that uses Node's BUILT-IN test runner (NOT Jest, NOT Vitest)
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Node Test Runner Project',
+        'package.json': JSON.stringify({
+          name: 'node-test-project',
+          type: 'module',
+          scripts: {
+            'test': 'node --import tsx --test tests/*.test.ts',
+            'test:unit': 'node --import tsx --test tests/unit/*.test.ts',
+          },
+          devDependencies: {
+            'tsx': '^4.0.0',
+            '@types/node': '^20.0.0',
+          },
+          // Explicitly NO jest, NO vitest
+        }, null, 2),
+        'tests/example.test.ts': `
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+
+describe('Example', () => {
+  it('should work', () => {
+    assert.strictEqual(1 + 1, 2);
+  });
+});
+`,
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create pages to trigger guide
+      const pages = [];
+      for (let i = 0; i < 12; i++) {
+        pages.push({
+          path: `features/feature-${i}`,
+          title: `Feature ${i}`,
+          content: `# Feature ${i}\n\nFeature description.`,
+        });
+      }
+      await createWikiPages(agentCtx.wikiId, pages);
+
+      const agent = new TestingGuideAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      if (result.updates.length > 0) {
+        const guide = result.updates[0]!;
+        const content = guide.content.toLowerCase();
+
+        // Check for WRONG frameworks being claimed
+        const wrongFrameworks = [];
+        if (content.includes('vitest')) wrongFrameworks.push('Vitest');
+        if (content.includes('jest') && !content.includes('not jest')) wrongFrameworks.push('Jest');
+        if (content.includes('mocha')) wrongFrameworks.push('Mocha');
+
+        // Check for CORRECT framework being mentioned
+        const correctIndicators = [
+          content.includes('node:test'),
+          content.includes("node's built-in"),
+          content.includes('node --test'),
+          content.includes('built-in test runner'),
+          content.includes('native test runner'),
+        ];
+        const hasCorrectFramework = correctIndicators.some(x => x);
+
+        if (wrongFrameworks.length > 0) {
+          console.error('\n❌ TESTING GUIDE CLAIMS WRONG FRAMEWORK:');
+          console.error(`   Guide mentions: ${wrongFrameworks.join(', ')}`);
+          console.error('   But package.json shows: node --import tsx --test (Node built-in runner)');
+          console.error('   Content preview:', guide.content.slice(0, 300));
+        }
+
+        // Soft assertion: warn if wrong but don't fail (LLM may have limited context)
+        if (wrongFrameworks.length > 0 && !hasCorrectFramework) {
+          console.warn(`\n⚠️  Testing guide may be inaccurate (mentioned ${wrongFrameworks.join(', ')} instead of Node built-in)`);
+        }
+
+        // LLM-as-judge for accuracy
+        const evalResult = await assertLLM(
+          'The testing guide should accurately describe the test framework used. ' +
+          'This project uses Node.js built-in test runner (node --test), NOT Jest or Vitest. ' +
+          'The guide should mention "node:test", "node --test", or "Node\'s built-in test runner".',
+          guide.content,
+          5  // Lower threshold - factual accuracy is hard
+        );
+
+        logTestResult('Testing framework accuracy', evalResult);
+        console.log(formatEvaluationResult('Testing framework accuracy', evalResult));
+      } else {
+        console.log('TestingGuideAgent skipped (conditions not met)');
+      }
+    });
   });
 
   describe('ProjectOverviewAgent', () => {

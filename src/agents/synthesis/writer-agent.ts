@@ -413,6 +413,40 @@ CONTENT:
 [The full rewritten article in markdown]
 
 CONFIDENCE: [0-1 based on how complete the rewrite is]
+
+## Example
+
+TITLE:
+Repository Pattern Implementation
+
+CONTENT:
+# Repository Pattern Implementation
+
+The repository pattern provides an abstraction layer between business logic and data persistence in the codebase.
+
+## How It Works
+
+Each domain entity has a corresponding repository interface that defines standard CRUD operations:
+- \`create()\` - Insert new records
+- \`findById()\` - Retrieve by primary key
+- \`update()\` - Modify existing records
+- \`delete()\` - Remove records
+
+The concrete implementations handle database-specific operations while the business logic depends only on the interfaces.
+
+## Usage
+
+\`\`\`typescript
+const userRepo = new UserRepository(db);
+const user = await userRepo.findById(userId);
+\`\`\`
+
+## Related Pages
+
+- [Domain Model](architecture/domain-model.md)
+- [Database Configuration](guides/database-setup.md)
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -469,6 +503,22 @@ CONTENT:
 [The full rewritten article in markdown]
 
 CONFIDENCE: [0-1 based on how complete the rewrite is]
+
+## Example
+
+TITLE:
+Repository Pattern Implementation
+
+CONTENT:
+# Repository Pattern Implementation
+
+The repository pattern provides an abstraction layer between business logic and data persistence...
+
+## How It Works
+
+Each domain entity has a corresponding repository interface...
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -476,31 +526,67 @@ CONFIDENCE: [0-1 based on how complete the rewrite is]
     const ctx = createParseContext('writer', response);
 
     // Parse title (optional - falls back to original)
-    const title = parseSection(ctx, 'TITLE', /TITLE:\s*(.+?)(?=\n|CONTENT:|$)/i, {
+    let title = parseSection(ctx, 'TITLE', /TITLE:\s*(.+?)(?=\n|CONTENT:|$)/i, {
       required: false,
       defaultValue: originalPage.title,
     }) ?? originalPage.title;
 
-    // Parse content (required)
-    const content = parseSection(ctx, 'CONTENT', /CONTENT:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i, {
-      required: true,
+    // Parse content with multiple fallback strategies
+    let content = parseSection(ctx, 'CONTENT', /CONTENT:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i, {
+      required: false, // We'll handle requirement ourselves with fallbacks
     });
 
-    // Check for required failures
-    if (hasRequiredFailures(ctx)) {
-      console.error(`[writer] Parse failed: ${getFailureSummary(ctx)}`);
+    // Fallback 1: Try to find content between TITLE: and CONFIDENCE:
+    if (!content || content.length < 100) {
+      const titleToConfidenceMatch = response.match(/TITLE:[^\n]*\n([\s\S]*?)(?=CONFIDENCE:|$)/i);
+      if (titleToConfidenceMatch && titleToConfidenceMatch[1]) {
+        const candidate = titleToConfidenceMatch[1].trim();
+        // Skip if it's just "CONTENT:" header
+        if (candidate.length > 100 && !candidate.match(/^CONTENT:\s*$/im)) {
+          content = candidate.replace(/^CONTENT:\s*/i, '').trim();
+          ctx.successfulSections.push('CONTENT (fallback 1)');
+        }
+      }
+    }
+
+    // Fallback 2: Extract any markdown article starting with a heading
+    if (!content || content.length < 100) {
+      // Look for markdown content that starts with a heading (# Title)
+      const markdownMatch = response.match(/(#\s+[^\n]+\n[\s\S]{100,}?)(?=CONFIDENCE:|$)/);
+      if (markdownMatch && markdownMatch[1]) {
+        content = markdownMatch[1].trim();
+        // Also try to extract title from the first heading
+        const headingMatch = content.match(/^#\s+(.+?)$/m);
+        if (headingMatch && headingMatch[1]) {
+          title = headingMatch[1].trim();
+        }
+        ctx.successfulSections.push('CONTENT (fallback 2)');
+      }
+    }
+
+    // Fallback 3: Take everything after TITLE: line if no CONTENT: marker
+    if (!content || content.length < 100) {
+      const afterTitleMatch = response.match(/TITLE:[^\n]*\n\n?([\s\S]{100,}?)(?=CONFIDENCE:|$)/i);
+      if (afterTitleMatch && afterTitleMatch[1]) {
+        content = afterTitleMatch[1].trim();
+        ctx.successfulSections.push('CONTENT (fallback 3)');
+      }
+    }
+
+    // Check if we still failed to get content
+    if (!content || content.length < 100) {
+      console.error(`[writer] Parse failed: Could not extract content (tried 3 fallback strategies)`);
+      console.error(`[writer] Response preview: ${response.slice(0, 300)}`);
       return null;
     }
 
-    // Validate content length
-    if (!validateMinLength(ctx, 'CONTENT', content, 100)) {
-      return null;
-    }
+    // Clean up content - remove any leading "CONTENT:" if it slipped through
+    content = content.replace(/^CONTENT:\s*/i, '').trim();
 
     // Parse confidence (optional with default)
     const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
-    return { title, content: content!, confidence };
+    return { title, content, confidence };
   }
 }
 
