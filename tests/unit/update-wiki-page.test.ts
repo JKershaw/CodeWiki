@@ -514,9 +514,9 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      // Should fail due to duplicate title
+      // Should fail due to duplicate/similar page
       assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar title'));
+      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
     });
 
     it('prevents creating a page with case-insensitive matching title', async () => {
@@ -546,7 +546,7 @@ describe('handleUpdateWikiPage', () => {
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
       assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar title'));
+      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
     });
 
     it('allows creating pages with different titles', async () => {
@@ -662,6 +662,128 @@ describe('handleUpdateWikiPage', () => {
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
       assert.strictEqual(result.success, true);
+    });
+  });
+
+  describe('semantic similarity prevention', () => {
+    it('prevents creating a page with a similar title', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create first page: "LLM Service"
+      const initialPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'services/llm',
+        title: 'LLM Service',
+        content: validContent('LLM Service'),
+      });
+      repos._pages.set(initialPage.id, initialPage);
+
+      // Try to create "LLM Service Overview" - similar title (2/3 = 67% word overlap)
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'components/llm-overview',
+        title: 'LLM Service Overview',
+        content: validContent('LLM Service Overview'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, false, `Expected failure but got success`);
+      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
+    });
+
+    it('prevents creating a page with a similar path', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create first page at "services/llm"
+      const initialPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'services/llm',
+        title: 'LLM Service',
+        content: validContent('LLM Service'),
+      });
+      repos._pages.set(initialPage.id, initialPage);
+
+      // Try to create at "services/llm-service" - similar path (50% overlap with llm and services)
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'services/llm-service',
+        title: 'OpenRouter Integration',
+        content: validContent('OpenRouter Integration'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
+    });
+
+    it('allows creating pages with truly different topics', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create first page
+      const initialPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'services/llm',
+        title: 'LLM Service',
+        content: validContent('LLM Service'),
+      });
+      repos._pages.set(initialPage.id, initialPage);
+
+      // Create completely different page
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'architecture/database',
+        title: 'Database Configuration',
+        content: validContent('Database Configuration'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+    });
+
+    it('provides helpful error message pointing to existing page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create first page
+      const initialPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'services/llm',
+        title: 'LLM Service',
+        content: validContent('LLM Service'),
+      });
+      repos._pages.set(initialPage.id, initialPage);
+
+      // Try to create page with identical title (exact match)
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'components/llm-wrapper',
+        title: 'LLM Service',
+        content: validContent('LLM Service'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, false);
+      // Error should mention the existing page path
+      assert.ok(result.error?.includes('services/llm'), `Error should mention existing path: ${result.error}`);
     });
   });
 });

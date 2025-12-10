@@ -2,6 +2,7 @@ import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-ag
 import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { FindingGroup } from '../../domain/finding.js';
+import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { FindingHandlerRegistry } from './finding-handler-registry.js';
 import { createDefaultHandlerRegistry } from './finding-handler-registry.js';
 import { createGroupOpenFindingsQuery, handleGroupOpenFindings } from '../../queries/index.js';
@@ -67,24 +68,56 @@ export class ConsolidationAgent implements Agent {
       };
     }
 
-    // Process the highest priority finding group
-    const group = findingGroups[0]!;
+    // Process multiple finding groups per run (up to 5) to speed up consolidation
+    const MAX_GROUPS_PER_RUN = 5;
+    const groupsToProcess = findingGroups.slice(0, MAX_GROUPS_PER_RUN);
 
-    // Mark findings as in progress
-    await this.markFindingsInProgress(group, context);
+    const allUpdates: WikiPageUpdate[] = [];
+    const allFindings: AgentRunResult['result']['findings'] = [];
+    const summaries: string[] = [];
+    let totalCost = 0;
 
-    try {
-      const result = await this.processGroup(group, context);
+    for (const group of groupsToProcess) {
+      // Mark findings as in progress
+      await this.markFindingsInProgress(group, context);
 
-      // Mark findings as addressed
-      await this.markFindingsAddressed(group, result.agentRunId ?? '', context);
+      try {
+        const result = await this.processGroup(group, context);
 
-      return result;
-    } catch (error) {
-      // Reset findings to open on error
-      await this.resetFindingsToOpen(group, context);
-      throw error;
+        // Mark findings as addressed
+        await this.markFindingsAddressed(group, result.agentRunId ?? '', context);
+
+        // Accumulate results
+        if (result.updates) {
+          allUpdates.push(...result.updates);
+        }
+        if (result.result.findings) {
+          allFindings.push(...result.result.findings);
+        }
+        summaries.push(result.result.summary);
+        totalCost += result.costUsd ?? 0;
+      } catch (error) {
+        // Reset findings to open on error
+        await this.resetFindingsToOpen(group, context);
+        // Continue processing other groups, but log the error
+        console.error(`[consolidation] Error processing group ${group.type}:`, error);
+      }
     }
+
+    const remainingGroups = findingGroups.length - groupsToProcess.length;
+    const summaryText = remainingGroups > 0
+      ? `Processed ${groupsToProcess.length} finding groups (${remainingGroups} remaining). ${summaries.join('; ')}`
+      : `Processed ${groupsToProcess.length} finding groups. ${summaries.join('; ')}`;
+
+    return {
+      result: createAgentResult({
+        summary: summaryText,
+        findings: allFindings,
+        confidence: 0.8,
+      }),
+      updates: allUpdates,
+      costUsd: totalCost,
+    };
   }
 
   /**

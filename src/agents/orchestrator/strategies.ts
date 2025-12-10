@@ -394,6 +394,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   }
 
   // Consolidation agent - address findings from meta agents
+  // Schedule more aggressively when there are many open findings
   if (workItems.length < remainingSlots) {
     const findingsQuery = createListOpenFindingsQuery(ctx.wikiId);
     const findingsResult = await handleListOpenFindings(findingsQuery, ctx.repos);
@@ -401,7 +402,12 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
 
     if (openFindings.length > 0) {
       const consolidationKey = 'consolidation:wiki';
-      if (!ctx.existingWorkKeys.has(consolidationKey) && !hasRunWithinCooldown('consolidation')) {
+
+      // Bypass cooldown if there are many findings (> 3) to clear backlog faster
+      const manyFindings = openFindings.length > 3;
+      const shouldRun = manyFindings || !hasRunWithinCooldown('consolidation');
+
+      if (!ctx.existingWorkKeys.has(consolidationKey) && shouldRun) {
         ctx.existingWorkKeys.add(consolidationKey);
         workItems.push(
           createWorkItem({

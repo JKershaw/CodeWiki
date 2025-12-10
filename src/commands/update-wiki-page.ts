@@ -9,6 +9,7 @@ import {
   type WikiPageHistoryAgentType,
 } from '../domain/wiki-page-history.js';
 import { validateContent } from '../utils/content-validation.js';
+import { findSimilarPage } from '../utils/similarity.js';
 
 /**
  * Command to update a wiki page.
@@ -54,15 +55,15 @@ export async function handleUpdateWikiPage(
         }
       }
 
-      // Check for pages with similar titles to prevent duplicates
+      // Check for pages with similar title, path, or content to prevent duplicates
       const newTitle = update.title ?? extractTitleWithFallback(update.content, update.path);
       const existingPages = await repos.wikiPages.findByWiki(wikiId);
-      const duplicatePage = existingPages.find(
-        page => page.title.toLowerCase() === newTitle.toLowerCase()
-      );
-      if (duplicatePage) {
+      const similarMatch = findSimilarPage(newTitle, update.path, update.content, existingPages, 0.5);
+      if (similarMatch) {
         return failure(
-          `A page with similar title "${newTitle}" already exists at path: ${duplicatePage.path}`
+          `A similar page already exists at path: ${similarMatch.page.path} ` +
+          `(${similarMatch.matchType} similarity: ${(similarMatch.similarity * 100).toFixed(0)}%). ` +
+          `Consider updating the existing page instead.`
         );
       }
 
@@ -164,15 +165,15 @@ export async function handleUpdateWikiPage(
           }
         }
 
-        // If page doesn't exist, create it - but first check for duplicates
+        // If page doesn't exist, create it - but first check for similar pages
         const newTitle = update.title ?? extractTitleWithFallback(update.content, update.path);
         const existingPages = await repos.wikiPages.findByWiki(wikiId);
-        const duplicatePage = existingPages.find(
-          page => page.title.toLowerCase() === newTitle.toLowerCase()
-        );
-        if (duplicatePage) {
+        const similarMatch = findSimilarPage(newTitle, update.path, update.content, existingPages, 0.5);
+        if (similarMatch) {
           return failure(
-            `A page with similar title "${newTitle}" already exists at path: ${duplicatePage.path}`
+            `A similar page already exists at path: ${similarMatch.page.path} ` +
+            `(${similarMatch.matchType} similarity: ${(similarMatch.similarity * 100).toFixed(0)}%). ` +
+            `Consider updating the existing page instead.`
           );
         }
 
