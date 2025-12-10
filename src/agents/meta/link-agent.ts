@@ -215,10 +215,15 @@ Now analyze the pages above and provide your link suggestions:
   ): WikiPageUpdate[] {
     const updates: WikiPageUpdate[] = [];
     const pageMap = new Map(allPages.map(p => [p.path, p]));
+    const validPaths = new Set(allPages.map(p => p.path));
 
-    // Group links by source page
+    // Group links by source page, validating that targets exist
     const linksBySource = new Map<string, Array<{ target: string; reason: string }>>();
     for (const link of analysis.linkSuggestions) {
+      // BUG 3 FIX: Only include links to pages that actually exist
+      if (!validPaths.has(link.targetPath)) {
+        continue;
+      }
       if (!linksBySource.has(link.sourcePath)) {
         linksBySource.set(link.sourcePath, []);
       }
@@ -230,28 +235,41 @@ Now analyze the pages above and provide your link suggestions:
 
     // Create updates for pages with new links
     for (const page of pagesToAnalyze) {
-      const newLinks = linksBySource.get(page.path);
-      if (!newLinks || newLinks.length === 0) continue;
+      const suggestedLinks = linksBySource.get(page.path);
+      if (!suggestedLinks || suggestedLinks.length === 0) continue;
 
-      // Add "Related Pages" section to content
-      const relatedSection = `\n\n## Related Pages\n\n${newLinks.map(l => {
+      // BUG 1 FIX: Extract existing links from Related Pages section if present
+      const existingTargets = this.extractExistingLinkTargets(page.content);
+
+      // Filter to only truly new links that don't already exist
+      const newLinks = suggestedLinks.filter(l => !existingTargets.has(l.target));
+
+      // Skip if no new links to add
+      if (newLinks.length === 0) continue;
+
+      // Build content for new links only
+      const newLinksContent = newLinks.map(l => {
         const targetPage = pageMap.get(l.target);
         const targetTitle = targetPage?.title ?? l.target;
         return `- [${targetTitle}](${l.target}) - ${l.reason}`;
-      }).join('\n')}`;
+      }).join('\n');
 
-      // Check if Related Pages section already exists
+      let contentUpdate: string;
       if (page.content.includes('## Related Pages')) {
-        continue; // Skip if already has related pages
+        // Append new links to existing section
+        contentUpdate = `\n${newLinksContent}`;
+      } else {
+        // Create new Related Pages section
+        contentUpdate = `\n\n## Related Pages\n\n${newLinksContent}`;
       }
 
-      // Extract link target paths for the structured links array
+      // Extract link target paths for the structured links array (only new ones)
       const linkPaths = newLinks.map(l => l.target);
 
       updates.push({
         type: 'merge',
         path: page.path,
-        content: relatedSection,
+        content: contentUpdate,
         sourceCommitId: page.sourceCommits[0] ?? '',
         agentRunId: '',
         confidenceDelta: 0.05,
@@ -260,6 +278,23 @@ Now analyze the pages above and provide your link suggestions:
     }
 
     return updates;
+  }
+
+  /**
+   * Extract existing link targets from page content.
+   * Looks for markdown links in the format [title](path).
+   */
+  private extractExistingLinkTargets(content: string): Set<string> {
+    const targets = new Set<string>();
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let match;
+    while ((match = linkRegex.exec(content)) !== null) {
+      const path = match[2]!;
+      // Remove .md extension if present
+      const cleanPath = path.replace(/\.md$/, '');
+      targets.add(cleanPath);
+    }
+    return targets;
   }
 }
 
