@@ -24,6 +24,7 @@ import { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
 import { createSelfImprovementRoutes } from './self-improvement.js';
 import { createConfigRoutes } from './config.js';
 import { createObservabilityRoutes } from './observability.js';
+import { createAutoBenchmarksRoutes } from './auto-benchmarks.js';
 
 /**
  * Dependencies required by route handlers.
@@ -59,6 +60,7 @@ export function createApiRoutes(deps: Dependencies): Router {
   router.use(createFilesystemRoutes(deps));
   router.use(createBenchmarksRoutes(deps));
   router.use(createQualityBenchmarksRoutes(deps));
+  router.use(createAutoBenchmarksRoutes(deps));
   router.use('/api/repos/:id/self-improvements', createSelfImprovementRoutes(deps.repos, deps.createLLM(), deps.git, deps.repoServiceFactory));
   router.use(createConfigRoutes());
 
@@ -74,5 +76,6 @@ export { createObservabilityRoutes } from './observability.js';
 export { createFilesystemRoutes } from './filesystem.js';
 export { createBenchmarksRoutes } from './benchmarks.js';
 export { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
+export { createAutoBenchmarksRoutes } from './auto-benchmarks.js';
 export { createSelfImprovementRoutes } from './self-improvement.js';
 export { createConfigRoutes } from './config.js';
