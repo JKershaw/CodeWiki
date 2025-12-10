@@ -90,6 +90,41 @@ describe('GitHub Auth Service', () => {
       }
     });
 
+    it('includes redirect_uri in token exchange request', async () => {
+      // GitHub OAuth requires redirect_uri in token exchange when it was
+      // included in the authorization request. Missing redirect_uri causes
+      // "redirect_uri_mismatch" errors.
+      const mockResponse = {
+        access_token: 'ghu_test123',
+        refresh_token: 'ghr_test456',
+        expires_in: 28800,
+        token_type: 'bearer',
+      };
+
+      let capturedBody: string = '';
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock.fn(async (_url: string, options: RequestInit) => {
+        capturedBody = options.body as string;
+        return new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch;
+
+      try {
+        await authService.exchangeCodeForTokens('auth-code-123');
+
+        // Verify redirect_uri is included in the request body
+        assert.ok(
+          capturedBody.includes(`redirect_uri=${encodeURIComponent(testConfig.redirectUri)}`),
+          `Expected request body to include redirect_uri=${encodeURIComponent(testConfig.redirectUri)}, got: ${capturedBody}`
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     it('throws error on failed token exchange', async () => {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mock.fn(async () => {
