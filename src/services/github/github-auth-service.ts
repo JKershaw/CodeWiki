@@ -128,6 +128,7 @@ export function createGitHubAuthService(config: GitHubAuthConfig): GitHubAuthSer
             client_id: config.clientId,
             client_secret: config.clientSecret,
             code,
+            redirect_uri: config.redirectUri,
           }).toString(),
         });
       } catch (error) {
