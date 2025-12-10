@@ -25,6 +25,7 @@ export * from './self-improvement-repository.js';
 export * from './chat-session-repository.js';
 export * from './user-repository.js';
 export * from './wiki-page-history-repository.js';
+export * from './auto-benchmark-repository.js';
 
 import type { RepoRepository } from './repo-repository.js';
 import type { WikiRepository } from './wiki-repository.js';
@@ -45,6 +46,7 @@ import type { SelfImprovementRepository } from './self-improvement-repository.js
 import type { ChatSessionRepository } from './chat-session-repository.js';
 import type { UserRepository } from './user-repository.js';
 import type { WikiPageHistoryRepository } from './wiki-page-history-repository.js';
+import type { AutoBenchmarkRepository } from './auto-benchmark-repository.js';
 
 /**
  * Collection of all repositories.
@@ -70,4 +72,5 @@ export interface Repositories {
   chatSessions: ChatSessionRepository;
   users: UserRepository;
   wikiPageHistory: WikiPageHistoryRepository;
+  autoBenchmarks: AutoBenchmarkRepository;
 }

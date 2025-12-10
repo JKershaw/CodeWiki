@@ -25,7 +25,13 @@ import { createGitHubAuthService } from '../services/github/github-auth-service.
 import { createGitHubRepoService, type GitHubRepoService } from '../services/github/github-repo-service.js';
 import { createGitHubApiCache, createCachedGitHubRepoService } from '../services/github/github-api-cache.js';
 import { createRepositoryServiceFactory } from '../services/repository/repository-service.js';
+import { createUnifiedRepoAccessFactory } from '../services/repository/unified-repo-access.js';
 import { swaggerSpec } from './swagger.js';
+import { AutoBenchmarkRunner, type AutoBenchmarkDependencies } from '../auto-benchmark/auto-benchmark-runner.js';
+import { createOrchestrator } from '../agents/orchestrator/orchestrator.js';
+import { createExecutor } from '../executor/executor.js';
+import { BenchmarkRunner } from '../benchmark/benchmark-runner.js';
+import { QualityBenchmarkRunner } from '../quality-benchmark/quality-benchmark-runner.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -91,6 +97,56 @@ function createLLM(): LLMService {
     return createOpenRouterLLM({ apiKey, model });
   }
   return createMockLLMForCodeAnalysis();
+}
+
+/**
+ * Resume any incomplete auto-benchmark runs from before server restart.
+ * Runs in background - does not block server startup.
+ */
+function resumeIncompleteAutoBenchmarks(
+  repos: RepositoryConnection['repositories'],
+  git: ReturnType<typeof createGitService>,
+  createLLMFn: () => LLMService,
+  repoServiceFactory?: ReturnType<typeof createRepositoryServiceFactory>
+): void {
+  const llm = createLLMFn();
+
+  // Create unified repo access factory for orchestrator
+  const repoAccessFactory = repoServiceFactory
+    ? createUnifiedRepoAccessFactory({
+        repos,
+        repoServiceFactory,
+        gitService: git,
+      })
+    : undefined;
+
+  // Create orchestrator and executor
+  const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, repoAccessFactory);
+  const executor = createExecutor(repos, git, llm, orchestrator, repoServiceFactory);
+
+  // Create benchmark runners
+  const benchmarkRunner = new BenchmarkRunner(repos, llm, git, repoServiceFactory);
+  const qualityRunner = new QualityBenchmarkRunner(repos, llm);
+
+  const runnerDeps: AutoBenchmarkDependencies = {
+    repos,
+    runIterations: async (repoId, iterations) => {
+      await executor.runIterations(repoId, iterations);
+    },
+    runAccuracyBenchmark: async (repoId, wikiId) => {
+      await benchmarkRunner.run(repoId, wikiId);
+    },
+    runQualityBenchmark: async (repoId, wikiId) => {
+      await qualityRunner.run(repoId, wikiId);
+    },
+  };
+
+  const runner = new AutoBenchmarkRunner(runnerDeps);
+
+  // Resume in background (don't await)
+  runner.resumeIncomplete().catch(error => {
+    console.error('[AutoBenchmark] Failed to resume incomplete runs:', error);
+  });
 }
 
 // Start server
@@ -194,6 +250,9 @@ export async function startServer(port = PORT) {
   } else {
     app.use(createApiRoutes(apiDeps));
   }
+
+  // Resume any incomplete auto-benchmark runs from before server restart
+  resumeIncompleteAutoBenchmarks(repos, git, createLLM, repoServiceFactory);
 
   // Render the main page for all non-API routes (SPA support)
   app.get('*', (_req: Request, res: Response) => {

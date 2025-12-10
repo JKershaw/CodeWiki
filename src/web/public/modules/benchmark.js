@@ -9,6 +9,7 @@ let qualityBenchmarkPollingInterval = null;
 let benchmarkChart = null;
 let autoBenchmarkRunning = false;
 let autoBenchmarkStopping = false;
+let currentAutoBenchmarkRunId = null;
 let selectedBenchmarkIds = new Set();
 let selfImprovementPollingInterval = null;
 
@@ -144,6 +145,9 @@ async function loadBenchmarkHistory(repoId) {
 
     // Populate self-improvement benchmark selector
     renderBenchmarkSelector(accuracyBenchmarks);
+
+    // Check for running auto-benchmark and resume UI polling
+    await checkAndResumeAutoBenchmark(repoId);
   } catch (error) {
     container.innerHTML = `<p class="placeholder">Error loading benchmarks: ${escapeHtml(error.message)}</p>`;
   }
@@ -957,7 +961,8 @@ async function showQualityBenchmarkDetail(benchmarkId) {
 }
 
 /**
- * Run auto-benchmark cycle.
+ * Run auto-benchmark cycle (server-side orchestration).
+ * Starts the auto-benchmark on the server and polls for status.
  */
 async function runAutoBenchmark() {
   if (!currentRepo || autoBenchmarkRunning) return;
@@ -968,6 +973,7 @@ async function runAutoBenchmark() {
 
   autoBenchmarkRunning = true;
   autoBenchmarkStopping = false;
+  currentAutoBenchmarkRunId = null;
 
   const startBtn = document.getElementById('auto-benchmark-btn');
   const stopBtn = document.getElementById('stop-auto-benchmark-btn');
@@ -991,64 +997,46 @@ async function runAutoBenchmark() {
   document.getElementById('run-both-benchmarks-btn').disabled = true;
 
   try {
-    for (let cycle = 1; cycle <= maxCycles; cycle++) {
-      if (autoBenchmarkStopping) {
-        statusText.textContent = 'Stopped by user';
-        break;
-      }
+    // Start auto-benchmark on server
+    statusText.textContent = 'Starting auto-benchmark...';
+    phaseSpan.textContent = 'Initializing...';
 
-      cycleSpan.textContent = `Cycle ${cycle}/${maxCycles}`;
-      const overallProgress = ((cycle - 1) / maxCycles) * 100;
-      progressFill.style.width = `${overallProgress}%`;
+    const response = await fetch(`/api/repos/${currentRepo.id}/auto-benchmarks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ iterationsPerCycle, maxCycles, includeQuality }),
+    });
 
-      phaseSpan.textContent = 'Running iterations...';
-      statusText.textContent = `Starting ${iterationsPerCycle} iterations...`;
-
-      await runIterationsAndWait(currentRepo.id, iterationsPerCycle, (completed, total) => {
-        statusText.textContent = `Iteration ${completed}/${total}`;
-      });
-
-      if (autoBenchmarkStopping) {
-        statusText.textContent = 'Stopped by user';
-        break;
-      }
-
-      const benchmarkLabel = includeQuality ? 'benchmarks' : 'benchmark';
-      phaseSpan.textContent = `Running ${benchmarkLabel}...`;
-      statusText.textContent = `Starting ${benchmarkLabel}...`;
-
-      if (includeQuality) {
-        await Promise.all([
-          runBenchmarkAndWait(currentRepo.id, () => {
-            statusText.textContent = 'Benchmarks in progress...';
-          }),
-          runQualityBenchmarkAndWait(currentRepo.id, () => {
-            statusText.textContent = 'Benchmarks in progress...';
-          }),
-        ]);
-      } else {
-        await runBenchmarkAndWait(currentRepo.id, () => {
-          statusText.textContent = 'Benchmark in progress...';
-        });
-      }
-
-      const cycleProgress = (cycle / maxCycles) * 100;
-      progressFill.style.width = `${cycleProgress}%`;
-      statusText.textContent = `Cycle ${cycle} complete`;
-
-      await loadBenchmarkHistory(currentRepo.id);
+    if (response.status === 409) {
+      const data = await response.json();
+      currentAutoBenchmarkRunId = data.runId;
+      statusText.textContent = 'Resuming existing run...';
+    } else if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to start auto-benchmark');
+    } else {
+      const data = await response.json();
+      currentAutoBenchmarkRunId = data.runId;
     }
 
-    if (!autoBenchmarkStopping) {
-      phaseSpan.textContent = 'Complete';
-      statusText.textContent = `All ${maxCycles} cycles completed`;
-      progressFill.style.width = '100%';
-    }
+    // Poll for status
+    await pollAutoBenchmarkStatus(currentRepo.id, currentAutoBenchmarkRunId, {
+      cycleSpan,
+      phaseSpan,
+      statusText,
+      progressFill,
+      maxCycles,
+    });
+
+    // Reload benchmark history when complete
+    await loadBenchmarkHistory(currentRepo.id);
+
   } catch (error) {
     statusText.textContent = `Error: ${error.message}`;
     phaseSpan.textContent = 'Failed';
   } finally {
     autoBenchmarkRunning = false;
+    currentAutoBenchmarkRunId = null;
     startBtn.disabled = false;
     stopBtn.classList.add('hidden');
     document.getElementById('auto-benchmark-iterations').disabled = false;
@@ -1061,14 +1049,171 @@ async function runAutoBenchmark() {
 }
 
 /**
- * Stop auto-benchmark.
+ * Poll for auto-benchmark status from server.
  */
-function stopAutoBenchmark() {
-  if (autoBenchmarkRunning) {
+async function pollAutoBenchmarkStatus(repoId, runId, ui) {
+  const { cycleSpan, phaseSpan, statusText, progressFill, maxCycles } = ui;
+
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/repos/${repoId}/auto-benchmarks/${runId}`);
+        if (!response.ok) {
+          throw new Error('Failed to get auto-benchmark status');
+        }
+
+        const run = await response.json();
+
+        // Update UI based on server state
+        cycleSpan.textContent = `Cycle ${run.currentCycle}/${run.config.maxCycles}`;
+
+        const phaseLabels = {
+          iterations: 'Running iterations...',
+          accuracy: 'Running accuracy benchmark...',
+          quality: 'Running quality benchmark...',
+          complete: 'Complete',
+        };
+        phaseSpan.textContent = phaseLabels[run.currentPhase] || run.currentPhase;
+
+        // Calculate progress
+        const cycleProgress = ((run.currentCycle - 1) / run.config.maxCycles) * 100;
+        const phaseBonus = run.currentPhase === 'complete' ? (100 / run.config.maxCycles) : 0;
+        progressFill.style.width = `${Math.min(cycleProgress + phaseBonus, 100)}%`;
+
+        if (run.status === 'completed') {
+          statusText.textContent = `All ${run.config.maxCycles} cycles completed`;
+          progressFill.style.width = '100%';
+          phaseSpan.textContent = 'Complete';
+          resolve();
+          return;
+        }
+
+        if (run.status === 'stopped') {
+          statusText.textContent = 'Stopped by user';
+          phaseSpan.textContent = 'Stopped';
+          resolve();
+          return;
+        }
+
+        if (run.status === 'failed') {
+          statusText.textContent = `Failed: ${run.error || 'Unknown error'}`;
+          phaseSpan.textContent = 'Failed';
+          reject(new Error(run.error || 'Auto-benchmark failed'));
+          return;
+        }
+
+        // Still running, continue polling
+        statusText.textContent = `${phaseLabels[run.currentPhase] || 'Processing'}`;
+        setTimeout(poll, 2000);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    setTimeout(poll, 500);
+  });
+}
+
+/**
+ * Stop auto-benchmark (server-side).
+ */
+async function stopAutoBenchmark() {
+  if (autoBenchmarkRunning && currentAutoBenchmarkRunId && currentRepo) {
     autoBenchmarkStopping = true;
     document.getElementById('stop-auto-benchmark-btn').textContent = 'Stopping...';
     document.getElementById('stop-auto-benchmark-btn').disabled = true;
     document.getElementById('auto-benchmark-phase').textContent = 'Stopping after current phase...';
+
+    try {
+      await fetch(`/api/repos/${currentRepo.id}/auto-benchmarks/${currentAutoBenchmarkRunId}/stop`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Failed to stop auto-benchmark:', error);
+    }
+  }
+}
+
+/**
+ * Check for running auto-benchmark and resume UI polling on page load.
+ * This ensures the UI reflects server state after a page refresh.
+ */
+async function checkAndResumeAutoBenchmark(repoId) {
+  // Don't check if already running locally
+  if (autoBenchmarkRunning) return;
+
+  try {
+    // Fetch auto-benchmark history to find any running runs
+    const response = await fetch(`/api/repos/${repoId}/auto-benchmarks?limit=1`);
+    if (!response.ok) return;
+
+    const data = await response.json();
+    const runs = data.runs || [];
+    const runningRun = runs.find(r => r.status === 'running');
+
+    if (!runningRun) return;
+
+    // Found a running auto-benchmark - resume UI state
+    autoBenchmarkRunning = true;
+    autoBenchmarkStopping = false;
+    currentAutoBenchmarkRunId = runningRun.id;
+
+    const startBtn = document.getElementById('auto-benchmark-btn');
+    const stopBtn = document.getElementById('stop-auto-benchmark-btn');
+    const progressDiv = document.getElementById('auto-benchmark-progress');
+    const cycleSpan = document.getElementById('auto-benchmark-cycle');
+    const phaseSpan = document.getElementById('auto-benchmark-phase');
+    const statusText = document.getElementById('auto-benchmark-status-text');
+    const progressFill = document.getElementById('auto-benchmark-progress-fill');
+
+    // Update UI to reflect running state
+    startBtn.disabled = true;
+    stopBtn.classList.remove('hidden');
+    stopBtn.textContent = 'Stop';
+    stopBtn.disabled = false;
+    document.getElementById('auto-benchmark-iterations').disabled = true;
+    document.getElementById('auto-benchmark-max-cycles').disabled = true;
+    document.getElementById('auto-benchmark-include-quality').disabled = true;
+    progressDiv.classList.remove('hidden');
+
+    document.getElementById('run-benchmark-btn').disabled = true;
+    document.getElementById('run-quality-benchmark-btn').disabled = true;
+    document.getElementById('run-both-benchmarks-btn').disabled = true;
+
+    statusText.textContent = 'Resuming auto-benchmark...';
+
+    // Update form values to match the running config
+    document.getElementById('auto-benchmark-iterations').value = runningRun.config.iterationsPerCycle;
+    document.getElementById('auto-benchmark-max-cycles').value = runningRun.config.maxCycles;
+    document.getElementById('auto-benchmark-include-quality').checked = runningRun.config.includeQuality;
+
+    // Poll for status (async - don't await to allow page to continue loading)
+    pollAutoBenchmarkStatus(repoId, runningRun.id, {
+      cycleSpan,
+      phaseSpan,
+      statusText,
+      progressFill,
+      maxCycles: runningRun.config.maxCycles,
+    }).then(async () => {
+      // Reload benchmark history when complete
+      await loadBenchmarkHistory(repoId);
+    }).catch(error => {
+      statusText.textContent = `Error: ${error.message}`;
+      phaseSpan.textContent = 'Failed';
+    }).finally(() => {
+      autoBenchmarkRunning = false;
+      currentAutoBenchmarkRunId = null;
+      startBtn.disabled = false;
+      stopBtn.classList.add('hidden');
+      document.getElementById('auto-benchmark-iterations').disabled = false;
+      document.getElementById('auto-benchmark-max-cycles').disabled = false;
+      document.getElementById('auto-benchmark-include-quality').disabled = false;
+      document.getElementById('run-benchmark-btn').disabled = false;
+      document.getElementById('run-quality-benchmark-btn').disabled = false;
+      document.getElementById('run-both-benchmarks-btn').disabled = false;
+    });
+  } catch (error) {
+    console.error('Failed to check for running auto-benchmark:', error);
   }
 }
 
