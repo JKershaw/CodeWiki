@@ -273,6 +273,92 @@ describe('handleUpdateWikiPage with links', () => {
       assert.deepStrictEqual(updatedPage.links, ['new/link']);
     });
   });
+
+  describe('merge operation links handling', () => {
+    it('should merge links array when merging, not replace existing links', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create page with existing links
+      const page = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nContent.\n\n## Related\n\n- [Old Link](old/link)',
+      });
+      page.links = ['old/link', 'another/old'];
+      repos._pages.set(pageId, page);
+
+      // Create target page for backlink
+      const targetPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'new/link',
+        title: 'New Link Target',
+        content: '# New Link Target\n\nContent.',
+      });
+      repos._pages.set(targetPage.id, targetPage);
+
+      // Merge with new links - should ADD to existing, not replace
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/page',
+        content: '\n\n- [New Link](new/link) - Added by link agent',
+        agentRunId: 'link-agent-1',
+        confidenceDelta: 0.05,
+        links: ['new/link'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      const updatedPage = repos._pages.get(pageId)!;
+
+      // Should have BOTH old and new links
+      assert.ok(updatedPage.links.includes('old/link'), 'Should preserve existing link');
+      assert.ok(updatedPage.links.includes('another/old'), 'Should preserve another existing link');
+      assert.ok(updatedPage.links.includes('new/link'), 'Should add new link');
+      assert.strictEqual(updatedPage.links.length, 3, 'Should have all 3 links');
+    });
+
+    it('should not duplicate links when merging same link twice', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create page with existing links
+      const page = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nContent.',
+      });
+      page.links = ['existing/link'];
+      repos._pages.set(pageId, page);
+
+      // Merge with same link that already exists
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/page',
+        content: '\n\n- [Existing Link](existing/link) - Re-suggested',
+        agentRunId: 'link-agent-1',
+        confidenceDelta: 0.05,
+        links: ['existing/link'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      const updatedPage = repos._pages.get(pageId)!;
+
+      // Should not have duplicate
+      assert.strictEqual(updatedPage.links.length, 1, 'Should not duplicate links');
+      assert.deepStrictEqual(updatedPage.links, ['existing/link']);
+    });
+  });
 });
 
 describe('Repository updateLinks method', () => {

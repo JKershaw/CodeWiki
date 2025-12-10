@@ -318,6 +318,196 @@ CONFIDENCE: 0.85`;
     });
   });
 
+  describe('merging links into existing Related Pages section', () => {
+    it('should merge new links into existing Related Pages section', async () => {
+      const repoId = 'link-agent-merge-test-1';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create a page that already has a Related Pages section
+      const oldDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      await ctx.repos.wikiPages.save({
+        id: 'page-has-related',
+        wikiId: wiki.id,
+        path: 'has-related',
+        title: 'Page With Related',
+        content: `# Page With Related
+
+Some content here.
+
+## Related Pages
+
+- [Target 1](target-1) - Existing link`,
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['target-1'],
+        backlinks: [],
+        createdAt: oldDate,
+        updatedAt: oldDate,
+      });
+
+      // Create target pages
+      await createWikiPages(wiki.id, [
+        { path: 'target-1', title: 'Target 1', content: '# Target 1\n\nContent.' },
+        { path: 'target-2', title: 'Target 2', content: '# Target 2\n\nContent.' },
+        { path: 'new-target', title: 'New Target', content: '# New Target\n\nNew content.' },
+      ]);
+
+      // Mock LLM to suggest a NEW link (not the existing one)
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'has-related', target: 'target-2', strength: 'strong', reason: 'Should add this new link' },
+        { source: 'has-related', target: 'new-target', strength: 'medium', reason: 'Another new link' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should have an update for the page with existing Related Pages
+      const update = result.updates.find(u => u.path === 'has-related');
+      assert.ok(update, 'Should generate update for page with existing Related Pages section');
+
+      // The links array should include ONLY the new links (not duplicating existing)
+      assert.ok(update.links, 'Update should have links array');
+      assert.ok(update.links!.includes('target-2'), 'Should include new link target-2');
+      assert.ok(update.links!.includes('new-target'), 'Should include new link new-target');
+      // Should NOT include target-1 since it already exists
+      assert.ok(!update.links!.includes('target-1'), 'Should not include already-existing link');
+    });
+
+    it('should not generate update if all suggested links already exist in Related Pages', async () => {
+      const repoId = 'link-agent-merge-test-2';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create a page that already has all the links we'll suggest
+      const oldDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      await ctx.repos.wikiPages.save({
+        id: 'page-fully-linked',
+        wikiId: wiki.id,
+        path: 'fully-linked',
+        title: 'Fully Linked',
+        content: `# Fully Linked
+
+Content.
+
+## Related Pages
+
+- [Target A](target-a) - Link A
+- [Target B](target-b) - Link B`,
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['target-a', 'target-b'],
+        backlinks: [],
+        createdAt: oldDate,
+        updatedAt: oldDate,
+      });
+
+      // Create target pages
+      await createWikiPages(wiki.id, [
+        { path: 'target-a', title: 'Target A', content: '# Target A\n\nContent.' },
+        { path: 'target-b', title: 'Target B', content: '# Target B\n\nContent.' },
+      ]);
+
+      // Mock LLM to suggest links that already exist
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'fully-linked', target: 'target-a', strength: 'strong', reason: 'Already exists' },
+        { source: 'fully-linked', target: 'target-b', strength: 'medium', reason: 'Already exists' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should NOT have an update since all suggested links already exist
+      const update = result.updates.find(u => u.path === 'fully-linked');
+      assert.ok(!update, 'Should not generate update when all suggested links already exist');
+    });
+  });
+
+  describe('link target validation', () => {
+    it('should only include links to pages that actually exist', async () => {
+      const repoId = 'link-agent-validate-test-1';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create source page and only ONE target page
+      await createWikiPages(wiki.id, [
+        { path: 'source', title: 'Source Page', content: '# Source\n\nSome content.' },
+        { path: 'real-target', title: 'Real Target', content: '# Real Target\n\nExists.' },
+      ]);
+
+      // Mock LLM to suggest links to both existing AND non-existing pages
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'source', target: 'real-target', strength: 'strong', reason: 'This page exists' },
+        { source: 'source', target: 'fake-target', strength: 'strong', reason: 'This page does NOT exist' },
+        { source: 'source', target: 'another/fake', strength: 'medium', reason: 'Also does not exist' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      const update = result.updates.find(u => u.path === 'source');
+      assert.ok(update, 'Should have update for source page');
+      assert.ok(update.links, 'Update should have links array');
+
+      // Should ONLY include the real target, not the fake ones
+      assert.ok(update.links!.includes('real-target'), 'Should include existing page');
+      assert.ok(!update.links!.includes('fake-target'), 'Should NOT include non-existing page');
+      assert.ok(!update.links!.includes('another/fake'), 'Should NOT include non-existing page');
+      assert.strictEqual(update.links!.length, 1, 'Should only have 1 valid link');
+    });
+
+    it('should not generate update if all suggested targets are invalid', async () => {
+      const repoId = 'link-agent-validate-test-2';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create only the source page
+      await createWikiPages(wiki.id, [
+        { path: 'lonely-source', title: 'Lonely Source', content: '# Lonely\n\nNo valid targets.' },
+        { path: 'other-page', title: 'Other Page', content: '# Other\n\nAnother page.' },
+      ]);
+
+      // Mock LLM to suggest links to non-existing pages
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'lonely-source', target: 'nonexistent-1', strength: 'strong', reason: 'Does not exist' },
+        { source: 'lonely-source', target: 'nonexistent-2', strength: 'medium', reason: 'Does not exist either' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should NOT have an update since no valid targets
+      const update = result.updates.find(u => u.path === 'lonely-source');
+      assert.ok(!update, 'Should not generate update when all suggested targets are invalid');
+    });
+  });
+
   describe('agent type', () => {
     it('has correct agent type', () => {
       const agent = new LinkAgent();

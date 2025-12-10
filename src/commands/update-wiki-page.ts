@@ -237,13 +237,15 @@ export async function handleUpdateWikiPage(
       }
       await repos.wikiPages.updateContent(existing.id, mergeUpdateParams);
 
-      // Update links if provided
+      // Update links if provided - MERGE with existing links for merge operations
       if (update.links && update.links.length > 0) {
         const oldLinks = existing.links || [];
-        await repos.wikiPages.updateLinks(existing.id, update.links);
+        // BUG 2 FIX: Merge new links with existing ones (deduplicated)
+        const mergedLinks = [...new Set([...oldLinks, ...update.links])];
+        await repos.wikiPages.updateLinks(existing.id, mergedLinks);
 
-        // Update backlinks on target pages
-        await updateBacklinks(repos, wikiId, existing.path, oldLinks, update.links);
+        // Update backlinks on target pages (only for newly added links)
+        await updateBacklinks(repos, wikiId, existing.path, oldLinks, mergedLinks);
       }
 
       // Record history for update (merge on existing page)
