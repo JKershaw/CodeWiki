@@ -485,17 +485,51 @@ Avoid duplicating existing wiki pages listed above.
 
 ## Output Format (Only After Exploration)
 
-Use this EXACT format with colons:
+You MUST use this EXACT format with colons after section names:
 
 SUMMARY:
 [2-3 paragraph overview based on the files you read]
 
 FINDINGS:
-- type: Architecture | importance: high | description: [Text] | paths: file1.ts
+- type: Architecture | importance: high | description: [Text] | paths: file1.ts, file2.ts
 
 WIKI_PAGES:
 === path: category/page-name | title: Title ===
 [Content]
+=== END ===
+
+CONFIDENCE: 0.85
+
+## Example Output (After Tool Exploration)
+
+After exploring src/services/auth with list_directory and reading auth-service.ts, user-repository.ts:
+
+SUMMARY:
+The authentication service provides JWT-based user authentication with bcrypt password hashing. It follows a repository pattern for data access, separating database queries from business logic.
+
+The service exposes three main methods: login(), register(), and validateToken(). All methods are async and handle their own error cases by throwing typed AuthErrors.
+
+FINDINGS:
+- type: Architecture | importance: high | description: Repository pattern separates data access from business logic | paths: src/services/auth/user-repository.ts
+- type: Convention | importance: medium | description: All public methods are async and throw typed errors | paths: src/services/auth/auth-service.ts
+
+WIKI_PAGES:
+=== path: services/authentication | title: Authentication Service ===
+# Authentication Service
+
+The authentication service handles user login, registration, and token validation using JWT tokens.
+
+## Key Components
+
+- **AuthService**: Main entry point for authentication operations
+- **UserRepository**: Handles database queries for user data
+
+## Usage Example
+
+\`\`\`typescript
+const authService = new AuthService(userRepo);
+const token = await authService.login(email, password);
+\`\`\`
 === END ===
 
 CONFIDENCE: 0.85
