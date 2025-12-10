@@ -483,8 +483,16 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
   private parseResponse(response: string): ParsedAnalysis {
     const ctx = createParseContext('codebase-explorer', response);
 
-    // Parse summary
-    const summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i) ?? '';
+    // Parse summary - try colon format first, then markdown heading format
+    let summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|##|$)/i);
+    if (!summary || summary.length < 20) {
+      // Fallback: try markdown heading format (## SUMMARY)
+      const mdMatch = response.match(/##\s*SUMMARY\s*\n([\s\S]*?)(?=##\s*FINDINGS|##\s*WIKI|FINDINGS:|WIKI_PAGES:|CONFIDENCE:|$)/i);
+      if (mdMatch && mdMatch[1]) {
+        summary = mdMatch[1].trim();
+      }
+    }
+    summary = summary ?? '';
 
     // Parse findings - pipe-separated format
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
@@ -500,16 +508,34 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       },
     ];
 
-    const findings = parseListItemsWithFallback(
+    // Try colon format first, then markdown heading format
+    let findings = parseListItemsWithFallback(
       ctx,
       'FINDINGS',
-      /FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|CONFIDENCE:|$)/i,
+      /FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|CONFIDENCE:|##|$)/i,
       findingPatterns
     );
+    if (findings.length === 0) {
+      // Fallback: try markdown heading format
+      findings = parseListItemsWithFallback(
+        ctx,
+        'FINDINGS (markdown)',
+        /##\s*FINDINGS\s*\n([\s\S]*?)(?=##\s*WIKI|WIKI_PAGES:|CONFIDENCE:|$)/i,
+        findingPatterns
+      );
+    }
 
     // Parse wiki pages - uses === path: X | title: Y === format
     const wikiPages: ParsedAnalysis['wikiPages'] = [];
-    const pagesSection = parseSection(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    // Try colon format first
+    let pagesSection = parseSection(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
+    if (!pagesSection || pagesSection.length < 20) {
+      // Fallback: try markdown heading format
+      const mdPagesMatch = response.match(/##\s*WIKI_PAGES\s*\n([\s\S]*?)(?=CONFIDENCE:|$)/i);
+      if (mdPagesMatch && mdPagesMatch[1]) {
+        pagesSection = mdPagesMatch[1].trim();
+      }
+    }
     if (pagesSection) {
       const pageMatches = pagesSection.matchAll(/===\s*path:\s*([^|=]+)\s*(?:\|\s*title:\s*([^=]+))?\s*===\s*([\s\S]*?)===\s*END\s*===/gi);
 
