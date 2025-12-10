@@ -230,6 +230,58 @@ Do NOT just write a brief description - write a complete article.]
 === END ===
 
 CONFIDENCE: [0-1 value]
+
+## Example Output
+
+SUMMARY:
+Architecture Decision Record documenting the choice to use CQRS pattern for data access.
+
+NARRATIVE_TYPE: adr
+
+PAGE_TITLE: CQRS Architecture Decision
+
+FINDINGS:
+- type: Architecture Decision | importance: high | description: Adopted CQRS pattern for separating read and write operations | paths: docs/adr/002-cqrs.md
+
+KEY_DECISIONS:
+- Use separate query and command models for data access
+- Queries are synchronous, commands may be async
+- Each domain has its own query and command handlers
+
+WIKI_UPDATES:
+=== path: decisions/cqrs-pattern | action: create ===
+# CQRS Architecture Decision
+
+The project uses Command Query Responsibility Segregation (CQRS) to separate read and write operations.
+
+## Decision
+
+Separate the data access layer into:
+- **Commands**: Operations that modify state (create, update, delete)
+- **Queries**: Operations that read state without side effects
+
+## Rationale
+
+This separation provides several benefits:
+- Clearer code organization and responsibilities
+- Easier testing of read vs write paths
+- Better scalability options for read-heavy workloads
+- Simpler audit logging for state changes
+
+## Implementation
+
+Each domain module has:
+- \`commands/\` - Command definitions and handlers
+- \`queries/\` - Query definitions and handlers
+- Both use the same underlying repositories
+
+## Alternatives Considered
+
+- Traditional CRUD repositories (rejected: harder to scale reads)
+- Full event sourcing (rejected: unnecessary complexity)
+=== END ===
+
+CONFIDENCE: 0.9
 `;
   }
 
@@ -296,6 +348,30 @@ WIKI_UPDATES:
 === END ===
 
 CONFIDENCE: [0-1 value]
+
+## Example
+
+SUMMARY:
+ADR documenting CQRS pattern adoption.
+
+NARRATIVE_TYPE: adr
+
+PAGE_TITLE: CQRS Architecture Decision
+
+FINDINGS:
+- type: Architecture Decision | importance: high | description: Adopted CQRS pattern | paths: docs/adr/002-cqrs.md
+
+KEY_DECISIONS:
+- Use separate query and command models
+
+WIKI_UPDATES:
+=== path: decisions/cqrs-pattern | action: create ===
+# CQRS Architecture Decision
+
+The project uses CQRS to separate read and write operations...
+=== END ===
+
+CONFIDENCE: 0.9
 `;
   }
 

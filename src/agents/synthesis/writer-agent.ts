@@ -413,6 +413,40 @@ CONTENT:
 [The full rewritten article in markdown]
 
 CONFIDENCE: [0-1 based on how complete the rewrite is]
+
+## Example
+
+TITLE:
+Repository Pattern Implementation
+
+CONTENT:
+# Repository Pattern Implementation
+
+The repository pattern provides an abstraction layer between business logic and data persistence in the codebase.
+
+## How It Works
+
+Each domain entity has a corresponding repository interface that defines standard CRUD operations:
+- \`create()\` - Insert new records
+- \`findById()\` - Retrieve by primary key
+- \`update()\` - Modify existing records
+- \`delete()\` - Remove records
+
+The concrete implementations handle database-specific operations while the business logic depends only on the interfaces.
+
+## Usage
+
+\`\`\`typescript
+const userRepo = new UserRepository(db);
+const user = await userRepo.findById(userId);
+\`\`\`
+
+## Related Pages
+
+- [Domain Model](architecture/domain-model.md)
+- [Database Configuration](guides/database-setup.md)
+
+CONFIDENCE: 0.85
 `;
   }
 
@@ -469,6 +503,22 @@ CONTENT:
 [The full rewritten article in markdown]
 
 CONFIDENCE: [0-1 based on how complete the rewrite is]
+
+## Example
+
+TITLE:
+Repository Pattern Implementation
+
+CONTENT:
+# Repository Pattern Implementation
+
+The repository pattern provides an abstraction layer between business logic and data persistence...
+
+## How It Works
+
+Each domain entity has a corresponding repository interface...
+
+CONFIDENCE: 0.85
 `;
   }
 
