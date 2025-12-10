@@ -404,6 +404,8 @@ Based on the directory structure and source files above, create comprehensive do
 
 ## Output Format
 
+You MUST use this EXACT format with colons after section names:
+
 SUMMARY:
 [2-3 paragraph overview of this code module]
 
@@ -415,7 +417,27 @@ WIKI_PAGES:
 [Markdown content with code examples from the files above]
 === END ===
 
-CONFIDENCE: [0.8-1.0 since you have full file contents]
+CONFIDENCE: 0.85
+
+## Example Output
+
+SUMMARY:
+The user-service module provides authentication and user management functionality. It implements JWT-based authentication with bcrypt password hashing.
+
+The service follows a clean separation of concerns with interfaces for testability.
+
+FINDINGS:
+- type: Architecture | importance: high | description: Repository pattern for data access | paths: user-repository.ts
+- type: Convention | importance: medium | description: All service methods are async | paths: user-service.ts
+
+WIKI_PAGES:
+=== path: services/user-service | title: User Service ===
+# User Service
+
+The user service handles authentication and user management...
+=== END ===
+
+CONFIDENCE: 0.9
 `;
   }
 
@@ -463,18 +485,20 @@ Avoid duplicating existing wiki pages listed above.
 
 ## Output Format (Only After Exploration)
 
+Use this EXACT format with colons:
+
 SUMMARY:
 [2-3 paragraph overview based on the files you read]
 
 FINDINGS:
-- type: Architecture | importance: high | description: [Text] | paths: file1.ts, file2.ts
+- type: Architecture | importance: high | description: [Text] | paths: file1.ts
 
 WIKI_PAGES:
-=== path: category/page-name | title: Descriptive Title ===
-[Markdown content with code examples from the files you read]
+=== path: category/page-name | title: Title ===
+[Content]
 === END ===
 
-CONFIDENCE: [0-1 value based on how many files you read]
+CONFIDENCE: 0.85
 
 Remember: Call list_directory and read_file BEFORE writing any output above.
 `;
