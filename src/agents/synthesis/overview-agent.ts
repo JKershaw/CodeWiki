@@ -66,7 +66,7 @@ export class OverviewAgent implements Agent {
     }
 
     // Generate overview for the first category that needs one
-    const [category, categoryPages] = categoriesNeedingOverview[0]!;
+    const [category, categoryPages, operationType] = categoriesNeedingOverview[0]!;
     const prompt = this.buildPrompt(category, categoryPages);
 
     // Use single LLM call - page summaries already contain synthesized info
@@ -78,14 +78,15 @@ export class OverviewAgent implements Agent {
     });
 
     const overview = this.parseResponse(completion.content);
-    const update = this.generateUpdate(category, overview, categoryPages);
+    const update = this.generateUpdate(category, overview, categoryPages, operationType);
 
+    const actionVerb = operationType === 'update' ? 'Updated' : 'Created';
     return {
       result: createAgentResult({
-        summary: `Created overview for ${category}/ (${categoryPages.length} pages)`,
+        summary: `${actionVerb} overview for ${category}/ (${categoryPages.length} pages)`,
         findings: [createFinding({
           type: 'SYNTHESIS',
-          description: `Generated overview page for ${category} category`,
+          description: `${actionVerb} overview page for ${category} category`,
           relatedPaths: [`${category}/overview`],
           importance: 'medium',
         })],
@@ -164,8 +165,8 @@ export class OverviewAgent implements Agent {
   private findCategoriesNeedingOverview(
     categories: Map<string, WikiPage[]>,
     _allPages: WikiPage[]
-  ): Array<[string, WikiPage[]]> {
-    const needsOverview: Array<[string, WikiPage[]]> = [];
+  ): Array<[string, WikiPage[], 'create' | 'update']> {
+    const needsOverview: Array<[string, WikiPage[], 'create' | 'update']> = [];
 
     // Skip commits category - those are too granular for an overview
     const skipCategories = ['commits'];
@@ -175,13 +176,28 @@ export class OverviewAgent implements Agent {
       if (pages.length < this.MIN_PAGES_FOR_OVERVIEW) continue;
 
       // Check if overview already exists
-      const hasOverview = pages.some(p =>
+      const existingOverview = pages.find(p =>
         p.path === `${category}/overview` ||
         p.path === `${category}/index`
       );
 
-      if (!hasOverview) {
-        needsOverview.push([category, pages]);
+      if (!existingOverview) {
+        // No overview exists - need to create one
+        needsOverview.push([category, pages, 'create']);
+      } else {
+        // Overview exists - check if it's stale (missing pages)
+        const listedPaths = this.extractListedPagePaths(existingOverview.content);
+        const contentPages = pages.filter(p =>
+          p.path !== `${category}/overview` && p.path !== `${category}/index`
+        );
+
+        // Check if any content pages are not listed in the overview
+        const unlistedPages = contentPages.filter(p => !listedPaths.has(p.path));
+
+        if (unlistedPages.length > 0) {
+          // Overview is stale - needs update
+          needsOverview.push([category, pages, 'update']);
+        }
       }
     }
 
@@ -189,6 +205,28 @@ export class OverviewAgent implements Agent {
     needsOverview.sort((a, b) => b[1].length - a[1].length);
 
     return needsOverview;
+  }
+
+  /**
+   * Extract page paths that are listed/linked in an overview's content.
+   * Looks for markdown links like [Title](path) and extracts the paths.
+   */
+  private extractListedPagePaths(content: string): Set<string> {
+    const paths = new Set<string>();
+
+    // Match markdown links: [Title](path)
+    const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let match;
+    while ((match = linkPattern.exec(content)) !== null) {
+      const path = match[2]!;
+      // Normalize path (remove leading ./ or /, remove .md extension)
+      const normalizedPath = path
+        .replace(/^\.?\//, '')
+        .replace(/\.md$/, '');
+      paths.add(normalizedPath);
+    }
+
+    return paths;
   }
 
   private buildPrompt(category: string, pages: WikiPage[]): string {
@@ -327,7 +365,8 @@ CONFIDENCE: 0.85
   private generateUpdate(
     category: string,
     overview: ParsedOverview,
-    pages: WikiPage[]
+    pages: WikiPage[],
+    operationType: 'create' | 'update' = 'create'
   ): WikiPageUpdate {
     const title = overview.title || `${capitalize(category)} Overview`;
 
@@ -338,10 +377,15 @@ CONFIDENCE: 0.85
 ${overview.keyConcepts.map(c => `- **${c.name}**: ${c.description}`).join('\n')}`
       : '';
 
+    // Filter out the overview page itself from the pages list
+    const contentPages = pages.filter(p =>
+      p.path !== `${category}/overview` && p.path !== `${category}/index`
+    );
+
     // Build pages section with links
     const pagesSection = `## Pages in this Category
 
-${pages.map(p => {
+${contentPages.map(p => {
   const desc = overview.pageDescriptions.find(pd =>
     pd.path === p.path || pd.path.includes(p.path.split('/').pop()!)
   );
@@ -367,13 +411,13 @@ ${readingSection}
 `.trim();
 
     return {
-      type: 'create',
+      type: operationType,
       path: `${category}/overview`,
       title,
       content,
       sourceCommitId: '',
       agentRunId: '',
-      confidenceDelta: 0.5,
+      confidenceDelta: operationType === 'update' ? 0.1 : 0.5,
     };
   }
 }

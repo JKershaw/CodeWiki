@@ -1,11 +1,105 @@
 # Observed Issues Holding the Wiki Back
 
-**Analysis Date:** 2025-12-09 (Updated with code-level root causes)
-**Iterations Analyzed:** 200 total (two runs of 100)
-**Model:** qwen/qwen-turbo
-**Repository:** CodeWiki (this repo)
+**Latest Analysis:** 2025-12-11 (meta-llama/llama-4-maverick)
+**Previous Analysis:** 2025-12-09 (qwen/qwen-turbo)
 
-This document combines empirical observations with code-level analysis to identify the root causes preventing effective wiki growth.
+This document combines findings from multiple testing sessions to identify systematic issues preventing effective wiki growth.
+
+---
+
+## Latest Test Results (llama-4-maverick)
+
+**Date:** 2025-12-11
+**Model:** meta-llama/llama-4-maverick
+**Iterations:** 200 (2 batches of 100)
+**Wiki Pages:** 51
+**Commits Processed:** 10/311 (3.2%)
+**Total Cost:** ~$0.32
+
+---
+
+## NEW Critical Issues (llama-4-maverick)
+
+### NEW: LLM Reasoning/Tool Calls Leaking into Wiki Content
+
+**Severity:** CRITICAL
+**Affected Components:** Synthesis agents, Pattern agent
+**Affected Pages:** 6+ pages confirmed
+
+**Problem:** LLM "thinking out loud" text and raw tool invocation JSON appear in wiki page content:
+- Internal reasoning ("I will read...", "Let's examine...")
+- Raw JSON tool calls: `{"name": "search_files", "parameters": {...}}`
+- Planning statements ("However, considering the context...")
+
+**Examples:**
+```
+guides/testing:
+"The test directory structure is now clear. I will read sample test files..."
+
+patterns/add:
+"{"name": "search_files", "parameters": {"pattern": "**/*.ts"}}"
+```
+
+**Root Cause:** Response parsing in synthesis agents does not strip LLM internal reasoning.
+
+**Fix Required:**
+1. Add post-processing to strip common LLM reasoning patterns
+2. Use structured output format with clear delimiters
+3. Add regex filters for tool invocation JSON
+
+---
+
+### NEW: Hallucinated/Fabricated Pattern Pages
+
+**Severity:** CRITICAL
+**Affected Components:** Pattern agent
+**Affected Pages:** patterns/add, patterns/avoid, patterns/sum, patterns/single-type-other-version-1
+
+**Problem:** Pattern agent creates pages describing "patterns" that don't exist:
+- patterns/add references non-existent "global._register()"
+- patterns/avoid describes a "PAGRAM mixture" (not in codebase)
+- High confidence (0.9) despite questionable accuracy
+
+**Fix Required:**
+1. Require verified file paths before creating pattern pages
+2. Add code existence verification
+3. Lower confidence for unverified patterns
+
+---
+
+### NEW: Response Parsing Failures Creating Malformed Content
+
+**Severity:** CRITICAL
+**Affected Components:** code-change agent, response-parser.ts
+
+**Problem:** llama model doesn't follow expected structured output formats:
+- Empty sections (SUMMARY, FINDINGS missing)
+- Regex patterns leaking into content
+- Default/fallback values used
+
+**Example (commits/9f3a6737):**
+```markdown
+# Setup Openrouter Audit
+
+\s*([\\s\\S]*?)(?=
+
+## Source
+```
+
+**Log Evidence:**
+```
+[code-change] Failed to parse PAGE_TITLE
+[code-change] Failed to parse SUMMARY
+[pattern] Parse stats: 1 ok, 7 failed
+```
+
+**Fix Required:** Implement flexible section parsing with multiple fallback patterns
+
+---
+
+## Previous Analysis (qwen/qwen-turbo)
+
+The following issues were identified in testing with qwen/qwen-turbo and remain relevant:
 
 ---
 
@@ -394,7 +488,8 @@ The issues above stem from several architectural patterns:
 
 ## Test Methodology
 
-1. Set up fresh .env with OpenRouter API key (qwen/qwen-turbo)
+### qwen/qwen-turbo (2025-12-09):
+1. Set up fresh .env with OpenRouter API key
 2. Ran `npm run cli process . 100` (first run)
 3. Analyzed wiki-pages.json for metrics
 4. Ran `npm run cli process . 100` (second run)
@@ -403,3 +498,65 @@ The issues above stem from several architectural patterns:
 7. Identified code-level root causes for persistent issues
 
 Analysis scripts: `analyze-links.cjs` in project root.
+
+### meta-llama/llama-4-maverick (2025-12-11):
+1. Fresh .env with meta-llama/llama-4-maverick model
+2. Ran `npx tsx src/cli.ts process . 100` (first batch)
+3. Reviewed wiki-pages.json and findings.json
+4. Documented findings in review-100-iterations.md
+5. Ran `npx tsx src/cli.ts process . 100` (second batch)
+6. Compared wiki growth and content quality
+7. Documented findings in review-200-iterations.md
+8. Consolidated all findings in this document
+
+---
+
+## Master Priority List (All Findings Combined)
+
+### P0 - Critical (Must Fix First)
+| # | Issue | Root Cause | Impact |
+|---|-------|------------|--------|
+| 1 | LLM reasoning leaking into content | Response parsing doesn't strip reasoning | Unreadable wiki pages |
+| 2 | Wrong link format (markdown vs wiki) | link-agent.ts:237-241 | Zero navigation |
+| 3 | Response parsing failures | Model output variations | Empty/malformed pages |
+| 4 | Orphaned pages (88% unconnected) | Link agent runs infrequently | No discoverability |
+| 5 | Overview agent never updates | overview-agent.ts:164-192 | Stale content persists |
+
+### P1 - High (Fix Soon)
+| # | Issue | Root Cause | Impact |
+|---|-------|------------|--------|
+| 6 | Hallucinated pattern pages | Pattern agent lacks verification | False information |
+| 7 | Commit processing stalled (3.2%) | Orchestrator priorities | Missing history |
+| 8 | Quality agent doesn't auto-fix | generateUpdates returns [] | No self-improvement |
+| 9 | Edit requests accumulate | Batch processing delays | Wasted generation |
+| 10 | Link agent skips existing pages | Skip-if-exists pattern | Pages stay isolated |
+
+### P2 - Medium (Fix Later)
+| # | Issue | Root Cause | Impact |
+|---|-------|------------|--------|
+| 11 | Topic fragmentation | No consolidation | Scattered information |
+| 12 | Missing navigation aids | Not implemented | Poor browsability |
+| 13 | Shallow content | No minimum requirements | Incomplete docs |
+| 14 | Path validation errors | Explorer behavior | Wasted iterations |
+| 15 | Inconsistent terminology | No standardization | Confusing readers |
+
+---
+
+## Cross-Model Observations
+
+Issues that appeared in **both** qwen/qwen-turbo and llama-4-maverick testing:
+- Orphaned pages / weak linking
+- Commit processing stalled at ~3%
+- Overview pages not updating
+- Quality agent not auto-fixing
+
+Issues **specific to llama-4-maverick**:
+- LLM reasoning/tool JSON in content
+- Higher rate of response parsing failures
+- Hallucinated pattern pages
+
+Issues **specific to qwen/qwen-turbo**:
+- Wrong link format (markdown vs wiki-style)
+- Template text appearing in content
+
+This suggests the core orchestrator and agent design issues are model-independent, while content quality issues vary by model.

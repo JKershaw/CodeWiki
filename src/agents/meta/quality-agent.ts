@@ -87,7 +87,9 @@ export class QualityAgent implements Agent {
     });
 
     const analysis = this.parseResponse(completion.content);
-    const updates = this.generateUpdates(pagesToReview, analysis);
+
+    // Generate improved content for pages with issues (makes additional LLM calls)
+    const { updates, additionalCost } = await this.generateUpdates(pagesToReview, analysis, context);
 
     return {
       result: createAgentResult({
@@ -109,7 +111,7 @@ export class QualityAgent implements Agent {
         confidence: analysis.confidence,
       }),
       updates,
-      costUsd: completion.costUsd,
+      costUsd: completion.costUsd + additionalCost,
     };
   }
 
@@ -317,13 +319,98 @@ CONFIDENCE: [0-1]
     };
   }
 
-  private generateUpdates(
-    _pages: WikiPage[],
-    _analysis: QualityAnalysis
-  ): WikiPageUpdate[] {
-    // Quality agent reports issues but doesn't auto-fix
-    // Future: could generate merge updates with improved content
-    return [];
+  private async generateUpdates(
+    pages: WikiPage[],
+    analysis: QualityAnalysis,
+    context: AgentContext
+  ): Promise<{ updates: WikiPageUpdate[], additionalCost: number }> {
+    const updates: WikiPageUpdate[] = [];
+    let additionalCost = 0;
+    const pageMap = new Map(pages.map(p => [p.path, p]));
+
+    // Group improvements by page
+    const improvementsByPage = new Map<string, string[]>();
+    for (const improvement of analysis.improvements) {
+      const existing = improvementsByPage.get(improvement.pagePath) || [];
+      existing.push(improvement.suggestion);
+      improvementsByPage.set(improvement.pagePath, existing);
+    }
+
+    // Generate actual improved content for each page via LLM
+    for (const [pagePath, suggestions] of improvementsByPage) {
+      const page = pageMap.get(pagePath);
+      if (!page) continue;
+
+      // Build prompt for content improvement
+      const improvementPrompt = this.buildImprovementPrompt(page, suggestions);
+
+      const completion = await context.llm.complete({
+        system: IMPROVEMENT_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: improvementPrompt }],
+        maxTokens: 2000,
+        temperature: 0.3,
+      });
+
+      additionalCost += completion.costUsd;
+
+      // Parse the improved content from response
+      const improvedContent = this.parseImprovedContent(completion.content);
+
+      if (improvedContent) {
+        updates.push({
+          type: 'merge',
+          path: pagePath,
+          content: improvedContent,
+          sourceCommitId: page.sourceCommits[0] ?? '',
+          agentRunId: '',
+          confidenceDelta: 0.1,  // Confidence boost for actual content improvement
+        });
+      }
+    }
+
+    return { updates, additionalCost };
+  }
+
+  private buildImprovementPrompt(page: WikiPage, suggestions: string[]): string {
+    return `Improve this wiki page based on the suggested improvements.
+
+## Current Page: ${page.path}
+
+**Title:** ${page.title}
+
+**Current Content:**
+${page.content}
+
+## Suggested Improvements
+
+${suggestions.map(s => `- ${s}`).join('\n')}
+
+## Your Task
+
+Write improved content that addresses the suggestions. Focus on:
+1. Adding depth - explain HOW things work, not just WHAT they are
+2. Including specific details like method names, configuration options, or code examples
+3. Explaining mechanisms, not just listing features
+
+## Required Output Format
+
+IMPROVED_CONTENT:
+[Your improved markdown content here - this will be appended to the page]
+
+CONFIDENCE: [0-1]`;
+  }
+
+  private parseImprovedContent(response: string): string | null {
+    // Try to extract IMPROVED_CONTENT section
+    const contentMatch = response.match(/IMPROVED_CONTENT:\s*([\s\S]*?)(?=\nCONFIDENCE:|$)/i);
+    if (contentMatch && contentMatch[1]) {
+      const content = contentMatch[1].trim();
+      // Validate content is not empty or just whitespace
+      if (content.length > 20) {
+        return '\n\n' + content;
+      }
+    }
+    return null;
   }
 }
 
@@ -375,3 +462,15 @@ When reviewing:
 - Flag pages that describe but don't explain
 
 Focus on content quality, not structure (that's another agent's job).`;
+
+const IMPROVEMENT_SYSTEM_PROMPT = `You are a Content Improvement Agent for CodeWiki. Your job is to expand and improve wiki page content.
+
+When improving content:
+1. **Add depth** - Explain HOW things work, not just WHAT they are
+2. **Be specific** - Include method names, configuration options, code examples
+3. **Explain mechanisms** - Describe the underlying implementation details
+4. **Keep it practical** - Focus on information developers actually need
+
+Write in a clear, technical style. Use markdown formatting appropriately.
+
+Output ONLY the improved content section - it will be appended to the existing page.`;

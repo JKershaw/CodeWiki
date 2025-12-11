@@ -203,7 +203,7 @@ CONFIDENCE: 0.85`);
         assert.strictEqual(result.costUsd, 0, 'Should not make LLM call');
       });
 
-      it('skips categories that already have overview', async () => {
+      it('skips categories that already have complete overview', async () => {
         const repoId = 'overview-exists';
 
         await createTestRepo(ctx, repoId, {
@@ -212,9 +212,22 @@ CONFIDENCE: 0.85`);
 
         const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-        // Create category with overview already present
+        // Create category with overview that already lists ALL pages
         await createWikiPages(wiki.id, [
-          { path: 'guides/overview', title: 'Guides Overview', content: '# Guides Overview\n\nExisting overview.' },
+          {
+            path: 'guides/overview',
+            title: 'Guides Overview',
+            content: `# Guides Overview
+
+Existing overview content.
+
+## Pages in this Category
+
+- [Setup](guides/setup)
+- [Deploy](guides/deploy)
+- [Testing](guides/testing)
+`,
+          },
           { path: 'guides/setup', title: 'Setup', content: '# Setup' },
           { path: 'guides/deploy', title: 'Deploy', content: '# Deploy' },
           { path: 'guides/testing', title: 'Testing', content: '# Testing' },
@@ -225,15 +238,18 @@ CONFIDENCE: 0.85`);
 
         const result = await agent.run(createWikiTarget(), agentCtx);
 
-        // Should indicate all categories have overviews
+        // Should indicate all categories have overviews (or are too small)
         assert.ok(
           result.result.summary.toLowerCase().includes('all') ||
           result.result.summary.toLowerCase().includes('have overview'),
           'Should indicate category already has overview'
         );
 
-        // Should not create pages
-        assert.strictEqual(result.updates.length, 0, 'Should not create duplicate overview');
+        // Should not create pages - overview is complete
+        assert.strictEqual(result.updates.length, 0, 'Should not update complete overview');
+
+        // Should not incur LLM cost
+        assert.strictEqual(result.costUsd, 0, 'Should not make LLM call');
       });
 
       it('prioritizes larger categories', async () => {
@@ -300,6 +316,180 @@ CONFIDENCE: 0.85`);
           /cannot handle target type/i,
           'Should throw error for commit target'
         );
+      });
+
+      it('updates existing overview when new pages are added to category', async () => {
+        const repoId = 'overview-update-new-pages';
+
+        await createTestRepo(ctx, repoId, {
+          'README.md': '# Test Project',
+        });
+
+        const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+        // Create category with existing overview that only lists 2 pages
+        await createWikiPages(wiki.id, [
+          {
+            path: 'guides/overview',
+            title: 'Guides Overview',
+            content: `# Guides Overview
+
+This section contains guides.
+
+## Pages in this Category
+
+- [Setup Guide](guides/setup)
+- [Deploy Guide](guides/deploy)
+`,
+          },
+          { path: 'guides/setup', title: 'Setup Guide', content: '# Setup\n\nHow to set up.' },
+          { path: 'guides/deploy', title: 'Deploy Guide', content: '# Deploy\n\nHow to deploy.' },
+          // NEW pages added after overview was created
+          { path: 'guides/testing', title: 'Testing Guide', content: '# Testing\n\nHow to test.' },
+          { path: 'guides/monitoring', title: 'Monitoring Guide', content: '# Monitoring\n\nHow to monitor.' },
+        ]);
+
+        // Mock LLM response for updated overview
+        ctx.llm.setDefaultResponse(`TITLE:
+Guides Overview
+
+INTRODUCTION:
+This section contains practical guides covering setup, deployment, testing, and monitoring.
+
+KEY_CONCEPTS:
+- Setup: Initial configuration
+- Testing: Quality assurance
+- Deployment: Production release
+- Monitoring: System health
+
+PAGES:
+- guides/setup: Initial project setup
+- guides/deploy: Deployment process
+- guides/testing: Testing strategies
+- guides/monitoring: Monitoring setup
+
+READING_ORDER:
+1. Setup Guide
+2. Testing Guide
+3. Deploy Guide
+4. Monitoring Guide
+
+CONFIDENCE: 0.85`);
+
+        const agent = new OverviewAgent();
+        const agentCtx = await ctx.agentContext(repoId);
+
+        const result = await agent.run(createWikiTarget(), agentCtx);
+
+        // Should create an update for the existing overview
+        assert.strictEqual(result.updates.length, 1, 'Should create one update');
+
+        const update = result.updates[0]!;
+        assert.strictEqual(update.type, 'update', 'Should be an update, not create');
+        assert.strictEqual(update.path, 'guides/overview', 'Should update the existing overview');
+
+        // Updated content should include the new pages
+        assert.ok(update.content.includes('testing') || update.content.includes('Testing'), 'Updated overview should mention testing');
+        assert.ok(update.content.includes('monitoring') || update.content.includes('Monitoring'), 'Updated overview should mention monitoring');
+
+        // Should incur LLM cost
+        assert.ok(result.costUsd > 0, 'Should incur LLM cost');
+      });
+
+      it('detects stale overview based on unlisted pages', async () => {
+        const repoId = 'overview-stale-detection';
+
+        await createTestRepo(ctx, repoId, {
+          'README.md': '# Test',
+        });
+
+        const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+        // Create overview that lists only 2 pages but category has 4
+        await createWikiPages(wiki.id, [
+          {
+            path: 'api/overview',
+            title: 'API Overview',
+            content: `# API Overview
+
+## Pages in this Category
+
+- [Users API](api/users)
+- [Posts API](api/posts)
+`,
+          },
+          { path: 'api/users', title: 'Users API', content: '# Users' },
+          { path: 'api/posts', title: 'Posts API', content: '# Posts' },
+          { path: 'api/auth', title: 'Auth API', content: '# Auth' },  // Not listed
+          { path: 'api/config', title: 'Config API', content: '# Config' },  // Not listed
+        ]);
+
+        ctx.llm.setDefaultResponse(`TITLE:
+API Overview
+
+INTRODUCTION:
+Complete API documentation.
+
+KEY_CONCEPTS:
+- REST: RESTful endpoints
+
+PAGES:
+- api/users: User management
+- api/posts: Content management
+- api/auth: Authentication
+- api/config: Configuration
+
+READING_ORDER:
+Start with auth.
+
+CONFIDENCE: 0.85`);
+
+        const agent = new OverviewAgent();
+        const agentCtx = await ctx.agentContext(repoId);
+
+        const result = await agent.run(createWikiTarget(), agentCtx);
+
+        // Should detect that overview is stale and update it
+        assert.strictEqual(result.updates.length, 1, 'Should generate update for stale overview');
+        assert.strictEqual(result.updates[0]!.type, 'update', 'Should be update type');
+      });
+
+      it('does not update overview when all pages are already listed', async () => {
+        const repoId = 'overview-already-complete';
+
+        await createTestRepo(ctx, repoId, {
+          'README.md': '# Test',
+        });
+
+        const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+        // Create overview that already lists all pages
+        await createWikiPages(wiki.id, [
+          {
+            path: 'docs/overview',
+            title: 'Docs Overview',
+            content: `# Docs Overview
+
+## Pages in this Category
+
+- [Setup](docs/setup)
+- [Usage](docs/usage)
+- [FAQ](docs/faq)
+`,
+          },
+          { path: 'docs/setup', title: 'Setup', content: '# Setup' },
+          { path: 'docs/usage', title: 'Usage', content: '# Usage' },
+          { path: 'docs/faq', title: 'FAQ', content: '# FAQ' },
+        ]);
+
+        const agent = new OverviewAgent();
+        const agentCtx = await ctx.agentContext(repoId);
+
+        const result = await agent.run(createWikiTarget(), agentCtx);
+
+        // Should not update - all pages already listed
+        assert.strictEqual(result.updates.length, 0, 'Should not update complete overview');
+        assert.strictEqual(result.costUsd, 0, 'Should not incur LLM cost');
       });
     });
 

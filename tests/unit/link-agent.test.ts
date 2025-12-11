@@ -508,6 +508,215 @@ Content.
     });
   });
 
+  describe('batch size and coverage', () => {
+    it('should process up to 20 pages per run (not just 10)', async () => {
+      const repoId = 'link-agent-batch-test-1';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create 15 pages without links - all should be analyzed
+      const pages = [];
+      for (let i = 0; i < 15; i++) {
+        pages.push({
+          path: `page-${i}`,
+          title: `Page ${i}`,
+          content: `# Page ${i}\n\nContent for page ${i}.`,
+        });
+      }
+      await createWikiPages(wiki.id, pages);
+
+      // Mock LLM to suggest links for all pages
+      const suggestions = pages.slice(0, 14).map((p, i) => ({
+        source: p.path,
+        target: `page-${i + 1}`,
+        strength: 'medium',
+        reason: 'Sequential relationship',
+      }));
+      ctx.llm.setDefaultResponse(linkSuggestionResponse(suggestions));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should analyze more than 10 pages
+      // The summary should mention analyzing 15 pages (or at least > 10)
+      assert.ok(
+        result.result.summary.includes('15 pages') ||
+        result.result.summary.includes('14 pages') ||
+        result.result.summary.includes('13 pages') ||
+        result.result.summary.includes('12 pages') ||
+        result.result.summary.includes('11 pages'),
+        `Should analyze more than 10 pages. Got: ${result.result.summary}`
+      );
+
+      // Should have generated updates for multiple pages
+      assert.ok(result.updates.length >= 10, `Should have updates for many pages. Got: ${result.updates.length}`);
+    });
+
+    it('should re-analyze pages when many new pages are created', async () => {
+      const repoId = 'link-agent-reanalyze-many';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create an old page with links
+      const oldDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 1 week ago
+      await ctx.repos.wikiPages.save({
+        id: 'page-original',
+        wikiId: wiki.id,
+        path: 'original',
+        title: 'Original Page',
+        content: '# Original\n\nThe first page.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['some-old-link'],
+        backlinks: [],
+        createdAt: oldDate,
+        updatedAt: oldDate,
+      });
+
+      // Create 5 new pages
+      const newDate = new Date();
+      for (let i = 0; i < 5; i++) {
+        await ctx.repos.wikiPages.save({
+          id: `page-new-${i}`,
+          wikiId: wiki.id,
+          path: `new-${i}`,
+          title: `New Page ${i}`,
+          content: `# New Page ${i}\n\nNew content.`,
+          confidence: 0.8,
+          sourceCommits: ['commit-2'],
+          sourceAgentRunIds: [],
+          links: [],
+          backlinks: [],
+          createdAt: newDate,
+          updatedAt: newDate,
+        });
+      }
+
+      // Mock LLM to suggest links from original to new pages
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'original', target: 'new-0', strength: 'strong', reason: 'Related to new content' },
+        { source: 'original', target: 'new-1', strength: 'medium', reason: 'Also related' },
+        { source: 'new-0', target: 'original', strength: 'medium', reason: 'References original' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // The original page should be re-analyzed and get new links
+      const originalUpdate = result.updates.find(u => u.path === 'original');
+      assert.ok(originalUpdate, 'Original page should be re-analyzed when new pages exist');
+      assert.ok(originalUpdate.links?.includes('new-0'), 'Should link to new page');
+    });
+  });
+
+  describe('bidirectional linking', () => {
+    it('should create backlinks for target pages when suggesting forward links', async () => {
+      const repoId = 'link-agent-bidirectional-1';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create pages without links
+      await createWikiPages(wiki.id, [
+        { path: 'source-page', title: 'Source Page', content: '# Source\n\nSome source content.' },
+        { path: 'target-page', title: 'Target Page', content: '# Target\n\nSome target content.' },
+      ]);
+
+      // Mock LLM to suggest a link from source -> target
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'source-page', target: 'target-page', strength: 'strong', reason: 'Source relates to target' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should have update for source page (forward link)
+      const sourceUpdate = result.updates.find(u => u.path === 'source-page');
+      assert.ok(sourceUpdate, 'Should have update for source page');
+      assert.ok(sourceUpdate.links?.includes('target-page'), 'Source should link to target');
+
+      // Should ALSO have update for target page (backlink)
+      const targetUpdate = result.updates.find(u => u.path === 'target-page');
+      assert.ok(targetUpdate, 'Should create backlink update for target page');
+      assert.ok(targetUpdate.links?.includes('source-page'), 'Target should backlink to source');
+    });
+
+    it('should not create duplicate backlinks for existing links', async () => {
+      const repoId = 'link-agent-bidirectional-2';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      const oldDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      // Target page already has a backlink to source
+      await ctx.repos.wikiPages.save({
+        id: 'page-target-existing',
+        wikiId: wiki.id,
+        path: 'target-existing',
+        title: 'Target With Existing Backlink',
+        content: `# Target With Existing Backlink
+
+Content.
+
+## Related Pages
+
+- [Source Page](source-new) - Already linked`,
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['source-new'],
+        backlinks: [],
+        createdAt: oldDate,
+        updatedAt: oldDate,
+      });
+
+      // Source page without links
+      await createWikiPages(wiki.id, [
+        { path: 'source-new', title: 'Source Page', content: '# Source\n\nSource content.' },
+      ]);
+
+      // Mock LLM to suggest source -> target link
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'source-new', target: 'target-existing', strength: 'strong', reason: 'Relates to target' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Source should get update
+      const sourceUpdate = result.updates.find(u => u.path === 'source-new');
+      assert.ok(sourceUpdate, 'Should have update for source page');
+
+      // Target should NOT get update since it already has the backlink
+      const targetUpdate = result.updates.find(u => u.path === 'target-existing');
+      assert.ok(!targetUpdate, 'Should not create duplicate backlink when link already exists');
+    });
+  });
+
   describe('agent type', () => {
     it('has correct agent type', () => {
       const agent = new LinkAgent();

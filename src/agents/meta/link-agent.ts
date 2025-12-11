@@ -91,7 +91,10 @@ export class LinkAgent implements Agent {
       excerpt: p.content.slice(0, 500),
     }));
 
-    const prompt = this.buildPrompt(pagesToAnalyze, pageSummaries);
+    // Limit pages to analyze to avoid overly long prompts (increased from 10 to 20)
+    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 20);
+
+    const prompt = this.buildPrompt(limitedPagesToAnalyze, pageSummaries);
 
     const completion = await context.llm.complete({
       system: SYSTEM_PROMPT,
@@ -101,11 +104,12 @@ export class LinkAgent implements Agent {
     });
 
     const analysis = this.parseResponse(completion.content);
-    const updates = this.generateUpdates(pagesToAnalyze, analysis, pages);
+    // Only generate updates for pages that were actually analyzed
+    const updates = this.generateUpdates(limitedPagesToAnalyze, analysis, pages);
 
     return {
       result: createAgentResult({
-        summary: `Found ${analysis.linkSuggestions.length} link relationships across ${pagesToAnalyze.length} pages`,
+        summary: `Found ${analysis.linkSuggestions.length} link relationships across ${limitedPagesToAnalyze.length} pages`,
         findings: analysis.linkSuggestions.slice(0, 10).map(link => createFinding({
           type: 'LINK',
           description: `${link.sourcePath} → ${link.targetPath}: ${link.reason}`,
@@ -123,14 +127,13 @@ export class LinkAgent implements Agent {
     pagesToAnalyze: WikiPage[],
     allPages: Array<{ path: string; title: string; category: string; excerpt: string }>
   ): string {
-    // Limit pages to avoid overly long prompts
-    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 10);
+    // Note: pagesToAnalyze is already limited by caller (to 20 pages max)
 
     return `You are analyzing wiki pages to create cross-references between related content.
 
 ## Pages to Analyze
 
-${limitedPagesToAnalyze.map(p => `### ${p.path}
+${pagesToAnalyze.map(p => `### ${p.path}
 **Title:** ${p.title}
 **Category:** ${p.path.split('/')[0] ?? 'uncategorized'}
 **Content Preview:**
@@ -243,6 +246,9 @@ Now analyze the pages above and provide your link suggestions:
       });
     }
 
+    // Track backlinks to create (target -> sources)
+    const backlinksToCreate = new Map<string, Array<{ source: string; reason: string }>>();
+
     // Create updates for pages with new links
     for (const page of pagesToAnalyze) {
       const suggestedLinks = linksBySource.get(page.path);
@@ -285,6 +291,64 @@ Now analyze the pages above and provide your link suggestions:
         confidenceDelta: 0.05,
         links: linkPaths,
       });
+
+      // Track backlinks: for each new link, create a backlink from target to source
+      for (const link of newLinks) {
+        const targetBacklinks = backlinksToCreate.get(link.target) || [];
+        targetBacklinks.push({ source: page.path, reason: `Linked from ${page.title}` });
+        backlinksToCreate.set(link.target, targetBacklinks);
+      }
+    }
+
+    // Create backlink updates for target pages
+    for (const [targetPath, backlinks] of backlinksToCreate) {
+      const targetPage = pageMap.get(targetPath);
+      if (!targetPage) continue;
+
+      // Check if target page already has these backlinks
+      const existingTargetLinks = this.extractExistingLinkTargets(targetPage.content);
+
+      // Filter to only new backlinks
+      const newBacklinks = backlinks.filter(bl => !existingTargetLinks.has(bl.source));
+      if (newBacklinks.length === 0) continue;
+
+      // Check if we already created an update for this target (as a source page)
+      const existingUpdate = updates.find(u => u.path === targetPath);
+      if (existingUpdate) {
+        // Append backlinks to existing update
+        const backlinkContent = newBacklinks.map(bl => {
+          const sourcePage = pageMap.get(bl.source);
+          const sourceTitle = sourcePage?.title ?? bl.source;
+          return `- [${sourceTitle}](${bl.source}) - ${bl.reason}`;
+        }).join('\n');
+
+        existingUpdate.content += `\n${backlinkContent}`;
+        existingUpdate.links = [...(existingUpdate.links || []), ...newBacklinks.map(bl => bl.source)];
+      } else {
+        // Create new update for target page with backlinks
+        const backlinkContent = newBacklinks.map(bl => {
+          const sourcePage = pageMap.get(bl.source);
+          const sourceTitle = sourcePage?.title ?? bl.source;
+          return `- [${sourceTitle}](${bl.source}) - ${bl.reason}`;
+        }).join('\n');
+
+        let contentUpdate: string;
+        if (targetPage.content.includes('## Related Pages')) {
+          contentUpdate = `\n${backlinkContent}`;
+        } else {
+          contentUpdate = `\n\n## Related Pages\n\n${backlinkContent}`;
+        }
+
+        updates.push({
+          type: 'merge',
+          path: targetPath,
+          content: contentUpdate,
+          sourceCommitId: targetPage.sourceCommits[0] ?? '',
+          agentRunId: '',
+          confidenceDelta: 0.05,
+          links: newBacklinks.map(bl => bl.source),
+        });
+      }
     }
 
     return updates;
