@@ -17,12 +17,87 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+interface ComplexityMetrics {
+  sections: number;        // ## headers
+  listItems: number;       // bullet points and numbered lists
+  codeBlocks: number;      // ``` fenced blocks
+  conditionals: number;    // if, when, unless, otherwise
+  negations: number;       // don't, never, not, avoid, do NOT
+  emphasisMarkers: number; // MUST, REQUIRED, CRITICAL, IMPORTANT, NEVER
+  imperativeVerbs: number; // use, create, write, ensure, call, return, etc.
+  avgSentenceLength: number;
+  complexityScore: number; // weighted composite score
+}
+
 interface PromptInfo {
   file: string;
   varName: string;
   charCount: number;
   estimatedTokens: number;
   lineNumber: number;
+  promptContent: string;   // actual prompt text for complexity analysis
+  complexity: ComplexityMetrics;
+}
+
+/**
+ * Analyze complexity metrics for a prompt.
+ */
+function analyzeComplexity(content: string): ComplexityMetrics {
+  // Count markdown sections (## headers)
+  const sections = (content.match(/^#{1,4}\s+/gm) || []).length;
+
+  // Count list items (bullet points and numbered lists)
+  const listItems = (content.match(/^[\s]*[-*+]\s+|^[\s]*\d+\.\s+/gm) || []).length;
+
+  // Count code blocks
+  const codeBlocks = (content.match(/```/g) || []).length / 2; // pairs of ```
+
+  // Count conditionals (case-insensitive word boundaries)
+  const conditionalPatterns = /\b(if|when|unless|otherwise|whether|in case|provided that)\b/gi;
+  const conditionals = (content.match(conditionalPatterns) || []).length;
+
+  // Count negations
+  const negationPatterns = /\b(don't|dont|do not|never|not|avoid|cannot|can't|shouldn't|should not|won't|will not|isn't|aren't)\b/gi;
+  const negations = (content.match(negationPatterns) || []).length;
+
+  // Count emphasis markers (uppercase)
+  const emphasisPatterns = /\b(MUST|REQUIRED|CRITICAL|IMPORTANT|NEVER|ALWAYS|DO NOT|MANDATORY|WARNING|NOTE|CAUTION)\b/g;
+  const emphasisMarkers = (content.match(emphasisPatterns) || []).length;
+
+  // Count imperative verbs (common instruction verbs at start of sentences/bullets)
+  const imperativePatterns = /\b(use|create|write|ensure|call|return|check|verify|include|exclude|add|remove|set|get|make|keep|avoid|follow|implement|handle|process|parse|extract|generate|output|respond|analyze|document|describe|explain|provide|specify|define|consider|note|remember|always|never)\b/gi;
+  const imperativeVerbs = (content.match(imperativePatterns) || []).length;
+
+  // Calculate average sentence length
+  // Split on sentence endings, filter out empty strings
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const totalWords = sentences.reduce((sum, s) => sum + s.trim().split(/\s+/).length, 0);
+  const avgSentenceLength = sentences.length > 0 ? Math.round(totalWords / sentences.length) : 0;
+
+  // Calculate weighted complexity score
+  // Higher weights for factors that tend to confuse simpler models
+  const complexityScore = Math.round(
+    (sections * 2) +
+    (listItems * 1) +
+    (codeBlocks * 3) +
+    (conditionals * 4) +      // Conditionals add branching complexity
+    (negations * 5) +         // Negations are hard to follow
+    (emphasisMarkers * 3) +   // Emphasis suggests critical rules
+    (imperativeVerbs * 0.5) + // Many instructions
+    (avgSentenceLength * 0.5) // Longer sentences = harder to parse
+  );
+
+  return {
+    sections,
+    listItems,
+    codeBlocks: Math.floor(codeBlocks),
+    conditionals,
+    negations,
+    emphasisMarkers,
+    imperativeVerbs,
+    avgSentenceLength,
+    complexityScore,
+  };
 }
 
 /**
@@ -121,6 +196,8 @@ function findPromptsInFile(filePath: string): PromptInfo[] {
             charCount: extracted.value.length,
             estimatedTokens: Math.ceil(extracted.value.length / 4),
             lineNumber,
+            promptContent: extracted.value,
+            complexity: analyzeComplexity(extracted.value),
           });
         }
       }
@@ -197,7 +274,7 @@ function runAudit(): void {
   const maxChars = allPrompts[0]?.charCount ?? 0;
   const maxTokens = allPrompts[0]?.estimatedTokens ?? 0;
 
-  console.log('SUMMARY:');
+  console.log('SIZE SUMMARY:');
   console.log('-'.repeat(40));
   console.log(`Total prompts found:     ${allPrompts.length}`);
   console.log(`Total characters:        ${totalChars.toLocaleString()}`);
@@ -208,12 +285,99 @@ function runAudit(): void {
   console.log(`Largest prompt (tokens): ${maxTokens.toLocaleString()}`);
   console.log();
 
+  // Complexity analysis
+  console.log('='.repeat(100));
+  console.log('COMPLEXITY ANALYSIS');
+  console.log('='.repeat(100));
+  console.log();
+
+  // Sort by complexity score descending
+  const byComplexity = [...allPrompts].sort((a, b) => b.complexity.complexityScore - a.complexity.complexityScore);
+
+  console.log('PROMPTS BY COMPLEXITY SCORE (highest first):');
+  console.log('-'.repeat(100));
+  console.log(
+    'Variable Name'.padEnd(30) +
+    'Score'.padStart(7) +
+    'Sects'.padStart(7) +
+    'Lists'.padStart(7) +
+    'Code'.padStart(6) +
+    'Cond'.padStart(6) +
+    'Neg'.padStart(5) +
+    'Emph'.padStart(6) +
+    'Verbs'.padStart(7) +
+    'AvgSnt'.padStart(8) +
+    '  Location'
+  );
+  console.log('-'.repeat(100));
+
+  for (const prompt of byComplexity) {
+    const c = prompt.complexity;
+    const location = `${relativePath(prompt.file)}:${prompt.lineNumber}`;
+    console.log(
+      prompt.varName.substring(0, 29).padEnd(30) +
+      c.complexityScore.toString().padStart(7) +
+      c.sections.toString().padStart(7) +
+      c.listItems.toString().padStart(7) +
+      c.codeBlocks.toString().padStart(6) +
+      c.conditionals.toString().padStart(6) +
+      c.negations.toString().padStart(5) +
+      c.emphasisMarkers.toString().padStart(6) +
+      c.imperativeVerbs.toString().padStart(7) +
+      c.avgSentenceLength.toString().padStart(8) +
+      `  ${location}`
+    );
+  }
+
+  console.log('-'.repeat(100));
+  console.log();
+
+  // Complexity summary
+  const avgComplexity = Math.round(allPrompts.reduce((sum, p) => sum + p.complexity.complexityScore, 0) / allPrompts.length);
+  const maxComplexity = byComplexity[0]?.complexity.complexityScore ?? 0;
+  const totalNegations = allPrompts.reduce((sum, p) => sum + p.complexity.negations, 0);
+  const totalConditionals = allPrompts.reduce((sum, p) => sum + p.complexity.conditionals, 0);
+  const totalEmphasis = allPrompts.reduce((sum, p) => sum + p.complexity.emphasisMarkers, 0);
+
+  console.log('COMPLEXITY SUMMARY:');
+  console.log('-'.repeat(40));
+  console.log(`Average complexity score:  ${avgComplexity}`);
+  console.log(`Highest complexity score:  ${maxComplexity}`);
+  console.log(`Total negations:           ${totalNegations}`);
+  console.log(`Total conditionals:        ${totalConditionals}`);
+  console.log(`Total emphasis markers:    ${totalEmphasis}`);
+  console.log();
+
+  // High complexity warnings
+  const COMPLEXITY_THRESHOLD = 100;
+  const complexPrompts = byComplexity.filter(p => p.complexity.complexityScore > COMPLEXITY_THRESHOLD);
+
+  if (complexPrompts.length > 0) {
+    console.log(`HIGH COMPLEXITY WARNINGS (score > ${COMPLEXITY_THRESHOLD}):`);
+    console.log('-'.repeat(60));
+    for (const prompt of complexPrompts) {
+      const c = prompt.complexity;
+      const factors: string[] = [];
+      if (c.negations >= 5) factors.push(`${c.negations} negations`);
+      if (c.conditionals >= 5) factors.push(`${c.conditionals} conditionals`);
+      if (c.emphasisMarkers >= 5) factors.push(`${c.emphasisMarkers} emphasis`);
+      if (c.sections >= 8) factors.push(`${c.sections} sections`);
+      if (c.listItems >= 15) factors.push(`${c.listItems} list items`);
+
+      console.log(`  ⚠️  ${prompt.varName}: score ${c.complexityScore}`);
+      if (factors.length > 0) {
+        console.log(`      Contributing factors: ${factors.join(', ')}`);
+      }
+    }
+    console.log();
+  }
+
   // Warnings for large prompts
   const WARNING_THRESHOLD = 2000; // chars
   const largePrompts = allPrompts.filter(p => p.charCount > WARNING_THRESHOLD);
 
   if (largePrompts.length > 0) {
-    console.log(`WARNINGS (prompts > ${WARNING_THRESHOLD} chars):`);
+    console.log(`SIZE WARNINGS (prompts > ${WARNING_THRESHOLD} chars):`);
     console.log('-'.repeat(40));
     for (const prompt of largePrompts) {
       console.log(`  ⚠️  ${prompt.varName}: ${prompt.charCount} chars (~${prompt.estimatedTokens} tokens)`);
@@ -222,7 +386,7 @@ function runAudit(): void {
   }
 
   console.log('='.repeat(80));
-  console.log('Audit complete.');
+  console.log('Static audit complete.');
 }
 
 /**
