@@ -12,6 +12,7 @@ let currentUser = null;
 const views = {
   repos: document.getElementById('repos-view'),
   wiki: document.getElementById('wiki-view'),
+  graph: document.getElementById('graph-view'),
   query: document.getElementById('query-view'),
   spec: document.getElementById('spec-view'),
   benchmark: document.getElementById('benchmark-view'),
@@ -55,6 +56,7 @@ function initNavigation() {
  */
 function enableRepoNavButtons() {
   document.querySelector('[data-view="wiki"]').disabled = false;
+  document.querySelector('[data-view="graph"]').disabled = false;
   document.querySelector('[data-view="query"]').disabled = false;
   document.querySelector('[data-view="spec"]').disabled = false;
   document.querySelector('[data-view="benchmark"]').disabled = false;
