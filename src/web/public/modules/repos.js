@@ -54,6 +54,7 @@ async function loadRepos() {
           <input type="number" class="iteration-input" data-id="${repo.id}" value="5" min="1" max="50" title="Number of iterations">
           <button class="btn primary process-btn" data-id="${repo.id}">Process</button>
           <button class="btn wiki-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Browse Wiki</button>
+          <button class="btn graph-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Graph</button>
           <button class="btn query-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Ask</button>
           <button class="btn spec-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Spec</button>
           <button class="btn benchmark-btn" data-id="${repo.id}" ${repo.wikiPages > 0 ? '' : 'disabled'}>Benchmark</button>
@@ -68,6 +69,9 @@ async function loadRepos() {
     });
     container.querySelectorAll('.wiki-btn').forEach(btn => {
       btn.addEventListener('click', () => openWiki(btn.dataset.id));
+    });
+    container.querySelectorAll('.graph-btn').forEach(btn => {
+      btn.addEventListener('click', () => openGraph(btn.dataset.id));
     });
     container.querySelectorAll('.query-btn').forEach(btn => {
       btn.addEventListener('click', () => openQuery(btn.dataset.id));
@@ -441,6 +445,7 @@ async function deleteRepository(repoId, repoName) {
       currentPage = null;
       // Disable repo-specific nav buttons
       document.querySelector('[data-view="wiki"]').disabled = true;
+      document.querySelector('[data-view="graph"]').disabled = true;
       document.querySelector('[data-view="query"]').disabled = true;
       document.querySelector('[data-view="spec"]').disabled = true;
       document.querySelector('[data-view="benchmark"]').disabled = true;
@@ -452,5 +457,48 @@ async function deleteRepository(repoId, repoName) {
     await loadRepos();
   } catch (error) {
     showToast(`Failed to delete repository: ${error.message}`, 'error');
+  }
+}
+
+/**
+ * Open the graph view for a repository.
+ */
+async function openGraph(repoId) {
+  currentRepo = await api(`/repos/${repoId}`);
+  document.getElementById('graph-repo-name').textContent = currentRepo.fullName;
+
+  // Enable nav buttons
+  document.querySelector('[data-view="wiki"]').disabled = false;
+  document.querySelector('[data-view="graph"]').disabled = false;
+  document.querySelector('[data-view="query"]').disabled = false;
+  document.querySelector('[data-view="spec"]').disabled = false;
+
+  showView('graph');
+
+  // Get the active wiki for this repo
+  const wikis = await api(`/repos/${repoId}/wikis`);
+  const activeWiki = wikis.find(w => w.isActive) || wikis[0];
+
+  if (activeWiki) {
+    currentWiki = activeWiki;
+
+    // Populate category filter
+    try {
+      const graph = await api(`/repos/${repoId}/wiki-graph?wikiId=${activeWiki.id}`);
+      const categoryFilter = document.getElementById('graph-category-filter');
+      if (categoryFilter && graph.stats.categories.length > 0) {
+        categoryFilter.innerHTML = `
+          <option value="all">All Categories</option>
+          ${graph.stats.categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('')}
+        `;
+      }
+    } catch (e) {
+      // Ignore category filter error
+    }
+
+    // Initialize the graph
+    await initGraph(repoId, activeWiki.id);
+  } else {
+    document.getElementById('graph-container').innerHTML = '<p class="placeholder">No wiki available. Process the repository first.</p>';
   }
 }

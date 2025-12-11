@@ -18,7 +18,10 @@ import {
   handleGetWikiPage,
   createGetWikiTreeQuery,
   handleGetWikiTree,
+  createGetWikiGraphQuery,
+  handleGetWikiGraph,
 } from '../../queries/index.js';
+import { wikiEventEmitter, type WikiEvent } from '../../services/wiki-events.js';
 
 /**
  * Create wiki content routes.
@@ -174,6 +177,177 @@ export function createWikiContentRoutes(deps: Dependencies): Router {
       const treeResult = await handleGetWikiTree(treeQuery, repos);
 
       res.json(treeResult.data || []);
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/repos/{id}/wiki-graph:
+   *   get:
+   *     summary: Get wiki pages as a graph of nodes and edges
+   *     tags: [Wiki Content]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: wikiId
+   *         schema:
+   *           type: string
+   *         description: Optional wiki ID (uses active wiki if not specified)
+   *       - in: query
+   *         name: category
+   *         schema:
+   *           type: string
+   *         description: Filter nodes by category
+   *       - in: query
+   *         name: minConfidence
+   *         schema:
+   *           type: number
+   *         description: Minimum confidence threshold (0-1)
+   *     responses:
+   *       200:
+   *         description: Wiki graph with nodes and edges
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 nodes:
+   *                   type: array
+   *                 edges:
+   *                   type: array
+   *                 stats:
+   *                   type: object
+   *       404:
+   *         description: Repository or wiki not found
+   *       500:
+   *         description: Internal server error
+   */
+  router.get('/api/repos/:id/wiki-graph', async (req: Request, res: Response) => {
+    try {
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+      const repo = repoResult.data;
+
+      let wiki;
+      if (req.query.wikiId) {
+        const wikiQuery = createGetWikiQuery(req.query.wikiId as string);
+        const wikiResult = await handleGetWiki(wikiQuery, repos);
+        if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== repo.id) {
+          res.status(404).json({ error: 'Wiki not found' });
+          return;
+        }
+        wiki = wikiResult.data;
+      } else {
+        wiki = await getOrCreateActiveWiki(repo.id, repos);
+      }
+
+      const options: { category?: string; minConfidence?: number } = {};
+      if (typeof req.query.category === 'string') {
+        options.category = req.query.category;
+      }
+      if (typeof req.query.minConfidence === 'string') {
+        options.minConfidence = parseFloat(req.query.minConfidence);
+      }
+      const graphQuery = createGetWikiGraphQuery(wiki.id, options);
+      const graphResult = await handleGetWikiGraph(graphQuery, repos);
+
+      res.json(graphResult.data);
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/repos/{id}/wiki-events:
+   *   get:
+   *     summary: Server-Sent Events stream for real-time wiki updates
+   *     tags: [Wiki Content]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Repository ID
+   *       - in: query
+   *         name: wikiId
+   *         schema:
+   *           type: string
+   *         description: Optional wiki ID (uses active wiki if not specified)
+   *     responses:
+   *       200:
+   *         description: SSE stream of wiki events
+   *         content:
+   *           text/event-stream:
+   *             schema:
+   *               type: string
+   *       404:
+   *         description: Repository or wiki not found
+   */
+  router.get('/api/repos/:id/wiki-events', async (req: Request, res: Response) => {
+    try {
+      const repoQuery = createGetRepositoryQuery(req.params.id!);
+      const repoResult = await handleGetRepository(repoQuery, repos);
+      if (!repoResult.success || !repoResult.data) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+      const repo = repoResult.data;
+
+      let wiki;
+      if (req.query.wikiId) {
+        const wikiQuery = createGetWikiQuery(req.query.wikiId as string);
+        const wikiResult = await handleGetWiki(wikiQuery, repos);
+        if (!wikiResult.success || !wikiResult.data || wikiResult.data.repoId !== repo.id) {
+          res.status(404).json({ error: 'Wiki not found' });
+          return;
+        }
+        wiki = wikiResult.data;
+      } else {
+        wiki = await getOrCreateActiveWiki(repo.id, repos);
+      }
+
+      // Set up SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+      res.flushHeaders();
+
+      // Send initial connection event
+      res.write(`event: connected\ndata: ${JSON.stringify({ wikiId: wiki.id })}\n\n`);
+
+      // Keep-alive ping every 30 seconds
+      const pingInterval = setInterval(() => {
+        res.write(`: ping\n\n`);
+      }, 30000);
+
+      // Subscribe to wiki events
+      const handleEvent = (event: WikiEvent) => {
+        if (event.wikiId === wiki.id) {
+          res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+        }
+      };
+
+      wikiEventEmitter.on('wiki-event', handleEvent);
+
+      // Clean up on close
+      req.on('close', () => {
+        clearInterval(pingInterval);
+        wikiEventEmitter.off('wiki-event', handleEvent);
+      });
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
