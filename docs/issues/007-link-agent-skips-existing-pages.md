@@ -116,10 +116,10 @@ The condition `p.links.length === 0` means pages with any links are filtered out
 
 ## Acceptance Criteria
 
-- [ ] Pages with existing links can receive new links
-- [ ] Related Pages section is merged, not replaced
-- [ ] Bidirectional links are created automatically
-- [ ] Link coverage increases over time, not freezes
+- [x] Pages with existing links can receive new links
+- [x] Related Pages section is merged, not replaced
+- [x] Bidirectional links are created automatically
+- [ ] Link coverage increases over time, not freezes (needs verification)
 
 ---
 

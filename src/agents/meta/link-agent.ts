@@ -246,6 +246,9 @@ Now analyze the pages above and provide your link suggestions:
       });
     }
 
+    // Track backlinks to create (target -> sources)
+    const backlinksToCreate = new Map<string, Array<{ source: string; reason: string }>>();
+
     // Create updates for pages with new links
     for (const page of pagesToAnalyze) {
       const suggestedLinks = linksBySource.get(page.path);
@@ -288,6 +291,64 @@ Now analyze the pages above and provide your link suggestions:
         confidenceDelta: 0.05,
         links: linkPaths,
       });
+
+      // Track backlinks: for each new link, create a backlink from target to source
+      for (const link of newLinks) {
+        const targetBacklinks = backlinksToCreate.get(link.target) || [];
+        targetBacklinks.push({ source: page.path, reason: `Linked from ${page.title}` });
+        backlinksToCreate.set(link.target, targetBacklinks);
+      }
+    }
+
+    // Create backlink updates for target pages
+    for (const [targetPath, backlinks] of backlinksToCreate) {
+      const targetPage = pageMap.get(targetPath);
+      if (!targetPage) continue;
+
+      // Check if target page already has these backlinks
+      const existingTargetLinks = this.extractExistingLinkTargets(targetPage.content);
+
+      // Filter to only new backlinks
+      const newBacklinks = backlinks.filter(bl => !existingTargetLinks.has(bl.source));
+      if (newBacklinks.length === 0) continue;
+
+      // Check if we already created an update for this target (as a source page)
+      const existingUpdate = updates.find(u => u.path === targetPath);
+      if (existingUpdate) {
+        // Append backlinks to existing update
+        const backlinkContent = newBacklinks.map(bl => {
+          const sourcePage = pageMap.get(bl.source);
+          const sourceTitle = sourcePage?.title ?? bl.source;
+          return `- [${sourceTitle}](${bl.source}) - ${bl.reason}`;
+        }).join('\n');
+
+        existingUpdate.content += `\n${backlinkContent}`;
+        existingUpdate.links = [...(existingUpdate.links || []), ...newBacklinks.map(bl => bl.source)];
+      } else {
+        // Create new update for target page with backlinks
+        const backlinkContent = newBacklinks.map(bl => {
+          const sourcePage = pageMap.get(bl.source);
+          const sourceTitle = sourcePage?.title ?? bl.source;
+          return `- [${sourceTitle}](${bl.source}) - ${bl.reason}`;
+        }).join('\n');
+
+        let contentUpdate: string;
+        if (targetPage.content.includes('## Related Pages')) {
+          contentUpdate = `\n${backlinkContent}`;
+        } else {
+          contentUpdate = `\n\n## Related Pages\n\n${backlinkContent}`;
+        }
+
+        updates.push({
+          type: 'merge',
+          path: targetPath,
+          content: contentUpdate,
+          sourceCommitId: targetPage.sourceCommits[0] ?? '',
+          agentRunId: '',
+          confidenceDelta: 0.05,
+          links: newBacklinks.map(bl => bl.source),
+        });
+      }
     }
 
     return updates;

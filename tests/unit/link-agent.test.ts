@@ -622,6 +622,101 @@ Content.
     });
   });
 
+  describe('bidirectional linking', () => {
+    it('should create backlinks for target pages when suggesting forward links', async () => {
+      const repoId = 'link-agent-bidirectional-1';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create pages without links
+      await createWikiPages(wiki.id, [
+        { path: 'source-page', title: 'Source Page', content: '# Source\n\nSome source content.' },
+        { path: 'target-page', title: 'Target Page', content: '# Target\n\nSome target content.' },
+      ]);
+
+      // Mock LLM to suggest a link from source -> target
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'source-page', target: 'target-page', strength: 'strong', reason: 'Source relates to target' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should have update for source page (forward link)
+      const sourceUpdate = result.updates.find(u => u.path === 'source-page');
+      assert.ok(sourceUpdate, 'Should have update for source page');
+      assert.ok(sourceUpdate.links?.includes('target-page'), 'Source should link to target');
+
+      // Should ALSO have update for target page (backlink)
+      const targetUpdate = result.updates.find(u => u.path === 'target-page');
+      assert.ok(targetUpdate, 'Should create backlink update for target page');
+      assert.ok(targetUpdate.links?.includes('source-page'), 'Target should backlink to source');
+    });
+
+    it('should not create duplicate backlinks for existing links', async () => {
+      const repoId = 'link-agent-bidirectional-2';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      const oldDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      // Target page already has a backlink to source
+      await ctx.repos.wikiPages.save({
+        id: 'page-target-existing',
+        wikiId: wiki.id,
+        path: 'target-existing',
+        title: 'Target With Existing Backlink',
+        content: `# Target With Existing Backlink
+
+Content.
+
+## Related Pages
+
+- [Source Page](source-new) - Already linked`,
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['source-new'],
+        backlinks: [],
+        createdAt: oldDate,
+        updatedAt: oldDate,
+      });
+
+      // Source page without links
+      await createWikiPages(wiki.id, [
+        { path: 'source-new', title: 'Source Page', content: '# Source\n\nSource content.' },
+      ]);
+
+      // Mock LLM to suggest source -> target link
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'source-new', target: 'target-existing', strength: 'strong', reason: 'Relates to target' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Source should get update
+      const sourceUpdate = result.updates.find(u => u.path === 'source-new');
+      assert.ok(sourceUpdate, 'Should have update for source page');
+
+      // Target should NOT get update since it already has the backlink
+      const targetUpdate = result.updates.find(u => u.path === 'target-existing');
+      assert.ok(!targetUpdate, 'Should not create duplicate backlink when link already exists');
+    });
+  });
+
   describe('agent type', () => {
     it('has correct agent type', () => {
       const agent = new LinkAgent();

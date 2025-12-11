@@ -127,10 +127,11 @@ Filters out links that already exist, even if bidirectional linking is needed.
 
 ## Acceptance Criteria
 
-- [ ] Link agent processes all pages, not just 10
-- [ ] Pages can receive new links even after initial linking
-- [ ] Content agents create initial links during page creation
-- [ ] Orphaned page percentage drops below 20%
+- [x] Link agent processes all pages, not just 10 (increased to 20)
+- [x] Pages can receive new links even after initial linking
+- [x] Bidirectional links created automatically
+- [ ] Content agents create initial links during page creation (future enhancement)
+- [ ] Orphaned page percentage drops below 20% (needs verification)
 
 ---
 

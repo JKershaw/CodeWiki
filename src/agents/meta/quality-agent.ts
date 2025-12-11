@@ -318,12 +318,43 @@ CONFIDENCE: [0-1]
   }
 
   private generateUpdates(
-    _pages: WikiPage[],
-    _analysis: QualityAnalysis
+    pages: WikiPage[],
+    analysis: QualityAnalysis
   ): WikiPageUpdate[] {
-    // Quality agent reports issues but doesn't auto-fix
-    // Future: could generate merge updates with improved content
-    return [];
+    const updates: WikiPageUpdate[] = [];
+    const pageMap = new Map(pages.map(p => [p.path, p]));
+
+    // Group improvements by page
+    const improvementsByPage = new Map<string, string[]>();
+    for (const improvement of analysis.improvements) {
+      const existing = improvementsByPage.get(improvement.pagePath) || [];
+      existing.push(improvement.suggestion);
+      improvementsByPage.set(improvement.pagePath, existing);
+    }
+
+    // Generate merge updates for pages with improvements
+    for (const [pagePath, suggestions] of improvementsByPage) {
+      const page = pageMap.get(pagePath);
+      if (!page) continue;
+
+      // Build improvement content as a Quality Notes section
+      const improvementContent = suggestions
+        .map(s => `- ${s}`)
+        .join('\n');
+
+      const contentUpdate = `\n\n## Quality Notes\n\nThe following improvements were suggested:\n\n${improvementContent}`;
+
+      updates.push({
+        type: 'merge',
+        path: pagePath,
+        content: contentUpdate,
+        sourceCommitId: page.sourceCommits[0] ?? '',
+        agentRunId: '',
+        confidenceDelta: 0.05,  // Small confidence boost for adding improvement notes
+      });
+    }
+
+    return updates;
   }
 }
 

@@ -233,6 +233,76 @@ CONFIDENCE: 0.8`);
       assert.ok(result.result.summary.includes('Reviewed'), 'Summary should indicate review');
     });
 
+    it('generates merge updates for pages with improvement suggestions', async () => {
+      const fixableRepoId = 'quality-fixable-repo';
+      await createTestRepo(ctx, fixableRepoId);
+      const wiki = await getOrCreateActiveWiki(fixableRepoId, ctx.repos);
+
+      // Create pages with quality issues
+      await ctx.repos.wikiPages.save({
+        id: 'shallow-page',
+        wikiId: wiki.id,
+        path: 'guides/shallow',
+        title: 'Shallow Guide',
+        content: 'Too short.',  // Very short content
+        confidence: 0.3,  // Low confidence
+        sourceCommits: [],
+        links: [],
+        backlinks: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await ctx.repos.wikiPages.save({
+        id: 'needs-depth-page',
+        wikiId: wiki.id,
+        path: 'guides/needs-depth',
+        title: 'Guide Needs Depth',
+        content: `# Guide Needs Depth
+
+The WorkQueue manages pending tasks for the executor.
+
+## Empty Section
+
+`,  // Has empty section, shallow content
+        confidence: 0.4,
+        sourceCommits: [],
+        links: [],
+        backlinks: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // LLM response with specific improvements
+      ctx.llm.setDefaultResponse(`ISSUES:
+- severity: high | page: guides/shallow | Page is too short to be useful
+- severity: medium | page: guides/needs-depth | Describes but doesn't explain mechanisms
+
+IMPROVEMENTS:
+- page: guides/shallow | Expand with implementation details and code examples
+- page: guides/needs-depth | Add details about how WorkQueue uses Redis and handles retries
+
+CONFIDENCE: 0.75`);
+
+      const agent = new QualityAgent();
+      const agentCtx = await ctx.agentContext(fixableRepoId);
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should generate merge updates for improvement suggestions
+      assert.ok(result.updates.length > 0, 'Should generate updates for improvements');
+
+      // Updates should be merge type (append improvement content)
+      const mergeUpdates = result.updates.filter(u => u.type === 'merge');
+      assert.ok(mergeUpdates.length > 0, 'Should create merge updates for improvements');
+
+      // Updates should target pages with issues
+      const updatePaths = mergeUpdates.map(u => u.path);
+      assert.ok(
+        updatePaths.some(p => p === 'guides/shallow' || p === 'guides/needs-depth'),
+        'Updates should target pages with quality issues'
+      );
+    });
+
     it('returns healthy status for high-quality pages', async () => {
       const healthyRepoId = 'quality-healthy-repo';
       await createTestRepo(ctx, healthyRepoId);
