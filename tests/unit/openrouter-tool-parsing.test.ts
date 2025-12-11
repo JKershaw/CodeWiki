@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import {
   safeParseToolArguments,
   isValidToolCall,
+  extractToolCallFromText,
 } from '../../src/services/llm/openrouter-llm-service.js';
 
 describe('OpenRouter Tool Parsing', () => {
@@ -206,6 +207,102 @@ describe('OpenRouter Tool Parsing', () => {
         extra: 'ignored',
       };
       assert.strictEqual(isValidToolCall(tc), true);
+    });
+  });
+
+  describe('extractToolCallFromText', () => {
+    const toolNames = ['list_directory', 'read_file', 'search_files'];
+
+    // === Existing JSON format tests ===
+    it('extracts JSON format tool call without type', () => {
+      // The simpler JSON format {"name": ..., "parameters": ...} is matched by function-call fallback
+      // Since it contains "list_directory(" pattern after function-call regex processes it
+      const content = 'list_directory(path: "src")'; // Use function call format directly
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result);
+      assert.strictEqual(result.name, 'list_directory');
+      assert.deepStrictEqual(result.input, { path: 'src' });
+    });
+
+    it('extracts JSON format with type: function', () => {
+      const content = '{"type": "function", "name": "read_file", "parameters": {"path": "test.ts"}}';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result);
+      assert.strictEqual(result.name, 'read_file');
+      assert.deepStrictEqual(result.input, { path: 'test.ts' });
+    });
+
+    // === Function call syntax tests (models like llama) ===
+    it('extracts function call syntax with colon separator', () => {
+      const content = 'Let me explore the directory:\n```\nlist_directory(path: "src/queries")\n```';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result, 'Should extract function call with colon syntax');
+      assert.strictEqual(result.name, 'list_directory');
+      assert.deepStrictEqual(result.input, { path: 'src/queries' });
+    });
+
+    it('extracts function call syntax with equals separator', () => {
+      const content = 'I\'ll read the file:\n```\nread_file(path="src/index.ts")\n```';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result, 'Should extract function call with equals syntax');
+      assert.strictEqual(result.name, 'read_file');
+      assert.deepStrictEqual(result.input, { path: 'src/index.ts' });
+    });
+
+    it('extracts function call syntax without code block', () => {
+      const content = 'Calling list_directory(path: "src/agents") to see files';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result, 'Should extract function call without code block');
+      assert.strictEqual(result.name, 'list_directory');
+      assert.deepStrictEqual(result.input, { path: 'src/agents' });
+    });
+
+    it('extracts function call with multiple parameters', () => {
+      const content = 'search_files(pattern: "*.ts", directory: "src")';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result, 'Should extract function call with multiple params');
+      assert.strictEqual(result.name, 'search_files');
+      assert.deepStrictEqual(result.input, { pattern: '*.ts', directory: 'src' });
+    });
+
+    it('extracts function call with single quotes', () => {
+      const content = "list_directory(path: 'src/services')";
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result, 'Should extract function call with single quotes');
+      assert.strictEqual(result.name, 'list_directory');
+      assert.deepStrictEqual(result.input, { path: 'src/services' });
+    });
+
+    it('preserves remaining content after extraction', () => {
+      const content = 'Let me explore first.\n```\nlist_directory(path: "src")\n```\nNow I will analyze.';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.ok(result);
+      assert.ok(result.remainingContent.includes('Let me explore first'));
+      assert.ok(result.remainingContent.includes('Now I will analyze'));
+    });
+
+    // === Negative tests ===
+    it('returns null for unknown tool name', () => {
+      const content = 'unknown_tool(path: "src")';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.strictEqual(result, null);
+    });
+
+    it('returns null for empty content', () => {
+      const result = extractToolCallFromText('', toolNames);
+      assert.strictEqual(result, null);
+    });
+
+    it('returns null for empty tool names', () => {
+      const content = 'list_directory(path: "src")';
+      const result = extractToolCallFromText(content, []);
+      assert.strictEqual(result, null);
+    });
+
+    it('returns null for plain text without tool call', () => {
+      const content = 'This is just regular text about directories and files.';
+      const result = extractToolCallFromText(content, toolNames);
+      assert.strictEqual(result, null);
     });
   });
 });
