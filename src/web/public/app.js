@@ -14,6 +14,7 @@
  *  - modules/browser.js - Folder browser
  *  - modules/repos.js - Repository management
  *  - modules/wiki.js - Wiki viewing
+ *  - modules/graph.js - Graph visualization
  *  - modules/query.js - Query functionality
  *  - modules/spec.js - Spec generation
  *  - modules/benchmark.js - Benchmarks and self-improvement
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize feature modules
   initBrowserListeners();
   initWikiListeners();
+  initGraphListeners();
   initQueryListeners();
   initSpecListeners();
   initBenchmarkListeners();
@@ -54,6 +56,11 @@ document.addEventListener('DOMContentLoaded', async () => {
  */
 function initBackButtons() {
   document.getElementById('back-to-repos').addEventListener('click', () => {
+    showView('repos');
+    loadRepos();
+  });
+  document.getElementById('back-to-repos-graph')?.addEventListener('click', () => {
+    destroyGraph();
     showView('repos');
     loadRepos();
   });

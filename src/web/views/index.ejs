@@ -23,6 +23,7 @@
     <nav id="nav">
       <button class="nav-btn active" data-view="repos">Repositories</button>
       <button class="nav-btn" data-view="wiki" disabled>Wiki</button>
+      <button class="nav-btn" data-view="graph" disabled>Graph</button>
       <button class="nav-btn" data-view="query" disabled>Ask</button>
       <button class="nav-btn" data-view="spec" disabled>Spec</button>
       <button class="nav-btn" data-view="benchmark" disabled>Benchmark</button>
@@ -135,6 +136,36 @@
             <p class="placeholder">Select a page from the sidebar</p>
           </article>
         </div>
+      </section>
+
+      <!-- Graph View -->
+      <section id="graph-view" class="view">
+        <div class="section-header">
+          <h2>Graph: <span id="graph-repo-name"></span></h2>
+          <div class="header-actions">
+            <div class="graph-controls">
+              <input type="text" id="graph-search" placeholder="Search pages..." class="graph-search-input">
+              <select id="graph-category-filter" class="graph-filter">
+                <option value="all">All Categories</option>
+              </select>
+              <button id="graph-center-btn" class="btn secondary small" title="Center graph">Center</button>
+              <button id="graph-layout-btn" class="btn secondary small" title="Toggle layout">Layout</button>
+              <button id="graph-refresh-btn" class="btn secondary small" title="Refresh graph">Refresh</button>
+              <span id="graph-connection-status" class="status-indicator status-disconnected" title="Disconnected"></span>
+            </div>
+            <button id="back-to-repos-graph" class="btn secondary">Back to Repos</button>
+          </div>
+        </div>
+
+        <div class="graph-layout">
+          <div id="graph-container" class="graph-container">
+            <p class="placeholder">Select a repository to view its wiki graph</p>
+          </div>
+          <div id="graph-stats" class="graph-stats"></div>
+        </div>
+
+        <!-- Graph tooltip -->
+        <div id="graph-tooltip" class="graph-tooltip hidden"></div>
       </section>
 
       <!-- Query View -->
@@ -451,6 +482,8 @@
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <!-- Chart.js for benchmark visualization -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Cytoscape.js for graph visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.umd.min.js"></script>
   <!-- Application modules (must load before app.js) -->
   <script src="/modules/utils.js"></script>
   <script src="/modules/api.js"></script>
@@ -463,6 +496,7 @@
   <script src="/modules/browser.js"></script>
   <script src="/modules/repos.js"></script>
   <script src="/modules/wiki.js"></script>
+  <script src="/modules/graph.js"></script>
   <script src="/modules/query.js"></script>
   <script src="/modules/spec.js"></script>
   <script src="/modules/benchmark.js"></script>

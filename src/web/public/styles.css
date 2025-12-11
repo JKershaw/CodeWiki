@@ -4235,3 +4235,164 @@ body.side-panel-open {
 .collapsible.expanded .collapse-icon {
 	transform: rotate(45deg);
 }
+
+/* ===========================================
+   Graph Visualization Styles
+   =========================================== */
+
+.graph-layout {
+	display: flex;
+	flex-direction: column;
+	height: calc(100vh - 250px);
+	min-height: 400px;
+}
+
+.graph-container {
+	flex: 1;
+	background: var(--bg-elevated);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	position: relative;
+	min-height: 400px;
+}
+
+.graph-container .loading,
+.graph-container .placeholder,
+.graph-container .error {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	text-align: center;
+}
+
+.graph-container .error {
+	color: var(--error);
+}
+
+.graph-controls {
+	display: flex;
+	align-items: center;
+	gap: var(--space-xs);
+	flex-wrap: wrap;
+}
+
+.graph-search-input {
+	width: 180px;
+	padding: 6px 10px;
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	color: var(--text-primary);
+	font-size: 0.85rem;
+}
+
+.graph-search-input:focus {
+	border-color: var(--accent-growth);
+	outline: none;
+}
+
+.graph-filter {
+	padding: 6px 10px;
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	color: var(--text-primary);
+	font-size: 0.85rem;
+}
+
+.graph-stats {
+	display: flex;
+	gap: var(--space-md);
+	padding: var(--space-sm);
+	background: var(--bg-card);
+	border-radius: 4px;
+	margin-top: var(--space-xs);
+	font-size: 0.85rem;
+	color: var(--text-secondary);
+}
+
+.graph-stats strong {
+	color: var(--text-primary);
+}
+
+/* Connection status indicator */
+.status-indicator {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	display: inline-block;
+}
+
+.status-connected {
+	background: var(--success);
+	box-shadow: 0 0 6px var(--success);
+}
+
+.status-disconnected {
+	background: var(--text-tertiary);
+}
+
+/* Graph tooltip */
+.graph-tooltip {
+	position: fixed;
+	z-index: 1000;
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 0;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	max-width: 300px;
+	pointer-events: none;
+}
+
+.graph-tooltip.hidden {
+	display: none;
+}
+
+.tooltip-header {
+	background: var(--bg-elevated);
+	padding: var(--space-xs) var(--space-sm);
+	border-bottom: 1px solid var(--border);
+	font-weight: 600;
+	color: var(--text-primary);
+	border-radius: 6px 6px 0 0;
+}
+
+.tooltip-body {
+	padding: var(--space-xs) var(--space-sm);
+	font-size: 0.85rem;
+	color: var(--text-secondary);
+}
+
+.tooltip-body div {
+	margin-bottom: 4px;
+}
+
+.tooltip-body strong {
+	color: var(--text-primary);
+}
+
+.tooltip-footer {
+	padding: var(--space-xs) var(--space-sm);
+	font-size: 0.75rem;
+	color: var(--text-tertiary);
+	border-top: 1px solid var(--border);
+	text-align: center;
+}
+
+/* Graph button in card */
+.graph-btn {
+	background: linear-gradient(135deg, var(--accent-wisdom), var(--accent-growth));
+	color: white;
+	border: none;
+}
+
+.graph-btn:hover:not(:disabled) {
+	filter: brightness(1.1);
+}
+
+.graph-btn:disabled {
+	background: var(--bg-card);
+	color: var(--text-tertiary);
+}
