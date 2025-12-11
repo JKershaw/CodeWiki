@@ -127,6 +127,92 @@ export function calculatePriorityScore(coveragePercent: number, loc: number): nu
   return coverageFactor * sizeFactor;
 }
 
+/** Entry point file names (without extension) */
+const ENTRY_POINT_NAMES = ['index', 'main', 'cli', 'app', 'server'];
+
+/** Entry point boost multiplier */
+const ENTRY_POINT_BOOST = 2.0;
+
+/**
+ * Check if a file path is an entry point.
+ *
+ * Entry points are files that serve as main entry into a module or application:
+ * - index.ts/js - Module entry points
+ * - main.ts/js - Application main files
+ * - cli.ts/js - Command line interfaces
+ * - app.ts/js - Application roots (including React's App.tsx)
+ * - server.ts/js - Server entry points
+ *
+ * @param filePath - Full path to the file
+ * @returns true if the file is an entry point
+ */
+export function isEntryPoint(filePath: string): boolean {
+  const fileName = filePath.split('/').pop() ?? '';
+
+  // Exclude test files
+  if (fileName.includes('.test.') || fileName.includes('.spec.')) {
+    return false;
+  }
+
+  // Exclude files in test directories (handle both with and without leading slash)
+  if (
+    filePath.includes('/tests/') ||
+    filePath.includes('/__tests__/') ||
+    filePath.startsWith('tests/')
+  ) {
+    return false;
+  }
+
+  // Extract base name without extension
+  // Handle: index.ts, index.js, index.tsx, index.jsx, index.mjs, index.cjs
+  const match = fileName.match(/^([a-zA-Z]+)\.(ts|js|tsx|jsx|mjs|cjs)$/);
+  if (!match) {
+    return false;
+  }
+
+  const baseName = match[1]!;
+  const baseNameLower = baseName.toLowerCase();
+
+  // Special case: App.tsx/App.jsx (React convention with capital A)
+  if (baseName === 'App' && (match[2] === 'tsx' || match[2] === 'jsx')) {
+    return true;
+  }
+
+  // Only match lowercase entry point names (INDEX.ts is unusual and shouldn't match)
+  if (baseName !== baseNameLower) {
+    return false;
+  }
+
+  return ENTRY_POINT_NAMES.includes(baseNameLower);
+}
+
+/**
+ * Calculate priority score with entry point boosting.
+ *
+ * Entry points get a 2x boost because they're critical for understanding:
+ * - How the module/application is used
+ * - The public API surface
+ * - Where to start when learning the codebase
+ *
+ * @param coveragePercent - Coverage percentage (0-100)
+ * @param loc - Lines of code
+ * @param filePath - Full path to the file
+ * @returns Priority score with entry point boost applied
+ */
+export function calculatePriorityScoreWithEntryPoint(
+  coveragePercent: number,
+  loc: number,
+  filePath: string
+): number {
+  const baseScore = calculatePriorityScore(coveragePercent, loc);
+
+  if (isEntryPoint(filePath)) {
+    return baseScore * ENTRY_POINT_BOOST;
+  }
+
+  return baseScore;
+}
+
 // ============================================================================
 // Coverage Calculation
 // ============================================================================
@@ -138,23 +224,136 @@ export function calculatePriorityScore(coveragePercent: number, loc: number): nu
  * @param filePath - Full path to the file
  * @param wikiPages - Wiki pages to search for mentions
  * @returns Coverage percentage (0 or 100 for now - binary)
+ * @deprecated Use calculateGraduatedCoverage for more nuanced scoring
  */
 export function calculateFileCoverage(filePath: string, wikiPages: WikiPageLike[]): number {
+  // Delegate to graduated coverage for consistency
+  return calculateGraduatedCoverage(filePath, wikiPages);
+}
+
+/**
+ * Calculate graduated file coverage based on wiki mentions.
+ *
+ * Returns tiered coverage levels:
+ * - 0%   - No mention at all
+ * - 25%  - Mentioned in passing (filename appears somewhere)
+ * - 50%  - Has dedicated section (heading about file or multiple mentions with context)
+ * - 100% - Has dedicated wiki page about the file
+ *
+ * @param filePath - Full path to the file (e.g., "src/agents/orchestrator.ts")
+ * @param wikiPages - Wiki pages to search for mentions
+ * @returns Coverage percentage (0, 25, 50, or 100)
+ */
+export function calculateGraduatedCoverage(filePath: string, wikiPages: WikiPageLike[]): number {
   const fileName = filePath.split('/').pop() ?? '';
-  const fileNameWithoutExt = fileName.replace(/\.[^.]+$/, '');
+  // Remove only the final extension for standard files
+  // For files like foo.config.ts, we want "foo.config" not "foo"
+  const fileNameWithoutExt = fileName.replace(/\.(?:ts|js|tsx|jsx|mjs|cjs)$/, '');
+  // Handle camelCase to kebab-case conversion (e.g., baseAgent -> base-agent)
+  const kebabName = fileNameWithoutExt.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  // Also create dot-to-kebab version (e.g., env.config -> env-config)
+  const dotToKebab = fileNameWithoutExt.replace(/\./g, '-').toLowerCase();
+
+  let highestCoverage = 0;
 
   for (const page of wikiPages) {
-    // Check if file path or name is mentioned in wiki content
-    if (page.content.includes(filePath) || page.content.includes(fileName)) {
-      return 100;
+    const pageContent = page.content;
+    const pageContentLower = pageContent.toLowerCase();
+    const pagePath = page.path.toLowerCase();
+    const fileNameLower = fileName.toLowerCase();
+    const fileNameWithoutExtLower = fileNameWithoutExt.toLowerCase();
+
+    // Check for 100% - dedicated wiki page about the file
+    // Page path should end with or be exactly the file name (without extension)
+    const pagePathSegments = pagePath.split('/');
+    const lastSegment = pagePathSegments[pagePathSegments.length - 1] ?? '';
+
+    const pathMatchesFile =
+      lastSegment === fileNameWithoutExtLower ||
+      lastSegment === kebabName ||
+      lastSegment === dotToKebab;
+
+    if (pathMatchesFile) {
+      // Page path exactly matches the file name - this is strong evidence of a dedicated page.
+      // We trust path matches because wiki pages are typically named after what they document.
+      // Only reject if content explicitly mentions a DIFFERENT file with similar name.
+      //
+      // Check if content mentions a different but similar filename (e.g., auth-helper.ts vs auth.ts)
+      const similarFilePattern = new RegExp(
+        `${escapeRegex(fileNameWithoutExtLower)}-[a-z]+\\.(?:ts|js)`,
+        'i'
+      );
+      const mentionsDifferentFile = similarFilePattern.test(pageContent) &&
+        !pageContentLower.includes(fileNameLower);
+
+      if (!mentionsDifferentFile) {
+        return 100; // Early return - this is the highest tier
+      }
     }
-    // Also check if mentioned in page path (e.g., page about this file)
-    if (page.path.includes(fileNameWithoutExt)) {
-      return 100;
+
+    // Check for 50% - has dedicated section (heading containing filename)
+    // Look for markdown headings that mention the file
+    const headingPattern = new RegExp(
+      `^#{1,6}\\s+.*\\b${escapeRegex(fileNameWithoutExtLower)}\\b.*$`,
+      'im'
+    );
+    if (headingPattern.test(pageContent.toLowerCase())) {
+      highestCoverage = Math.max(highestCoverage, 50);
+      continue; // Keep looking for potentially higher coverage
+    }
+
+    // Check for 50% - multiple mentions with context (3+ mentions)
+    const mentionCount = countMentions(pageContentLower, fileNameLower, fileNameWithoutExtLower);
+    if (mentionCount >= 3) {
+      highestCoverage = Math.max(highestCoverage, 50);
+      continue;
+    }
+
+    // Check for 25% - mentioned in passing (at least one mention)
+    if (mentionCount >= 1) {
+      highestCoverage = Math.max(highestCoverage, 25);
+      continue;
+    }
+
+    // Check if full path is mentioned
+    if (pageContentLower.includes(filePath.toLowerCase())) {
+      highestCoverage = Math.max(highestCoverage, 25);
     }
   }
 
-  return 0;
+  return highestCoverage;
+}
+
+/**
+ * Count how many times a filename appears in content.
+ * Uses strict boundaries to avoid matching partial names like "auth" in "auth-helper".
+ */
+function countMentions(content: string, fileName: string, fileNameWithoutExt: string): number {
+  // Count filename mentions (with extension)
+  // For "executor.ts", match "executor.ts" but not "executors.ts" or "pre-executor.ts"
+  const fileNameRegex = new RegExp(
+    `(?<![a-zA-Z0-9_-])${escapeRegex(fileName)}(?![a-zA-Z0-9_-])`,
+    'gi'
+  );
+  const fileNameMatches = content.match(fileNameRegex) || [];
+
+  // Also count mentions of just the name without extension
+  // For "executor", match "executor" but not "executor-helper" or "pre-executor"
+  const nameOnlyRegex = new RegExp(
+    `(?<![a-zA-Z0-9_-])${escapeRegex(fileNameWithoutExt)}(?![a-zA-Z0-9_-])`,
+    'gi'
+  );
+  const nameOnlyMatches = content.match(nameOnlyRegex) || [];
+
+  // Return the higher count (don't sum - they may overlap)
+  return Math.max(fileNameMatches.length, nameOnlyMatches.length);
+}
+
+/**
+ * Escape special regex characters in a string.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

@@ -165,7 +165,8 @@ describe('buildCoverageTreeWithFiles', () => {
       // Find the file in the tree
       const orchestratorDir = tree.children.find(c => c.name === 'agents')
         ?.children.find(c => c.name === 'orchestrator');
-      assert.strictEqual(orchestratorDir?.files[0]?.coveragePercent, 100);
+      // Graduated coverage: single mention = 25%
+      assert.strictEqual(orchestratorDir?.files[0]?.coveragePercent, 25);
     });
 
     it('returns 0 coverage when file not mentioned', () => {
@@ -195,8 +196,9 @@ describe('buildCoverageTreeWithFiles', () => {
       const tree = buildCoverageTreeWithFiles(files, wikiPages);
 
       assert.ok(tree);
-      // Still 100% - it's covered
-      assert.strictEqual(tree.files[0]?.coveragePercent, 100);
+      // Graduated coverage: multiple mentions across pages still counts
+      // Each page has 1 mention, so highest is 25%
+      assert.strictEqual(tree.files[0]?.coveragePercent, 25);
     });
 
     it('matches wiki page path to file name', () => {
@@ -360,10 +362,13 @@ describe('buildCoverageTreeWithFiles', () => {
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 7);
 
-      // Services should have high coverage (both mentioned)
+      // Services should have coverage (files are mentioned, but just once each = 25%)
+      // types.ts is not in services dir, so only user-service and auth-service get 25%
       const servicesDir = tree.children.find(c => c.name === 'services');
       assert.ok(servicesDir);
-      assert.strictEqual(servicesDir.coveragePercent, 100);
+      // With graduated coverage: each file mentioned once = 25%
+      // Weighted average: (200*25 + 150*25) / (200+150) = 8750/350 = 25%
+      assert.strictEqual(servicesDir.coveragePercent, 25);
 
       // Utils should have 0 coverage (not mentioned)
       const utilsDir = tree.children.find(c => c.name === 'utils');
