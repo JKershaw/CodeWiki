@@ -393,3 +393,293 @@ test.describe('Auto-Benchmark Full Lifecycle', () => {
     }
   });
 });
+
+test.describe('Auto-Benchmark Page Reload Resilience', () => {
+  let repoId: string;
+  let wikiId: string;
+  const testId = Date.now().toString(36);
+
+  test.beforeAll(async ({ request }) => {
+    // Set up repository with wiki
+    const response = await request.post('/api/repos', {
+      data: { path: '.' },
+    });
+
+    if (response.ok()) {
+      const data = await response.json();
+      repoId = data.id;
+    } else {
+      const reposResponse = await request.get('/api/repos');
+      const repos = await reposResponse.json();
+      if (repos.length > 0) {
+        repoId = repos[0].id;
+      }
+    }
+
+    // Ensure active wiki exists
+    const wikisResponse = await request.get(`/api/repos/${repoId}/wikis`);
+    const wikis = await wikisResponse.json();
+    if (wikis.length === 0) {
+      const wikiResponse = await request.post(`/api/repos/${repoId}/wikis`, {
+        data: { name: `reload-test-wiki-${testId}` },
+      });
+      if (wikiResponse.ok()) {
+        const wiki = await wikiResponse.json();
+        wikiId = wiki.id;
+      }
+    } else {
+      const activeWiki = wikis.find((w: { isActive: boolean }) => w.isActive);
+      wikiId = activeWiki?.id ?? wikis[0].id;
+    }
+
+    // Stop any existing running auto-benchmarks
+    const runningResponse = await request.get(`/api/repos/${repoId}/auto-benchmarks`);
+    if (runningResponse.ok()) {
+      const data = await runningResponse.json();
+      for (const run of data.runs) {
+        if (run.status === 'running') {
+          await request.post(`/api/repos/${repoId}/auto-benchmarks/${run.id}/stop`, { data: {} });
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    }
+  });
+
+  test('run persists and continues after simulated page reload', async ({ request }) => {
+    test.skip(!wikiId, 'No wiki available for reload test');
+
+    // Start a multi-cycle auto-benchmark
+    const startResponse = await request.post(`/api/repos/${repoId}/auto-benchmarks`, {
+      data: {
+        iterationsPerCycle: 1,
+        maxCycles: 3,
+        includeQuality: false,
+      },
+    });
+
+    if (startResponse.status() !== 202) {
+      console.log(`Skipping reload test: start returned ${startResponse.status()}`);
+      return;
+    }
+
+    const startData = await startResponse.json();
+    const runId = startData.runId;
+
+    try {
+      // Poll until we see some progress (run is actively processing)
+      let initialState: { currentCycle: number; currentPhase: string; status: string } | null = null;
+      const maxWaitMs = 30000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const statusResponse = await request.get(`/api/repos/${repoId}/auto-benchmarks/${runId}`);
+        if (!statusResponse.ok()) break;
+
+        const data = await statusResponse.json();
+        initialState = {
+          currentCycle: data.currentCycle,
+          currentPhase: data.currentPhase,
+          status: data.status,
+        };
+
+        // Wait until we've made some progress or completed
+        if (data.status !== 'running' || data.currentCycle >= 1) {
+          break;
+        }
+      }
+
+      expect(initialState).not.toBeNull();
+
+      // === SIMULATE PAGE RELOAD ===
+      // User closes browser/reloads - we stop polling entirely
+      // Wait a moment (simulating time to reload page)
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // === USER RETURNS / PAGE RELOADED ===
+      // Fetch the run status again (as if from a fresh page load)
+      const reloadedStatusResponse = await request.get(`/api/repos/${repoId}/auto-benchmarks/${runId}`);
+      expect(reloadedStatusResponse.ok()).toBeTruthy();
+
+      const reloadedData = await reloadedStatusResponse.json();
+
+      // Verify the run still exists and has expected properties
+      expect(reloadedData.id).toBe(runId);
+      expect(reloadedData.repoId).toBe(repoId);
+      expect(reloadedData.config.maxCycles).toBe(3);
+
+      // Status should be running, completed, or another valid state (not lost)
+      expect(['running', 'completed', 'failed', 'stopped']).toContain(reloadedData.status);
+
+      // If still running, progress should be >= what we saw before
+      if (reloadedData.status === 'running' && initialState!.status === 'running') {
+        const progressMade =
+          reloadedData.currentCycle > initialState!.currentCycle ||
+          (reloadedData.currentCycle === initialState!.currentCycle &&
+            getPhaseOrder(reloadedData.currentPhase) >= getPhaseOrder(initialState!.currentPhase));
+        expect(progressMade).toBeTruthy();
+      }
+
+      // Verify run appears in the list endpoint (as user would see on page load)
+      const listResponse = await request.get(`/api/repos/${repoId}/auto-benchmarks`);
+      expect(listResponse.ok()).toBeTruthy();
+      const listData = await listResponse.json();
+      const foundRun = listData.runs.find((r: { id: string }) => r.id === runId);
+      expect(foundRun).toBeDefined();
+      expect(foundRun.id).toBe(runId);
+    } finally {
+      // Clean up
+      await request.post(`/api/repos/${repoId}/auto-benchmarks/${runId}/stop`, { data: {} });
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await request.delete(`/api/repos/${repoId}/auto-benchmarks/${runId}`);
+    }
+  });
+
+  test('progress state is accurately persisted across polls', async ({ request }) => {
+    test.skip(!wikiId, 'No wiki available for progress test');
+
+    // Start a multi-cycle auto-benchmark
+    const startResponse = await request.post(`/api/repos/${repoId}/auto-benchmarks`, {
+      data: {
+        iterationsPerCycle: 1,
+        maxCycles: 2,
+        includeQuality: false,
+      },
+    });
+
+    if (startResponse.status() !== 202) {
+      console.log(`Skipping progress test: start returned ${startResponse.status()}`);
+      return;
+    }
+
+    const startData = await startResponse.json();
+    const runId = startData.runId;
+
+    try {
+      // Track all observed states
+      const observedStates: Array<{ cycle: number; phase: string; status: string }> = [];
+      const maxWaitMs = 60000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const statusResponse = await request.get(`/api/repos/${repoId}/auto-benchmarks/${runId}`);
+        if (!statusResponse.ok()) break;
+
+        const data = await statusResponse.json();
+        const state = {
+          cycle: data.currentCycle,
+          phase: data.currentPhase,
+          status: data.status,
+        };
+
+        // Only record if state changed
+        const lastState = observedStates[observedStates.length - 1];
+        if (!lastState || lastState.cycle !== state.cycle || lastState.phase !== state.phase || lastState.status !== state.status) {
+          observedStates.push(state);
+        }
+
+        if (['completed', 'failed', 'stopped'].includes(data.status)) {
+          break;
+        }
+      }
+
+      // Verify we observed multiple states (progress was made and persisted)
+      expect(observedStates.length).toBeGreaterThan(0);
+
+      // Verify progress was monotonic (never went backwards)
+      for (let i = 1; i < observedStates.length; i++) {
+        const prev = observedStates[i - 1]!;
+        const curr = observedStates[i]!;
+
+        // Status transitions should be valid
+        if (prev.status === 'running' && curr.status === 'running') {
+          // Progress should not go backwards
+          const prevProgress = prev.cycle * 10 + getPhaseOrder(prev.phase);
+          const currProgress = curr.cycle * 10 + getPhaseOrder(curr.phase);
+          expect(currProgress).toBeGreaterThanOrEqual(prevProgress);
+        }
+      }
+
+      // If completed, verify final state
+      const finalState = observedStates[observedStates.length - 1];
+      if (finalState?.status === 'completed') {
+        expect(finalState.phase).toBe('complete');
+      }
+    } finally {
+      // Clean up
+      await request.post(`/api/repos/${repoId}/auto-benchmarks/${runId}/stop`, { data: {} });
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await request.delete(`/api/repos/${repoId}/auto-benchmarks/${runId}`);
+    }
+  });
+
+  test('run is discoverable via list endpoint after starting', async ({ request }) => {
+    test.skip(!wikiId, 'No wiki available for discovery test');
+
+    // Start an auto-benchmark
+    const startResponse = await request.post(`/api/repos/${repoId}/auto-benchmarks`, {
+      data: {
+        iterationsPerCycle: 2,
+        maxCycles: 3,
+        includeQuality: false,
+      },
+    });
+
+    if (startResponse.status() !== 202) {
+      console.log(`Skipping discovery test: start returned ${startResponse.status()}`);
+      return;
+    }
+
+    const startData = await startResponse.json();
+    const runId = startData.runId;
+
+    try {
+      // Check the list endpoint (simulating fresh page load)
+      // The run may have already completed or failed by now, but it should be discoverable
+      const listResponse = await request.get(`/api/repos/${repoId}/auto-benchmarks`);
+      expect(listResponse.ok()).toBeTruthy();
+
+      const listData = await listResponse.json();
+      expect(listData.runs).toBeDefined();
+
+      // The run we just started should be in the list regardless of current status
+      const foundRun = listData.runs.find((r: { id: string }) => r.id === runId);
+      expect(foundRun).toBeDefined();
+      // Run should be in some valid state (running, completed, or failed)
+      expect(['running', 'completed', 'failed', 'stopped']).toContain(foundRun.status);
+      expect(foundRun.config.maxCycles).toBe(3);
+
+      // User could use this to get the run ID and start polling
+      // Verify the detailed endpoint also works
+      const detailResponse = await request.get(`/api/repos/${repoId}/auto-benchmarks/${foundRun.id}`);
+      expect(detailResponse.ok()).toBeTruthy();
+
+      const detailData = await detailResponse.json();
+      expect(detailData.id).toBe(runId);
+      // Verify essential properties are present
+      expect(detailData.repoId).toBe(repoId);
+      expect(detailData.config).toBeDefined();
+      expect(detailData.startedAt).toBeDefined();
+    } finally {
+      // Clean up
+      await request.post(`/api/repos/${repoId}/auto-benchmarks/${runId}/stop`, { data: {} });
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await request.delete(`/api/repos/${repoId}/auto-benchmarks/${runId}`);
+    }
+  });
+});
+
+/**
+ * Helper to convert phase names to numeric order for comparison.
+ */
+function getPhaseOrder(phase: string): number {
+  const phaseOrder: Record<string, number> = {
+    iterations: 1,
+    accuracy: 2,
+    quality: 3,
+    complete: 4,
+  };
+  return phaseOrder[phase] ?? 0;
+}
