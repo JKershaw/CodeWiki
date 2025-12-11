@@ -215,12 +215,12 @@ commit hashes or file paths, making it hard to trace back to source.`,
       });
 
       ctx.llm.setDefaultResponse(`ISSUES:
-- [SEVERITY:medium] | [guides/short] | Page has very little content
-- [SEVERITY:low] | [guides/no-refs] | Missing source citations
+- severity: medium | page: guides/short | Page has very little content
+- severity: low | page: guides/no-refs | Missing source citations
 
 IMPROVEMENTS:
-- [guides/short] | Expand content with more detail
-- [guides/no-refs] | Add commit and file references
+- page: guides/short | Expand content with more detail
+- page: guides/no-refs | Add commit and file references
 
 CONFIDENCE: 0.8`);
 
@@ -273,8 +273,8 @@ The WorkQueue manages pending tasks for the executor.
         updatedAt: new Date(),
       });
 
-      // LLM response with specific improvements
-      ctx.llm.setDefaultResponse(`ISSUES:
+      // First LLM call: Quality review
+      ctx.llm.onPromptContaining('Review these wiki pages', `ISSUES:
 - severity: high | page: guides/shallow | Page is too short to be useful
 - severity: medium | page: guides/needs-depth | Describes but doesn't explain mechanisms
 
@@ -283,6 +283,25 @@ IMPROVEMENTS:
 - page: guides/needs-depth | Add details about how WorkQueue uses Redis and handles retries
 
 CONFIDENCE: 0.75`);
+
+      // Second LLM calls: Generate improved content for each page
+      ctx.llm.onPromptContaining('guides/shallow', `IMPROVED_CONTENT:
+## Overview
+
+This guide covers the shallow topic in detail.
+
+## Implementation
+
+Here are the implementation details with code examples.
+
+CONFIDENCE: 0.8`);
+
+      ctx.llm.onPromptContaining('guides/needs-depth', `IMPROVED_CONTENT:
+## How It Works
+
+The WorkQueue uses Redis for task storage and handles retries with exponential backoff.
+
+CONFIDENCE: 0.8`);
 
       const agent = new QualityAgent();
       const agentCtx = await ctx.agentContext(fixableRepoId);
@@ -300,6 +319,102 @@ CONFIDENCE: 0.75`);
       assert.ok(
         updatePaths.some(p => p === 'guides/shallow' || p === 'guides/needs-depth'),
         'Updates should target pages with quality issues'
+      );
+    });
+
+    it('generates actual improved content, not just meta-commentary', async () => {
+      const improveRepoId = 'quality-improve-content-repo';
+      await createTestRepo(ctx, improveRepoId);
+      const wiki = await getOrCreateActiveWiki(improveRepoId, ctx.repos);
+
+      // Create a page with shallow content that needs improvement
+      await ctx.repos.wikiPages.save({
+        id: 'shallow-needs-fix',
+        wikiId: wiki.id,
+        path: 'guides/work-queue',
+        title: 'Work Queue',
+        content: 'The WorkQueue manages pending tasks.',  // Too shallow
+        confidence: 0.3,
+        sourceCommits: [],
+        links: [],
+        backlinks: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Also need a second page to meet the 2-page minimum
+      await ctx.repos.wikiPages.save({
+        id: 'helper-page',
+        wikiId: wiki.id,
+        path: 'guides/executor',
+        title: 'Executor',
+        content: 'The executor runs tasks.',
+        confidence: 0.3,
+        sourceCommits: [],
+        links: [],
+        backlinks: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // First LLM call: Review and identify issues (matches "Review these wiki pages")
+      ctx.llm.onPromptContaining('Review these wiki pages', `ISSUES:
+- severity: high | page: guides/work-queue | Page is too shallow - describes but doesn't explain
+- severity: high | page: guides/executor | Page is too shallow
+
+IMPROVEMENTS:
+- page: guides/work-queue | Explain how WorkQueue uses Redis-backed priority queue, task claiming via atomic operations, and retry with exponential backoff
+- page: guides/executor | Explain executor architecture and task processing flow
+
+CONFIDENCE: 0.7`);
+
+      // Second LLM call: Generate improved content (matches "improve" or "expand")
+      ctx.llm.onPromptContaining('guides/work-queue', `IMPROVED_CONTENT:
+## Overview
+
+The WorkQueue manages pending tasks using a Redis-backed priority queue.
+
+## How It Works
+
+Tasks are claimed via WorkQueueRepository.claimBatch(), which uses atomic operations to prevent duplicate processing. If a task fails, it's re-queued with exponential backoff up to 3 retries.
+
+## Key Methods
+
+- \`enqueue(task)\`: Adds a task to the priority queue
+- \`claimBatch(count)\`: Atomically claims tasks for processing
+- \`complete(taskId)\`: Marks a task as successfully completed
+- \`fail(taskId)\`: Marks a task as failed and schedules retry
+
+CONFIDENCE: 0.85`);
+
+      const agent = new QualityAgent();
+      const agentCtx = await ctx.agentContext(improveRepoId);
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should generate updates
+      assert.ok(result.updates.length > 0, 'Should generate updates');
+
+      // Find update for work-queue page
+      const workQueueUpdate = result.updates.find(u => u.path === 'guides/work-queue');
+      assert.ok(workQueueUpdate, 'Should have update for work-queue page');
+
+      // Content should have ACTUAL improved content, not just "Quality Notes"
+      assert.ok(
+        !workQueueUpdate.content.includes('Quality Notes'),
+        'Should NOT just add Quality Notes meta-commentary'
+      );
+      assert.ok(
+        !workQueueUpdate.content.includes('improvements were suggested'),
+        'Should NOT just describe what should be improved'
+      );
+
+      // Content should have substantive information
+      assert.ok(
+        workQueueUpdate.content.includes('Redis') ||
+        workQueueUpdate.content.includes('atomic') ||
+        workQueueUpdate.content.includes('retry') ||
+        workQueueUpdate.content.includes('How It Works'),
+        'Should include actual substantive content about the topic'
       );
     });
 
