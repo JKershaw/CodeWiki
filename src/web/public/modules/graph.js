@@ -35,6 +35,12 @@ async function initGraph(repoId, wikiId) {
   // Show loading state
   container.innerHTML = '<p class="loading">Loading graph...</p>';
 
+  // Check if Cytoscape is loaded
+  if (typeof cytoscape === 'undefined') {
+    container.innerHTML = '<p class="error">Graph library failed to load. Please refresh the page.</p>';
+    return;
+  }
+
   try {
     // Load graph data
     const url = wikiId
@@ -44,6 +50,9 @@ async function initGraph(repoId, wikiId) {
 
     // Clear loading state
     container.innerHTML = '';
+
+    // Wait for container to be rendered with proper dimensions
+    await new Promise(resolve => requestAnimationFrame(resolve));
 
     // Initialize Cytoscape
     cy = cytoscape({
