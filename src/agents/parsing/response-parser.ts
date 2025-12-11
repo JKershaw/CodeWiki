@@ -145,6 +145,127 @@ export function parseSection(
 }
 
 /**
+ * Options for flexible section parsing.
+ */
+export interface FlexibleParseOptions extends ParseOptions {
+  /**
+   * Section terminators to use for markdown fallback.
+   * These are section names that signal the end of the current section.
+   * Default: common terminators like CONFIDENCE, FINDINGS, etc.
+   */
+  terminators?: string[];
+  /**
+   * Minimum length to consider a match valid.
+   * If the matched content is shorter than this, try fallback patterns.
+   * Default: 10
+   */
+  minLength?: number;
+}
+
+/**
+ * Parse a section with automatic fallback to markdown heading formats.
+ *
+ * Tries patterns in this order:
+ * 1. Original pattern (e.g., SUMMARY: content)
+ * 2. Markdown ## heading (e.g., ## SUMMARY\ncontent)
+ * 3. Markdown ### heading (e.g., ### SUMMARY\ncontent)
+ *
+ * This handles common LLM output variations while keeping prompts simple.
+ *
+ * @param ctx - The parsing context
+ * @param sectionName - Human-readable name of the section (e.g., 'SUMMARY', 'FINDINGS')
+ * @param primaryPattern - Primary regex pattern with a capture group
+ * @param options - Parsing options including terminators for markdown fallback
+ * @returns The parsed value or null if all patterns failed
+ */
+export function parseSectionFlexible(
+  ctx: ParseContext,
+  sectionName: string,
+  primaryPattern: RegExp,
+  options: FlexibleParseOptions = {}
+): string | null {
+  const {
+    required = false,
+    defaultValue,
+    minLength = 10,
+    terminators = ['CONFIDENCE', 'FINDINGS', 'SUMMARY', 'WIKI_PAGES', 'WIKI_UPDATES', 'TODO_ITEMS', 'REMEDIATION', 'HOTSPOTS']
+  } = options;
+
+  // Try primary pattern first
+  const primaryMatch = ctx.response.match(primaryPattern);
+  if (primaryMatch && primaryMatch[1]) {
+    const value = primaryMatch[1].trim();
+    if (value.length >= minLength) {
+      ctx.successfulSections.push(sectionName);
+      return value;
+    }
+  }
+
+  // Build terminator pattern for markdown fallback
+  // Match next ## or ### heading, or SECTION: format, or end of string
+  const terminatorPattern = terminators
+    .map(t => `##\\s*${t}|${t}:`)
+    .join('|');
+
+  // Try ## SECTION_NAME format (but not ### - must be exactly two #)
+  const h2Pattern = new RegExp(
+    `(?:^|\\n)##(?!#)\\s*${sectionName}\\s*\\n([\\s\\S]*?)(?=${terminatorPattern}|$)`,
+    'i'
+  );
+  const h2Match = ctx.response.match(h2Pattern);
+  if (h2Match && h2Match[1]) {
+    const value = h2Match[1].trim();
+    if (value.length >= minLength) {
+      ctx.successfulSections.push(sectionName);
+      return value;
+    }
+  }
+
+  // Try ### SECTION_NAME format
+  // For h3, we stop at any heading (## or ###) or at colon-format sections
+  const h3Pattern = new RegExp(
+    `###\\s*${sectionName}\\s*\\n([\\s\\S]*?)(?=\\n##|${terminatorPattern}|$)`,
+    'i'
+  );
+  const h3Match = ctx.response.match(h3Pattern);
+  if (h3Match && h3Match[1]) {
+    const value = h3Match[1].trim();
+    if (value.length >= minLength) {
+      ctx.successfulSections.push(sectionName);
+      return value;
+    }
+  }
+
+  // All patterns failed - log and record the failure
+  const failure: ParseFailure = {
+    section: sectionName,
+    required,
+    pattern: primaryPattern.source.slice(0, 50) + (primaryPattern.source.length > 50 ? '...' : ''),
+    responsePreview: getResponsePreview(ctx.response, sectionName),
+    timestamp: new Date(),
+  };
+
+  ctx.failures.push(failure);
+
+  const logMethod = required ? console.error : console.warn;
+  logMethod(
+    `[${ctx.agentType}] Failed to parse ${sectionName} (tried colon and markdown formats)`,
+    {
+      section: sectionName,
+      required,
+      pattern: failure.pattern,
+      responsePreview: failure.responsePreview,
+    }
+  );
+
+  if (!required && defaultValue !== undefined) {
+    return defaultValue;
+  }
+
+  return null;
+}
+
+/**
  * Parse multiple items from a section using a line-based pattern.
  *
  * Used for sections like:

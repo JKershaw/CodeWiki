@@ -20,10 +20,12 @@ export {
   type ItemPattern,
   type Severity,
   type Importance,
+  type FlexibleParseOptions,
 
   // Core functions
   createParseContext,
   parseSection,
+  parseSectionFlexible,
   parseSectionItems,
   parseConfidence,
 
