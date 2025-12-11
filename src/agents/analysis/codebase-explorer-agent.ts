@@ -786,57 +786,31 @@ function validateFindingPaths(
   });
 }
 
-const SYSTEM_PROMPT = `You MUST use tools before generating any documentation. Your FIRST response MUST be a tool call, NOT text.
+const SYSTEM_PROMPT = `You are a documentation agent. Read actual source code with tools, then write documentation based on what you read.
 
-## MANDATORY TOOL USAGE - READ THIS FIRST
+## Workflow
 
-You are REQUIRED to make AT LEAST 2 tool calls before writing any documentation:
-1. FIRST: Call \`list_directory\` to see what files exist
-2. THEN: Call \`read_file\` to read the actual source code
+1. Call \`list_directory\` on the target path to see files
+2. Call \`read_file\` on each important file
+3. Write documentation using ONLY information from files you read
 
-NEVER output SUMMARY, FINDINGS, or WIKI_PAGES without first making these tool calls.
-If you skip tools and guess based on directory names, you WILL hallucinate incorrect content.
+## Tools
 
-## Available Tools
+- \`list_directory\`: List files in a directory
+- \`read_file\`: Read source file contents
+- \`search_files\`: Find files by pattern
 
-- \`list_directory\`: See what files exist in a directory - ALWAYS call this first
-- \`read_file\`: Read the full contents of a source file - REQUIRED before documenting
-- \`search_files\`: Find files by glob pattern (e.g., find test files)
+## Documentation Rules
 
-## Required Workflow
+Base ALL documentation on actual code you read. Use exact class names, function names, and patterns from the source files.
 
-Your response pattern MUST be:
-1. Call \`list_directory\` on the target path (REQUIRED)
-2. Call \`read_file\` on key files you discover (REQUIRED - at least 1 file)
-3. Optionally call \`search_files\` for test files
-4. ONLY AFTER tool calls: Output your documentation in the requested format
+Example: If you read a file with \`class UserRepository\`, document UserRepository. If you read a function \`calculateTotal(items)\`, document that exact signature.
 
-## Why Tools Are Mandatory
+Wiki pages: Use lowercase paths with hyphens (e.g., "services/llm-service"). Reference only file paths you verified.
 
-Without reading actual source code, you will:
-- Invent file names that don't exist
-- Describe frameworks not used in this codebase
-- Document APIs that don't match the implementation
-- Use wrong class/function/variable names
+## Confidence
 
-## Documentation Style (ONLY after tool calls)
-
-Once you have read the actual code:
-- Write encyclopedia-style documentation based on what you READ
-- Use EXACT names from the source code
-- Include code examples FROM THE ACTUAL FILES you read
-- Explain what the code does and why it exists
-
-Wiki page guidelines:
-- Use lowercase paths with hyphens (e.g., "services/llm-service")
-- Each page should be 200-500 words minimum
-- Only reference file paths you verified via tool calls
-
-Confidence scoring:
-- 0.9+: Read all key files, comprehensive documentation
-- 0.7-0.9: Read most files but some unexplored
-- 0.5-0.7: Limited file reads, may need more exploration
-- <0.5: Insufficient tool use, documentation may be inaccurate`;
+0.9+: Read all key files. 0.7-0.9: Read most files. 0.5-0.7: Limited reads. <0.5: Insufficient data.`;
 
 /**
  * Simplified system prompt for pre-fetch mode.
