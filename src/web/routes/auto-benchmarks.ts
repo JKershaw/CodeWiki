@@ -166,8 +166,15 @@ export function createAutoBenchmarksRoutes(deps: Dependencies): Router {
         console.error(`[AutoBenchmark] Run ${runId} failed:`, error);
       });
 
-      // Wait briefly for record to be created
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for record to be created before responding
+      // This ensures conflict detection works for concurrent requests
+      const maxWaitMs = 5000;
+      const startTime = Date.now();
+      while (Date.now() - startTime < maxWaitMs) {
+        const record = await repos.autoBenchmarks.findById(runId);
+        if (record) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
 
       res.status(202).json({
         runId,

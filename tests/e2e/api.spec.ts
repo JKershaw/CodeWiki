@@ -289,8 +289,30 @@ test.describe('API Endpoints', () => {
       expect(repos.length, 'Test requires at least one repository (failed to add one)').toBeGreaterThan(0);
     }
 
-    // Try to stop when no processing is active
-    const response = await request.patch(`/api/repos/${repos[0].id}/processing/stop`);
+    const repoId = repos[0].id;
+
+    // First, ensure no processing is currently running by stopping any active runs
+    // This handles test isolation issues where other tests may have started processing
+    let processingResponse = await request.get(`/api/repos/${repoId}/processing`);
+    if (processingResponse.ok()) {
+      const processingData = await processingResponse.json();
+      if (processingData.processing?.status === 'running') {
+        // Stop the running processing first
+        await request.patch(`/api/repos/${repoId}/processing/stop`);
+        // Wait for it to actually stop
+        const maxWaitMs = 10000;
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxWaitMs) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          processingResponse = await request.get(`/api/repos/${repoId}/processing`);
+          const data = await processingResponse.json();
+          if (!data.processing || data.processing.status !== 'running') break;
+        }
+      }
+    }
+
+    // Now try to stop when no processing is active
+    const response = await request.patch(`/api/repos/${repoId}/processing/stop`);
 
     // Should return 404 (no active processing) or 400 (not in running state)
     expect([404, 400]).toContain(response.status());
