@@ -91,7 +91,10 @@ export class LinkAgent implements Agent {
       excerpt: p.content.slice(0, 500),
     }));
 
-    const prompt = this.buildPrompt(pagesToAnalyze, pageSummaries);
+    // Limit pages to analyze to avoid overly long prompts (increased from 10 to 20)
+    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 20);
+
+    const prompt = this.buildPrompt(limitedPagesToAnalyze, pageSummaries);
 
     const completion = await context.llm.complete({
       system: SYSTEM_PROMPT,
@@ -101,11 +104,12 @@ export class LinkAgent implements Agent {
     });
 
     const analysis = this.parseResponse(completion.content);
-    const updates = this.generateUpdates(pagesToAnalyze, analysis, pages);
+    // Only generate updates for pages that were actually analyzed
+    const updates = this.generateUpdates(limitedPagesToAnalyze, analysis, pages);
 
     return {
       result: createAgentResult({
-        summary: `Found ${analysis.linkSuggestions.length} link relationships across ${pagesToAnalyze.length} pages`,
+        summary: `Found ${analysis.linkSuggestions.length} link relationships across ${limitedPagesToAnalyze.length} pages`,
         findings: analysis.linkSuggestions.slice(0, 10).map(link => createFinding({
           type: 'LINK',
           description: `${link.sourcePath} → ${link.targetPath}: ${link.reason}`,
@@ -123,14 +127,13 @@ export class LinkAgent implements Agent {
     pagesToAnalyze: WikiPage[],
     allPages: Array<{ path: string; title: string; category: string; excerpt: string }>
   ): string {
-    // Limit pages to avoid overly long prompts
-    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 10);
+    // Note: pagesToAnalyze is already limited by caller (to 20 pages max)
 
     return `You are analyzing wiki pages to create cross-references between related content.
 
 ## Pages to Analyze
 
-${limitedPagesToAnalyze.map(p => `### ${p.path}
+${pagesToAnalyze.map(p => `### ${p.path}
 **Title:** ${p.title}
 **Category:** ${p.path.split('/')[0] ?? 'uncategorized'}
 **Content Preview:**
