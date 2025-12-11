@@ -7,6 +7,7 @@ import assert from 'node:assert';
 import {
   createParseContext,
   parseSection,
+  parseSectionFlexible,
   parseSectionItems,
   parseConfidence,
   hasRequiredFailures,
@@ -1035,5 +1036,229 @@ CONFIDENCE: 0.85`;
 
     const confidence = parseConfidence(ctx);
     assert.strictEqual(confidence, 0.85);
+  });
+});
+
+describe('parseSectionFlexible', () => {
+  it('should parse colon format (primary pattern)', () => {
+    const response = `SUMMARY: This is the summary content.
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i
+    );
+
+    assert.strictEqual(result, 'This is the summary content.');
+    assert.ok(ctx.successfulSections.includes('SUMMARY'));
+    assert.strictEqual(ctx.failures.length, 0);
+  });
+
+  it('should fallback to ## markdown heading format', () => {
+    const response = `## SUMMARY
+This is the summary content from markdown heading.
+
+## FINDINGS
+Some findings here.`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i
+    );
+
+    assert.strictEqual(result, 'This is the summary content from markdown heading.');
+    assert.ok(ctx.successfulSections.includes('SUMMARY'));
+  });
+
+  it('should fallback to ### markdown heading format', () => {
+    const response = `### SUMMARY
+This is the summary from h3 heading.
+
+### FINDINGS
+Some findings here.`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i
+    );
+
+    assert.strictEqual(result, 'This is the summary from h3 heading.');
+    assert.ok(ctx.successfulSections.includes('SUMMARY'));
+  });
+
+  it('should prefer colon format over markdown when both present', () => {
+    const response = `SUMMARY: This is the colon format.
+
+## SUMMARY
+This is the markdown format.
+
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=CONFIDENCE:|##|$)/i
+    );
+
+    assert.strictEqual(result, 'This is the colon format.');
+  });
+
+  it('should handle multiline markdown content', () => {
+    const response = `## SUMMARY
+This is the first paragraph.
+
+This is the second paragraph with more details.
+
+- Bullet point 1
+- Bullet point 2
+
+## FINDINGS
+Next section.`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i
+    );
+
+    assert.ok(result);
+    assert.ok(result.includes('first paragraph'));
+    assert.ok(result.includes('second paragraph'));
+    assert.ok(result.includes('Bullet point'));
+  });
+
+  it('should return default value when all patterns fail', () => {
+    const response = `OTHER: stuff
+No summary section here.`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      { defaultValue: 'Default summary' }
+    );
+
+    assert.strictEqual(result, 'Default summary');
+    assert.strictEqual(ctx.failures.length, 1);
+  });
+
+  it('should return null for required missing section', () => {
+    const response = `OTHER: stuff`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i,
+      { required: true }
+    );
+
+    assert.strictEqual(result, null);
+    assert.ok(hasRequiredFailures(ctx));
+  });
+
+  it('should use custom terminators', () => {
+    const response = `## SUMMARY
+This is content until custom terminator.
+
+## CUSTOM_END
+Next section.`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=CUSTOM_END:|$)/i,
+      { terminators: ['CUSTOM_END'] }
+    );
+
+    assert.ok(result);
+    assert.ok(result.includes('custom terminator'));
+    assert.ok(!result.includes('Next section'));
+  });
+
+  it('should respect minLength option', () => {
+    const response = `SUMMARY: Short
+
+## SUMMARY
+This is the longer markdown content that meets minimum length.
+
+CONFIDENCE: 0.8`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=CONFIDENCE:|##|$)/i,
+      { minLength: 20 }
+    );
+
+    // Should fall back to markdown since colon format is too short
+    assert.ok(result);
+    assert.ok(result.includes('longer markdown content'));
+  });
+
+  it('should handle case-insensitive section names', () => {
+    const response = `## summary
+This is lowercase heading content.
+
+## FINDINGS
+Next.`;
+
+    const ctx = createParseContext('test', response);
+
+    const result = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|$)/i
+    );
+
+    assert.ok(result);
+    assert.ok(result.includes('lowercase heading content'));
+  });
+
+  it('should handle real LLM-style response with mixed formats', () => {
+    const response = `### SUMMARY
+The code implements a repository pattern for data access.
+
+### DEBT_TREND
+adding_debt
+
+### FINDINGS
+- category: Long Method | severity: high | description: Method exceeds 50 lines | paths: src/main.ts
+
+### CONFIDENCE
+0.85`;
+
+    const ctx = createParseContext('technical-debt', response);
+
+    const summary = parseSectionFlexible(
+      ctx,
+      'SUMMARY',
+      /SUMMARY:\s*([\s\S]*?)(?=DEBT_TREND:|FINDINGS:|$)/i,
+      { terminators: ['DEBT_TREND', 'FINDINGS', 'CONFIDENCE'] }
+    );
+
+    assert.ok(summary);
+    assert.ok(summary.includes('repository pattern'));
+    assert.ok(!summary.includes('DEBT_TREND'));
   });
 });
