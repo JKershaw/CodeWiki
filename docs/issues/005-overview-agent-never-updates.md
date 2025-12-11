@@ -2,7 +2,7 @@
 
 **Priority:** P0 - Critical
 **Severity:** CRITICAL
-**Status:** Open
+**Status:** FIXED
 **Detected:** 2025-12-09 (qwen testing), confirmed 2025-12-11 (llama testing)
 
 ---
