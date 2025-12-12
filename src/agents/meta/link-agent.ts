@@ -59,11 +59,12 @@ export class LinkAgent implements Agent {
     const newestPageCreation = Math.max(...pages.map(p => p.createdAt.getTime()));
 
     // Find pages that need link analysis:
-    // 1. Pages with no links (always need analysis)
-    // 2. Pages with links but updated before a newer page was created (might need new links)
+    // 1. Pages with very few links (< 2) - always need analysis for more links
+    // 2. Pages with more links but updated before a newer page was created (might need new links)
     const pagesToAnalyze = pages.filter(p => {
-      // Always analyze pages with no links
-      if (p.links.length === 0) {
+      // Always analyze pages with very few links (0 or 1)
+      // Pages with just 1 link likely have more relevant connections
+      if (p.links.length < 2) {
         return true;
       }
       // Re-analyze pages with links if they were updated before a newer page was created

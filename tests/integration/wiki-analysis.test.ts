@@ -101,13 +101,14 @@ CONFIDENCE: 0.85`);
       );
     });
 
-    it('skips analysis when pages already have links and no newer pages exist', async () => {
+    it('skips analysis when pages have sufficient links and no newer pages exist', async () => {
       const repoWithLinks = 'link-test-repo-2';
       await createTestRepo(ctx, repoWithLinks);
       const wiki = await getOrCreateActiveWiki(repoWithLinks, ctx.repos);
 
-      // Create pages that already have links at the same timestamp
+      // Create pages that already have 2+ links at the same timestamp
       // (no newer pages exist, so no re-analysis needed)
+      // Pages with 2+ links are considered "sufficiently linked"
       const sameTime = new Date();
       await ctx.repos.wikiPages.save({
         id: 'linked-1',
@@ -118,7 +119,7 @@ CONFIDENCE: 0.85`);
         confidence: 0.7,
         sourceCommits: [],
         sourceAgentRunIds: [],
-        links: ['page-b'],
+        links: ['page-b', 'page-c'],  // 2 links = sufficient
         backlinks: [],
         createdAt: sameTime,
         updatedAt: sameTime,
@@ -133,7 +134,22 @@ CONFIDENCE: 0.85`);
         confidence: 0.7,
         sourceCommits: [],
         sourceAgentRunIds: [],
-        links: ['page-a'],
+        links: ['page-a', 'page-c'],  // 2 links = sufficient
+        backlinks: [],
+        createdAt: sameTime,
+        updatedAt: sameTime,
+      });
+
+      await ctx.repos.wikiPages.save({
+        id: 'linked-3',
+        wikiId: wiki.id,
+        path: 'page-c',
+        title: 'Page C',
+        content: '# Page C',
+        confidence: 0.7,
+        sourceCommits: [],
+        sourceAgentRunIds: [],
+        links: ['page-a', 'page-b'],  // 2 links = sufficient
         backlinks: [],
         createdAt: sameTime,
         updatedAt: sameTime,
