@@ -26,6 +26,9 @@ export interface OrchestratorRun {
 
   // Whether this used LLM or fell back to deterministic
   usedLLM: boolean;
+
+  // Progress update: One paragraph summary of progress and forecast
+  progressUpdate?: string;
 }
 
 /**

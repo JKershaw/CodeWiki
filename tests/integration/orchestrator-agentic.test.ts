@@ -148,9 +148,9 @@ describe('Agentic Orchestrator', () => {
       const orchestrator = new Orchestrator(ctx.repos, llm, { useLLM: true }, ctx.repoAccessFactory);
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
-      // Should use completeWithTools, not complete
-      assert.strictEqual(llm.completeWithToolsCalls.length, 1, 'Should call completeWithTools once');
-      assert.strictEqual(llm.completeCalls.length, 0, 'Should not call complete');
+      // Should use completeWithTools for orchestration, and complete for progress update
+      assert.strictEqual(llm.completeWithToolsCalls.length, 1, 'Should call completeWithTools once for orchestration');
+      assert.strictEqual(llm.completeCalls.length, 1, 'Should call complete once for progress update');
     });
 
     it('should pass tools to the LLM call', async () => {

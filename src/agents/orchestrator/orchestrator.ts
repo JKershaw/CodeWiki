@@ -18,11 +18,13 @@ import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.j
 import type { UnifiedRepoAccessFactory, UnifiedRepoAccess } from '../../services/repository/unified-repo-access.js';
 import { codebaseTools } from '../../services/llm/codebase-tools.js';
 import type { ToolContext, ToolDefinition } from '../../services/llm/tools.js';
-import { ContextGatherer } from './context-gatherer.js';
+import { ContextGatherer, type OrchestratorContext } from './context-gatherer.js';
 import {
   ORCHESTRATOR_SYSTEM_PROMPT,
   buildUserPrompt,
   parseOrchestratorResponse,
+  PROGRESS_UPDATE_SYSTEM_PROMPT,
+  buildProgressUpdatePrompt,
 } from './prompts.js';
 import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 import {
@@ -103,6 +105,8 @@ export class Orchestrator {
     // First check for high-priority deterministic work that should always run
     const bootstrapWork = await this.checkBootstrapNeeded(repoId, wikiId);
     if (bootstrapWork) {
+      // Generate progress update for bootstrap if LLM available
+      await this.generateBootstrapProgressUpdate(repoId, wikiId, bootstrapWork);
       return [bootstrapWork];
     }
 
@@ -121,6 +125,55 @@ export class Orchestrator {
 
     // Deterministic fallback
     return await this.generateDeterministic(repoId, wikiId, maxItems);
+  }
+
+  /**
+   * Generate progress update for bootstrap case.
+   */
+  private async generateBootstrapProgressUpdate(
+    repoId: string,
+    wikiId: string,
+    bootstrapWork: WorkItem
+  ): Promise<void> {
+    if (!this.llm) {
+      return;
+    }
+
+    try {
+      const startTime = Date.now();
+      const context = await this.contextGatherer.gather(repoId, wikiId);
+      const reasoning = 'Bootstrap required - wiki is empty, initializing documentation.';
+
+      const progressUpdate = await this.generateProgressUpdate(
+        context,
+        1,
+        reasoning
+      );
+
+      // Create and save orchestrator run record
+      const runId = uuid();
+      const orchestratorRun = createOrchestratorRun({
+        id: runId,
+        repoId,
+        context,
+        promptSent: '[bootstrap mode - no prompt]',
+      });
+      orchestratorRun.rawResponse = reasoning;
+      orchestratorRun.decision = { reasoning, workItems: [] };
+      orchestratorRun.workItemsCreated = [bootstrapWork.id];
+      orchestratorRun.model = 'bootstrap';
+      orchestratorRun.costUsd = 0;
+      orchestratorRun.durationMs = Date.now() - startTime;
+      orchestratorRun.usedLLM = false;
+      if (progressUpdate) {
+        orchestratorRun.progressUpdate = progressUpdate;
+        console.log(`📊 Progress: ${progressUpdate}`);
+      }
+
+      await this.repos.orchestratorRuns.save(orchestratorRun);
+    } catch (error) {
+      console.warn('Failed to generate bootstrap progress update:', error);
+    }
   }
 
   /**
@@ -327,8 +380,18 @@ export class Orchestrator {
     // Combine LLM work with fallback exploration
     const allWorkItems = [...llmWorkItems, ...fallbackExplorationWork];
 
+    // Generate progress update
+    const progressUpdate = await this.generateProgressUpdate(
+      context,
+      allWorkItems.length,
+      decision.reasoning
+    );
+
     // Save tracking record
     orchestratorRun.workItemsCreated = allWorkItems.map(w => w.id);
+    if (progressUpdate) {
+      orchestratorRun.progressUpdate = progressUpdate;
+    }
     await this.repos.orchestratorRuns.save(orchestratorRun);
 
     const toolInfo = completion.toolRounds > 0 ? `, ${completion.toolRounds} tool rounds` : '';
@@ -336,6 +399,9 @@ export class Orchestrator {
     console.log(
       `🤖 LLM Orchestrator: "${decision.reasoning}" (${allWorkItems.length} items${fallbackInfo}${toolInfo}, $${completion.costUsd.toFixed(4)})`
     );
+    if (progressUpdate) {
+      console.log(`📊 Progress: ${progressUpdate}`);
+    }
 
     return allWorkItems;
   }
@@ -494,6 +560,8 @@ export class Orchestrator {
     wikiId: string,
     maxItems: number
   ): Promise<WorkItem[]> {
+    const startTime = Date.now();
+
     // Fetch existing work keys for deduplication
     const keysQuery = createGetPendingWorkKeysQuery(repoId);
     const keysResult = await handleGetPendingWorkKeys(keysQuery, this.repos);
@@ -520,7 +588,101 @@ export class Orchestrator {
     };
 
     // Execute all strategies
-    return executeStrategies(strategyContext, remainingSlots);
+    const workItems = await executeStrategies(strategyContext, remainingSlots);
+
+    // Generate progress update if LLM is available
+    if (this.llm && workItems.length > 0) {
+      // Gather context for progress update
+      const context = await this.contextGatherer.gather(repoId, wikiId);
+
+      // Describe what deterministic strategies decided
+      const reasoning = this.describeDeterministicReasoning(workItems);
+
+      // Generate progress update
+      const progressUpdate = await this.generateProgressUpdate(
+        context,
+        workItems.length,
+        reasoning
+      );
+
+      // Create and save orchestrator run record for tracking
+      const runId = uuid();
+      const orchestratorRun = createOrchestratorRun({
+        id: runId,
+        repoId,
+        context,
+        promptSent: '[deterministic mode - no prompt]',
+      });
+      orchestratorRun.rawResponse = reasoning;
+      orchestratorRun.decision = { reasoning, workItems: [] };
+      orchestratorRun.workItemsCreated = workItems.map(w => w.id);
+      orchestratorRun.model = 'deterministic';
+      orchestratorRun.costUsd = 0;
+      orchestratorRun.durationMs = Date.now() - startTime;
+      orchestratorRun.usedLLM = false;
+      if (progressUpdate) {
+        orchestratorRun.progressUpdate = progressUpdate;
+      }
+
+      await this.repos.orchestratorRuns.save(orchestratorRun);
+
+      if (progressUpdate) {
+        console.log(`📊 Progress: ${progressUpdate}`);
+      }
+    }
+
+    return workItems;
+  }
+
+  /**
+   * Describe what the deterministic strategies decided to do.
+   */
+  private describeDeterministicReasoning(workItems: WorkItem[]): string {
+    if (workItems.length === 0) {
+      return 'No work scheduled - queue may be full or no gaps found.';
+    }
+
+    const agentTypes = [...new Set(workItems.map(w => w.agentType))];
+    const summary = agentTypes.map(agent => {
+      const count = workItems.filter(w => w.agentType === agent).length;
+      return `${count} ${agent}`;
+    }).join(', ');
+
+    return `Deterministic scheduling: ${summary}`;
+  }
+
+  /**
+   * Generate a progress update summary via LLM.
+   *
+   * Called after each orchestrator run to provide visibility into
+   * the orchestrator's assessment of progress and remaining work.
+   *
+   * @returns Progress update paragraph, or undefined if LLM unavailable or fails
+   */
+  private async generateProgressUpdate(
+    context: OrchestratorContext,
+    workItemsScheduled: number,
+    reasoning: string
+  ): Promise<string | undefined> {
+    if (!this.llm) {
+      return undefined;
+    }
+
+    try {
+      const prompt = buildProgressUpdatePrompt(context, workItemsScheduled, reasoning);
+
+      const result = await this.llm.complete({
+        system: PROGRESS_UPDATE_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: 500,
+        temperature: 0.3,
+      });
+
+      return result.content.trim();
+    } catch (error) {
+      console.warn('Failed to generate progress update:', error);
+      return undefined;
+    }
   }
 
   /**

@@ -241,3 +241,77 @@ export function parseOrchestratorResponse(
     workItems: validWorkItems,
   };
 }
+
+/**
+ * System prompt for the progress update.
+ */
+export const PROGRESS_UPDATE_SYSTEM_PROMPT = `You are summarizing progress on wiki documentation generation.
+
+Provide a brief, one-paragraph progress summary that:
+1. Estimates overall documentation completeness (as a rough percentage)
+2. Identifies the main gaps or areas needing work
+3. Forecasts how many more iterations might be needed for comprehensive coverage
+
+Be concise and specific. Focus on actionable insights, not generic statements.`;
+
+/**
+ * Build the user prompt for progress update.
+ */
+export function buildProgressUpdatePrompt(
+  ctx: OrchestratorContext,
+  workItemsScheduled: number,
+  reasoning: string
+): string {
+  const lines: string[] = [];
+
+  lines.push('## Current Wiki State\n');
+  lines.push(`- **Wiki pages:** ${ctx.wikiPages}`);
+  lines.push(`- **Average confidence:** ${(ctx.avgConfidence * 100).toFixed(0)}%`);
+  lines.push(`- **Total commits:** ${ctx.totalCommits}`);
+
+  // Coverage summary
+  const coverageLines: string[] = [];
+  for (const [agent, counts] of Object.entries(ctx.commitsByAgent)) {
+    if (counts.pending > 0) {
+      const pct = ctx.totalCommits > 0
+        ? ((counts.processed / ctx.totalCommits) * 100).toFixed(0)
+        : '0';
+      coverageLines.push(`${agent}: ${pct}% (${counts.pending} pending)`);
+    }
+  }
+  if (coverageLines.length > 0) {
+    lines.push(`- **Commit coverage:** ${coverageLines.join(', ')}`);
+  }
+
+  // Quality gaps
+  const gaps: string[] = [];
+  if (!ctx.hasProjectOverview) gaps.push('missing project overview');
+  if (!ctx.hasGettingStarted) gaps.push('missing getting started guide');
+  if (ctx.shallowPages > 0) gaps.push(`${ctx.shallowPages} shallow pages`);
+  if (ctx.pagesWithoutLinks > 0) gaps.push(`${ctx.pagesWithoutLinks} pages without links`);
+  if (ctx.categoriesWithoutOverview.length > 0) {
+    gaps.push(`${ctx.categoriesWithoutOverview.length} categories without overview`);
+  }
+
+  if (gaps.length > 0) {
+    lines.push(`- **Quality gaps:** ${gaps.join(', ')}`);
+  }
+
+  // Iteration progress if available
+  if (ctx.iterationInfo) {
+    lines.push(`\n## Iteration Progress`);
+    lines.push(`- **Current:** ${ctx.iterationInfo.currentIteration} of ${ctx.iterationInfo.totalIterations}`);
+    lines.push(`- **Remaining:** ${ctx.iterationInfo.remainingIterations}`);
+    lines.push(`- **Phase:** ${ctx.iterationPhase || 'unknown'}`);
+  }
+
+  // What was just scheduled
+  lines.push(`\n## Work Just Scheduled`);
+  lines.push(`- **Items scheduled:** ${workItemsScheduled}`);
+  lines.push(`- **Reasoning:** ${reasoning}`);
+
+  lines.push(`\n## Your Task`);
+  lines.push(`Provide a one-paragraph progress summary and forecast. Be specific about what's been accomplished, what gaps remain, and estimate how many more iterations might be needed.`);
+
+  return lines.join('\n');
+}
