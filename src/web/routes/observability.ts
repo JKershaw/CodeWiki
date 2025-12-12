@@ -217,6 +217,7 @@ export function createObservabilityRoutes(deps: Dependencies): Router {
           context: run.context,
           promptSent: run.promptSent,
           rawResponse: run.rawResponse,
+          progressUpdate: run.progressUpdate,
         },
       });
     } catch (error) {
