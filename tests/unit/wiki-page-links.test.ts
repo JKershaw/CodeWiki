@@ -361,6 +361,330 @@ describe('handleUpdateWikiPage with links', () => {
   });
 });
 
+describe('Auto-extraction of links from content', () => {
+  describe('create operation', () => {
+    it('should auto-extract links from content when links not provided', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create a target page that will be linked to
+      const targetPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'architecture/auth',
+        title: 'Auth Module',
+        content: '# Auth Module\n\nAuthentication details.',
+      });
+      repos._pages.set(targetPage.id, targetPage);
+
+      // Create new page WITH markdown links in content but WITHOUT explicit links array
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'guides/security',
+        content: '# Security Guide\n\nFor authentication, see [Auth Module](architecture/auth). This guide covers security best practices and integration patterns for secure applications.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+        // NOTE: no links: [] provided - should be auto-extracted
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // The key assertion: links should be auto-extracted from content
+      assert.deepStrictEqual(result.data?.links, ['architecture/auth']);
+    });
+
+    it('should auto-extract multiple links from content', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create target pages
+      const page1 = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'architecture/api',
+        title: 'API',
+        content: '# API\n\nAPI docs.',
+      });
+      const page2 = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'guides/testing',
+        title: 'Testing',
+        content: '# Testing\n\nTesting docs.',
+      });
+      repos._pages.set(page1.id, page1);
+      repos._pages.set(page2.id, page2);
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'overview',
+        content: '# Project Overview\n\nSee [API](architecture/api) and [Testing Guide](guides/testing) for more details. This document provides a comprehensive overview of the entire project structure.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+        // No links provided
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.ok(result.data?.links.includes('architecture/api'));
+      assert.ok(result.data?.links.includes('guides/testing'));
+      assert.strictEqual(result.data?.links.length, 2);
+    });
+
+    it('should not override explicitly provided links', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create target page
+      const targetPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'explicit/target',
+        title: 'Explicit Target',
+        content: '# Explicit Target\n\nContent.',
+      });
+      repos._pages.set(targetPage.id, targetPage);
+
+      // Content has one link, but we explicitly provide a different links array
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/page',
+        content: '# Test Page\n\nSee [Other Page](other/page) for info. This is comprehensive documentation that passes validation requirements.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+        links: ['explicit/target'], // Explicitly provided - should be used as-is
+        skipValidation: true,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Should use explicitly provided links, not auto-extracted
+      assert.deepStrictEqual(result.data?.links, ['explicit/target']);
+    });
+
+    it('should create backlinks for auto-extracted links', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create target page
+      const targetPageId = uuid();
+      const targetPage = createWikiPage({
+        id: targetPageId,
+        wikiId,
+        path: 'target/page',
+        title: 'Target Page',
+        content: '# Target Page\n\nContent.',
+      });
+      repos._pages.set(targetPageId, targetPage);
+
+      // Verify no backlinks initially
+      assert.deepStrictEqual(targetPage.backlinks, []);
+
+      // Create page with markdown link but no explicit links array
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'source/page',
+        content: '# Source Page\n\nCheck out [Target Page](target/page) for details. This document contains comprehensive information about the topic.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+        // No links provided - should auto-extract and create backlinks
+      });
+
+      await handleUpdateWikiPage(command, repos, wikiId);
+
+      // Target page should now have backlink from source page
+      const updatedTarget = repos._pages.get(targetPageId)!;
+      assert.ok(updatedTarget.backlinks.includes('source/page'));
+    });
+  });
+
+  describe('update operation', () => {
+    it('should auto-extract links from updated content when links not provided', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page with no links
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal content.',
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Create target page
+      const targetPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'new/target',
+        title: 'New Target',
+        content: '# New Target\n\nContent.',
+      });
+      repos._pages.set(targetPage.id, targetPage);
+
+      // Update with content containing links but no explicit links array
+      const command = createUpdateWikiPageCommand({
+        type: 'update',
+        path: 'test/page',
+        content: '# Test Page\n\nUpdated to reference [New Target](new/target) now.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.1,
+        // No links provided
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      const updatedPage = repos._pages.get(pageId)!;
+      assert.deepStrictEqual(updatedPage.links, ['new/target']);
+    });
+  });
+
+  describe('merge operation', () => {
+    it('should auto-extract links from merged content when links not provided', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal content.',
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Create target page
+      const targetPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'related/page',
+        title: 'Related Page',
+        content: '# Related Page\n\nContent.',
+      });
+      repos._pages.set(targetPage.id, targetPage);
+
+      // Merge content with links but no explicit links array
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/page',
+        content: '\n\n## Related\n\nSee also [Related Page](related/page).',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.05,
+        // No links provided - should auto-extract from merged content
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      const updatedPage = repos._pages.get(pageId)!;
+      assert.ok(updatedPage.links.includes('related/page'));
+    });
+
+    it('should merge auto-extracted links with existing links', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page with existing links
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal with [Old Link](old/link).',
+      });
+      initialPage.links = ['old/link'];
+      repos._pages.set(pageId, initialPage);
+
+      // Create target page for new link
+      const newTarget = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'new/link',
+        title: 'New Link',
+        content: '# New Link\n\nContent.',
+      });
+      repos._pages.set(newTarget.id, newTarget);
+
+      // Merge content with new link, no explicit links array
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/page',
+        content: '\n\n## More\n\nAlso see [New Link](new/link).',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.05,
+        // No links provided
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      const updatedPage = repos._pages.get(pageId)!;
+      // Should have both old and new links
+      assert.ok(updatedPage.links.includes('old/link'), 'Should keep existing link');
+      assert.ok(updatedPage.links.includes('new/link'), 'Should add new auto-extracted link');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle content with no links gracefully', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/no-links',
+        content: '# No Links Here\n\nJust plain text without any markdown links. This is comprehensive documentation that passes all validation requirements.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+        // No links in content, none provided
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.deepStrictEqual(result.data?.links, []);
+    });
+
+    it('should ignore external URLs during auto-extraction', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create internal target
+      const internalPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'internal/page',
+        title: 'Internal',
+        content: '# Internal\n\nContent.',
+      });
+      repos._pages.set(internalPage.id, internalPage);
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/mixed-links',
+        content: '# Mixed Links\n\nSee [Internal](internal/page) and [External](https://example.com). This documentation provides comprehensive information about mixed linking strategies.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Should only have internal link, not external
+      assert.deepStrictEqual(result.data?.links, ['internal/page']);
+    });
+  });
+});
+
 describe('Repository updateLinks method', () => {
   it('should update links array on page', async () => {
     const repos = createMockRepos();
