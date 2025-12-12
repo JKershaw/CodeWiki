@@ -820,9 +820,14 @@ export interface WorkSummary {
   openFindings: number;
 }
 
+// Import PhasedOrchestrator - no circular dependency since it only imports types from this file
+import { PhasedOrchestrator } from './phased-orchestrator.js';
+
 /**
  * Create an orchestrator instance.
- * Uses ORCHESTRATOR_TYPE env var to select implementation (default: 'default').
+ * Uses ORCHESTRATOR_TYPE env var to select implementation.
+ * Default is 'phased' (the new phased orchestrator).
+ * Use 'legacy' for the original deterministic/LLM orchestrator.
  */
 export function createOrchestrator(
   repos: Repositories,
@@ -830,11 +835,13 @@ export function createOrchestrator(
   config?: OrchestratorConfig,
   repoAccessFactory?: UnifiedRepoAccessFactory
 ): Orchestrator {
-  const type = process.env.ORCHESTRATOR_TYPE || 'default';
+  const type = process.env.ORCHESTRATOR_TYPE || 'phased';
 
   switch (type) {
-    case 'default':
-    default:
+    case 'legacy':
       return new DefaultOrchestrator(repos, llm, config, repoAccessFactory);
+    case 'phased':
+    default:
+      return new PhasedOrchestrator(repos, llm, config, repoAccessFactory);
   }
 }
