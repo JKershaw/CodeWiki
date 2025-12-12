@@ -10,6 +10,7 @@ import {
   parseConfidence,
   type ItemPattern,
 } from '../parsing/index.js';
+import { extractLinkTargetsAsSet } from '../../utils/link-extraction.js';
 
 /**
  * Link Agent - Manages cross-references between wiki pages.
@@ -255,7 +256,7 @@ Now analyze the pages above and provide your link suggestions:
       if (!suggestedLinks || suggestedLinks.length === 0) continue;
 
       // BUG 1 FIX: Extract existing links from Related Pages section if present
-      const existingTargets = this.extractExistingLinkTargets(page.content);
+      const existingTargets = extractLinkTargetsAsSet(page.content);
 
       // Filter to only truly new links that don't already exist
       const newLinks = suggestedLinks.filter(l => !existingTargets.has(l.target));
@@ -306,7 +307,7 @@ Now analyze the pages above and provide your link suggestions:
       if (!targetPage) continue;
 
       // Check if target page already has these backlinks
-      const existingTargetLinks = this.extractExistingLinkTargets(targetPage.content);
+      const existingTargetLinks = extractLinkTargetsAsSet(targetPage.content);
 
       // Filter to only new backlinks
       const newBacklinks = backlinks.filter(bl => !existingTargetLinks.has(bl.source));
@@ -352,23 +353,6 @@ Now analyze the pages above and provide your link suggestions:
     }
 
     return updates;
-  }
-
-  /**
-   * Extract existing link targets from page content.
-   * Looks for markdown links in the format [title](path).
-   */
-  private extractExistingLinkTargets(content: string): Set<string> {
-    const targets = new Set<string>();
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    let match;
-    while ((match = linkRegex.exec(content)) !== null) {
-      const path = match[2]!;
-      // Remove .md extension if present
-      const cleanPath = path.replace(/\.md$/, '');
-      targets.add(cleanPath);
-    }
-    return targets;
   }
 }
 
