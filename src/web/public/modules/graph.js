@@ -44,8 +44,8 @@ async function initGraph(repoId, wikiId) {
   try {
     // Load graph data
     const url = wikiId
-      ? `/api/repos/${repoId}/wiki-graph?wikiId=${wikiId}`
-      : `/api/repos/${repoId}/wiki-graph`;
+      ? `/repos/${repoId}/wiki-graph?wikiId=${wikiId}`
+      : `/repos/${repoId}/wiki-graph`;
     const graph = await api(url);
 
     // Clear loading state
