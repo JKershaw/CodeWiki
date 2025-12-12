@@ -1,9 +1,15 @@
+import { v4 as uuid } from 'uuid';
 import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
 import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import {
+  createCreateFindingsCommand,
+  handleCreateFindings,
+  type CreateFindingInput,
+} from '../../commands/index.js';
 import {
   createParseContext,
   parseConfidence as parseConfidenceCentral,
@@ -171,7 +177,7 @@ export class CategoryAgent implements Agent {
 
     // Create findings from the parsed findings
     const findings = categoryFindings.map(f => createFinding({
-      type: 'CATEGORY_MISMATCH',
+      type: 'category_mismatch',
       description: `${f.pagePath} should be in "${f.suggestedCategory}": ${f.reason}`,
       relatedPaths: [f.pagePath],
       importance: f.severity,
@@ -182,6 +188,9 @@ export class CategoryAgent implements Agent {
       c => c.currentCategory !== c.suggestedCategory
     ).length;
 
+    // Save findings to repository for consolidation agent to address
+    await this.saveFindings(categoryFindings, context);
+
     return {
       result: createAgentResult({
         summary: `Analyzed ${pages.length} pages across ${Object.keys(categoryStats).length} categories. Found ${mismatchCount} potential miscategorizations.`,
@@ -191,6 +200,46 @@ export class CategoryAgent implements Agent {
       updates,
       costUsd: completion.costUsd,
     };
+  }
+
+  /**
+   * Save detected category mismatches as findings in the repository.
+   * These will be processed by the ConsolidationAgent.
+   */
+  private async saveFindings(
+    categoryFindings: CategoryFinding[],
+    context: AgentContext
+  ): Promise<void> {
+    if (categoryFindings.length === 0) {
+      return;
+    }
+
+    const findingInputs: CreateFindingInput[] = categoryFindings.map(f => ({
+      id: uuid(),
+      type: 'category_mismatch' as const,
+      description: `${f.pagePath} should be in "${f.suggestedCategory}": ${f.reason}`,
+      affectedPaths: [f.pagePath],
+      severity: f.severity,
+      metadata: {
+        suggestedCategory: f.suggestedCategory,
+        categoryConfidence: 0.85,
+      },
+    }));
+
+    // Use CQRS command with skipDuplicates to avoid creating duplicate findings
+    const command = createCreateFindingsCommand({
+      wikiId: context.wikiId,
+      repoId: context.repoId,
+      sourceAgentRunId: '', // Will be filled by executor
+      findings: findingInputs,
+      skipDuplicates: true,
+    });
+
+    const result = await handleCreateFindings(command, context.repos);
+
+    if (result.success && result.data) {
+      console.log(`📋 CategoryAgent: Saved ${result.data.length} findings for consolidation`);
+    }
   }
 
   private buildCategoryStats(pages: WikiPage[]): Record<string, number> {

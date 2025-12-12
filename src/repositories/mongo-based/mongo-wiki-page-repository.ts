@@ -72,6 +72,8 @@ export class MongoWikiPageRepository implements WikiPageRepository {
       confidence?: number;
       sourceCommitId?: string;
       sourceAgentRunId?: string;
+      category?: string;
+      categoryConfidence?: number;
     }
   ): Promise<void> {
     const setFields: Record<string, unknown> = {
@@ -90,6 +92,12 @@ export class MongoWikiPageRepository implements WikiPageRepository {
     }
     if (updates.sourceAgentRunId !== undefined) {
       setFields.sourceAgentRunId = updates.sourceAgentRunId;
+    }
+    if (updates.category !== undefined) {
+      setFields.category = updates.category;
+    }
+    if (updates.categoryConfidence !== undefined) {
+      setFields.categoryConfidence = updates.categoryConfidence;
     }
 
     await this.collection.updateOne(byId(id), { $set: setFields });
