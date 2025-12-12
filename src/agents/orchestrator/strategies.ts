@@ -197,8 +197,18 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
   // Get phase-adjusted thresholds (combines wiki size with iteration phase)
   const thresholds = getPhaseAdjustedThresholds(ctx.iterationPhase, wikiPageCount);
 
+  // Filter to low coverage directories, then sort by coverage and depth
+  // Prefer deeper directories (more specific targeting) when coverage is equal
   const lowCoverageDirs = context.directoryCoverage
     .filter(d => d.coveragePercent < thresholds.coverageThreshold)
+    .sort((a, b) => {
+      // First by coverage (lowest first)
+      if (a.coveragePercent !== b.coveragePercent) {
+        return a.coveragePercent - b.coveragePercent;
+      }
+      // Then by depth (deeper first) - more specific targeting
+      return b.path.split('/').length - a.path.split('/').length;
+    })
     .slice(0, thresholds.maxDirectories);
 
   for (const dir of lowCoverageDirs) {

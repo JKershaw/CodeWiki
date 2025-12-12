@@ -297,6 +297,7 @@ describe('ContextGatherer GitHub Mode', () => {
         { name: 'index.ts', path: 'src/index.ts', type: 'file', size: 100 },
       ];
 
+      // Note: Files are counted toward their IMMEDIATE parent directory
       const fileTree = [
         'src/agents/base-agent.ts',
         'src/agents/code-change-agent.ts',
@@ -310,10 +311,11 @@ describe('ContextGatherer GitHub Mode', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Should have coverage for 2 directories (agents, services)
-      assert.strictEqual(context.directoryCoverage.length, 2);
+      // Should have coverage for 3 directories (agents, services/git, services/llm)
+      // Each file is counted toward its immediate parent directory
+      assert.strictEqual(context.directoryCoverage.length, 3);
 
-      // Both should have 0% coverage since there are no wiki pages mentioning them
+      // All should have 0% coverage since there are no wiki pages mentioning them
       for (const dir of context.directoryCoverage) {
         assert.ok(dir.path.startsWith('src/'));
         assert.strictEqual(dir.wikiMentions, 0);
@@ -323,9 +325,10 @@ describe('ContextGatherer GitHub Mode', () => {
 
     it('counts wiki mentions correctly for GitHub repos', async () => {
       // Create mock wiki pages that mention directories
+      // Note: Wiki mentions are matched against the directory NAME (last part of path)
       const wikiPages = [
         createMockWikiPage('architecture/agents', 'The agents module handles...'),
-        createMockWikiPage('guides/services', 'The src/services directory contains...'),
+        createMockWikiPage('guides/git', 'The src/services/git directory contains...'),
       ];
 
       const repos = {
@@ -356,6 +359,7 @@ describe('ContextGatherer GitHub Mode', () => {
         { name: 'services', path: 'src/services', type: 'dir', size: 0 },
       ];
 
+      // Note: Files are counted toward their IMMEDIATE parent directory
       const fileTree = [
         'src/agents/base-agent.ts',
         'src/agents/code-change-agent.ts',
@@ -368,14 +372,14 @@ describe('ContextGatherer GitHub Mode', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Both directories should have mentions
+      // Directories should have coverage based on immediate parent
       const agentsCoverage = context.directoryCoverage.find(d => d.path === 'src/agents');
-      const servicesCoverage = context.directoryCoverage.find(d => d.path === 'src/services');
+      const gitCoverage = context.directoryCoverage.find(d => d.path === 'src/services/git');
 
       assert.ok(agentsCoverage, 'Should have agents coverage');
-      assert.ok(servicesCoverage, 'Should have services coverage');
+      assert.ok(gitCoverage, 'Should have services/git coverage');
       assert.ok(agentsCoverage.wikiMentions > 0, 'Agents should have wiki mentions');
-      assert.ok(servicesCoverage.wikiMentions > 0, 'Services should have wiki mentions');
+      assert.ok(gitCoverage.wikiMentions > 0, 'Git should have wiki mentions');
     });
 
     it('filters out test and declaration files', async () => {
