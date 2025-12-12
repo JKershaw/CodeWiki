@@ -9,7 +9,7 @@ import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
 import { createTestContext, createTestRepo, type TestContext } from '../helpers/index.js';
 import { Executor, createExecutor } from '../../src/executor/executor.js';
-import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
+import { DefaultOrchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { createEditRequest, createCommitEditSource } from '../../src/domain/edit-request.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
@@ -93,7 +93,7 @@ describe('Executor Edit Request Processing', () => {
       await createPendingEdit(wiki.id, repoId, 'docs/new-page', '# New Page\n\nContent.');
 
       // Run executor with 1 iteration
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
 
       const summary = await executor.runIterations(repoId, 1);
@@ -117,7 +117,7 @@ describe('Executor Edit Request Processing', () => {
       // Create just ONE pending edit request - should still trigger processing
       await createPendingEdit(wiki.id, repoId, 'docs/single-page', '# Single Page\n\nThis is comprehensive documentation for the single page that explains the feature in detail.');
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
 
       await executor.runIterations(repoId, 1);
@@ -173,7 +173,7 @@ describe('Executor Edit Request Processing', () => {
         "confidence": 0.8
       }`);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
 
       // Run with 2 iterations - should process edit first, then do other work
@@ -201,7 +201,7 @@ describe('Executor Edit Request Processing', () => {
         await createPendingEdit(wiki.id, repoId, `docs/page-${i}`, `# Page ${i}`);
       }
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
 
       // Run with 1 iteration - WikiEditorAgent will process up to 10
@@ -229,7 +229,7 @@ describe('Executor Edit Request Processing', () => {
       // Create a pending edit
       await createPendingEdit(wiki.id, repoId, 'docs/from-edit', '# From Edit Request\n\nThis is comprehensive documentation that explains the feature in detail for new developers.');
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
 
       // Run with 1 iteration
@@ -256,7 +256,7 @@ describe('Executor Edit Request Processing', () => {
       // Create a pending edit
       await createPendingEdit(wiki.id, repoId, 'docs/tracked-page', '# Tracked Page');
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
 
       await executor.runIterations(repoId, 1);

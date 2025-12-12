@@ -6,7 +6,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, addCommit, type TestContext } from '../helpers/index.js';
-import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
+import { DefaultOrchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { createWorkItem, createWikiTarget } from '../../src/domain/work-item.js';
 import { createAgentRun } from '../../src/domain/agent-run.js';
@@ -63,7 +63,7 @@ describe('Orchestrator Bootstrap Behavior', () => {
       });
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // First item should be bootstrap
@@ -107,7 +107,7 @@ describe('Orchestrator Bootstrap Behavior', () => {
       }
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should ONLY return bootstrap - don't add commit work until bootstrapped
@@ -173,7 +173,7 @@ Process new commit with code-change agent
 # Work Items
 code-change,${sha},Analyze new commit`);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should NOT include bootstrap
@@ -206,7 +206,7 @@ code-change,${sha},Analyze new commit`);
         target: createWikiTarget(),
       }));
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should not create another bootstrap item
@@ -236,7 +236,7 @@ code-change,${sha},Analyze new commit`);
       claimedBootstrap.claimedAt = new Date();
       await ctx.repos.workQueue.save(claimedBootstrap);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should not create another bootstrap item - the claimed one is in progress
@@ -266,7 +266,7 @@ code-change,${sha},Analyze new commit`);
       failedWorkItem.completedAt = new Date();
       await ctx.repos.workQueue.save(failedWorkItem);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should NOT create another bootstrap item - prevents infinite loop
@@ -297,7 +297,7 @@ code-change,${sha},Analyze new commit`);
       failedAgentRun.completedAt = new Date();
       await ctx.repos.agentRuns.save(failedAgentRun);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should NOT create another bootstrap item - prevents infinite loop
@@ -316,7 +316,7 @@ code-change,${sha},Analyze new commit`);
       // Get the wiki for this repo (empty wiki)
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
 
       // First call: should generate bootstrap work
       const firstWorkItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);

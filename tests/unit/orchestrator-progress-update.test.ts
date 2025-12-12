@@ -6,7 +6,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createTestContext, createTestRepo, MockLLMService, type TestContext } from '../helpers/index.js';
-import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
+import { DefaultOrchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import type { OrchestratorRun } from '../../src/domain/orchestrator-run.js';
 
@@ -68,7 +68,7 @@ codebase-explorer,src,Document the source directory`);
         'Wiki is approximately 20% complete. The src directory has been identified for documentation. ' +
         'Estimated 4-5 more iterations needed to achieve comprehensive coverage.');
 
-      const orchestrator = new Orchestrator(ctx.repos, mockLLM, { useLLM: true });
+      const orchestrator = new DefaultOrchestrator(ctx.repos, mockLLM, { useLLM: true });
 
       // Generate work list (which should also generate progress update)
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
@@ -103,7 +103,7 @@ codebase-explorer,src,Low coverage directory`);
 
       mockLLM.onPromptContaining('progress summary', expectedProgressUpdate);
 
-      const orchestrator = new Orchestrator(ctx.repos, mockLLM, { useLLM: true });
+      const orchestrator = new DefaultOrchestrator(ctx.repos, mockLLM, { useLLM: true });
 
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
@@ -131,7 +131,7 @@ codebase-explorer,src,Low coverage directory`);
       mockLLM.onPromptContaining('progress summary', expectedProgressUpdate);
 
       // Deterministic mode (useLLM: false)
-      const orchestrator = new Orchestrator(ctx.repos, mockLLM, { useLLM: false });
+      const orchestrator = new DefaultOrchestrator(ctx.repos, mockLLM, { useLLM: false });
 
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
@@ -169,7 +169,7 @@ codebase-explorer,src,Test`);
         return originalComplete(options);
       };
 
-      const orchestrator = new Orchestrator(ctx.repos, failingMockLLM, { useLLM: true });
+      const orchestrator = new DefaultOrchestrator(ctx.repos, failingMockLLM, { useLLM: true });
 
       // Should not throw - gracefully handles failure
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 5);
@@ -188,7 +188,7 @@ codebase-explorer,src,Test`);
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
       // No LLM provided
-      const orchestrator = new Orchestrator(ctx.repos, undefined, { useLLM: false });
+      const orchestrator = new DefaultOrchestrator(ctx.repos, undefined, { useLLM: false });
 
       // Should not throw
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 5);
@@ -215,7 +215,7 @@ codebase-explorer,src,Low coverage`);
 
       mockLLM.onPromptContaining('progress summary', 'Progress update content');
 
-      const orchestrator = new Orchestrator(ctx.repos, mockLLM, { useLLM: true });
+      const orchestrator = new DefaultOrchestrator(ctx.repos, mockLLM, { useLLM: true });
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       // Check progress prompt includes context
@@ -249,7 +249,7 @@ codebase-explorer,src,Test`);
 
       mockLLM.onPromptContaining('progress summary', 'One paragraph response');
 
-      const orchestrator = new Orchestrator(ctx.repos, mockLLM, { useLLM: true });
+      const orchestrator = new DefaultOrchestrator(ctx.repos, mockLLM, { useLLM: true });
       await orchestrator.generateWorkList(repoId, wiki.id, 5);
 
       const progressCall = mockLLM.calls.find(call =>

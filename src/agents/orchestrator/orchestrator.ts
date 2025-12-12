@@ -75,9 +75,19 @@ export interface OrchestratorConfig {
 }
 
 /**
- * Orchestrator class.
+ * Orchestrator interface - the contract for work generation.
  */
-export class Orchestrator {
+export interface Orchestrator {
+  generateWorkList(repoId: string, wikiId: string, maxItems?: number): Promise<WorkItem[]>;
+  hasMoreWork(repoId: string, wikiId: string): Promise<boolean>;
+  getWorkSummary(repoId: string, wikiId: string): Promise<WorkSummary>;
+}
+
+/**
+ * Default orchestrator implementation.
+ * Supports both LLM-powered and deterministic modes.
+ */
+export class DefaultOrchestrator implements Orchestrator {
   private contextGatherer: ContextGatherer;
   private config: OrchestratorConfig;
 
@@ -812,6 +822,7 @@ export interface WorkSummary {
 
 /**
  * Create an orchestrator instance.
+ * Uses ORCHESTRATOR_TYPE env var to select implementation (default: 'default').
  */
 export function createOrchestrator(
   repos: Repositories,
@@ -819,5 +830,11 @@ export function createOrchestrator(
   config?: OrchestratorConfig,
   repoAccessFactory?: UnifiedRepoAccessFactory
 ): Orchestrator {
-  return new Orchestrator(repos, llm, config, repoAccessFactory);
+  const type = process.env.ORCHESTRATOR_TYPE || 'default';
+
+  switch (type) {
+    case 'default':
+    default:
+      return new DefaultOrchestrator(repos, llm, config, repoAccessFactory);
+  }
 }
