@@ -558,6 +558,78 @@ Content.
       assert.ok(result.updates.length >= 10, `Should have updates for many pages. Got: ${result.updates.length}`);
     });
 
+    it('should re-analyze pages with very few links (less than 2)', async () => {
+      const repoId = 'link-agent-few-links';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create a page with just 1 link (should be re-analyzed for more links)
+      const recentDate = new Date();
+      await ctx.repos.wikiPages.save({
+        id: 'page-with-one-link',
+        wikiId: wiki.id,
+        path: 'page-with-one-link',
+        title: 'Page With One Link',
+        content: '# Page With One Link\n\nHas only one link but could have more.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: ['existing-target'],  // Only 1 link
+        backlinks: [],
+        createdAt: recentDate,
+        updatedAt: recentDate,  // Recently updated
+      });
+
+      // Create target pages
+      await ctx.repos.wikiPages.save({
+        id: 'page-existing-target',
+        wikiId: wiki.id,
+        path: 'existing-target',
+        title: 'Existing Target',
+        content: '# Existing Target\n\nAlready linked.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: [],
+        backlinks: [],
+        createdAt: recentDate,
+        updatedAt: recentDate,
+      });
+
+      await ctx.repos.wikiPages.save({
+        id: 'page-potential-target',
+        wikiId: wiki.id,
+        path: 'potential-target',
+        title: 'Potential Target',
+        content: '# Potential Target\n\nCould be a new link.',
+        confidence: 0.8,
+        sourceCommits: ['commit-1'],
+        sourceAgentRunIds: [],
+        links: [],
+        backlinks: [],
+        createdAt: recentDate,
+        updatedAt: recentDate,
+      });
+
+      // Mock LLM to suggest additional link
+      ctx.llm.setDefaultResponse(linkSuggestionResponse([
+        { source: 'page-with-one-link', target: 'potential-target', strength: 'medium', reason: 'Related content' },
+      ]));
+
+      const agent = new LinkAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Page with 1 link should be re-analyzed and get additional links
+      const pageUpdate = result.updates.find(u => u.path === 'page-with-one-link');
+      assert.ok(pageUpdate, 'Page with only 1 link should be re-analyzed for more links');
+    });
+
     it('should re-analyze pages when many new pages are created', async () => {
       const repoId = 'link-agent-reanalyze-many';
 

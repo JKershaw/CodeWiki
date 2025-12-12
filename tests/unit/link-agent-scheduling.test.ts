@@ -125,7 +125,7 @@ describe('Link Agent Scheduling', () => {
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      // Create 10 pages, 4 without links (40% unlinked - above 30% threshold but below 50% override)
+      // Create 10 pages, 2 without links (20% unlinked - above 15% threshold but below 30% override)
       await createWikiPages(wiki.id, [
         { path: 'page1', title: 'Page 1', content: '# Page 1', links: ['page2'] },
         { path: 'page2', title: 'Page 2', content: '# Page 2', links: ['page1'] },
@@ -133,13 +133,13 @@ describe('Link Agent Scheduling', () => {
         { path: 'page4', title: 'Page 4', content: '# Page 4', links: ['page1'] },
         { path: 'page5', title: 'Page 5', content: '# Page 5', links: ['page1'] },
         { path: 'page6', title: 'Page 6', content: '# Page 6', links: ['page1'] },
-        { path: 'page7', title: 'Page 7', content: '# Page 7', links: [] },  // no links
-        { path: 'page8', title: 'Page 8', content: '# Page 8', links: [] },  // no links
+        { path: 'page7', title: 'Page 7', content: '# Page 7', links: ['page1'] },
+        { path: 'page8', title: 'Page 8', content: '# Page 8', links: ['page1'] },
         { path: 'page9', title: 'Page 9', content: '# Page 9', links: [] },  // no links
         { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
       ]);
 
-      // Record a link agent run (will be in recent 20 runs window)
+      // Record a link agent run (will be in recent 10 runs window)
       await ctx.repos.agentRuns.save({
         id: uuid(),
         repoId,
@@ -159,7 +159,7 @@ describe('Link Agent Scheduling', () => {
       const result = await metaAgentsStrategy(strategyCtx, 10);
 
       const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // With link run in recent window and less than 50% unlinked, should NOT reschedule
+      // With link run in recent window and less than 30% unlinked, should NOT reschedule
       assert.ok(!linkWorkItem, 'Should respect cooldown for recent run within window');
     });
 
@@ -172,7 +172,7 @@ describe('Link Agent Scheduling', () => {
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      // Create 10 pages, 4 without links (40% unlinked - above 30% threshold but below 50% override)
+      // Create 10 pages, 2 without links (20% unlinked - above 15% threshold but below 30% override)
       await createWikiPages(wiki.id, [
         { path: 'page1', title: 'Page 1', content: '# Page 1', links: ['page2'] },
         { path: 'page2', title: 'Page 2', content: '# Page 2', links: ['page1'] },
@@ -180,8 +180,8 @@ describe('Link Agent Scheduling', () => {
         { path: 'page4', title: 'Page 4', content: '# Page 4', links: ['page1'] },
         { path: 'page5', title: 'Page 5', content: '# Page 5', links: ['page1'] },
         { path: 'page6', title: 'Page 6', content: '# Page 6', links: ['page1'] },
-        { path: 'page7', title: 'Page 7', content: '# Page 7', links: [] },  // no links
-        { path: 'page8', title: 'Page 8', content: '# Page 8', links: [] },  // no links
+        { path: 'page7', title: 'Page 7', content: '# Page 7', links: ['page1'] },
+        { path: 'page8', title: 'Page 8', content: '# Page 8', links: ['page1'] },
         { path: 'page9', title: 'Page 9', content: '# Page 9', links: [] },  // no links
         { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
       ]);
@@ -202,8 +202,8 @@ describe('Link Agent Scheduling', () => {
         toolCalls: [],
       });
 
-      // Add 25 other completed runs to push link agent out of the 20-run window
-      for (let i = 0; i < 25; i++) {
+      // Add 15 other completed runs to push link agent out of the 10-run window
+      for (let i = 0; i < 15; i++) {
         await ctx.repos.agentRuns.save({
           id: uuid(),
           repoId,
@@ -224,7 +224,7 @@ describe('Link Agent Scheduling', () => {
       const result = await metaAgentsStrategy(strategyCtx, 10);
 
       const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // After link run is pushed out of 20-run window, should schedule again
+      // After link run is pushed out of 10-run window, should schedule again
       assert.ok(linkWorkItem, 'Should allow scheduling after cooldown expires');
     });
 

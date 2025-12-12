@@ -10,6 +10,7 @@ import {
   parseConfidence,
   type ItemPattern,
 } from '../parsing/index.js';
+import { extractLinksFromContent } from '../../utils/link-extraction.js';
 
 /**
  * Overview Agent - Creates category overview pages that synthesize all pages in a category.
@@ -410,6 +411,9 @@ ${pagesSection}
 ${readingSection}
 `.trim();
 
+    // Extract links from the generated content for graph tracking
+    const links = extractLinksFromContent(content);
+
     return {
       type: operationType,
       path: `${category}/overview`,
@@ -418,6 +422,7 @@ ${readingSection}
       sourceCommitId: '',
       agentRunId: '',
       confidenceDelta: operationType === 'update' ? 0.1 : 0.5,
+      links,
     };
   }
 }

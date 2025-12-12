@@ -4,6 +4,7 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import { extractLinksFromContent } from '../../utils/link-extraction.js';
 
 /**
  * Bootstrap Agent - Creates foundation pages for empty wikis.
@@ -140,6 +141,9 @@ export class BootstrapAgent implements Agent {
     const titleMatch = cleanContent.match(/^#\s+(.+?)(?:\s+-\s+Overview)?$/m);
     const title = titleMatch ? titleMatch[1]!.trim() : 'Project Overview';
 
+    // Extract links from content for graph tracking
+    const links = extractLinksFromContent(cleanContent);
+
     // Create the main overview page
     updates.push({
       type: 'create',
@@ -149,6 +153,7 @@ export class BootstrapAgent implements Agent {
       sourceCommitId: '', // Bootstrap has no source commit
       agentRunId: '',
       confidenceDelta,
+      links,
     });
 
     return updates;

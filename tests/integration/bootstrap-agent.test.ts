@@ -227,6 +227,53 @@ Multi-agent system with orchestrator.
         );
       }
     });
+
+    it('populates links array when content contains links', async () => {
+      const repoId = 'bootstrap-links';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Link Test Project\n\nA project to test link extraction.',
+      });
+
+      // Mock LLM response with wiki links in the content
+      ctx.llm.setDefaultResponse(`# Link Test Project - Overview
+
+A project to test link extraction.
+
+## Related Pages
+
+- [Architecture Guide](guides/architecture) - System design
+- [API Reference](api/reference) - API documentation
+
+## See Also
+
+Check the [Getting Started](getting-started) guide for more information.`);
+
+      const agent = new BootstrapAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should create overview page
+      assert.ok(result.updates.length > 0, 'Should create pages');
+      const overviewUpdate = result.updates.find(u => u.path === 'overview');
+      assert.ok(overviewUpdate, 'Should create overview page');
+
+      // Should extract and populate links array
+      assert.ok(overviewUpdate.links, 'Should have links array');
+      assert.ok(overviewUpdate.links!.length > 0, 'Links array should not be empty');
+      assert.ok(
+        overviewUpdate.links!.includes('guides/architecture'),
+        'Should include guides/architecture link'
+      );
+      assert.ok(
+        overviewUpdate.links!.includes('api/reference'),
+        'Should include api/reference link'
+      );
+      assert.ok(
+        overviewUpdate.links!.includes('getting-started'),
+        'Should include getting-started link'
+      );
+    });
   });
 
   describe('run (commit target)', () => {

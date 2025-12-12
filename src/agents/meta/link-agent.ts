@@ -10,6 +10,7 @@ import {
   parseConfidence,
   type ItemPattern,
 } from '../parsing/index.js';
+import { extractLinkTargetsAsSet } from '../../utils/link-extraction.js';
 
 /**
  * Link Agent - Manages cross-references between wiki pages.
@@ -58,11 +59,12 @@ export class LinkAgent implements Agent {
     const newestPageCreation = Math.max(...pages.map(p => p.createdAt.getTime()));
 
     // Find pages that need link analysis:
-    // 1. Pages with no links (always need analysis)
-    // 2. Pages with links but updated before a newer page was created (might need new links)
+    // 1. Pages with very few links (< 2) - always need analysis for more links
+    // 2. Pages with more links but updated before a newer page was created (might need new links)
     const pagesToAnalyze = pages.filter(p => {
-      // Always analyze pages with no links
-      if (p.links.length === 0) {
+      // Always analyze pages with very few links (0 or 1)
+      // Pages with just 1 link likely have more relevant connections
+      if (p.links.length < 2) {
         return true;
       }
       // Re-analyze pages with links if they were updated before a newer page was created
@@ -91,8 +93,8 @@ export class LinkAgent implements Agent {
       excerpt: p.content.slice(0, 500),
     }));
 
-    // Limit pages to analyze to avoid overly long prompts (increased from 10 to 20)
-    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 20);
+    // Limit pages to analyze to avoid overly long prompts (increased from 20 to 40)
+    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 40);
 
     const prompt = this.buildPrompt(limitedPagesToAnalyze, pageSummaries);
 
@@ -127,7 +129,7 @@ export class LinkAgent implements Agent {
     pagesToAnalyze: WikiPage[],
     allPages: Array<{ path: string; title: string; category: string; excerpt: string }>
   ): string {
-    // Note: pagesToAnalyze is already limited by caller (to 20 pages max)
+    // Note: pagesToAnalyze is already limited by caller (to 40 pages max)
 
     return `You are analyzing wiki pages to create cross-references between related content.
 
@@ -255,7 +257,7 @@ Now analyze the pages above and provide your link suggestions:
       if (!suggestedLinks || suggestedLinks.length === 0) continue;
 
       // BUG 1 FIX: Extract existing links from Related Pages section if present
-      const existingTargets = this.extractExistingLinkTargets(page.content);
+      const existingTargets = extractLinkTargetsAsSet(page.content);
 
       // Filter to only truly new links that don't already exist
       const newLinks = suggestedLinks.filter(l => !existingTargets.has(l.target));
@@ -306,7 +308,7 @@ Now analyze the pages above and provide your link suggestions:
       if (!targetPage) continue;
 
       // Check if target page already has these backlinks
-      const existingTargetLinks = this.extractExistingLinkTargets(targetPage.content);
+      const existingTargetLinks = extractLinkTargetsAsSet(targetPage.content);
 
       // Filter to only new backlinks
       const newBacklinks = backlinks.filter(bl => !existingTargetLinks.has(bl.source));
@@ -352,23 +354,6 @@ Now analyze the pages above and provide your link suggestions:
     }
 
     return updates;
-  }
-
-  /**
-   * Extract existing link targets from page content.
-   * Looks for markdown links in the format [title](path).
-   */
-  private extractExistingLinkTargets(content: string): Set<string> {
-    const targets = new Set<string>();
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    let match;
-    while ((match = linkRegex.exec(content)) !== null) {
-      const path = match[2]!;
-      // Remove .md extension if present
-      const cleanPath = path.replace(/\.md$/, '');
-      targets.add(cleanPath);
-    }
-    return targets;
   }
 }
 

@@ -4,6 +4,7 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import { extractLinksFromContent } from '../../utils/link-extraction.js';
 
 /**
  * Extension Guide Agent - Creates documentation for extending the codebase.
@@ -99,6 +100,9 @@ export class ExtensionGuideAgent implements Agent {
     const titleMatch = content.match(/^#\s+(.+)$/m);
     const title = titleMatch?.[1] ?? 'Extension Patterns';
 
+    // Extract links from the generated content for graph tracking
+    const links = extractLinksFromContent(content);
+
     const update: WikiPageUpdate = {
       type: 'create',
       path: this.GUIDE_PATH,
@@ -107,6 +111,7 @@ export class ExtensionGuideAgent implements Agent {
       sourceCommitId: '',
       agentRunId: '',
       confidenceDelta: 0.7,
+      links,
     };
 
     return {

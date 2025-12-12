@@ -4,6 +4,7 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
+import { extractLinksFromContent } from '../../utils/link-extraction.js';
 
 /**
  * Wiki Index Agent - Creates a master navigation page for the wiki.
@@ -91,6 +92,9 @@ export class WikiIndexAgent implements Agent {
     // Generate the index content
     const content = this.generateIndexContent(contentPages);
 
+    // Extract links from the generated content for graph tracking
+    const links = extractLinksFromContent(content);
+
     const update: WikiPageUpdate = {
       type: existingIndex ? 'update' : 'create',
       path: this.INDEX_PATH,
@@ -99,6 +103,7 @@ export class WikiIndexAgent implements Agent {
       sourceCommitId: '',
       agentRunId: '',
       confidenceDelta: 0.8,
+      links,
     };
 
     return {
