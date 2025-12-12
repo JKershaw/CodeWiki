@@ -240,7 +240,7 @@ describe('handleUpdateWikiPage with links', () => {
   });
 
   describe('update operation with links', () => {
-    it('should replace links array when updating page with new links', async () => {
+    it('should merge new links with existing links when updating page', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
       const pageId = uuid();
@@ -256,7 +256,7 @@ describe('handleUpdateWikiPage with links', () => {
       page.links = ['old/link'];
       repos._pages.set(pageId, page);
 
-      // Update with new links
+      // Update with new links - should MERGE with existing, not replace
       const command = createUpdateWikiPageCommand({
         type: 'update',
         path: 'test/page',
@@ -270,7 +270,10 @@ describe('handleUpdateWikiPage with links', () => {
 
       assert.strictEqual(result.success, true);
       const updatedPage = repos._pages.get(pageId)!;
-      assert.deepStrictEqual(updatedPage.links, ['new/link']);
+      // Should have BOTH old and new links (merged, deduplicated)
+      assert.ok(updatedPage.links.includes('old/link'), 'Should preserve old link');
+      assert.ok(updatedPage.links.includes('new/link'), 'Should add new link');
+      assert.strictEqual(updatedPage.links.length, 2);
     });
   });
 
@@ -682,6 +685,224 @@ describe('Auto-extraction of links from content', () => {
       // Should only have internal link, not external
       assert.deepStrictEqual(result.data?.links, ['internal/page']);
     });
+  });
+});
+
+describe('Update operation should merge links (not replace)', () => {
+  it('should preserve existing links when updating page without explicit links', async () => {
+    const repos = createMockRepos();
+    const wikiId = uuid();
+    const pageId = uuid();
+
+    // Create page with existing links from previous LinkAgent run
+    const page = createWikiPage({
+      id: pageId,
+      wikiId,
+      path: 'test/page',
+      title: 'Test Page',
+      content: '# Test Page\n\nContent.\n\n## Related Pages\n\n- [Old Link](old/link)',
+    });
+    page.links = ['old/link', 'another/existing'];
+    repos._pages.set(pageId, page);
+
+    // WriterAgent rewrites content WITHOUT markdown links
+    // (simulating LLM not preserving link formatting)
+    const command = createUpdateWikiPageCommand({
+      type: 'update',
+      path: 'test/page',
+      content: '# Test Page\n\nCompletely rewritten content with no markdown links.',
+      agentRunId: 'writer-agent-1',
+      confidenceDelta: 0.1,
+      // No links provided - currently would wipe existing links
+    });
+
+    const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+    assert.strictEqual(result.success, true);
+    const updatedPage = repos._pages.get(pageId)!;
+
+    // KEY: Existing links should be PRESERVED, not wiped
+    assert.ok(updatedPage.links.includes('old/link'), 'Should preserve old/link');
+    assert.ok(updatedPage.links.includes('another/existing'), 'Should preserve another/existing');
+  });
+
+  it('should merge new extracted links with existing links on update', async () => {
+    const repos = createMockRepos();
+    const wikiId = uuid();
+    const pageId = uuid();
+
+    // Create page with existing links
+    const page = createWikiPage({
+      id: pageId,
+      wikiId,
+      path: 'test/page',
+      title: 'Test Page',
+      content: '# Test Page\n\nContent.',
+    });
+    page.links = ['existing/link'];
+    repos._pages.set(pageId, page);
+
+    // Create target for new link
+    const newTarget = createWikiPage({
+      id: uuid(),
+      wikiId,
+      path: 'new/target',
+      title: 'New Target',
+      content: '# New Target\n\nContent.',
+    });
+    repos._pages.set(newTarget.id, newTarget);
+
+    // Update with content that has a NEW link
+    const command = createUpdateWikiPageCommand({
+      type: 'update',
+      path: 'test/page',
+      content: '# Test Page\n\nUpdated with [New Target](new/target).',
+      agentRunId: 'agent-1',
+      confidenceDelta: 0.1,
+      // No explicit links - should auto-extract AND merge with existing
+    });
+
+    const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+    assert.strictEqual(result.success, true);
+    const updatedPage = repos._pages.get(pageId)!;
+
+    // Should have BOTH old and new links
+    assert.ok(updatedPage.links.includes('existing/link'), 'Should preserve existing link');
+    assert.ok(updatedPage.links.includes('new/target'), 'Should add new link');
+    assert.strictEqual(updatedPage.links.length, 2);
+  });
+
+  it('should deduplicate links when merging on update', async () => {
+    const repos = createMockRepos();
+    const wikiId = uuid();
+    const pageId = uuid();
+
+    // Create page with existing link
+    const page = createWikiPage({
+      id: pageId,
+      wikiId,
+      path: 'test/page',
+      title: 'Test Page',
+      content: '# Test Page\n\nSee [Target](target/page).',
+    });
+    page.links = ['target/page'];
+    repos._pages.set(pageId, page);
+
+    // Update with content that references the SAME link
+    const command = createUpdateWikiPageCommand({
+      type: 'update',
+      path: 'test/page',
+      content: '# Test Page\n\nStill references [Target](target/page) after rewrite.',
+      agentRunId: 'agent-1',
+      confidenceDelta: 0.1,
+    });
+
+    const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+    assert.strictEqual(result.success, true);
+    const updatedPage = repos._pages.get(pageId)!;
+
+    // Should NOT have duplicate
+    assert.strictEqual(updatedPage.links.length, 1);
+    assert.deepStrictEqual(updatedPage.links, ['target/page']);
+  });
+
+  it('should still allow explicit links to add to existing links', async () => {
+    const repos = createMockRepos();
+    const wikiId = uuid();
+    const pageId = uuid();
+
+    // Create page with existing links
+    const page = createWikiPage({
+      id: pageId,
+      wikiId,
+      path: 'test/page',
+      title: 'Test Page',
+      content: '# Test Page\n\nContent.',
+    });
+    page.links = ['existing/link'];
+    repos._pages.set(pageId, page);
+
+    // Update with explicit links array
+    const command = createUpdateWikiPageCommand({
+      type: 'update',
+      path: 'test/page',
+      content: '# Test Page\n\nNew content.',
+      agentRunId: 'agent-1',
+      confidenceDelta: 0.1,
+      links: ['explicit/new'], // Explicit links provided
+    });
+
+    const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+    assert.strictEqual(result.success, true);
+    const updatedPage = repos._pages.get(pageId)!;
+
+    // Should have both existing and explicit new links
+    assert.ok(updatedPage.links.includes('existing/link'), 'Should preserve existing');
+    assert.ok(updatedPage.links.includes('explicit/new'), 'Should add explicit');
+  });
+
+  it('should update backlinks correctly when merging links on update', async () => {
+    const repos = createMockRepos();
+    const wikiId = uuid();
+    const sourcePageId = uuid();
+    const existingTargetId = uuid();
+    const newTargetId = uuid();
+
+    // Create source page with existing link
+    const sourcePage = createWikiPage({
+      id: sourcePageId,
+      wikiId,
+      path: 'source/page',
+      title: 'Source Page',
+      content: '# Source Page\n\nLinks to [Existing](existing/target).',
+    });
+    sourcePage.links = ['existing/target'];
+    repos._pages.set(sourcePageId, sourcePage);
+
+    // Create existing target (already has backlink)
+    const existingTarget = createWikiPage({
+      id: existingTargetId,
+      wikiId,
+      path: 'existing/target',
+      title: 'Existing Target',
+      content: '# Existing Target\n\nContent.',
+    });
+    existingTarget.backlinks = ['source/page'];
+    repos._pages.set(existingTargetId, existingTarget);
+
+    // Create new target
+    const newTarget = createWikiPage({
+      id: newTargetId,
+      wikiId,
+      path: 'new/target',
+      title: 'New Target',
+      content: '# New Target\n\nContent.',
+    });
+    repos._pages.set(newTargetId, newTarget);
+
+    // Update to add a new link while keeping existing
+    const command = createUpdateWikiPageCommand({
+      type: 'update',
+      path: 'source/page',
+      content: '# Source Page\n\nNow links to [New Target](new/target).',
+      agentRunId: 'agent-1',
+      confidenceDelta: 0.1,
+    });
+
+    await handleUpdateWikiPage(command, repos, wikiId);
+
+    // Existing target should still have backlink
+    const updatedExistingTarget = repos._pages.get(existingTargetId)!;
+    assert.ok(updatedExistingTarget.backlinks.includes('source/page'),
+      'Existing target should keep backlink');
+
+    // New target should now have backlink
+    const updatedNewTarget = repos._pages.get(newTargetId)!;
+    assert.ok(updatedNewTarget.backlinks.includes('source/page'),
+      'New target should have backlink');
   });
 });
 

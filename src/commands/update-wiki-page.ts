@@ -133,13 +133,17 @@ export async function handleUpdateWikiPage(
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
 
-      // Update links - use provided links or auto-extract from content
-      const linksToUse = update.links ?? extractLinksFromContent(update.content);
+      // Update links - MERGE with existing links (same as merge operation)
+      // This prevents agents that rewrite content from accidentally wiping links
+      // Use provided links or auto-extract from content
       const oldLinks = existing.links || [];
-      await repos.wikiPages.updateLinks(existing.id, linksToUse);
+      const incomingLinks = update.links ?? extractLinksFromContent(update.content);
+      // Merge new links with existing ones (deduplicated)
+      const mergedLinks = [...new Set([...oldLinks, ...incomingLinks])];
+      await repos.wikiPages.updateLinks(existing.id, mergedLinks);
 
-      // Update backlinks on target pages
-      await updateBacklinks(repos, wikiId, existing.path, oldLinks, linksToUse);
+      // Update backlinks on target pages (only for newly added links)
+      await updateBacklinks(repos, wikiId, existing.path, oldLinks, mergedLinks);
 
       // Record history for update
       await recordHistory(repos, {
