@@ -761,23 +761,31 @@ export const deterministicStrategies: Strategy[] = [
 ];
 
 /**
- * Execute all strategies in order.
+ * Execute strategies in order, returning work from the FIRST strategy that has work.
+ *
+ * This prevents mixing of work types - only one "phase" of work runs at a time:
+ * 1. Exploration (if needed)
+ * 2. Synthesis (if exploration complete)
+ * 3. Meta agents (if synthesis complete)
+ * 4. Commit analysis (if everything else complete)
+ *
+ * The first strategy to return any work items wins - no mixing.
  */
 export async function executeStrategies(
   ctx: StrategyContext,
   maxItems: number
 ): Promise<WorkItem[]> {
-  const allWorkItems: WorkItem[] = [];
-
   for (const strategy of deterministicStrategies) {
-    const remainingSlots = maxItems - allWorkItems.length;
-    if (remainingSlots <= 0) break;
+    const result = await strategy(ctx, maxItems);
 
-    const result = await strategy(ctx, remainingSlots);
-    allWorkItems.push(...result.workItems);
+    // Return immediately when a strategy produces work.
+    // This ensures only ONE strategy's work is returned per call (no mixing).
+    if (result.workItems.length > 0) {
+      return result.workItems;
+    }
 
     if (result.stopProcessing) break;
   }
 
-  return allWorkItems;
+  return [];
 }

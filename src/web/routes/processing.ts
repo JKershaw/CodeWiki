@@ -15,8 +15,90 @@ import {
   handleGetRepository,
   createListWorkItemsQuery,
   handleListWorkItems,
+  createListWikiPagesQuery,
+  handleListWikiPages,
+  createListAgentRunsQuery,
+  handleListAgentRuns,
+  createListUnprocessedCommitsQuery,
+  handleListUnprocessedCommits,
 } from '../../queries/index.js';
 import { isCommitTarget, isPathTarget } from '../../domain/work-item.js';
+import { detectCurrentPhase, type WikiPhase, type PhaseDetectionContext } from '../../agents/orchestrator/phase-detection.js';
+import { ANALYSIS_AGENTS } from '../../agents/registry.js';
+
+/**
+ * Compute the current wiki generation phase from wiki state.
+ * Uses lightweight detection (no directory coverage) suitable for API calls.
+ */
+async function computeCurrentPhase(
+  repos: Dependencies['repos'],
+  repoId: string,
+  wikiId: string
+): Promise<WikiPhase> {
+  // Gather context for phase detection in parallel
+  const [
+    pagesResult,
+    runsResult,
+    pendingWorkResult,
+  ] = await Promise.all([
+    handleListWikiPages(createListWikiPagesQuery(wikiId), repos),
+    handleListAgentRuns(createListAgentRunsQuery(repoId), repos),
+    handleListWorkItems(createListWorkItemsQuery(repoId, { status: 'pending' }), repos),
+  ]);
+
+  const wikiPages = pagesResult.data || [];
+  const agentRuns = runsResult.data || [];
+  const pendingWork = pendingWorkResult.data || [];
+
+  // Check for key pages
+  const hasProjectOverview = wikiPages.some(p =>
+    p.path === 'overview' ||
+    p.path === 'architecture/overview' ||
+    p.path === 'architecture/index'
+  );
+  const hasGettingStarted = wikiPages.some(p =>
+    p.path === 'guides/getting-started' ||
+    p.path === 'guides/quickstart' ||
+    p.path === 'guides/index'
+  );
+
+  // Count pages without links
+  const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0).length;
+
+  // Check if quality agent has run (any completed run)
+  const qualityAgentHasRun = agentRuns.some(
+    r => r.agentType === 'quality' && r.status === 'completed'
+  );
+
+  // Check for pending exploration work
+  const hasExplorationWorkPending = pendingWork.some(
+    w => w.agentType === 'codebase-explorer'
+  );
+
+  // Check for unprocessed commits (check first agent type only for efficiency)
+  let unprocessedCommitsExist = false;
+  if (ANALYSIS_AGENTS.length > 0) {
+    const unprocessedResult = await handleListUnprocessedCommits(
+      createListUnprocessedCommitsQuery(repoId, ANALYSIS_AGENTS[0]!),
+      repos
+    );
+    unprocessedCommitsExist = (unprocessedResult.data?.length ?? 0) > 0;
+  }
+
+  // Build phase detection context (lightweight - no directory coverage)
+  const phaseContext: PhaseDetectionContext = {
+    wikiPages: wikiPages.length,
+    directoryCoverage: [], // Lightweight detection - no directory coverage
+    hasProjectOverview,
+    hasGettingStarted,
+    pagesWithoutLinks,
+    qualityAgentHasRun,
+    unprocessedCommitsExist,
+    hasExplorationWorkPending,
+  };
+
+  return detectCurrentPhase(phaseContext);
+}
 
 /**
  * Create processing status routes.
@@ -184,7 +266,7 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    * /api/repos/{id}/processing:
    *   get:
    *     summary: Get processing status for a repository
-   *     description: Returns the active or most recent processing run with iteration details
+   *     description: Returns the active or most recent processing run with iteration details and current phase
    *     tags: [Processing]
    *     parameters:
    *       - in: path
@@ -201,6 +283,10 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    *             schema:
    *               type: object
    *               properties:
+   *                 currentPhase:
+   *                   type: string
+   *                   enum: [bootstrap, exploration, synthesis, quality, history, continuous]
+   *                   description: The current wiki generation phase, computed from wiki state
    *                 processing:
    *                   type: object
    *                   nullable: true
@@ -275,7 +361,7 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    */
   /**
    * Get processing status for a repository.
-   * Returns the active or most recent processing run with iteration details.
+   * Returns the active or most recent processing run with iteration details and current phase.
    */
   router.get('/api/repos/:id/processing', async (req: Request, res: Response) => {
     try {
@@ -288,6 +374,15 @@ export function createProcessingRoutes(deps: Dependencies): Router {
       }
       const repo = repoResult.data;
 
+      // Get the active wiki for this repository
+      const wiki = await repos.wikis.findActive(repo.id);
+
+      // Compute the current phase (always computed, not stored)
+      let currentPhase: WikiPhase = 'bootstrap';
+      if (wiki) {
+        currentPhase = await computeCurrentPhase(repos, repo.id, wiki.id);
+      }
+
       // Try to find an active processing run first
       let processingRun = await repos.processingRuns.findActive(repo.id);
 
@@ -297,7 +392,7 @@ export function createProcessingRoutes(deps: Dependencies): Router {
       }
 
       if (!processingRun) {
-        res.json({ processing: null });
+        res.json({ currentPhase, processing: null });
         return;
       }
 
@@ -308,6 +403,7 @@ export function createProcessingRoutes(deps: Dependencies): Router {
       const currentIteration = iterations.find(i => i.status === 'running');
 
       res.json({
+        currentPhase,
         processing: {
           id: processingRun.id,
           status: processingRun.status,
