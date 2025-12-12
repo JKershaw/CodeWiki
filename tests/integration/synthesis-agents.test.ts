@@ -176,6 +176,62 @@ CONFIDENCE: 0.85`);
         );
       });
 
+      it('populates links array in WikiPageUpdate for graph tracking', async () => {
+        const repoId = 'overview-links-array';
+
+        await createTestRepo(ctx, repoId, {
+          'README.md': '# Test Project',
+        });
+
+        const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+        // Create category with 3+ pages
+        await createWikiPages(wiki.id, [
+          { path: 'guides/setup', title: 'Setup Guide', content: '# Setup\n\nHow to set up.' },
+          { path: 'guides/deploy', title: 'Deploy Guide', content: '# Deploy\n\nHow to deploy.' },
+          { path: 'guides/testing', title: 'Testing Guide', content: '# Testing\n\nHow to test.' },
+        ]);
+
+        // Mock LLM response
+        ctx.llm.setDefaultResponse(`TITLE:
+Guides Overview
+
+INTRODUCTION:
+Practical guides for the project.
+
+KEY_CONCEPTS:
+- Setup: Configuration
+
+PAGES:
+- guides/setup: Initial setup
+- guides/deploy: Deployment process
+- guides/testing: Testing strategies
+
+READING_ORDER:
+Start with setup.
+
+CONFIDENCE: 0.85`);
+
+        const agent = new OverviewAgent();
+        const agentCtx = await ctx.agentContext(repoId);
+
+        const result = await agent.run(createWikiTarget(), agentCtx);
+
+        assert.strictEqual(result.updates.length, 1, 'Should create one overview page');
+
+        const update = result.updates[0]!;
+
+        // Critical: links array should be populated for graph tracking
+        assert.ok(update.links, 'Update should have links array');
+        assert.ok(Array.isArray(update.links), 'links should be an array');
+        assert.ok(update.links.length >= 3, 'Should have at least 3 links (one per page)');
+
+        // Links should include the category pages
+        assert.ok(update.links.includes('guides/setup'), 'Should link to guides/setup');
+        assert.ok(update.links.includes('guides/deploy'), 'Should link to guides/deploy');
+        assert.ok(update.links.includes('guides/testing'), 'Should link to guides/testing');
+      });
+
       it('skips categories with too few pages', async () => {
         const repoId = 'overview-few-pages';
 

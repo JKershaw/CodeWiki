@@ -4,6 +4,7 @@ import type { AgentType } from '../../domain/agent-run.js';
 import type { WikiPageUpdate } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
+import { extractLinksFromContent } from '../../utils/link-extraction.js';
 
 /**
  * Testing Guide Agent - Creates a testing documentation guide.
@@ -97,6 +98,9 @@ export class TestingGuideAgent implements Agent {
     const titleMatch = content.match(/^#\s+(.+)$/m);
     const title = titleMatch?.[1] ?? 'Testing Guide';
 
+    // Extract links from the generated content for graph tracking
+    const links = extractLinksFromContent(content);
+
     const update: WikiPageUpdate = {
       type: 'create',
       path: this.GUIDE_PATH,
@@ -105,6 +109,7 @@ export class TestingGuideAgent implements Agent {
       sourceCommitId: '',
       agentRunId: '',
       confidenceDelta: 0.7,
+      links,
     };
 
     return {
