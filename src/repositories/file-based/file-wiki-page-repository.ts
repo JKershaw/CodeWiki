@@ -69,6 +69,8 @@ export class FileWikiPageRepository implements WikiPageRepository {
     confidence?: number;
     sourceCommitId?: string;
     sourceAgentRunId?: string;
+    category?: string;
+    categoryConfidence?: number;
   }): Promise<void> {
     const page = await this.store.get(id);
     if (page) {
@@ -89,6 +91,13 @@ export class FileWikiPageRepository implements WikiPageRepository {
       }
       if (updates.sourceAgentRunId && !page.sourceAgentRunIds.includes(updates.sourceAgentRunId)) {
         page.sourceAgentRunIds.push(updates.sourceAgentRunId);
+      }
+      // Update category metadata
+      if (updates.category !== undefined) {
+        page.category = updates.category;
+      }
+      if (updates.categoryConfidence !== undefined) {
+        page.categoryConfidence = updates.categoryConfidence;
       }
       await this.store.set(page);
     }

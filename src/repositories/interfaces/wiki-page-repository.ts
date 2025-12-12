@@ -58,6 +58,10 @@ export interface WikiPageRepository {
     confidence?: number;
     sourceCommitId?: string;
     sourceAgentRunId?: string;
+    /** Category for the page (e.g., "architecture", "security") */
+    category?: string;
+    /** Confidence score for the category assignment (0-1) */
+    categoryConfidence?: number;
   }): Promise<void>;
 
   /**
