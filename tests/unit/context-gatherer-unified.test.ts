@@ -97,6 +97,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         isGitHubRepo: false,
       } as Repo);
 
+      // Note: Files are counted toward their IMMEDIATE parent directory
+      // So src/services/git/git-service.ts counts toward src/services/git, not src/services
       const fileTree = [
         'src/agents/base-agent.ts',
         'src/agents/code-change-agent.ts',
@@ -110,16 +112,20 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Should have coverage for 2 directories (agents, services)
-      assert.strictEqual(context.directoryCoverage.length, 2);
+      // Should have coverage for 3 directories (agents, services/git, services/llm)
+      // Each file is counted toward its immediate parent directory
+      assert.strictEqual(context.directoryCoverage.length, 3);
 
       const agentsCoverage = context.directoryCoverage.find(d => d.path === 'src/agents');
-      const servicesCoverage = context.directoryCoverage.find(d => d.path === 'src/services');
+      const gitCoverage = context.directoryCoverage.find(d => d.path === 'src/services/git');
+      const llmCoverage = context.directoryCoverage.find(d => d.path === 'src/services/llm');
 
       assert.ok(agentsCoverage, 'Should have agents coverage');
-      assert.ok(servicesCoverage, 'Should have services coverage');
+      assert.ok(gitCoverage, 'Should have services/git coverage');
+      assert.ok(llmCoverage, 'Should have services/llm coverage');
       assert.strictEqual(agentsCoverage.fileCount, 2);
-      assert.strictEqual(servicesCoverage.fileCount, 2);
+      assert.strictEqual(gitCoverage.fileCount, 1);
+      assert.strictEqual(llmCoverage.fileCount, 1);
     });
 
     it('calculates coverage for GitHub repo using RepositoryService', async () => {
@@ -239,7 +245,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
     it('calculates wiki mentions correctly', async () => {
       const wikiPages = [
         createMockWikiPage('architecture/agents', 'The agents module handles autonomous tasks.'),
-        createMockWikiPage('guides/services', 'The src/services directory contains service implementations.'),
+        createMockWikiPage('guides/git', 'The src/services/git directory contains git service implementations.'),
       ];
 
       const repos = createMockRepos({
@@ -247,6 +253,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         isGitHubRepo: false,
       } as Repo, wikiPages);
 
+      // Note: Files are counted toward their IMMEDIATE parent directory
       const fileTree = [
         'src/agents/base-agent.ts',
         'src/agents/code-change-agent.ts',
@@ -260,12 +267,12 @@ describe('ContextGatherer Unified Directory Coverage', () => {
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
       const agentsCoverage = context.directoryCoverage.find(d => d.path === 'src/agents');
-      const servicesCoverage = context.directoryCoverage.find(d => d.path === 'src/services');
+      const gitCoverage = context.directoryCoverage.find(d => d.path === 'src/services/git');
 
       assert.ok(agentsCoverage, 'Should have agents coverage');
-      assert.ok(servicesCoverage, 'Should have services coverage');
+      assert.ok(gitCoverage, 'Should have services/git coverage');
       assert.ok(agentsCoverage.wikiMentions > 0, 'Agents should have wiki mentions');
-      assert.ok(servicesCoverage.wikiMentions > 0, 'Services should have wiki mentions');
+      assert.ok(gitCoverage.wikiMentions > 0, 'Git should have wiki mentions');
     });
 
     it('calculates coverage for non-src directories like lib/', async () => {

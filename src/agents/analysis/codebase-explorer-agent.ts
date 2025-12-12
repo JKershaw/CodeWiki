@@ -241,6 +241,9 @@ export class CodebaseExplorerAgent implements Agent {
 
   /**
    * List directory tree structure.
+   *
+   * Uses getFileTree() to discover ALL files under the target path at any depth,
+   * not just 1-2 levels deep. This ensures deeply nested source files are found.
    */
   private async listDirectoryTree(
     targetPath: string,
@@ -251,47 +254,74 @@ export class CodebaseExplorerAgent implements Agent {
     }
 
     try {
-      const entries = await context.repoAccess.listDirectory(targetPath);
-      const files: string[] = [];
-      const treeLines: string[] = [];
+      // Get ALL files in the repository
+      const allFiles = await context.repoAccess.getFileTree();
 
-      for (const entry of entries) {
-        const fullPath = targetPath === '.' ? entry.name : `${targetPath}/${entry.name}`;
-        if (entry.type === 'dir') {
-          treeLines.push(`${entry.name}/`);
-          // Recursively list subdirectories (one level deep)
-          try {
-            const subEntries = await context.repoAccess.listDirectory(fullPath);
-            for (const subEntry of subEntries) {
-              const subPath = `${fullPath}/${subEntry.name}`;
-              if (subEntry.type === 'dir') {
-                treeLines.push(`  ${subEntry.name}/`);
-              } else {
-                treeLines.push(`  ${subEntry.name}`);
-                if (this.isSourceFile(subEntry.name)) {
-                  files.push(subPath);
-                }
-              }
-            }
-          } catch {
-            // Ignore subdirectory listing errors
-          }
-        } else {
-          treeLines.push(entry.name);
-          if (this.isSourceFile(entry.name)) {
-            files.push(fullPath);
-          }
+      // Filter to files under the target path
+      const prefix = targetPath === '.' ? '' : targetPath + '/';
+      const filesUnderTarget = targetPath === '.'
+        ? allFiles
+        : allFiles.filter(f => f.startsWith(prefix));
+
+      // Filter to source files only
+      const sourceFiles = filesUnderTarget.filter(f => {
+        const filename = f.split('/').pop() ?? '';
+        return this.isSourceFile(filename);
+      });
+
+      if (sourceFiles.length === 0) {
+        return null;
+      }
+
+      // Build tree representation from file paths
+      const tree = this.buildTreeFromPaths(sourceFiles, targetPath);
+
+      return {
+        tree,
+        files: sourceFiles,
+      };
+    } catch (error) {
+      console.warn(`[codebase-explorer] Failed to get file tree for ${targetPath}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Build a tree representation from a list of file paths.
+   */
+  private buildTreeFromPaths(files: string[], basePath: string): string {
+    const prefix = basePath === '.' ? '' : basePath + '/';
+    const treeLines: string[] = [];
+    const seenDirs = new Set<string>();
+
+    // Sort files for consistent tree output
+    const sortedFiles = [...files].sort();
+
+    for (const filePath of sortedFiles) {
+      // Get path relative to base
+      const relativePath = basePath === '.'
+        ? filePath
+        : filePath.slice(prefix.length);
+
+      const parts = relativePath.split('/');
+
+      // Add directory entries (with indentation based on depth)
+      for (let i = 0; i < parts.length - 1; i++) {
+        const dirPath = parts.slice(0, i + 1).join('/');
+        if (!seenDirs.has(dirPath)) {
+          seenDirs.add(dirPath);
+          const indent = '  '.repeat(i);
+          treeLines.push(`${indent}${parts[i]}/`);
         }
       }
 
-      return {
-        tree: treeLines.join('\n'),
-        files,
-      };
-    } catch (error) {
-      console.warn(`[codebase-explorer] Failed to list directory ${targetPath}: ${error}`);
-      return null;
+      // Add file entry
+      const indent = '  '.repeat(parts.length - 1);
+      const filename = parts[parts.length - 1];
+      treeLines.push(`${indent}${filename}`);
     }
+
+    return treeLines.join('\n');
   }
 
   /**

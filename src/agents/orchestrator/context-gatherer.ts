@@ -412,14 +412,17 @@ export class ContextGatherer {
         return [];
       }
 
-      // Extract second-level directories and count files
-      // e.g., src/agents/foo.ts -> src/agents, lib/utils/bar.ts -> lib/utils
+      // Extract directories at ALL levels and count files
+      // Each file is counted toward its immediate parent directory only
+      // e.g., src/agents/orchestrator/strategies.ts -> src/agents/orchestrator
+      //       src/agents/base-agent.ts -> src/agents
       const dirCounts = new Map<string, number>();
       for (const filePath of sourceFiles) {
         const parts = filePath.split('/');
         // Only count files that are at least 2 levels deep (e.g., dir/subdir/file.ts)
         if (parts.length >= 3) {
-          const dirPath = `${parts[0]}/${parts[1]}`;
+          // Get the immediate parent directory (all parts except the filename)
+          const dirPath = parts.slice(0, -1).join('/');
           dirCounts.set(dirPath, (dirCounts.get(dirPath) ?? 0) + 1);
         }
       }
@@ -431,7 +434,8 @@ export class ContextGatherer {
       // Build coverage array
       const coverage: DirectoryCoverage[] = [];
       for (const [dirPath, fileCount] of dirCounts) {
-        const dirName = dirPath.split('/')[1]!;
+        // Get the last part of the directory path for wiki mention search
+        const dirName = dirPath.split('/').pop()!;
 
         // Check for wiki mentions
         const wikiMentions = this.countWikiMentions(dirName, dirPath, wikiPages);
@@ -449,8 +453,14 @@ export class ContextGatherer {
         });
       }
 
-      // Sort by coverage (lowest first to highlight gaps)
-      coverage.sort((a, b) => a.coveragePercent - b.coveragePercent);
+      // Sort by coverage (lowest first), then by depth (deeper first for same coverage)
+      coverage.sort((a, b) => {
+        if (a.coveragePercent !== b.coveragePercent) {
+          return a.coveragePercent - b.coveragePercent;
+        }
+        // For same coverage, prefer deeper directories (more specific targeting)
+        return b.path.split('/').length - a.path.split('/').length;
+      });
 
       return coverage;
     } catch (error) {
