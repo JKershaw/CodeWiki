@@ -66,15 +66,16 @@ export class OrphanedPageHandler implements FindingHandler {
    * Add a link to a target page in the given content.
    */
   private addLinkToPage(content: string, targetPage: WikiPage): string {
-    // Add link in a "Related" section if it exists, otherwise at the end
-    const relatedMatch = content.match(/^## Related\s*\n/m);
+    // Add link in a "Related Pages" section if it exists, otherwise at the end
+    // Match both "## Related Pages" and "## Related" for backward compatibility
+    const relatedMatch = content.match(/^## Related(?:\s+Pages)?\s*\n/m);
     if (relatedMatch) {
       const insertPos = relatedMatch.index! + relatedMatch[0].length;
-      const linkLine = `- [${targetPage.title}](${targetPage.path}.md)\n`;
+      const linkLine = `- [${targetPage.title}](${targetPage.path})\n`;
       return content.slice(0, insertPos) + linkLine + content.slice(insertPos);
     }
 
-    // Add a Related section at the end
-    return `${content.trimEnd()}\n\n## Related\n\n- [${targetPage.title}](${targetPage.path}.md)\n`;
+    // Add a Related Pages section at the end (standardized naming)
+    return `${content.trimEnd()}\n\n## Related Pages\n\n- [${targetPage.title}](${targetPage.path})\n`;
   }
 }

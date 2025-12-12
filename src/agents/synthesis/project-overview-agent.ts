@@ -220,7 +220,7 @@ Output ONLY the markdown content. No explanations before or after.
 
     let finalContent = content;
     if (!content.includes('## Related') && nonCommitPages.length > 0) {
-      const relatedSection = `\n\n## Related Documentation\n\n${nonCommitPages.slice(0, 8).map(p => `- [${p.title}](${p.path})`).join('\n')}`;
+      const relatedSection = `\n\n## Related Pages\n\n${nonCommitPages.slice(0, 8).map(p => `- [${p.title}](${p.path})`).join('\n')}`;
       finalContent += relatedSection;
     }
 
@@ -343,9 +343,9 @@ ${overview.entryPoints.map(e => `- **${e.path}**: ${e.reason}`).join('\n')}`
       p.path !== this.OVERVIEW_PATH
     );
     const relatedPagesSection = nonCommitPages.length > 0
-      ? `## Related Documentation
+      ? `## Related Pages
 
-${nonCommitPages.slice(0, 10).map(p => `- [${p.title}](${p.path}.md)`).join('\n')}`
+${nonCommitPages.slice(0, 10).map(p => `- [${p.title}](${p.path})`).join('\n')}`
       : '';
 
     const content = `# ${title}
