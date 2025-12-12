@@ -64,6 +64,12 @@ import {
 // Import agent registry for type lists
 import { ANALYSIS_AGENTS } from '../../agents/registry.js';
 
+// Import file coverage calculation
+import {
+  calculateAggregateFileCoverage,
+  type FileData,
+} from './file-coverage-tree.js';
+
 /**
  * Orchestrator configuration.
  */
@@ -780,6 +786,40 @@ export class DefaultOrchestrator implements Orchestrator {
         ? wikiPages.reduce((sum, p) => sum + p.confidence, 0) / wikiPages.length
         : 0;
 
+    // Calculate file documentation coverage if repoAccessFactory is available
+    let fileDocCoverage = 0;
+    let totalSourceFiles = 0;
+    let documentedFiles = 0;
+
+    if (this.repoAccessFactory) {
+      try {
+        const repoAccess = await this.repoAccessFactory.create(repoId);
+        const allFiles = await repoAccess.getFileTree();
+        const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
+
+        if (sourceFiles.length > 0) {
+          const DEFAULT_LOC = 75; // Estimated LOC per file
+          const fileData: FileData[] = sourceFiles.map(path => ({
+            path,
+            loc: DEFAULT_LOC,
+          }));
+
+          const wikiPagesForCoverage = wikiPages.map(p => ({
+            path: p.path,
+            content: p.content,
+          }));
+
+          const fileCoverage = calculateAggregateFileCoverage(fileData, wikiPagesForCoverage);
+          fileDocCoverage = fileCoverage.coveragePercent;
+          totalSourceFiles = fileCoverage.totalFiles;
+          documentedFiles = fileCoverage.documentedFiles;
+        }
+      } catch (error) {
+        // If file coverage calculation fails, continue with zeros
+        console.warn('Failed to calculate file documentation coverage:', error);
+      }
+    }
+
     return {
       totalCommits,
       processedCommits,
@@ -790,7 +830,38 @@ export class DefaultOrchestrator implements Orchestrator {
       avgConfidence,
       openConflicts: openConflicts.length,
       openFindings: openFindings.length,
+      fileDocCoverage,
+      totalSourceFiles,
+      documentedFiles,
     };
+  }
+
+  /**
+   * Check if a file path is a source file (for coverage calculation).
+   */
+  private isSourceFile(filePath: string): boolean {
+    // Include TypeScript and JavaScript files
+    if (!filePath.match(/\.(ts|js|tsx|jsx)$/)) {
+      return false;
+    }
+    // Exclude test files
+    if (filePath.includes('.test.') || filePath.includes('.spec.')) {
+      return false;
+    }
+    // Exclude type definition files
+    if (filePath.endsWith('.d.ts')) {
+      return false;
+    }
+    // Exclude common non-source directories
+    if (
+      filePath.includes('node_modules/') ||
+      filePath.includes('dist/') ||
+      filePath.includes('build/') ||
+      filePath.includes('__pycache__/')
+    ) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -818,6 +889,12 @@ export interface WorkSummary {
   avgConfidence: number;
   openConflicts: number;
   openFindings: number;
+  /** File documentation coverage percentage (0-100), weighted by LOC */
+  fileDocCoverage: number;
+  /** Total number of source files in the repository */
+  totalSourceFiles: number;
+  /** Number of files with any documentation (coverage > 0) */
+  documentedFiles: number;
 }
 
 // Import PhasedOrchestrator - no circular dependency since it only imports types from this file
