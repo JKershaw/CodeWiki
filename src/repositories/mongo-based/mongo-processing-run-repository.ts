@@ -1,6 +1,6 @@
 import type { Collection, Db, Document, Filter } from 'mongodb';
 import type { ProcessingRunRepository } from '../interfaces/processing-run-repository.js';
-import type { ProcessingRun, ProcessingRunStatus } from '../../domain/processing-run.js';
+import type { ProcessingRun, ProcessingRunStatus, ProcessingPhase } from '../../domain/processing-run.js';
 import { toEntity, toEntities, toDocument, byId } from './mongo-utils.js';
 
 export class MongoProcessingRunRepository implements ProcessingRunRepository {
@@ -124,5 +124,37 @@ export class MongoProcessingRunRepository implements ProcessingRunRepository {
       byId(id),
       { $set: { status: 'stopped', completedAt: new Date() } }
     );
+  }
+
+  async advancePhase(id: string, phase: ProcessingPhase): Promise<void> {
+    const run = await this.findById(id);
+    if (!run) return;
+
+    // Mark current phase as completed and new phase as running
+    const updatedPhaseStatus = { ...run.phaseStatus };
+    if (run.currentPhase) {
+      updatedPhaseStatus[run.currentPhase] = 'completed';
+    }
+    updatedPhaseStatus[phase] = 'running';
+
+    await this.collection.updateOne(
+      byId(id),
+      {
+        $set: {
+          currentPhase: phase,
+          phaseProgress: 0,
+          phaseTarget: null,
+          phaseStatus: updatedPhaseStatus,
+        },
+      }
+    );
+  }
+
+  async updatePhaseProgress(id: string, progress: number, target?: number): Promise<void> {
+    const updates: Record<string, unknown> = { phaseProgress: progress };
+    if (target !== undefined) {
+      updates.phaseTarget = target;
+    }
+    await this.collection.updateOne(byId(id), { $set: updates });
   }
 }

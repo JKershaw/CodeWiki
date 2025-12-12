@@ -1,4 +1,4 @@
-import type { ProcessingRun, ProcessingRunStatus } from '../../domain/processing-run.js';
+import type { ProcessingRun, ProcessingRunStatus, ProcessingPhase } from '../../domain/processing-run.js';
 
 /**
  * Repository interface for managing processing runs.
@@ -81,4 +81,18 @@ export interface ProcessingRunRepository {
    * Sets status to 'stopped' and completedAt.
    */
   confirmStop(id: string): Promise<void>;
+
+  /**
+   * Advance to the next phase in the pipeline.
+   * Marks the current phase as completed and sets the new phase as running.
+   */
+  advancePhase(id: string, phase: ProcessingPhase): Promise<void>;
+
+  /**
+   * Update progress within the current phase.
+   * @param id - Processing run ID
+   * @param progress - Current progress value
+   * @param target - Optional target value for completion
+   */
+  updatePhaseProgress(id: string, progress: number, target?: number): Promise<void>;
 }

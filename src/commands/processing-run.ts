@@ -8,7 +8,12 @@
 import type { Command, CommandResult } from './types.js';
 import { success, failure } from './types.js';
 import type { Repositories } from '../repositories/index.js';
-import { createProcessingRun, type ProcessingRun } from '../domain/processing-run.js';
+import {
+  createProcessingRun,
+  getNextPhase,
+  type ProcessingRun,
+  type ProcessingPhase,
+} from '../domain/processing-run.js';
 import {
   handleIncrementWikiIterations,
   createIncrementWikiIterationsCommand,
@@ -353,5 +358,116 @@ export async function handleConfirmStopProcessingRun(
     return success();
   } catch (error) {
     return failure(`Failed to confirm stop for processing run: ${error}`);
+  }
+}
+
+// ============================================================================
+// AdvancePhase Command
+// ============================================================================
+
+/**
+ * Command to advance to the next phase in the pipeline.
+ * Validates that the transition is valid (can only advance to the next phase).
+ */
+export interface AdvancePhaseCommand extends Command {
+  readonly type: 'AdvancePhase';
+  readonly processingRunId: string;
+  readonly targetPhase: ProcessingPhase;
+}
+
+export function createAdvancePhaseCommand(
+  processingRunId: string,
+  targetPhase: ProcessingPhase
+): AdvancePhaseCommand {
+  return {
+    type: 'AdvancePhase',
+    processingRunId,
+    targetPhase,
+  };
+}
+
+/**
+ * Handler for AdvancePhase command.
+ * Validates the phase transition and updates the processing run.
+ */
+export async function handleAdvancePhase(
+  command: AdvancePhaseCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    // Verify processing run exists
+    const run = await repos.processingRuns.findById(command.processingRunId);
+    if (!run) {
+      return failure(`Processing run not found: ${command.processingRunId}`);
+    }
+
+    // Validate phase transition
+    const expectedNextPhase = getNextPhase(run.currentPhase);
+    if (command.targetPhase !== expectedNextPhase) {
+      return failure(
+        `Invalid phase transition: cannot advance from '${run.currentPhase}' to '${command.targetPhase}'. ` +
+        `Expected next phase: '${expectedNextPhase ?? 'none (already at final phase)'}'`
+      );
+    }
+
+    await repos.processingRuns.advancePhase(command.processingRunId, command.targetPhase);
+    return success();
+  } catch (error) {
+    return failure(`Failed to advance phase: ${error}`);
+  }
+}
+
+// ============================================================================
+// UpdatePhaseProgress Command
+// ============================================================================
+
+/**
+ * Command to update progress within the current phase.
+ */
+export interface UpdatePhaseProgressCommand extends Command {
+  readonly type: 'UpdatePhaseProgress';
+  readonly processingRunId: string;
+  readonly progress: number;
+  readonly target?: number;
+}
+
+export function createUpdatePhaseProgressCommand(
+  processingRunId: string,
+  progress: number,
+  target?: number
+): UpdatePhaseProgressCommand {
+  const command: UpdatePhaseProgressCommand = {
+    type: 'UpdatePhaseProgress',
+    processingRunId,
+    progress,
+  };
+  if (target !== undefined) {
+    return { ...command, target };
+  }
+  return command;
+}
+
+/**
+ * Handler for UpdatePhaseProgress command.
+ */
+export async function handleUpdatePhaseProgress(
+  command: UpdatePhaseProgressCommand,
+  repos: Repositories
+): Promise<CommandResult<void>> {
+  try {
+    // Verify processing run exists
+    const run = await repos.processingRuns.findById(command.processingRunId);
+    if (!run) {
+      return failure(`Processing run not found: ${command.processingRunId}`);
+    }
+
+    await repos.processingRuns.updatePhaseProgress(
+      command.processingRunId,
+      command.progress,
+      command.target
+    );
+    return success();
+  } catch (error) {
+    return failure(`Failed to update phase progress: ${error}`);
   }
 }

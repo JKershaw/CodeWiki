@@ -1,5 +1,5 @@
 import type { ProcessingRunRepository } from '../interfaces/processing-run-repository.js';
-import type { ProcessingRun, ProcessingRunStatus } from '../../domain/processing-run.js';
+import type { ProcessingRun, ProcessingRunStatus, ProcessingPhase } from '../../domain/processing-run.js';
 import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
 
@@ -118,5 +118,34 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
       status: 'stopped',
       completedAt: new Date(),
     });
+  }
+
+  async advancePhase(id: string, phase: ProcessingPhase): Promise<void> {
+    const run = await this.store.get(id);
+    if (!run) {
+      throw new Error(`Processing run not found: ${id}`);
+    }
+
+    // Mark current phase as completed
+    const updatedPhaseStatus = { ...run.phaseStatus };
+    if (run.currentPhase) {
+      updatedPhaseStatus[run.currentPhase] = 'completed';
+    }
+    updatedPhaseStatus[phase] = 'running';
+
+    await this.store.update(id, {
+      currentPhase: phase,
+      phaseProgress: 0,
+      phaseTarget: null,
+      phaseStatus: updatedPhaseStatus,
+    });
+  }
+
+  async updatePhaseProgress(id: string, progress: number, target?: number): Promise<void> {
+    const updates: Partial<ProcessingRun> = { phaseProgress: progress };
+    if (target !== undefined) {
+      updates.phaseTarget = target;
+    }
+    await this.store.update(id, updates);
   }
 }

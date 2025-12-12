@@ -321,6 +321,11 @@ export function createProcessingRoutes(deps: Dependencies): Router {
           startedAt: processingRun.startedAt,
           completedAt: processingRun.completedAt,
           error: processingRun.error,
+          // Phase tracking
+          currentPhase: processingRun.currentPhase,
+          phaseProgress: processingRun.phaseProgress,
+          phaseTarget: processingRun.phaseTarget,
+          phaseStatus: processingRun.phaseStatus,
           currentIteration: currentIteration ? {
             iterationNumber: currentIteration.iterationNumber,
             agentType: currentIteration.agentType,
