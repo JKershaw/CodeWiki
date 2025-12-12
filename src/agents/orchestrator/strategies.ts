@@ -321,14 +321,9 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     if (needsLinking) {
       const linkKey = 'link:wiki';
 
-      // Check for recent link runs (iteration-based cooldown)
-      const hasRecentRun = hasRunWithinCooldown('link');
-
-      // Override cooldown if unlinked ratio is significant (> 30%)
-      // This ensures link agent runs frequently when wiki is poorly linked
-      const shouldOverrideCooldown = unlinkedRatio > 0.3;
-
-      if (!ctx.existingWorkKeys.has(linkKey) && (!hasRecentRun || shouldOverrideCooldown)) {
+      // No cooldown for link agent - cross-references are critical for wiki navigation
+      // and the link agent itself has internal filtering to skip already-linked pages
+      if (!ctx.existingWorkKeys.has(linkKey)) {
         ctx.existingWorkKeys.add(linkKey);
         workItems.push(
           createWorkItem({

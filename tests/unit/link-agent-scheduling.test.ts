@@ -116,7 +116,7 @@ describe('Link Agent Scheduling', () => {
       assert.ok(!linkWorkItem, 'Should not schedule link agent when all pages have links');
     });
 
-    it('respects recent link agent run cooldown (iteration-based)', async () => {
+    it('schedules link agent regardless of recent runs (no cooldown)', async () => {
       const repoId = 'link-sched-3';
 
       await createTestRepo(ctx, repoId, {
@@ -125,7 +125,7 @@ describe('Link Agent Scheduling', () => {
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      // Create 10 pages, 2 without links (20% unlinked - above 15% threshold but below 30% override)
+      // Create 10 pages, 2 without links (20% unlinked - above 15% threshold)
       await createWikiPages(wiki.id, [
         { path: 'page1', title: 'Page 1', content: '# Page 1', links: ['page2'] },
         { path: 'page2', title: 'Page 2', content: '# Page 2', links: ['page1'] },
@@ -139,7 +139,7 @@ describe('Link Agent Scheduling', () => {
         { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
       ]);
 
-      // Record a link agent run (will be in recent 10 runs window)
+      // Record a link agent run (would have been in cooldown window before)
       await ctx.repos.agentRuns.save({
         id: uuid(),
         repoId,
@@ -159,76 +159,11 @@ describe('Link Agent Scheduling', () => {
       const result = await metaAgentsStrategy(strategyCtx, 10);
 
       const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // With link run in recent window and less than 30% unlinked, should NOT reschedule
-      assert.ok(!linkWorkItem, 'Should respect cooldown for recent run within window');
+      // Link agent has no cooldown - should schedule when pages need linking
+      assert.ok(linkWorkItem, 'Should schedule link agent even with recent run (no cooldown)');
     });
 
-    it('allows scheduling after cooldown expires (pushed out of window)', async () => {
-      const repoId = 'link-sched-3b';
-
-      await createTestRepo(ctx, repoId, {
-        'README.md': '# Test',
-      });
-
-      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
-
-      // Create 10 pages, 2 without links (20% unlinked - above 15% threshold but below 30% override)
-      await createWikiPages(wiki.id, [
-        { path: 'page1', title: 'Page 1', content: '# Page 1', links: ['page2'] },
-        { path: 'page2', title: 'Page 2', content: '# Page 2', links: ['page1'] },
-        { path: 'page3', title: 'Page 3', content: '# Page 3', links: ['page1'] },
-        { path: 'page4', title: 'Page 4', content: '# Page 4', links: ['page1'] },
-        { path: 'page5', title: 'Page 5', content: '# Page 5', links: ['page1'] },
-        { path: 'page6', title: 'Page 6', content: '# Page 6', links: ['page1'] },
-        { path: 'page7', title: 'Page 7', content: '# Page 7', links: ['page1'] },
-        { path: 'page8', title: 'Page 8', content: '# Page 8', links: ['page1'] },
-        { path: 'page9', title: 'Page 9', content: '# Page 9', links: [] },  // no links
-        { path: 'page10', title: 'Page 10', content: '# Page 10', links: [] },  // no links
-      ]);
-
-      // Record an old link agent run
-      await ctx.repos.agentRuns.save({
-        id: uuid(),
-        repoId,
-        wikiId: wiki.id,
-        agentType: 'link',
-        status: 'completed',
-        startedAt: new Date(Date.now() - 100000),
-        completedAt: new Date(Date.now() - 99000),
-        durationMs: 1000,
-        inputTokens: 100,
-        outputTokens: 50,
-        costUsd: 0.001,
-        toolCalls: [],
-      });
-
-      // Add 15 other completed runs to push link agent out of the 10-run window
-      for (let i = 0; i < 15; i++) {
-        await ctx.repos.agentRuns.save({
-          id: uuid(),
-          repoId,
-          wikiId: wiki.id,
-          agentType: 'code-change', // Different agent type
-          status: 'completed',
-          startedAt: new Date(Date.now() - 50000 + i * 1000),
-          completedAt: new Date(Date.now() - 49000 + i * 1000),
-          durationMs: 1000,
-          inputTokens: 100,
-          outputTokens: 50,
-          costUsd: 0.001,
-          toolCalls: [],
-        });
-      }
-
-      const strategyCtx = createStrategyContext(repoId, wiki.id);
-      const result = await metaAgentsStrategy(strategyCtx, 10);
-
-      const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // After link run is pushed out of 10-run window, should schedule again
-      assert.ok(linkWorkItem, 'Should allow scheduling after cooldown expires');
-    });
-
-    it('reschedules link agent when high percentage of pages are unlinked', async () => {
+    it('schedules link agent when high percentage of pages are unlinked', async () => {
       const repoId = 'link-sched-4';
 
       await createTestRepo(ctx, repoId, {
@@ -249,28 +184,12 @@ describe('Link Agent Scheduling', () => {
       }
       await createWikiPages(wiki.id, pages);
 
-      // Record a recent link agent run (to test re-scheduling)
-      await ctx.repos.agentRuns.save({
-        id: uuid(),
-        repoId,
-        wikiId: wiki.id,
-        agentType: 'link',
-        status: 'completed',
-        startedAt: new Date(Date.now() - 60000), // 1 minute ago
-        completedAt: new Date(Date.now() - 59000),
-        durationMs: 1000,
-        inputTokens: 100,
-        outputTokens: 50,
-        costUsd: 0.001,
-        toolCalls: [],
-      });
-
       const strategyCtx = createStrategyContext(repoId, wiki.id);
       const result = await metaAgentsStrategy(strategyCtx, 10);
 
       const linkWorkItem = result.workItems.find(w => w.agentType === 'link');
-      // With 80% unlinked, should re-schedule even with recent run
-      assert.ok(linkWorkItem, 'Should reschedule link agent when many pages are unlinked');
+      // With 80% unlinked (above 15% threshold), should schedule link agent
+      assert.ok(linkWorkItem, 'Should schedule link agent when many pages are unlinked');
     });
   });
 });
