@@ -2,14 +2,14 @@
  * Unit tests for Orchestrator strategy deep directory targeting.
  *
  * These tests verify that the codebaseExplorationStrategy prefers targeting
- * deeper directories with low coverage over shallower parent directories.
+ * directories with more undocumented files over those that are better covered.
  */
 
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import { codebaseExplorationStrategy } from '../../src/agents/orchestrator/strategies.js';
 import type { StrategyContext } from '../../src/agents/orchestrator/strategies.js';
-import type { DirectoryCoverage, OrchestratorContext } from '../../src/agents/orchestrator/context-gatherer.js';
+import type { UndocumentedDirectory, OrchestratorContext } from '../../src/agents/orchestrator/context-gatherer.js';
 
 // Suppress console output during tests
 mock.method(console, 'warn', () => {});
@@ -17,16 +17,15 @@ mock.method(console, 'log', () => {});
 mock.method(console, 'error', () => {});
 
 /**
- * Create a mock StrategyContext with specified directory coverage.
+ * Create a mock StrategyContext with specified undocumented directories.
  */
 function createMockStrategyContext(
-  directoryCoverage: DirectoryCoverage[],
+  undocumentedDirectories: UndocumentedDirectory[],
   options?: {
-    iterationPhase?: 'early' | 'mid' | 'late';
     wikiPageCount?: number;
   }
 ): StrategyContext {
-  const { iterationPhase = 'early', wikiPageCount = 10 } = options ?? {};
+  const { wikiPageCount = 10 } = options ?? {};
 
   const mockOrchestratorContext: OrchestratorContext = {
     totalCommits: 10,
@@ -50,11 +49,10 @@ function createMockStrategyContext(
     hasGettingStarted: true,
     hasTestingGuide: false,
     hasExtensionGuide: false,
-    directoryCoverage,
+    undocumentedDirectories,
     fileCoverageTree: null,
     projectOverviewContent: null,
     pendingEditRequests: 0,
-    iterationPhase,
   };
 
   return {
@@ -62,7 +60,6 @@ function createMockStrategyContext(
     wikiId: 'test-wiki',
     repos: {} as any,
     existingWorkKeys: new Set(),
-    iterationPhase,
     contextGatherer: {
       gather: mock.fn(async () => mockOrchestratorContext),
       formatForPrompt: mock.fn(() => ''),
@@ -72,125 +69,110 @@ function createMockStrategyContext(
 
 describe('Orchestrator Deep Directory Targeting', () => {
   describe('codebaseExplorationStrategy', () => {
-    it('should prefer deeper directories with lower coverage over shallower ones', async () => {
-      // Scenario: src/agents has 50% coverage, but src/agents/analysis has 0%
-      const directoryCoverage: DirectoryCoverage[] = [
-        { path: 'src/agents', fileCount: 10, wikiMentions: 5, coveragePercent: 50 },
-        { path: 'src/agents/analysis', fileCount: 4, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/agents/orchestrator', fileCount: 3, wikiMentions: 3, coveragePercent: 100 },
-        { path: 'src/services', fileCount: 5, wikiMentions: 2, coveragePercent: 40 },
+    it('should prefer directories with higher undocumented ratio', async () => {
+      // Scenario: src/agents/analysis has 100% undocumented, src/services has 50%
+      const undocumentedDirectories: UndocumentedDirectory[] = [
+        { path: 'src/agents/analysis', totalFiles: 4, undocumentedCount: 4, undocumentedRatio: 1.0 },
+        { path: 'src/services', totalFiles: 10, undocumentedCount: 5, undocumentedRatio: 0.5 },
       ];
 
-      const ctx = createMockStrategyContext(directoryCoverage);
+      const ctx = createMockStrategyContext(undocumentedDirectories);
       const result = await codebaseExplorationStrategy(ctx, 5);
 
       // Should have created work items
       assert.ok(result.workItems.length > 0, 'Should create work items');
 
-      // The first work item should target the deepest directory with lowest coverage
+      // The first work item should target the directory with highest undocumented ratio
       const firstTarget = result.workItems[0];
       assert.ok(firstTarget, 'Should have at least one work item');
 
-      // src/agents/analysis (0% coverage) should be prioritized over src/agents (50%)
       const targetPath = (firstTarget.target as any).path;
       assert.strictEqual(
         targetPath,
         'src/agents/analysis',
-        `Should target deeply nested low-coverage directory first. Got: ${targetPath}`
+        `Should target directory with highest undocumented ratio first. Got: ${targetPath}`
       );
     });
 
-    it('should sort by coverage first, then by depth', async () => {
-      const directoryCoverage: DirectoryCoverage[] = [
-        { path: 'src/services', fileCount: 5, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/agents/analysis', fileCount: 4, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/agents', fileCount: 10, wikiMentions: 5, coveragePercent: 50 },
+    it('should sort by undocumented ratio first, then by count', async () => {
+      const undocumentedDirectories: UndocumentedDirectory[] = [
+        { path: 'src/services', totalFiles: 10, undocumentedCount: 5, undocumentedRatio: 0.5 },
+        { path: 'src/agents/analysis', totalFiles: 4, undocumentedCount: 4, undocumentedRatio: 1.0 },
+        { path: 'src/utils', totalFiles: 2, undocumentedCount: 2, undocumentedRatio: 1.0 },
       ];
 
-      const ctx = createMockStrategyContext(directoryCoverage);
+      const ctx = createMockStrategyContext(undocumentedDirectories);
       const result = await codebaseExplorationStrategy(ctx, 5);
 
-      // Both src/services and src/agents/analysis have 0% coverage
-      // src/agents/analysis is deeper (3 parts) than src/services (2 parts)
-      // So src/agents/analysis should come first
       const paths = result.workItems.map(w => (w.target as any).path);
 
+      // Both src/agents/analysis and src/utils have 100% undocumented
+      // src/agents/analysis has more undocumented files (4 vs 2)
+      // So src/agents/analysis should come first
       assert.ok(paths.length >= 2, 'Should have at least 2 work items');
 
-      // Find positions of both directories
       const analysisIndex = paths.indexOf('src/agents/analysis');
-      const servicesIndex = paths.indexOf('src/services');
+      const utilsIndex = paths.indexOf('src/utils');
 
       assert.ok(
         analysisIndex !== -1,
         `Should include src/agents/analysis. Paths: ${paths.join(', ')}`
       );
       assert.ok(
-        servicesIndex !== -1,
-        `Should include src/services. Paths: ${paths.join(', ')}`
+        utilsIndex !== -1,
+        `Should include src/utils. Paths: ${paths.join(', ')}`
       );
 
-      // Deeper directory should come first when coverage is equal
+      // More undocumented files should come first when ratio is equal
       assert.ok(
-        analysisIndex < servicesIndex,
-        `Deeper directory (src/agents/analysis at index ${analysisIndex}) should come before shallower (src/services at index ${servicesIndex})`
+        analysisIndex < utilsIndex,
+        `Directory with more undocumented files (src/agents/analysis at index ${analysisIndex}) should come before (src/utils at index ${utilsIndex})`
       );
     });
 
-    it('should not target parent directory when child has same coverage', async () => {
-      // If src/agents and src/agents/analysis both have 0%, prefer the child
-      const directoryCoverage: DirectoryCoverage[] = [
-        { path: 'src/agents', fileCount: 10, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/agents/analysis', fileCount: 4, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/agents/orchestrator', fileCount: 3, wikiMentions: 0, coveragePercent: 0 },
+    it('should prefer deeper directories when ratio and count are equal', async () => {
+      const undocumentedDirectories: UndocumentedDirectory[] = [
+        { path: 'src/a', totalFiles: 4, undocumentedCount: 4, undocumentedRatio: 1.0 },
+        { path: 'src/a/nested', totalFiles: 4, undocumentedCount: 4, undocumentedRatio: 1.0 },
       ];
 
-      const ctx = createMockStrategyContext(directoryCoverage);
+      const ctx = createMockStrategyContext(undocumentedDirectories);
       const result = await codebaseExplorationStrategy(ctx, 2);
 
       const paths = result.workItems.map(w => (w.target as any).path);
 
-      // Should prefer child directories over parent when coverage is same
-      // Because documenting a specific subdirectory is more focused
-      assert.ok(
-        paths[0] !== 'src/agents' || paths.length === 1,
-        `Should prefer child directories over parent. First target: ${paths[0]}`
+      // Deeper directory should come first when ratio and count are equal
+      assert.strictEqual(
+        paths[0],
+        'src/a/nested',
+        `Should prefer deeper directory. First target: ${paths[0]}`
       );
     });
 
-    it('should skip directories that are already well-documented', async () => {
-      const directoryCoverage: DirectoryCoverage[] = [
-        { path: 'src/agents/orchestrator', fileCount: 3, wikiMentions: 10, coveragePercent: 100 },
-        { path: 'src/agents/analysis', fileCount: 4, wikiMentions: 0, coveragePercent: 0 },
-      ];
+    it('should only include directories with undocumented files', async () => {
+      // Empty list means all directories are documented
+      const undocumentedDirectories: UndocumentedDirectory[] = [];
 
-      const ctx = createMockStrategyContext(directoryCoverage);
+      const ctx = createMockStrategyContext(undocumentedDirectories);
       const result = await codebaseExplorationStrategy(ctx, 5);
 
-      const paths = result.workItems.map(w => (w.target as any).path);
-
-      // Should not include the 100% coverage directory
-      assert.ok(
-        !paths.includes('src/agents/orchestrator'),
-        `Should skip well-documented directories. Paths: ${paths.join(', ')}`
-      );
-
-      // Should include the 0% coverage directory
-      assert.ok(
-        paths.includes('src/agents/analysis'),
-        `Should include low-coverage directories. Paths: ${paths.join(', ')}`
+      // Should not create any work items when everything is documented
+      assert.strictEqual(
+        result.workItems.length,
+        0,
+        'Should not create work items when everything is documented'
       );
     });
 
     it('should respect the remaining slots limit', async () => {
-      const directoryCoverage: DirectoryCoverage[] = [
-        { path: 'src/a', fileCount: 5, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/b', fileCount: 5, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/c', fileCount: 5, wikiMentions: 0, coveragePercent: 0 },
-        { path: 'src/d', fileCount: 5, wikiMentions: 0, coveragePercent: 0 },
+      const undocumentedDirectories: UndocumentedDirectory[] = [
+        { path: 'src/a', totalFiles: 5, undocumentedCount: 5, undocumentedRatio: 1.0 },
+        { path: 'src/b', totalFiles: 5, undocumentedCount: 5, undocumentedRatio: 1.0 },
+        { path: 'src/c', totalFiles: 5, undocumentedCount: 5, undocumentedRatio: 1.0 },
+        { path: 'src/d', totalFiles: 5, undocumentedCount: 5, undocumentedRatio: 1.0 },
       ];
 
-      const ctx = createMockStrategyContext(directoryCoverage);
+      const ctx = createMockStrategyContext(undocumentedDirectories);
       const result = await codebaseExplorationStrategy(ctx, 2);
 
       // Should only create 2 work items even though 4 directories need coverage
@@ -201,17 +183,44 @@ describe('Orchestrator Deep Directory Targeting', () => {
     });
 
     it('should add targeted directories to existingWorkKeys', async () => {
-      const directoryCoverage: DirectoryCoverage[] = [
-        { path: 'src/agents', fileCount: 10, wikiMentions: 0, coveragePercent: 0 },
+      const undocumentedDirectories: UndocumentedDirectory[] = [
+        { path: 'src/agents', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
       ];
 
-      const ctx = createMockStrategyContext(directoryCoverage);
+      const ctx = createMockStrategyContext(undocumentedDirectories);
       await codebaseExplorationStrategy(ctx, 5);
 
       // Should have added the work key
       assert.ok(
         ctx.existingWorkKeys.has('codebase-explorer:path:src/agents'),
         'Should add work key for targeted directory'
+      );
+    });
+
+    it('should skip directories already in existingWorkKeys', async () => {
+      const undocumentedDirectories: UndocumentedDirectory[] = [
+        { path: 'src/agents', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
+        { path: 'src/services', totalFiles: 5, undocumentedCount: 5, undocumentedRatio: 1.0 },
+      ];
+
+      const ctx = createMockStrategyContext(undocumentedDirectories);
+      // Pre-add the first directory to existingWorkKeys
+      ctx.existingWorkKeys.add('codebase-explorer:path:src/agents');
+
+      const result = await codebaseExplorationStrategy(ctx, 5);
+
+      const paths = result.workItems.map(w => (w.target as any).path);
+
+      // Should not include the pre-added directory
+      assert.ok(
+        !paths.includes('src/agents'),
+        `Should skip directory already in existingWorkKeys. Paths: ${paths.join(', ')}`
+      );
+
+      // Should include the other directory
+      assert.ok(
+        paths.includes('src/services'),
+        `Should include other directories. Paths: ${paths.join(', ')}`
       );
     });
   });

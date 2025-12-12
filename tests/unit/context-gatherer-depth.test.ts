@@ -264,14 +264,14 @@ describe('ContextGatherer GitHub Mode', () => {
     };
   }
 
-  describe('calculateDirectoryCoverage', () => {
+  describe('calculateUndocumentedDirectories', () => {
     it('returns empty for repo not found', async () => {
       const repos = createMockRepos(null);
       const gatherer = new ContextGatherer(repos);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 0);
+      assert.strictEqual(context.undocumentedDirectories.length, 0);
     });
 
     it('returns empty for GitHub repo without repoAccessFactory', async () => {
@@ -280,10 +280,10 @@ describe('ContextGatherer GitHub Mode', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 0);
+      assert.strictEqual(context.undocumentedDirectories.length, 0);
     });
 
-    it('calculates coverage for GitHub repos via API', async () => {
+    it('identifies undocumented directories for GitHub repos via API', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: true,
@@ -311,75 +311,15 @@ describe('ContextGatherer GitHub Mode', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Should have coverage for 3 directories (agents, services/git, services/llm)
-      // Each file is counted toward its immediate parent directory
-      assert.strictEqual(context.directoryCoverage.length, 3);
+      // Should have undocumented directories since no wiki pages exist
+      assert.ok(context.undocumentedDirectories.length > 0, 'Should find undocumented directories');
 
-      // All should have 0% coverage since there are no wiki pages mentioning them
-      for (const dir of context.directoryCoverage) {
-        assert.ok(dir.path.startsWith('src/'));
-        assert.strictEqual(dir.wikiMentions, 0);
-        assert.strictEqual(dir.coveragePercent, 0);
+      // All should be 100% undocumented since there are no wiki pages
+      for (const dir of context.undocumentedDirectories) {
+        // Paths should start with 'src' (either 'src' or 'src/...')
+        assert.ok(dir.path.startsWith('src'), `Path should start with src: ${dir.path}`);
+        assert.strictEqual(dir.undocumentedRatio, 1, 'Should be 100% undocumented');
       }
-    });
-
-    it('counts wiki mentions correctly for GitHub repos', async () => {
-      // Create mock wiki pages that mention directories
-      // Note: Wiki mentions are matched against the directory NAME (last part of path)
-      const wikiPages = [
-        createMockWikiPage('architecture/agents', 'The agents module handles...'),
-        createMockWikiPage('guides/git', 'The src/services/git directory contains...'),
-      ];
-
-      const repos = {
-        repos: {
-          findById: mock.fn(async () => ({
-            id: 'repo-1',
-            isGitHubRepo: true,
-            owner: 'test',
-            repoName: 'repo',
-          })),
-        },
-        commits: {
-          findByRepo: mock.fn(async () => []),
-        },
-        wikiPages: {
-          findByWiki: mock.fn(async () => wikiPages),
-        },
-        agentRuns: {
-          findByRepo: mock.fn(async () => []),
-        },
-        editRequests: {
-          countPending: mock.fn(async () => 0),
-        },
-      } as any;
-
-      const srcEntries: FileEntry[] = [
-        { name: 'agents', path: 'src/agents', type: 'dir', size: 0 },
-        { name: 'services', path: 'src/services', type: 'dir', size: 0 },
-      ];
-
-      // Note: Files are counted toward their IMMEDIATE parent directory
-      const fileTree = [
-        'src/agents/base-agent.ts',
-        'src/agents/code-change-agent.ts',
-        'src/services/git/git-service.ts',
-        'src/services/llm/llm-service.ts',
-      ];
-
-      const repoAccessFactory = createMockRepoAccessFactory(srcEntries, fileTree);
-      const gatherer = new ContextGatherer(repos, repoAccessFactory);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      // Directories should have coverage based on immediate parent
-      const agentsCoverage = context.directoryCoverage.find(d => d.path === 'src/agents');
-      const gitCoverage = context.directoryCoverage.find(d => d.path === 'src/services/git');
-
-      assert.ok(agentsCoverage, 'Should have agents coverage');
-      assert.ok(gitCoverage, 'Should have services/git coverage');
-      assert.ok(agentsCoverage.wikiMentions > 0, 'Agents should have wiki mentions');
-      assert.ok(gitCoverage.wikiMentions > 0, 'Git should have wiki mentions');
     });
 
     it('filters out test and declaration files', async () => {
@@ -406,9 +346,9 @@ describe('ContextGatherer GitHub Mode', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      const utilsCoverage = context.directoryCoverage.find(d => d.path === 'src/utils');
-      assert.ok(utilsCoverage, 'Should have utils coverage');
-      assert.strictEqual(utilsCoverage.fileCount, 1, 'Should only count helper.ts');
+      const utilsDir = context.undocumentedDirectories.find(d => d.path === 'src/utils');
+      assert.ok(utilsDir, 'Should have utils directory');
+      assert.strictEqual(utilsDir.totalFiles, 1, 'Should only count helper.ts');
     });
 
     it('returns empty when src directory does not exist', async () => {
@@ -436,7 +376,7 @@ describe('ContextGatherer GitHub Mode', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 0);
+      assert.strictEqual(context.undocumentedDirectories.length, 0);
     });
   });
 });

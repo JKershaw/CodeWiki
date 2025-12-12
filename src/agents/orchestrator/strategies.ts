@@ -3,6 +3,11 @@
  *
  * Each strategy is responsible for identifying a specific type of work that
  * needs to be done and creating the appropriate work items.
+ *
+ * Strategy: "Useful Wiki First"
+ * - Document the CURRENT codebase before analyzing commit history
+ * - Explore until files are actually documented, not until page count is high
+ * - The wiki is "done" when files are documented, not when page count is high
  */
 
 import { v4 as uuid } from 'uuid';
@@ -10,7 +15,7 @@ import type { Repositories } from '../../repositories/index.js';
 import { createWorkItem, type WorkItem } from '../../domain/work-item.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import type { AgentRun } from '../../domain/agent-run.js';
-import type { OrchestratorContext, IterationPhase } from './context-gatherer.js';
+import type { OrchestratorContext } from './context-gatherer.js';
 
 // Import CQRS queries
 import {
@@ -40,112 +45,6 @@ export interface StrategyContext {
   wikiId: string;
   existingWorkKeys: Set<string>;
   contextGatherer?: { gather: (repoId: string, wikiId: string) => Promise<OrchestratorContext> };
-  /** Optional iteration phase for phase-aware prioritization */
-  iterationPhase?: IterationPhase;
-}
-
-/**
- * Phase-adjusted thresholds for strategies.
- * Allows strategies to adapt behavior based on iteration progress.
- */
-export interface PhaseAdjustedThresholds {
-  /** Coverage threshold - directories below this are explored */
-  coverageThreshold: number;
-  /** Maximum directories to explore at once */
-  maxDirectories: number;
-  /** Priority boost for synthesis work (0-1) */
-  synthesisBoost: number;
-  /** Priority boost for quality/meta work (0-1) */
-  qualityBoost: number;
-}
-
-/**
- * Get phase-adjusted thresholds for strategies.
- *
- * Combines wiki size with iteration phase to determine optimal thresholds:
- * - Early phase (0-30%): Aggressive exploration, breadth-first coverage
- * - Mid phase (30-70%): Balance exploration with synthesis
- * - Late phase (70-100%): Focus on quality, polish, and gap-filling
- *
- * @param phase - Current iteration phase (undefined for backwards compatibility)
- * @param wikiPageCount - Current number of wiki pages
- * @returns Adjusted thresholds for strategies
- */
-export function getPhaseAdjustedThresholds(
-  phase: IterationPhase | undefined,
-  wikiPageCount: number
-): PhaseAdjustedThresholds {
-  // Base thresholds from wiki size (existing logic)
-  // Small wiki (< 5 pages): Aggressive exploration
-  // Growing wiki (5-10 pages): Moderate exploration
-  // Established wiki (10-20 pages): Selective exploration
-  // Mature wiki (20+ pages): Only truly undocumented
-  const baseCoverageThreshold = wikiPageCount < 5 ? 60
-    : wikiPageCount < 10 ? 40
-    : wikiPageCount < 20 ? 30
-    : 20;
-
-  const baseMaxDirectories = wikiPageCount < 5 ? 5
-    : wikiPageCount < 10 ? 4
-    : wikiPageCount < 20 ? 3
-    : 2;
-
-  // Default boosts (no phase = balanced approach)
-  let synthesisBoost = 0.5;
-  let qualityBoost = 0.5;
-
-  // Adjust based on iteration phase
-  if (!phase) {
-    // No phase info - return base thresholds (backwards compatible)
-    return {
-      coverageThreshold: baseCoverageThreshold,
-      maxDirectories: baseMaxDirectories,
-      synthesisBoost,
-      qualityBoost,
-    };
-  }
-
-  // Phase adjustments
-  let coverageAdjustment = 0;
-  let directoryAdjustment = 0;
-
-  switch (phase) {
-    case 'early':
-      // Early phase: Be MORE aggressive with exploration
-      // Increase coverage threshold by 15% (explore more directories)
-      // Increase max directories by 2
-      coverageAdjustment = 15;
-      directoryAdjustment = 2;
-      synthesisBoost = 0.3; // Lower synthesis priority
-      qualityBoost = 0.2; // Lower quality priority
-      break;
-
-    case 'mid':
-      // Mid phase: Balance exploration and synthesis
-      // Keep base thresholds but boost synthesis
-      coverageAdjustment = 5;
-      directoryAdjustment = 1;
-      synthesisBoost = 0.8; // High synthesis priority
-      qualityBoost = 0.5; // Moderate quality priority
-      break;
-
-    case 'late':
-      // Late phase: Focus on quality, polish, gap-filling
-      // Reduce exploration (only truly undocumented)
-      // Decrease coverage threshold by 10% (explore fewer directories)
-      coverageAdjustment = -10;
-      directoryAdjustment = -1;
-      synthesisBoost = 0.6; // Moderate synthesis
-      qualityBoost = 0.9; // High quality priority
-      break;
-  }
-
-  return {
-    coverageThreshold: Math.max(10, baseCoverageThreshold + coverageAdjustment),
-    maxDirectories: Math.max(1, baseMaxDirectories + directoryAdjustment),
-    synthesisBoost,
-    qualityBoost,
-  };
 }
 
 /**
@@ -164,24 +63,27 @@ export type Strategy = (
   remainingSlots: number
 ) => Promise<StrategyResult>;
 
-// Note: Bootstrap is handled by Orchestrator.checkBootstrapNeeded() BEFORE strategies run.
-// This ensures bootstrap is checked for both LLM and deterministic modes, and avoids code duplication.
-// The bootstrap check happens before generateDeterministic() is called, so no bootstrap strategy is needed here.
+/**
+ * Coverage threshold for considering a file "documented".
+ * Files with coverage below this are considered undocumented.
+ * Using 50% means files need at least a dedicated section or multiple mentions.
+ */
+const FILE_COVERAGE_THRESHOLD = 50;
+
+/**
+ * Maximum directories to explore per orchestration run.
+ * Keeps work batches manageable while ensuring progress.
+ */
+const MAX_DIRECTORIES_PER_RUN = 5;
 
 /**
  * Strategy 1: Codebase exploration.
  * Document undocumented code before commit analysis to establish current state.
  *
- * "Useful Wiki First" approach:
- * - When wiki is small (< 10 pages), be aggressive about exploration
- * - Higher coverage threshold = explore more directories
- * - More directories at once = faster foundation building
- * - As wiki grows, become more selective (only truly undocumented areas)
- *
- * Phase-aware adjustments:
- * - Early phase: Even more aggressive exploration (breadth-first)
- * - Mid phase: Balance exploration with other work
- * - Late phase: Only explore truly undocumented areas
+ * Simplified approach:
+ * - Uses file-level coverage (not directory mentions) to determine what's documented
+ * - Explores directories where >50% of files have <50% coverage
+ * - No page-count-based throttling - explore until files are actually documented
  */
 export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0 || !ctx.contextGatherer) {
@@ -189,29 +91,29 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
   }
 
   const workItems: WorkItem[] = [];
-
-  // Calculate directory coverage
   const context = await ctx.contextGatherer.gather(ctx.repoId, ctx.wikiId);
-  const wikiPageCount = context.wikiPages;
 
-  // Get phase-adjusted thresholds (combines wiki size with iteration phase)
-  const thresholds = getPhaseAdjustedThresholds(ctx.iterationPhase, wikiPageCount);
+  // Use the undocumented directories from context (calculated using file-level coverage)
+  const undocumentedDirs = context.undocumentedDirectories || [];
 
-  // Filter to low coverage directories, then sort by coverage and depth
-  // Prefer deeper directories (more specific targeting) when coverage is equal
-  const lowCoverageDirs = context.directoryCoverage
-    .filter(d => d.coveragePercent < thresholds.coverageThreshold)
-    .sort((a, b) => {
-      // First by coverage (lowest first)
-      if (a.coveragePercent !== b.coveragePercent) {
-        return a.coveragePercent - b.coveragePercent;
-      }
-      // Then by depth (deeper first) - more specific targeting
-      return b.path.split('/').length - a.path.split('/').length;
-    })
-    .slice(0, thresholds.maxDirectories);
+  // Sort by priority: more undocumented files first, then by path depth (deeper = more specific)
+  const sortedDirs = [...undocumentedDirs].sort((a, b) => {
+    // First by undocumented ratio (higher first)
+    if (a.undocumentedRatio !== b.undocumentedRatio) {
+      return b.undocumentedRatio - a.undocumentedRatio;
+    }
+    // Then by absolute count of undocumented files (more first)
+    if (a.undocumentedCount !== b.undocumentedCount) {
+      return b.undocumentedCount - a.undocumentedCount;
+    }
+    // Then by depth (deeper first for more specific targeting)
+    return b.path.split('/').length - a.path.split('/').length;
+  });
 
-  for (const dir of lowCoverageDirs) {
+  // Take top directories up to limit
+  const dirsToExplore = sortedDirs.slice(0, Math.min(MAX_DIRECTORIES_PER_RUN, remainingSlots));
+
+  for (const dir of dirsToExplore) {
     if (workItems.length >= remainingSlots) break;
 
     const key = `codebase-explorer:path:${dir.path}`;
@@ -300,8 +202,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   const runsResult = await handleListAgentRuns(runsQuery, ctx.repos);
   const recentRuns = runsResult.data || [];
 
-  // Iteration-based cooldown: only consider runs within the last N completed runs as "recent"
-  // This approximates "hasn't run in last 10 iterations" by counting completed runs
+  // Cooldown: only consider runs within the last N completed runs as "recent"
   const META_AGENT_COOLDOWN_RUNS = 10;
 
   // Get all completed runs sorted by completion time (newest first)
@@ -315,24 +216,14 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     return recentWindow.some(r => r.agentType === agentType);
   };
 
-  // Check for pages without links (need link agent)
-  // Link agent scheduling is more aggressive than other meta agents because
-  // cross-references are critical for wiki navigation
+  // Link agent: schedule if many pages lack links
   if (workItems.length < remainingSlots) {
     const pagesWithoutLinks = wikiPages.filter(p => p.links.length === 0);
-    const totalPages = wikiPages.length;
-    const unlinkedRatio = totalPages > 0 ? pagesWithoutLinks.length / totalPages : 0;
+    const unlinkedRatio = wikiPages.length > 0 ? pagesWithoutLinks.length / wikiPages.length : 0;
 
-    // Schedule link agent if:
-    // 1. More than 15% of pages have no links, OR
-    // 2. More than 3 pages have no links (absolute threshold for small wikis)
-    const needsLinking = unlinkedRatio > 0.15 || pagesWithoutLinks.length > 3;
-
-    if (needsLinking) {
+    // Schedule if >15% unlinked OR >3 absolute pages unlinked
+    if (unlinkedRatio > 0.15 || pagesWithoutLinks.length > 3) {
       const linkKey = 'link:wiki';
-
-      // No cooldown for link agent - cross-references are critical for wiki navigation
-      // and the link agent itself has internal filtering to skip already-linked pages
       if (!ctx.existingWorkKeys.has(linkKey)) {
         ctx.existingWorkKeys.add(linkKey);
         workItems.push(
@@ -347,7 +238,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Run structure agent periodically (when wiki has at least 5 pages)
+  // Structure agent: run periodically when wiki has 5+ pages
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const structureKey = 'structure:wiki';
     if (!ctx.existingWorkKeys.has(structureKey) && !hasRunWithinCooldown('structure')) {
@@ -363,7 +254,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Run quality agent for low-confidence pages
+  // Quality agent: run for low-confidence pages
   if (workItems.length < remainingSlots && wikiPages.length >= 3) {
     const lowConfidencePages = wikiPages.filter(p => p.confidence < 0.7);
     if (lowConfidencePages.length > 0) {
@@ -382,7 +273,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Run consistency agent when wiki has enough pages (5+)
+  // Consistency agent: run when wiki has 5+ pages
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const consistencyKey = 'consistency:wiki';
     if (!ctx.existingWorkKeys.has(consistencyKey) && !hasRunWithinCooldown('consistency')) {
@@ -398,8 +289,7 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Consolidation agent - address findings from meta agents
-  // Schedule more aggressively when there are many open findings
+  // Consolidation agent: address findings from meta agents
   if (workItems.length < remainingSlots) {
     const findingsQuery = createListOpenFindingsQuery(ctx.wikiId);
     const findingsResult = await handleListOpenFindings(findingsQuery, ctx.repos);
@@ -407,10 +297,8 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
 
     if (openFindings.length > 0) {
       const consolidationKey = 'consolidation:wiki';
-
-      // Bypass cooldown if there are many findings (> 3) to clear backlog faster
-      const manyFindings = openFindings.length > 3;
-      const shouldRun = manyFindings || !hasRunWithinCooldown('consolidation');
+      // Bypass cooldown if many findings (>3) to clear backlog faster
+      const shouldRun = openFindings.length > 3 || !hasRunWithinCooldown('consolidation');
 
       if (!ctx.existingWorkKeys.has(consolidationKey) && shouldRun) {
         ctx.existingWorkKeys.add(consolidationKey);
@@ -430,14 +318,10 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
 };
 
 /**
- * Strategy 4: Synthesis work (elevated in "Useful Wiki First" approach).
+ * Strategy 4: Synthesis work.
  *
- * Key change: Trigger synthesis EARLIER to make wiki useful sooner.
- * - Old approach: Wait for 5+ pages, project-overview at 10+
- * - New approach: Start at 3 pages, project-overview at 5+
- *
- * Rationale: Users need navigation and overview pages early to understand
- * the wiki structure, even if content is still being added.
+ * Creates overview pages, guides, and navigation to make the wiki useful.
+ * Triggers early (at 3 pages) to build structure alongside exploration.
  */
 export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
   if (remainingSlots <= 0) return { workItems: [] };
@@ -447,18 +331,22 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
   const pagesResult = await handleListWikiPages(pagesQuery, ctx.repos);
   const wikiPages = pagesResult.data || [];
 
-  // Lower threshold: start synthesis at 3 pages (was 5)
-  // This supports "Useful Wiki First" - create structure early
+  // Start synthesis at 3 pages
   if (wikiPages.length < 3) {
     return { workItems: [] };
   }
 
   const workItems: WorkItem[] = [];
 
-  // Fetch recent agent runs for synthesis checks
-  const synthRunsQuery = createListAgentRunsQuery(ctx.repoId);
-  const synthRunsResult = await handleListAgentRuns(synthRunsQuery, ctx.repos);
-  const synthRuns = synthRunsResult.data || [];
+  // Fetch recent agent runs
+  const runsQuery = createListAgentRunsQuery(ctx.repoId);
+  const runsResult = await handleListAgentRuns(runsQuery, ctx.repos);
+  const synthRuns = runsResult.data || [];
+
+  // Helper to check if agent has completed recently
+  const hasCompletedRecently = (agentType: string): boolean => {
+    return synthRuns.some((r: AgentRun) => r.agentType === agentType && r.status === 'completed');
+  };
 
   // Group pages by category
   const categories = new Map<string, WikiPage[]>();
@@ -470,7 +358,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     categories.get(category)!.push(page);
   }
 
-  // Overview Agent: trigger for categories with 3+ pages but no overview
+  // Overview Agent: for categories with 3+ pages but no overview
   const skipCategories = ['commits'];
   for (const [category, pages] of categories) {
     if (workItems.length >= remainingSlots) break;
@@ -482,12 +370,8 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     );
 
     if (!hasOverview) {
-      const recentOverviewRuns = synthRuns
-        .filter((r: AgentRun) => r.agentType === 'overview' && r.status === 'completed')
-        .slice(0, 1);
-
       const overviewKey = 'overview:wiki';
-      if (!ctx.existingWorkKeys.has(overviewKey) && recentOverviewRuns.length === 0) {
+      if (!ctx.existingWorkKeys.has(overviewKey) && !hasCompletedRecently('overview')) {
         ctx.existingWorkKeys.add(overviewKey);
         workItems.push(
           createWorkItem({
@@ -502,20 +386,15 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Project Overview Agent: trigger when 5+ pages but no architecture/overview
-  // (Lowered from 10 to support "Useful Wiki First" - users need architecture overview early)
+  // Project Overview Agent: at 5+ pages
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const hasProjectOverview = wikiPages.some(
       p => p.path === 'architecture/overview' || p.path === 'architecture/index'
     );
 
     if (!hasProjectOverview) {
-      const recentProjectOverviewRuns = synthRuns
-        .filter((r: AgentRun) => r.agentType === 'project-overview' && r.status === 'completed')
-        .slice(0, 1);
-
       const projectOverviewKey = 'project-overview:wiki';
-      if (!ctx.existingWorkKeys.has(projectOverviewKey) && recentProjectOverviewRuns.length === 0) {
+      if (!ctx.existingWorkKeys.has(projectOverviewKey) && !hasCompletedRecently('project-overview')) {
         ctx.existingWorkKeys.add(projectOverviewKey);
         workItems.push(
           createWorkItem({
@@ -529,23 +408,17 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Getting Started Agent: trigger when 5+ pages but no guides/getting-started
-  // (Lowered from 10 to support "Useful Wiki First" - users need onboarding guide early)
+  // Getting Started Agent: at 5+ pages
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const hasGettingStarted = wikiPages.some(
-      p =>
-        p.path === 'guides/getting-started' ||
-        p.path === 'guides/quickstart' ||
-        p.path === 'guides/index'
+      p => p.path === 'guides/getting-started' ||
+           p.path === 'guides/quickstart' ||
+           p.path === 'guides/index'
     );
 
     if (!hasGettingStarted) {
-      const recentGettingStartedRuns = synthRuns
-        .filter((r: AgentRun) => r.agentType === 'getting-started' && r.status === 'completed')
-        .slice(0, 1);
-
       const gettingStartedKey = 'getting-started:wiki';
-      if (!ctx.existingWorkKeys.has(gettingStartedKey) && recentGettingStartedRuns.length === 0) {
+      if (!ctx.existingWorkKeys.has(gettingStartedKey) && !hasCompletedRecently('getting-started')) {
         ctx.existingWorkKeys.add(gettingStartedKey);
         workItems.push(
           createWorkItem({
@@ -559,22 +432,17 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Testing Guide Agent: trigger when 15+ pages but no guides/testing
+  // Testing Guide Agent: at 15+ pages
   if (workItems.length < remainingSlots && wikiPages.length >= 15) {
     const hasTestingGuide = wikiPages.some(
-      p =>
-        p.path === 'guides/testing' ||
-        p.path === 'guides/tests' ||
-        p.path === 'guides/testing-guide'
+      p => p.path === 'guides/testing' ||
+           p.path === 'guides/tests' ||
+           p.path === 'guides/testing-guide'
     );
 
     if (!hasTestingGuide) {
-      const recentTestingGuideRuns = synthRuns
-        .filter((r: AgentRun) => r.agentType === 'testing-guide' && r.status === 'completed')
-        .slice(0, 1);
-
       const testingGuideKey = 'testing-guide:wiki';
-      if (!ctx.existingWorkKeys.has(testingGuideKey) && recentTestingGuideRuns.length === 0) {
+      if (!ctx.existingWorkKeys.has(testingGuideKey) && !hasCompletedRecently('testing-guide')) {
         ctx.existingWorkKeys.add(testingGuideKey);
         workItems.push(
           createWorkItem({
@@ -588,25 +456,19 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Extension Guide Agent: trigger when 15+ pages but no guides/extension-patterns
+  // Extension Guide Agent: at 15+ pages
   if (workItems.length < remainingSlots && wikiPages.length >= 15) {
     const hasExtensionGuide = wikiPages.some(
-      p =>
-        p.path === 'guides/extension-patterns' ||
-        p.path === 'guides/extending' ||
-        p.path === 'guides/adding-features' ||
-        p.path === 'guides/patterns'
+      p => p.path === 'guides/extension-patterns' ||
+           p.path === 'guides/extending' ||
+           p.path === 'guides/adding-features' ||
+           p.path === 'guides/patterns'
     );
 
     if (!hasExtensionGuide) {
-      const recentExtensionGuideRuns = synthRuns
-        .filter((r: AgentRun) => r.agentType === 'extension-guide' && r.status === 'completed')
-        .slice(0, 1);
-
-      if (
-        !ctx.existingWorkKeys.has('extension-guide:wiki') &&
-        recentExtensionGuideRuns.length === 0
-      ) {
+      const extensionGuideKey = 'extension-guide:wiki';
+      if (!ctx.existingWorkKeys.has(extensionGuideKey) && !hasCompletedRecently('extension-guide')) {
+        ctx.existingWorkKeys.add(extensionGuideKey);
         workItems.push(
           createWorkItem({
             id: uuid(),
@@ -619,7 +481,7 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Writer Agent: trigger for pages with commit-style content
+  // Writer Agent: for pages with commit-style content
   if (workItems.length < remainingSlots) {
     const pagesNeedingRewrite = wikiPages.filter(page => {
       const category = page.path.split('/')[0] ?? '';
@@ -628,20 +490,17 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
 
       const firstPara = page.content.split('\n\n')[1] ?? '';
       const commitIndicators = [
-        'this commit ',
-        'this change ',
-        'this patch ',
-        'this adds ',
-        'this modifies ',
-        'this introduces ',
-        'commit adds',
-        'commit modifies',
+        'this commit ', 'this change ', 'this patch ',
+        'this adds ', 'this modifies ', 'this introduces ',
+        'commit adds', 'commit modifies',
       ];
       return commitIndicators.some(ind => firstPara.toLowerCase().includes(ind));
     });
 
     if (pagesNeedingRewrite.length > 0) {
-      if (!ctx.existingWorkKeys.has('writer:wiki')) {
+      const writerKey = 'writer:wiki';
+      if (!ctx.existingWorkKeys.has(writerKey)) {
+        ctx.existingWorkKeys.add(writerKey);
         workItems.push(
           createWorkItem({
             id: uuid(),
@@ -654,14 +513,12 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
     }
   }
 
-  // Wiki Index Agent: trigger when 5+ pages but no navigation/wiki-index
-  // (Lowered from 10 to support "Useful Wiki First" - users need navigation early)
+  // Wiki Index Agent: at 5+ pages
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const hasWikiIndex = wikiPages.some(
-      p =>
-        p.path === 'navigation/wiki-index' ||
-        p.path === 'navigation/index' ||
-        p.path === 'guides/wiki-index'
+      p => p.path === 'navigation/wiki-index' ||
+           p.path === 'navigation/index' ||
+           p.path === 'guides/wiki-index'
     );
 
     if (!hasWikiIndex) {
@@ -672,35 +529,32 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const wikiIndexWorkResult = await handleListWorkItems(wikiIndexWorkQuery, ctx.repos);
       const wikiIndexWorkExists = wikiIndexWorkResult.data || [];
 
-      const recentWikiIndexRuns = synthRuns
-        .filter((r: AgentRun) => r.agentType === 'wiki-index' && r.status === 'completed')
-        .slice(0, 1);
-
-      if (wikiIndexWorkExists.length === 0 && recentWikiIndexRuns.length === 0) {
-        workItems.push(
-          createWorkItem({
-            id: uuid(),
-            repoId: ctx.repoId,
-            agentType: 'wiki-index',
-            target: { type: 'wiki' },
-          })
-        );
+      if (wikiIndexWorkExists.length === 0 && !hasCompletedRecently('wiki-index')) {
+        const wikiIndexKey = 'wiki-index:wiki';
+        if (!ctx.existingWorkKeys.has(wikiIndexKey)) {
+          ctx.existingWorkKeys.add(wikiIndexKey);
+          workItems.push(
+            createWorkItem({
+              id: uuid(),
+              repoId: ctx.repoId,
+              agentType: 'wiki-index',
+              target: { type: 'wiki' },
+            })
+          );
+        }
       }
     }
   }
 
-  // TOC Agent: trigger when 5+ pages to add table of contents to long pages
+  // TOC Agent: at 5+ pages for long pages
   if (workItems.length < remainingSlots && wikiPages.length >= 5) {
     const pagesNeedingToc = wikiPages.filter(page => {
       if (page.path.includes('navigation/') || page.path.endsWith('/index')) return false;
       if (page.confidence < 0.5) return false;
       const lowerContent = page.content.toLowerCase();
-      if (
-        lowerContent.includes('## table of contents') ||
-        lowerContent.includes('## contents') ||
-        lowerContent.includes('## toc')
-      )
-        return false;
+      if (lowerContent.includes('## table of contents') ||
+          lowerContent.includes('## contents') ||
+          lowerContent.includes('## toc')) return false;
       const headingCount = (page.content.match(/^#{2,6}\s+/gm) || []).length;
       return headingCount >= 3;
     });
@@ -713,19 +567,19 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const tocWorkResult = await handleListWorkItems(tocWorkQuery, ctx.repos);
       const tocWorkExists = tocWorkResult.data || [];
 
-      const recentTocRuns = synthRuns
-        .filter((r: AgentRun) => r.agentType === 'toc' && r.status === 'completed')
-        .slice(0, 1);
-
-      if (tocWorkExists.length === 0 && recentTocRuns.length === 0) {
-        workItems.push(
-          createWorkItem({
-            id: uuid(),
-            repoId: ctx.repoId,
-            agentType: 'toc',
-            target: { type: 'wiki' },
-          })
-        );
+      if (tocWorkExists.length === 0 && !hasCompletedRecently('toc')) {
+        const tocKey = 'toc:wiki';
+        if (!ctx.existingWorkKeys.has(tocKey)) {
+          ctx.existingWorkKeys.add(tocKey);
+          workItems.push(
+            createWorkItem({
+              id: uuid(),
+              repoId: ctx.repoId,
+              agentType: 'toc',
+              target: { type: 'wiki' },
+            })
+          );
+        }
       }
     }
   }
@@ -737,27 +591,16 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
  * All deterministic strategies in priority order.
  *
  * Strategy: "Useful Wiki First"
- * - Users want to USE the wiki immediately, not wait for full commit analysis
- * - Build from CURRENT codebase first (exploration), then add historical context (commits)
- *
- * Note: Pending edit requests are now handled automatically by the Executor
- * before asking the Orchestrator for work. This simplifies the Orchestrator's
- * responsibility to focus on "what new work to generate".
- *
- * Note: Bootstrap is handled by Orchestrator.checkBootstrapNeeded() BEFORE
- * these strategies run, so it's not included here.
- *
- * Order:
- * 1. Codebase Exploration - PRIMARY early: document what exists NOW
- * 2. Synthesis - ELEVATED: create overviews/guides early from exploration pages
- * 3. Meta Agents - improve quality and linking
- * 4. Commit Analysis - DEMOTED: add historical context after wiki is useful
+ * - Document current code first (exploration)
+ * - Build structure early (synthesis)
+ * - Improve quality (meta agents)
+ * - Add historical context last (commits)
  */
 export const deterministicStrategies: Strategy[] = [
   codebaseExplorationStrategy,
-  synthesisStrategy,           // Elevated: create structure early
+  synthesisStrategy,
   metaAgentsStrategy,
-  commitAnalysisStrategy,      // Demoted: historical context comes after useful wiki
+  commitAnalysisStrategy,
 ];
 
 /**
@@ -781,3 +624,6 @@ export async function executeStrategies(
 
   return allWorkItems;
 }
+
+// Export constants for testing
+export { FILE_COVERAGE_THRESHOLD, MAX_DIRECTORIES_PER_RUN };

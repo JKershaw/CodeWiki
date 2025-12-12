@@ -7,6 +7,7 @@ import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 // Import file-level coverage tree
 import {
   buildPrioritizedCoverageTree,
+  calculateGraduatedCoverage,
   type FileData,
 } from './file-coverage-tree.js';
 
@@ -25,48 +26,18 @@ import {
 } from '../../queries/index.js';
 
 /**
- * Iteration progress information for the orchestrator.
- * Enables phase-aware prioritization during a processing run.
+ * Directory with undocumented files, for exploration targeting.
+ * Uses file-level coverage to determine what's actually documented.
  */
-export interface IterationInfo {
-  /** Current iteration number (1-indexed) */
-  currentIteration: number;
-  /** Total iterations requested for this run */
-  totalIterations: number;
-  /** Remaining iterations in this run */
-  remainingIterations: number;
-  /** Progress percentage (0-100) */
-  progressPercent: number;
-}
-
-/**
- * Phase of the processing run based on progress percentage.
- * - early (0-30%): Focus on exploration, breadth-first coverage
- * - mid (30-70%): Balance exploration with synthesis and linking
- * - late (70-100%): Focus on quality, polish, and filling gaps
- */
-export type IterationPhase = 'early' | 'mid' | 'late';
-
-/**
- * Options for gathering orchestrator context.
- */
-export interface GatherOptions {
-  /** Optional iteration info for phase-aware prioritization */
-  iterationInfo?: IterationInfo;
-}
-
-/**
- * Directory coverage information for the orchestrator (flat format for strategies).
- */
-export interface DirectoryCoverage {
-  /** Relative path from repo root (e.g., "src/services/llm") */
+export interface UndocumentedDirectory {
+  /** Relative path from repo root */
   path: string;
-  /** Number of source files in this directory */
-  fileCount: number;
-  /** Number of wiki mentions of this directory or its files */
-  wikiMentions: number;
-  /** Coverage percentage (wikiMentions / fileCount * 100) */
-  coveragePercent: number;
+  /** Total files in this directory */
+  totalFiles: number;
+  /** Number of files with < 50% coverage */
+  undocumentedCount: number;
+  /** Ratio of undocumented files (0-1) */
+  undocumentedRatio: number;
 }
 
 /**
@@ -102,17 +73,12 @@ export interface OrchestratorContext {
 
   // Quality Indicators
   pagesWithoutLinks: number;
-  /** Page paths without any links */
   pagesWithoutLinksList: string[];
 
-  // Depth Indicators (heuristic-based)
-  /** Pages with < 500 chars content (excluding overview/index pages) */
+  // Depth Indicators
   shallowPages: number;
-  /** Page paths that are shallow */
   shallowPagesList: string[];
-  /** Pages without fenced code blocks (excluding overview/index pages) */
   pagesLackingExamples: number;
-  /** Page paths lacking code examples */
   pagesLackingExamplesList: string[];
 
   // Key pages existence
@@ -121,8 +87,9 @@ export interface OrchestratorContext {
   hasTestingGuide: boolean;
   hasExtensionGuide: boolean;
 
-  // Directory coverage - which parts of the codebase are documented
-  directoryCoverage: DirectoryCoverage[];
+  // Undocumented directories - for exploration strategy
+  // Uses file-level coverage to identify directories needing documentation
+  undocumentedDirectories: UndocumentedDirectory[];
 
   // File-level coverage tree - prioritized view with individual files
   fileCoverageTree: string | null;
@@ -132,13 +99,13 @@ export interface OrchestratorContext {
 
   // Pending edit requests (from analysis agents, awaiting wiki-editor)
   pendingEditRequests: number;
-
-  // Iteration progress (optional - only present during a processing run)
-  iterationInfo?: IterationInfo;
-
-  // Iteration phase derived from progressPercent (only present when iterationInfo is provided)
-  iterationPhase?: IterationPhase;
 }
+
+/**
+ * Coverage threshold for considering a file "documented".
+ * Files below this threshold need documentation.
+ */
+const FILE_COVERAGE_THRESHOLD = 50;
 
 /**
  * Gathers context about the current wiki state for orchestrator decisions.
@@ -150,18 +117,9 @@ export class ContextGatherer {
   ) {}
 
   /**
-   * Derive iteration phase from progress percentage.
-   */
-  private getIterationPhase(progressPercent: number): IterationPhase {
-    if (progressPercent < 30) return 'early';
-    if (progressPercent < 70) return 'mid';
-    return 'late';
-  }
-
-  /**
    * Gather a complete snapshot of the wiki state.
    */
-  async gather(repoId: string, wikiId: string, options?: GatherOptions): Promise<OrchestratorContext> {
+  async gather(repoId: string, wikiId: string): Promise<OrchestratorContext> {
     // Fetch all the data we need via CQRS queries
     const commitsQuery = createListCommitsQuery(repoId, { limit: 100 });
     const pagesQuery = createListWikiPagesQuery(wikiId);
@@ -198,7 +156,6 @@ export class ContextGatherer {
     }
 
     // Recent commits with their processing status
-    // Use sha (Git hash) instead of id (internal UUID) for the orchestrator
     const recentCommits = commits
       .sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime())
       .slice(0, 10)
@@ -270,7 +227,6 @@ export class ContextGatherer {
       .map(p => p.path);
     const pagesWithoutLinks = pagesWithoutLinksList.length;
 
-    // Depth metrics (heuristic-based)
     // Shallow pages: content < 500 chars, excluding overview/index pages
     const shallowPagesList = wikiPages
       .filter(p => {
@@ -280,7 +236,7 @@ export class ContextGatherer {
       .map(p => p.path);
     const shallowPages = shallowPagesList.length;
 
-    // Pages lacking examples: no fenced code blocks, excluding overview/index pages
+    // Pages lacking examples: no fenced code blocks
     const pagesLackingExamplesList = wikiPages
       .filter(p => {
         if (p.path.endsWith('/overview') || p.path.endsWith('/index')) return false;
@@ -290,9 +246,6 @@ export class ContextGatherer {
     const pagesLackingExamples = pagesLackingExamplesList.length;
 
     // Key pages existence
-    // Check for project overview in either location:
-    // - 'overview' (created by bootstrap agent on empty wikis)
-    // - 'architecture/overview' (created by project-overview agent on 10+ page wikis)
     const hasProjectOverview = wikiPages.some(p =>
       p.path === 'overview' ||
       p.path === 'architecture/overview' ||
@@ -315,16 +268,13 @@ export class ContextGatherer {
       p.path === 'guides/patterns'
     );
 
-    // Calculate directory coverage (which parts of the codebase are documented)
-    const directoryCoverage = await this.calculateDirectoryCoverage(repoId, wikiPages);
+    // Calculate undocumented directories using file-level coverage
+    const undocumentedDirectories = await this.calculateUndocumentedDirectories(repoId, wikiPages);
 
-    // Build file-level coverage tree (prioritized view with individual files)
+    // Build file-level coverage tree
     const fileCoverageTree = await this.buildFileCoverageTree(repoId, wikiPages);
 
-    // Fetch project overview content (if exists)
-    // Try multiple paths in order of preference:
-    // 1. 'architecture/overview' (project-overview agent, more comprehensive)
-    // 2. 'overview' (bootstrap agent, basic starter)
+    // Fetch project overview content
     let projectOverviewContent: string | null = null;
     if (hasProjectOverview) {
       const overviewPaths = ['architecture/overview', 'overview'];
@@ -333,20 +283,18 @@ export class ContextGatherer {
         const overviewResult = await handleGetWikiPage(overviewQuery, this.repos);
         if (overviewResult.success && overviewResult.data) {
           const content = overviewResult.data.content;
-          // Truncate to ~4000 chars for LLM context (increased from 2000 to preserve more architectural context)
           const maxOverviewLength = 4000;
           if (content.length > maxOverviewLength) {
             projectOverviewContent = content.slice(0, maxOverviewLength) + '\n\n[... truncated ...]';
           } else {
             projectOverviewContent = content;
           }
-          break; // Found one, stop looking
+          break;
         }
       }
     }
 
-    // Build result with optional iteration info
-    const result: OrchestratorContext = {
+    return {
       totalCommits: commits.length,
       commitsByAgent,
       recentCommits,
@@ -368,103 +316,83 @@ export class ContextGatherer {
       hasGettingStarted,
       hasTestingGuide,
       hasExtensionGuide,
-      directoryCoverage,
+      undocumentedDirectories,
       fileCoverageTree,
       projectOverviewContent,
       pendingEditRequests,
     };
-
-    // Add iteration info if provided
-    if (options?.iterationInfo) {
-      result.iterationInfo = options.iterationInfo;
-      result.iterationPhase = this.getIterationPhase(options.iterationInfo.progressPercent);
-    }
-
-    return result;
   }
 
   /**
-   * Calculate coverage of source directories in the wiki.
-   * Scans the repository for source files and checks how well each
-   * directory is documented in the wiki.
-   *
-   * Uses UnifiedRepoAccess to work uniformly with both local and GitHub repositories.
+   * Calculate which directories have undocumented files.
+   * Uses file-level coverage (graduated coverage) instead of simple mention counting.
    */
-  private async calculateDirectoryCoverage(
+  private async calculateUndocumentedDirectories(
     repoId: string,
     wikiPages: Array<{ path: string; content: string }>
-  ): Promise<DirectoryCoverage[]> {
+  ): Promise<UndocumentedDirectory[]> {
     if (!this.repoAccessFactory) {
       return [];
     }
 
     try {
-      // Get unified access for this repository
       const repoAccess = await this.repoAccessFactory.create(repoId);
-
-      // Get all files via unified interface
       const allFiles = await repoAccess.getFileTree();
-
-      // Filter to source files only (any directory)
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
         return [];
       }
 
-      // Extract directories at ALL levels and count files
-      // Each file is counted toward its immediate parent directory only
-      // e.g., src/agents/orchestrator/strategies.ts -> src/agents/orchestrator
-      //       src/agents/base-agent.ts -> src/agents
-      const dirCounts = new Map<string, number>();
+      // Group files by directory and calculate coverage for each file
+      const dirStats = new Map<string, { total: number; undocumented: number }>();
+
       for (const filePath of sourceFiles) {
         const parts = filePath.split('/');
-        // Only count files that are at least 2 levels deep (e.g., dir/subdir/file.ts)
-        if (parts.length >= 3) {
-          // Get the immediate parent directory (all parts except the filename)
-          const dirPath = parts.slice(0, -1).join('/');
-          dirCounts.set(dirPath, (dirCounts.get(dirPath) ?? 0) + 1);
+        if (parts.length < 2) continue;
+
+        const dirPath = parts.slice(0, -1).join('/');
+
+        // Calculate file-level coverage using graduated coverage
+        const coverage = calculateGraduatedCoverage(filePath, wikiPages);
+        const isUndocumented = coverage < FILE_COVERAGE_THRESHOLD;
+
+        if (!dirStats.has(dirPath)) {
+          dirStats.set(dirPath, { total: 0, undocumented: 0 });
+        }
+
+        const stats = dirStats.get(dirPath)!;
+        stats.total++;
+        if (isUndocumented) {
+          stats.undocumented++;
         }
       }
 
-      if (dirCounts.size === 0) {
-        return [];
-      }
+      // Convert to array and filter to directories with undocumented files
+      const undocumentedDirs: UndocumentedDirectory[] = [];
 
-      // Build coverage array
-      const coverage: DirectoryCoverage[] = [];
-      for (const [dirPath, fileCount] of dirCounts) {
-        // Get the last part of the directory path for wiki mention search
-        const dirName = dirPath.split('/').pop()!;
-
-        // Check for wiki mentions
-        const wikiMentions = this.countWikiMentions(dirName, dirPath, wikiPages);
-
-        // Calculate coverage percentage
-        const coveragePercent = fileCount > 0
-          ? Math.min(100, (wikiMentions / fileCount) * 100)
-          : 0;
-
-        coverage.push({
-          path: dirPath,
-          fileCount,
-          wikiMentions,
-          coveragePercent: Math.round(coveragePercent),
-        });
-      }
-
-      // Sort by coverage (lowest first), then by depth (deeper first for same coverage)
-      coverage.sort((a, b) => {
-        if (a.coveragePercent !== b.coveragePercent) {
-          return a.coveragePercent - b.coveragePercent;
+      for (const [path, stats] of dirStats) {
+        if (stats.undocumented > 0) {
+          undocumentedDirs.push({
+            path,
+            totalFiles: stats.total,
+            undocumentedCount: stats.undocumented,
+            undocumentedRatio: stats.undocumented / stats.total,
+          });
         }
-        // For same coverage, prefer deeper directories (more specific targeting)
-        return b.path.split('/').length - a.path.split('/').length;
+      }
+
+      // Sort by undocumented ratio (highest first), then by count
+      undocumentedDirs.sort((a, b) => {
+        if (a.undocumentedRatio !== b.undocumentedRatio) {
+          return b.undocumentedRatio - a.undocumentedRatio;
+        }
+        return b.undocumentedCount - a.undocumentedCount;
       });
 
-      return coverage;
+      return undocumentedDirs;
     } catch (error) {
-      console.warn(`Failed to calculate directory coverage: ${error}`);
+      console.warn(`Failed to calculate undocumented directories: ${error}`);
       return [];
     }
   }
@@ -473,17 +401,14 @@ export class ContextGatherer {
    * Check if a file path is a source code file.
    */
   private isSourceFile(filePath: string): boolean {
-    // Only TypeScript and JavaScript files
     if (!filePath.endsWith('.ts') && !filePath.endsWith('.js')) {
       return false;
     }
-    // Skip test files and declaration files
     if (filePath.includes('.test.') ||
         filePath.includes('.spec.') ||
         filePath.endsWith('.d.ts')) {
       return false;
     }
-    // Skip common non-source directories
     const skipDirs = ['node_modules', 'dist', 'build', '__pycache__'];
     if (skipDirs.some(dir => filePath.includes(`/${dir}/`))) {
       return false;
@@ -492,39 +417,7 @@ export class ContextGatherer {
   }
 
   /**
-   * Count wiki mentions for a directory.
-   */
-  private countWikiMentions(
-    dirName: string,
-    relativePath: string,
-    wikiPages: Array<{ path: string; content: string }>
-  ): number {
-    const searchTerms = [
-      dirName.toLowerCase(),
-      relativePath.toLowerCase(),
-      relativePath.replace(/\//g, '-').toLowerCase(),
-    ];
-
-    let wikiMentions = 0;
-    for (const term of searchTerms) {
-      const mentionCount = wikiPages.filter(p =>
-        p.content.toLowerCase().includes(term) ||
-        p.path.toLowerCase().includes(term)
-      ).length;
-      wikiMentions = Math.max(wikiMentions, mentionCount);
-    }
-    return wikiMentions;
-  }
-
-  /**
    * Build a file-level coverage tree with prioritized output.
-   *
-   * Uses the new file-coverage-tree module for file-level detail,
-   * priority scoring, and budget-aware truncation.
-   *
-   * @param repoId - Repository ID
-   * @param wikiPages - Wiki pages for coverage calculation
-   * @returns Formatted coverage tree string, or null if unavailable
    */
   private async buildFileCoverageTree(
     repoId: string,
@@ -537,24 +430,19 @@ export class ContextGatherer {
     try {
       const repoAccess = await this.repoAccessFactory.create(repoId);
       const allFiles = await repoAccess.getFileTree();
-
-      // Filter to source files only
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
         return null;
       }
 
-      // Convert to FileData format
-      // Use estimated LOC based on file type (fetching actual content would be expensive)
-      // TypeScript/JavaScript files average ~50-100 LOC, use 75 as default
+      // Use estimated LOC (fetching actual content would be expensive)
       const DEFAULT_LOC = 75;
       const fileData: FileData[] = sourceFiles.map(path => ({
         path,
         loc: DEFAULT_LOC,
       }));
 
-      // Use the new prioritized coverage tree builder
       return buildPrioritizedCoverageTree(fileData, wikiPages, 100);
     } catch (error) {
       console.warn(`Failed to build file coverage tree: ${error}`);
@@ -564,61 +452,48 @@ export class ContextGatherer {
 
   /**
    * Format context as a string for the LLM prompt.
-   *
-   * Order prioritizes existing code understanding over historical commits:
-   * 1. Immediate actions (pending edits)
-   * 2. Project context (what are we documenting?)
-   * 3. Codebase structure (what code exists?)
-   * 4. Wiki state (what's documented?)
-   * 5. Quality gaps (what needs improvement?)
-   * 6. Recent activity (what work was done?)
-   * 7. Historical context (commits for enrichment)
    */
   formatForPrompt(ctx: OrchestratorContext): string {
     const lines: string[] = [];
 
-    // 0. ITERATION PROGRESS - helps with phase-aware prioritization
-    if (ctx.iterationInfo) {
-      lines.push('## Iteration Progress\n');
-      lines.push(`**Progress:** ${ctx.iterationInfo.currentIteration} of ${ctx.iterationInfo.totalIterations} (${ctx.iterationInfo.progressPercent}%), ${ctx.iterationInfo.remainingIterations} remaining`);
-      lines.push(`**Phase:** ${ctx.iterationPhase}`);
-
-      // Phase-specific guidance
-      if (ctx.iterationPhase === 'early') {
-        lines.push('**Priority:** Focus on exploration and breadth-first coverage. Document undocumented areas aggressively.');
-      } else if (ctx.iterationPhase === 'mid') {
-        lines.push('**Priority:** Balance exploration with synthesis. Create overview pages and cross-references.');
-      } else {
-        lines.push('**Priority:** Focus on quality and polish. Fill gaps, improve low-confidence pages, ensure consistency.');
-      }
-      lines.push('');
-    }
-
-    // 1. IMMEDIATE ACTIONS - must be addressed first
+    // 1. IMMEDIATE ACTIONS
     if (ctx.pendingEditRequests > 0) {
-      lines.push('## ⚠️ Immediate Action Required\n');
+      lines.push('## Immediate Action Required\n');
       lines.push(`**Pending edit requests:** ${ctx.pendingEditRequests} - run wiki-editor agent FIRST!`);
       lines.push('');
     }
 
-    // 2. PROJECT CONTEXT - understand what we're documenting
+    // 2. PROJECT CONTEXT
     if (ctx.projectOverviewContent) {
       lines.push('## Project Overview\n');
       lines.push(ctx.projectOverviewContent);
       lines.push('');
     }
 
-    // 3. CODEBASE STRUCTURE - what code exists and what's covered
+    // 3. CODEBASE STRUCTURE
     lines.push('## Codebase Structure\n');
     lines.push('Files marked with ⚠️ have low coverage. Target these with `codebase-explorer`.\n');
     lines.push(ctx.fileCoverageTree ?? '*No source files found*');
     lines.push('');
 
-    // 4. WIKI STATE - what's already documented
+    // 4. UNDOCUMENTED DIRECTORIES (for exploration targeting)
+    if (ctx.undocumentedDirectories.length > 0) {
+      lines.push('## Directories Needing Documentation\n');
+      const topDirs = ctx.undocumentedDirectories.slice(0, 10);
+      for (const dir of topDirs) {
+        const pct = Math.round(dir.undocumentedRatio * 100);
+        lines.push(`- ${dir.path}: ${dir.undocumentedCount}/${dir.totalFiles} files undocumented (${pct}%)`);
+      }
+      if (ctx.undocumentedDirectories.length > 10) {
+        lines.push(`... and ${ctx.undocumentedDirectories.length - 10} more directories`);
+      }
+      lines.push('');
+    }
+
+    // 5. WIKI STATE
     lines.push('## Wiki State\n');
     lines.push(`**Pages:** ${ctx.wikiPages} total, avg confidence ${(ctx.avgConfidence * 100).toFixed(0)}%`);
 
-    // Categories with overview status inline
     const categoryInfo = Object.entries(ctx.categoryCounts)
       .map(([cat, count]) => `${cat}(${count})`)
       .join(', ');
@@ -627,7 +502,6 @@ export class ContextGatherer {
       lines.push(`**Categories needing overview:** ${ctx.categoriesWithoutOverview.join(', ')}`);
     }
 
-    // Key pages consolidated into single line showing what's missing
     const missingKeyPages: string[] = [];
     if (!ctx.hasProjectOverview) missingKeyPages.push('project-overview');
     if (!ctx.hasGettingStarted) missingKeyPages.push('getting-started');
@@ -640,10 +514,9 @@ export class ContextGatherer {
     }
     lines.push('');
 
-    // 5. QUALITY GAPS - grouped together for clear prioritization with specific pages
+    // 6. QUALITY GAPS
     lines.push('## Quality Gaps\n');
 
-    // Helper to format a list of pages with truncation
     const formatPageList = (pages: string[], maxShow: number = 5): string => {
       if (pages.length === 0) return '';
       if (pages.length <= maxShow) return pages.join(', ');
@@ -674,7 +547,7 @@ export class ContextGatherer {
     }
     lines.push('');
 
-    // 6. RECENT ACTIVITY - what work was done recently
+    // 7. RECENT ACTIVITY
     lines.push('## Recent Activity\n');
     if (ctx.recentRuns.length > 0) {
       for (const run of ctx.recentRuns.slice(0, 5)) {
@@ -686,7 +559,7 @@ export class ContextGatherer {
     }
     lines.push('');
 
-    // 7. HISTORICAL CONTEXT - commits for enrichment (last priority)
+    // 8. HISTORICAL CONTEXT (commits)
     lines.push('## Historical Context\n');
     lines.push(`**Commits:** ${ctx.totalCommits} total`);
     for (const [agent, counts] of Object.entries(ctx.commitsByAgent)) {
@@ -697,7 +570,6 @@ export class ContextGatherer {
     }
     lines.push('');
 
-    // Recent commits (show full ID so LLM can reference them exactly)
     if (ctx.recentCommits.length > 0) {
       lines.push('**Recent commits:**');
       for (const commit of ctx.recentCommits.slice(0, 10)) {
