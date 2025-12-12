@@ -92,8 +92,8 @@ export class LinkAgent implements Agent {
       excerpt: p.content.slice(0, 500),
     }));
 
-    // Limit pages to analyze to avoid overly long prompts (increased from 10 to 20)
-    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 20);
+    // Limit pages to analyze to avoid overly long prompts (increased from 20 to 40)
+    const limitedPagesToAnalyze = pagesToAnalyze.slice(0, 40);
 
     const prompt = this.buildPrompt(limitedPagesToAnalyze, pageSummaries);
 

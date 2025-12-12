@@ -291,8 +291,8 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
   const recentRuns = runsResult.data || [];
 
   // Iteration-based cooldown: only consider runs within the last N completed runs as "recent"
-  // This approximates "hasn't run in last 20 iterations" by counting completed runs
-  const META_AGENT_COOLDOWN_RUNS = 20;
+  // This approximates "hasn't run in last 10 iterations" by counting completed runs
+  const META_AGENT_COOLDOWN_RUNS = 10;
 
   // Get all completed runs sorted by completion time (newest first)
   const completedRuns = recentRuns
@@ -314,9 +314,9 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     const unlinkedRatio = totalPages > 0 ? pagesWithoutLinks.length / totalPages : 0;
 
     // Schedule link agent if:
-    // 1. More than 30% of pages have no links, OR
-    // 2. More than 5 pages have no links (absolute threshold for small wikis)
-    const needsLinking = unlinkedRatio > 0.3 || pagesWithoutLinks.length > 5;
+    // 1. More than 15% of pages have no links, OR
+    // 2. More than 3 pages have no links (absolute threshold for small wikis)
+    const needsLinking = unlinkedRatio > 0.15 || pagesWithoutLinks.length > 3;
 
     if (needsLinking) {
       const linkKey = 'link:wiki';
@@ -324,9 +324,9 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
       // Check for recent link runs (iteration-based cooldown)
       const hasRecentRun = hasRunWithinCooldown('link');
 
-      // Override cooldown if unlinked ratio is very high (> 50%)
+      // Override cooldown if unlinked ratio is significant (> 30%)
       // This ensures link agent runs frequently when wiki is poorly linked
-      const shouldOverrideCooldown = unlinkedRatio > 0.5;
+      const shouldOverrideCooldown = unlinkedRatio > 0.3;
 
       if (!ctx.existingWorkKeys.has(linkKey) && (!hasRecentRun || shouldOverrideCooldown)) {
         ctx.existingWorkKeys.add(linkKey);
