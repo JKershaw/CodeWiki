@@ -129,7 +129,7 @@ export class LinkAgent implements Agent {
     pagesToAnalyze: WikiPage[],
     allPages: Array<{ path: string; title: string; category: string; excerpt: string }>
   ): string {
-    // Note: pagesToAnalyze is already limited by caller (to 20 pages max)
+    // Note: pagesToAnalyze is already limited by caller (to 40 pages max)
 
     return `You are analyzing wiki pages to create cross-references between related content.
 
