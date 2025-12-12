@@ -31,6 +31,8 @@ tests/llm/results/
 
 # Generated wiki output
 wiki-output/
+review-wiki-data/
+review-wiki-markdown/
 
 # Logs
 *.log
