@@ -4303,7 +4303,8 @@ body.side-panel-open {
 
 .graph-stats {
 	display: flex;
-	gap: var(--space-md);
+	flex-direction: column;
+	gap: var(--space-xs);
 	padding: var(--space-sm);
 	background: var(--bg-card);
 	border-radius: 4px;
@@ -4312,8 +4313,59 @@ body.side-panel-open {
 	color: var(--text-secondary);
 }
 
+.graph-stats .stats-row {
+	display: flex;
+	gap: var(--space-md);
+	flex-wrap: wrap;
+}
+
 .graph-stats strong {
 	color: var(--text-primary);
+}
+
+.graph-stats .orphan-stat {
+	color: #e67e22;
+}
+
+.graph-stats .orphan-stat strong {
+	color: #e67e22;
+}
+
+/* Graph legend */
+.graph-legend {
+	display: flex;
+	gap: var(--space-sm);
+	flex-wrap: wrap;
+	align-items: center;
+	padding-top: var(--space-xs);
+	border-top: 1px solid var(--border);
+}
+
+.graph-legend .legend-title {
+	font-weight: 600;
+	color: var(--text-primary);
+	margin-right: var(--space-xs);
+}
+
+.graph-legend .legend-item {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 0.8rem;
+}
+
+.graph-legend .legend-dot {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	border: 2px solid currentColor;
+	flex-shrink: 0;
+}
+
+.graph-legend .legend-size-info {
+	font-style: italic;
+	color: var(--text-tertiary);
+	margin-left: auto;
 }
 
 /* Connection status indicator */

@@ -12,15 +12,20 @@ let graphWikiId = null;
 // Category colors for node styling
 const CATEGORY_COLORS = {
   architecture: '#4a90d9',
+  guides: '#50c878',
   api: '#50c878',
   security: '#e74c3c',
   testing: '#9b59b6',
+  commits: '#95a5a6',
   database: '#f39c12',
   deployment: '#1abc9c',
   documentation: '#3498db',
-  configuration: '#95a5a6',
-  default: '#7f8c8d',
+  configuration: '#7f8c8d',
+  default: '#6c7a89',
 };
+
+// Color for orphaned nodes (no connections)
+const ORPHAN_COLOR = '#e67e22';
 
 /**
  * Initialize the graph visualization.
@@ -68,8 +73,11 @@ async function initGraph(repoId, wikiId) {
     // Set up interactions
     setupInteractions();
 
-    // Update stats
-    updateGraphStats(graph.stats);
+    // Update stats (include orphan count from transform)
+    updateGraphStats({
+      ...graph.stats,
+      orphanCount: graph._orphanCount || 0,
+    });
 
     // Connect to real-time updates
     connectToEvents(repoId, wikiId);
@@ -80,25 +88,40 @@ async function initGraph(repoId, wikiId) {
 }
 
 /**
+ * Truncate a label to a maximum length.
+ */
+function truncateLabel(label, maxLength = 25) {
+  if (label.length <= maxLength) return label;
+  return label.substring(0, maxLength - 1) + '…';
+}
+
+/**
  * Transform API graph data to Cytoscape format.
  */
 function transformGraphData(graph) {
   const elements = [];
+  let orphanCount = 0;
 
   // Add nodes
   for (const node of graph.nodes) {
+    const totalLinks = (node.linkCount || 0) + (node.backlinkCount || 0);
+    const isOrphan = totalLinks === 0;
+    if (isOrphan) orphanCount++;
+
     elements.push({
       group: 'nodes',
       data: {
         id: node.id,
         label: node.title,
+        shortLabel: truncateLabel(node.title),
         path: node.path,
         category: node.category || 'default',
         confidence: node.confidence,
-        linkCount: node.linkCount,
-        backlinkCount: node.backlinkCount,
+        linkCount: node.linkCount || 0,
+        backlinkCount: node.backlinkCount || 0,
+        isOrphan: isOrphan,
         // Size based on connectivity
-        size: Math.max(20, Math.min(60, 20 + (node.linkCount + node.backlinkCount) * 3)),
+        size: Math.max(20, Math.min(60, 20 + totalLinks * 3)),
       },
     });
   }
@@ -115,6 +138,9 @@ function transformGraphData(graph) {
     });
   }
 
+  // Store orphan count for stats
+  graph._orphanCount = orphanCount;
+
   return elements;
 }
 
@@ -123,32 +149,60 @@ function transformGraphData(graph) {
  */
 function getGraphStyles() {
   return [
-    // Node styles
+    // Node styles - labels hidden by default for cleaner look
     {
       selector: 'node',
       style: {
-        'label': 'data(label)',
+        'label': '',
         'width': 'data(size)',
         'height': 'data(size)',
         'background-color': function(node) {
+          // Orphaned nodes get special color
+          if (node.data('isOrphan')) {
+            return ORPHAN_COLOR;
+          }
           const category = node.data('category');
           return CATEGORY_COLORS[category] || CATEGORY_COLORS.default;
         },
         'background-opacity': function(node) {
-          return 0.5 + node.data('confidence') * 0.5;
+          // Orphans are more opaque to stand out
+          if (node.data('isOrphan')) return 0.9;
+          return 0.6 + node.data('confidence') * 0.4;
         },
         'border-width': 2,
         'border-color': function(node) {
+          if (node.data('isOrphan')) {
+            return '#d35400';
+          }
           const category = node.data('category');
           return CATEGORY_COLORS[category] || CATEGORY_COLORS.default;
         },
-        'font-size': '10px',
+        'font-size': '11px',
+        'font-weight': 500,
         'text-valign': 'bottom',
-        'text-margin-y': 5,
-        'color': '#333',
-        'text-outline-color': '#fff',
-        'text-outline-width': 1,
-        'min-zoomed-font-size': 8,
+        'text-margin-y': 8,
+        'color': '#ecf0f1',
+        'text-background-color': 'rgba(44, 62, 80, 0.85)',
+        'text-background-opacity': 1,
+        'text-background-padding': '4px',
+        'text-background-shape': 'roundrectangle',
+        'min-zoomed-font-size': 10,
+      },
+    },
+    // Show truncated labels for larger/important nodes (high connectivity)
+    {
+      selector: 'node[size >= 35]',
+      style: {
+        'label': 'data(shortLabel)',
+      },
+    },
+    // Orphan nodes - show label always to highlight they need attention
+    {
+      selector: 'node[?isOrphan]',
+      style: {
+        'label': 'data(shortLabel)',
+        'border-style': 'dashed',
+        'text-background-color': 'rgba(211, 84, 0, 0.85)',
       },
     },
     // Edge styles
@@ -156,35 +210,38 @@ function getGraphStyles() {
       selector: 'edge',
       style: {
         'width': 1.5,
-        'line-color': '#ccc',
-        'target-arrow-color': '#ccc',
+        'line-color': '#5d6d7e',
+        'target-arrow-color': '#5d6d7e',
         'target-arrow-shape': 'triangle',
         'curve-style': 'bezier',
-        'opacity': 0.6,
+        'opacity': 0.5,
       },
     },
-    // Highlighted node
+    // Highlighted node (selected)
     {
       selector: 'node:selected',
       style: {
         'border-width': 4,
-        'border-color': '#2c3e50',
+        'border-color': '#3498db',
         'background-opacity': 1,
+        'label': 'data(label)',
       },
     },
-    // Connected edges on hover
+    // Show full label on hover
     {
       selector: 'node.hover',
       style: {
+        'label': 'data(label)',
         'border-width': 3,
-        'border-color': '#2c3e50',
+        'border-color': '#3498db',
+        'z-index': 999,
       },
     },
     {
       selector: 'edge.highlighted',
       style: {
-        'line-color': '#2c3e50',
-        'target-arrow-color': '#2c3e50',
+        'line-color': '#3498db',
+        'target-arrow-color': '#3498db',
         'width': 2.5,
         'opacity': 1,
       },
@@ -196,6 +253,17 @@ function getGraphStyles() {
         'border-width': 4,
         'border-color': '#27ae60',
         'border-style': 'dashed',
+        'label': 'data(shortLabel)',
+      },
+    },
+    // Search highlighted
+    {
+      selector: 'node.highlighted',
+      style: {
+        'border-width': 4,
+        'border-color': '#f1c40f',
+        'background-opacity': 1,
+        'label': 'data(label)',
       },
     },
   ];
@@ -331,10 +399,51 @@ function updateGraphStats(stats) {
   const statsEl = document.getElementById('graph-stats');
   if (!statsEl) return;
 
+  const orphanWarning = stats.orphanCount > 0
+    ? `<span class="orphan-stat"><strong>${stats.orphanCount}</strong> orphaned pages</span>`
+    : '';
+
   statsEl.innerHTML = `
-    <span><strong>${stats.nodeCount}</strong> pages</span>
-    <span><strong>${stats.edgeCount}</strong> links</span>
-    <span><strong>${stats.avgLinks.toFixed(1)}</strong> avg links/page</span>
+    <div class="stats-row">
+      <span><strong>${stats.nodeCount}</strong> pages</span>
+      <span><strong>${stats.edgeCount}</strong> links</span>
+      <span><strong>${stats.avgLinks.toFixed(1)}</strong> avg links/page</span>
+      ${orphanWarning}
+    </div>
+    <div class="graph-legend">
+      <span class="legend-title">Legend:</span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: ${ORPHAN_COLOR}; border-style: dashed;"></span>
+        Orphaned (needs links)
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: ${CATEGORY_COLORS.architecture};"></span>
+        Architecture
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: ${CATEGORY_COLORS.guides};"></span>
+        Guides
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: ${CATEGORY_COLORS.security};"></span>
+        Security
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: ${CATEGORY_COLORS.testing};"></span>
+        Testing
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: ${CATEGORY_COLORS.commits};"></span>
+        Commits
+      </span>
+      <span class="legend-item">
+        <span class="legend-dot" style="background: ${CATEGORY_COLORS.default};"></span>
+        Other
+      </span>
+      <span class="legend-size-info">
+        (Size = link count)
+      </span>
+    </div>
   `;
 }
 
@@ -555,10 +664,17 @@ function refreshGraphStats() {
   const edgeCount = cy.edges().length;
   const avgLinks = nodeCount > 0 ? edgeCount / nodeCount : 0;
 
+  // Count orphaned nodes
+  let orphanCount = 0;
+  cy.nodes().forEach(node => {
+    if (node.data('isOrphan')) orphanCount++;
+  });
+
   updateGraphStats({
     nodeCount,
     edgeCount,
     avgLinks,
+    orphanCount,
   });
 }
 
