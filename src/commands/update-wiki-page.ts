@@ -10,6 +10,7 @@ import {
 } from '../domain/wiki-page-history.js';
 import { validateContent } from '../utils/content-validation.js';
 import { findSimilarPage } from '../utils/similarity.js';
+import { extractLinksFromContent } from '../utils/link-extraction.js';
 
 /**
  * Command to update a wiki page.
@@ -87,13 +88,14 @@ export async function handleUpdateWikiPage(
 
       await repos.wikiPages.save(page);
 
-      // Update links if provided
-      if (update.links && update.links.length > 0) {
-        await repos.wikiPages.updateLinks(page.id, update.links);
-        page.links = update.links;
+      // Update links - use provided links or auto-extract from content
+      const linksToUse = update.links ?? extractLinksFromContent(update.content);
+      if (linksToUse.length > 0) {
+        await repos.wikiPages.updateLinks(page.id, linksToUse);
+        page.links = linksToUse;
 
         // Add backlinks to target pages
-        await updateBacklinks(repos, wikiId, page.path, [], update.links);
+        await updateBacklinks(repos, wikiId, page.path, [], linksToUse);
       }
 
       // Record history for create
@@ -131,14 +133,13 @@ export async function handleUpdateWikiPage(
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
 
-      // Update links if provided
-      if (update.links) {
-        const oldLinks = existing.links || [];
-        await repos.wikiPages.updateLinks(existing.id, update.links);
+      // Update links - use provided links or auto-extract from content
+      const linksToUse = update.links ?? extractLinksFromContent(update.content);
+      const oldLinks = existing.links || [];
+      await repos.wikiPages.updateLinks(existing.id, linksToUse);
 
-        // Update backlinks on target pages
-        await updateBacklinks(repos, wikiId, existing.path, oldLinks, update.links);
-      }
+      // Update backlinks on target pages
+      await updateBacklinks(repos, wikiId, existing.path, oldLinks, linksToUse);
 
       // Record history for update
       await recordHistory(repos, {
@@ -197,13 +198,14 @@ export async function handleUpdateWikiPage(
 
         await repos.wikiPages.save(page);
 
-        // Update links if provided
-        if (update.links && update.links.length > 0) {
-          await repos.wikiPages.updateLinks(page.id, update.links);
-          page.links = update.links;
+        // Update links - use provided links or auto-extract from content
+        const linksToUse = update.links ?? extractLinksFromContent(update.content);
+        if (linksToUse.length > 0) {
+          await repos.wikiPages.updateLinks(page.id, linksToUse);
+          page.links = linksToUse;
 
           // Add backlinks to target pages
-          await updateBacklinks(repos, wikiId, page.path, [], update.links);
+          await updateBacklinks(repos, wikiId, page.path, [], linksToUse);
         }
 
         // Record history for create (merge on non-existent page)
@@ -238,16 +240,16 @@ export async function handleUpdateWikiPage(
       }
       await repos.wikiPages.updateContent(existing.id, mergeUpdateParams);
 
-      // Update links if provided - MERGE with existing links for merge operations
-      if (update.links && update.links.length > 0) {
-        const oldLinks = existing.links || [];
-        // BUG 2 FIX: Merge new links with existing ones (deduplicated)
-        const mergedLinks = [...new Set([...oldLinks, ...update.links])];
-        await repos.wikiPages.updateLinks(existing.id, mergedLinks);
+      // Update links - MERGE with existing links for merge operations
+      // Use provided links or auto-extract from merged content
+      const oldLinks = existing.links || [];
+      const incomingLinks = update.links ?? extractLinksFromContent(mergedContent);
+      // Merge new links with existing ones (deduplicated)
+      const mergedLinks = [...new Set([...oldLinks, ...incomingLinks])];
+      await repos.wikiPages.updateLinks(existing.id, mergedLinks);
 
-        // Update backlinks on target pages (only for newly added links)
-        await updateBacklinks(repos, wikiId, existing.path, oldLinks, mergedLinks);
-      }
+      // Update backlinks on target pages (only for newly added links)
+      await updateBacklinks(repos, wikiId, existing.path, oldLinks, mergedLinks);
 
       // Record history for update (merge on existing page)
       await recordHistory(repos, {
