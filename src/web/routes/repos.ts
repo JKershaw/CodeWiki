@@ -245,9 +245,18 @@ export function createReposRoutes(deps: Dependencies): Router {
       const listResult = await handleListRepositories(listQuery, repos);
       const allRepos = listResult.data || [];
 
+      // Create unified repo access factory for file coverage calculation
+      const repoAccessFactory = deps.repoServiceFactory
+        ? createUnifiedRepoAccessFactory({
+            repos,
+            repoServiceFactory: deps.repoServiceFactory,
+            gitService: git,
+          })
+        : undefined;
+
       const reposWithStatus = await Promise.all(
         allRepos.map(async (repo) => {
-          const orchestrator = createOrchestrator(repos);
+          const orchestrator = createOrchestrator(repos, undefined, undefined, repoAccessFactory);
           const wiki = await getOrCreateActiveWiki(repo.id, repos);
           // Use CQRS query to list wikis
           const wikisQuery = createListWikisQuery(repo.id);
@@ -351,7 +360,16 @@ export function createReposRoutes(deps: Dependencies): Router {
       }
       const repo = repoResult.data;
 
-      const orchestrator = createOrchestrator(repos);
+      // Create unified repo access factory for file coverage calculation
+      const repoAccessFactory = deps.repoServiceFactory
+        ? createUnifiedRepoAccessFactory({
+            repos,
+            repoServiceFactory: deps.repoServiceFactory,
+            gitService: git,
+          })
+        : undefined;
+
+      const orchestrator = createOrchestrator(repos, undefined, undefined, repoAccessFactory);
       const wiki = await getOrCreateActiveWiki(repo.id, repos);
       // Use CQRS query to list wikis
       const wikisQuery = createListWikisQuery(repo.id);

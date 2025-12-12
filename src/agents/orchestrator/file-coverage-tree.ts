@@ -755,3 +755,89 @@ export function buildPrioritizedCoverageTree(
     }
   );
 }
+
+/**
+ * Result of aggregate file documentation coverage calculation.
+ */
+export interface FileDocCoverageResult {
+  /** Overall documentation coverage percentage (0-100), weighted by LOC */
+  coveragePercent: number;
+  /** Total number of source files analyzed */
+  totalFiles: number;
+  /** Number of files with any documentation (coverage > 0) */
+  documentedFiles: number;
+  /** Number of files with full documentation (coverage = 100) */
+  fullyDocumentedFiles: number;
+  /** Breakdown by coverage tier */
+  byTier: {
+    none: number;      // 0%
+    mentioned: number; // 25%
+    sectioned: number; // 50%
+    dedicated: number; // 100%
+  };
+}
+
+/**
+ * Calculate aggregate file documentation coverage metrics.
+ *
+ * This provides an overall view of how well the wiki documents the codebase files.
+ * Coverage is weighted by lines of code so larger files have more impact on the score.
+ *
+ * @param files - Array of file data with paths and LOC
+ * @param wikiPages - Wiki pages to check for file mentions
+ * @returns Aggregate coverage metrics
+ */
+export function calculateAggregateFileCoverage(
+  files: FileData[],
+  wikiPages: WikiPageLike[]
+): FileDocCoverageResult {
+  if (files.length === 0) {
+    return {
+      coveragePercent: 0,
+      totalFiles: 0,
+      documentedFiles: 0,
+      fullyDocumentedFiles: 0,
+      byTier: { none: 0, mentioned: 0, sectioned: 0, dedicated: 0 },
+    };
+  }
+
+  let totalLoc = 0;
+  let weightedCoverageSum = 0;
+  let documentedFiles = 0;
+  let fullyDocumentedFiles = 0;
+  const byTier = { none: 0, mentioned: 0, sectioned: 0, dedicated: 0 };
+
+  for (const file of files) {
+    const coverage = calculateGraduatedCoverage(file.path, wikiPages);
+    totalLoc += file.loc;
+    weightedCoverageSum += coverage * file.loc;
+
+    if (coverage > 0) {
+      documentedFiles++;
+    }
+    if (coverage === 100) {
+      fullyDocumentedFiles++;
+    }
+
+    // Categorize by tier
+    if (coverage === 0) {
+      byTier.none++;
+    } else if (coverage === 25) {
+      byTier.mentioned++;
+    } else if (coverage === 50) {
+      byTier.sectioned++;
+    } else {
+      byTier.dedicated++;
+    }
+  }
+
+  const coveragePercent = totalLoc > 0 ? weightedCoverageSum / totalLoc : 0;
+
+  return {
+    coveragePercent,
+    totalFiles: files.length,
+    documentedFiles,
+    fullyDocumentedFiles,
+    byTier,
+  };
+}

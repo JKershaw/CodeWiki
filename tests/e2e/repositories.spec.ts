@@ -75,9 +75,9 @@ test.describe('Repository Management', () => {
     // If a repo exists, check its stats
     const card = page.locator('.card').first();
     if (await card.isVisible()) {
-      // Check stats are displayed
-      await expect(card.locator('.stat')).toHaveCount(4);
-      await expect(card.locator('.stat-label')).toContainText(['Commits', 'Processed', 'Wiki Pages', 'Coverage']);
+      // Check stats are displayed (8 total: 4 primary + 4 secondary)
+      await expect(card.locator('.stat')).toHaveCount(8);
+      await expect(card.locator('.stat-label')).toContainText(['Commits', 'Processed', 'Wiki Pages', 'Coverage', 'File Doc', 'Confidence', 'Issues', 'Agents']);
     }
   });
 
@@ -170,8 +170,8 @@ test.describe('Repository Management', () => {
     // Verify we have one more card than before (excluding loading cards)
     await expect(page.locator('.card:not(.repo-loading-card)')).toHaveCount(initialCards + 1, { timeout: 10000 });
 
-    // The new repo card should have stats displayed
-    await expect(newCard.locator('.stat')).toHaveCount(4);
+    // The new repo card should have stats displayed (8 total: 4 primary + 4 secondary)
+    await expect(newCard.locator('.stat')).toHaveCount(8);
   });
 
   test('shows error for invalid GitHub URL', async ({ page }) => {

@@ -428,6 +428,75 @@ nav {
 	text-transform: uppercase;
 }
 
+/* Secondary stats row */
+.card-stats-secondary {
+	margin-top: -5px;
+}
+
+.card-stats-secondary .stat {
+	padding: 8px;
+}
+
+.card-stats-secondary .stat-value {
+	font-size: 1.1rem;
+}
+
+/* Coverage color indicators */
+.stat-high {
+	color: var(--accent-growth, #10b981);
+}
+
+.stat-medium {
+	color: var(--accent-warning, #f59e0b);
+}
+
+.stat-low {
+	color: var(--accent-danger, #ef4444);
+}
+
+.stat-warning {
+	color: var(--accent-danger, #ef4444);
+}
+
+/* Agent coverage mini visualization */
+.agent-coverage-mini {
+	display: flex;
+	gap: 3px;
+	justify-content: center;
+	align-items: flex-end;
+	height: 24px;
+}
+
+.agent-bar {
+	width: 12px;
+	height: calc(var(--coverage, 0) * 0.24);
+	min-height: 2px;
+	background: var(--accent-insight);
+	border-radius: 2px;
+	transition: height 0.3s ease;
+}
+
+.agent-bar.stat-high {
+	background: var(--accent-growth, #10b981);
+}
+
+.agent-bar.stat-medium {
+	background: var(--accent-warning, #f59e0b);
+}
+
+.agent-bar.stat-low {
+	background: var(--accent-danger, #ef4444);
+}
+
+.stat-agents .stat-label {
+	margin-top: 4px;
+}
+
+.no-data {
+	color: var(--text-secondary);
+	font-size: 0.9rem;
+}
+
 .card-actions {
 	display: flex;
 	gap: 10px;

@@ -50,6 +50,26 @@ async function loadRepos() {
             <div class="stat-label">Coverage</div>
           </div>
         </div>
+        <div class="card-stats card-stats-secondary">
+          <div class="stat">
+            <div class="stat-value ${getCoverageColorClass(repo.fileDocCoverage)}">${(repo.fileDocCoverage || 0).toFixed(0)}%</div>
+            <div class="stat-label">File Doc</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value ${getCoverageColorClass(repo.avgConfidence)}">${(repo.avgConfidence || 0).toFixed(0)}%</div>
+            <div class="stat-label">Confidence</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value ${(repo.openConflicts || 0) + (repo.openFindings || 0) > 0 ? 'stat-warning' : ''}">${(repo.openConflicts || 0) + (repo.openFindings || 0)}</div>
+            <div class="stat-label">Issues</div>
+          </div>
+          <div class="stat stat-agents">
+            <div class="agent-coverage-mini">
+              ${renderAgentCoverageMini(repo.agentCoverage)}
+            </div>
+            <div class="stat-label">Agents</div>
+          </div>
+        </div>
         <div class="card-actions">
           <input type="number" class="iteration-input" data-id="${repo.id}" value="5" min="1" max="50" title="Number of iterations">
           <button class="btn primary process-btn" data-id="${repo.id}">Process</button>
@@ -501,4 +521,44 @@ async function openGraph(repoId) {
   } else {
     document.getElementById('graph-container').innerHTML = '<p class="placeholder">No wiki available. Process the repository first.</p>';
   }
+}
+
+/**
+ * Get CSS class for coverage percentage coloring.
+ * @param {number} percent - Coverage percentage (0-100)
+ * @returns {string} CSS class name
+ */
+function getCoverageColorClass(percent) {
+  if (percent == null) return '';
+  if (percent >= 70) return 'stat-high';
+  if (percent >= 40) return 'stat-medium';
+  return 'stat-low';
+}
+
+/**
+ * Render mini agent coverage visualization.
+ * Shows key agents as small colored bars.
+ * @param {Object} agentCoverage - Map of agent type to coverage percentage
+ * @returns {string} HTML for mini visualization
+ */
+function renderAgentCoverageMini(agentCoverage) {
+  if (!agentCoverage || Object.keys(agentCoverage).length === 0) {
+    return '<span class="no-data">-</span>';
+  }
+
+  // Key agents to show (abbreviations for space)
+  const keyAgents = [
+    { key: 'code-change', label: 'CC' },
+    { key: 'architecture', label: 'AR' },
+    { key: 'security', label: 'SE' },
+    { key: 'quality', label: 'QA' },
+  ];
+
+  const bars = keyAgents.map(({ key, label }) => {
+    const percent = agentCoverage[key] || 0;
+    const colorClass = getCoverageColorClass(percent);
+    return `<div class="agent-bar ${colorClass}" title="${label}: ${percent.toFixed(0)}%" style="--coverage: ${percent}%"></div>`;
+  }).join('');
+
+  return bars;
 }
