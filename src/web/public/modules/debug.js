@@ -255,6 +255,13 @@ async function showOrchestratorRunDetail(repoId, runId) {
     const run = data.orchestratorRun;
 
     content.innerHTML = `
+      ${run.progressUpdate ? `
+        <div class="detail-section progress-update-section">
+          <h4>📊 Progress Update</h4>
+          <p class="progress-update-text">${escapeHtml(run.progressUpdate)}</p>
+        </div>
+      ` : ''}
+
       <div class="detail-section">
         <h4>Decision</h4>
         <p><strong>Reasoning:</strong> ${escapeHtml(run.decision.reasoning)}</p>
