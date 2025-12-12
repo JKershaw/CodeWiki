@@ -386,7 +386,7 @@ export class CodebaseExplorerAgent implements Agent {
   ): string {
     const sortedPaths = sortByPathRelevance(existingPagePaths, targetPath);
     const existingPagesInfo = sortedPaths.length > 0
-      ? `\n## Existing Wiki Pages (avoid duplication)\n${sortedPaths.slice(0, 15).map(p => `- ${p}`).join('\n')}`
+      ? `\n## Related Wiki Pages (link to these)\n${sortedPaths.slice(0, 15).map(p => `- ${p}`).join('\n')}\n\nIMPORTANT: Include markdown links to relevant existing pages using [Page Title](path) format.`
       : '';
 
     const filesContext = formatFetchedFilesForContext(fileContents, '## Source Files');
@@ -402,6 +402,7 @@ ${filesContext}
 ${existingPagesInfo}
 
 Based on the directory structure and source files above, create comprehensive documentation.
+Do NOT duplicate existing pages, but DO link to them when relevant.
 
 ## Output Format
 
@@ -435,7 +436,10 @@ WIKI_PAGES:
 === path: services/user-service | title: User Service ===
 # User Service
 
-The user service handles authentication and user management...
+The user service handles authentication and user management. For security best practices, see [Security Guidelines](guides/security-best-practices).
+
+## Related
+- [Authentication Overview](auth/overview) - How authentication works
 === END ===
 
 CONFIDENCE: 0.9
@@ -451,7 +455,7 @@ CONFIDENCE: 0.9
     // This ensures we don't miss related pages when truncating to 20
     const sortedPaths = sortByPathRelevance(existingPagePaths, targetPath);
     const existingPagesInfo = sortedPaths.length > 0
-      ? `\n\n## Existing Wiki Pages (avoid duplication)\n${sortedPaths.slice(0, 20).map(p => `- ${p}`).join('\n')}`
+      ? `\n\n## Related Wiki Pages (link to these)\n${sortedPaths.slice(0, 20).map(p => `- ${p}`).join('\n')}\n\nIMPORTANT: Include markdown links to relevant existing pages using [Page Title](path) format.`
       : '';
 
     return `## Your Task
@@ -482,7 +486,7 @@ Focus on:
 - Usage patterns (especially from tests if you find any)
 ${existingPagesInfo}
 
-Avoid duplicating existing wiki pages listed above.
+Do NOT duplicate existing pages, but DO link to them when relevant.
 
 ## Output Format (Only After Exploration)
 
@@ -813,6 +817,10 @@ Example: If you read a file with \`class UserRepository\`, document UserReposito
 
 Wiki pages: Use lowercase paths with hyphens (e.g., "services/llm-service"). Reference only file paths you verified.
 
+## Cross-Linking
+
+When existing wiki pages are listed, include markdown links to relevant pages in your documentation using [Page Title](path) format. This helps readers navigate related content.
+
 ## Confidence
 
 0.9+: Read all key files. 0.7-0.9: Read most files. 0.5-0.7: Limited reads. <0.5: Insufficient data.`;
@@ -837,6 +845,7 @@ Create comprehensive documentation for the code provided. The directory structur
 - Use lowercase paths with hyphens (e.g., "services/user-service")
 - Each page should be 200-500 words minimum
 - Only reference file paths shown in the directory structure
+- Include markdown links to related existing wiki pages using [Page Title](path) format
 
 ## Output Format
 Respond with SUMMARY, FINDINGS, WIKI_PAGES, and CONFIDENCE sections as specified in the prompt.`;
