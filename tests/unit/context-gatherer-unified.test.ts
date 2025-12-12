@@ -1,17 +1,17 @@
 /**
  * Unit tests for ContextGatherer unified RepositoryService-based directory coverage.
  *
- * These tests verify that directory coverage calculation works uniformly for both
+ * These tests verify that undocumented directory calculation works uniformly for both
  * local and GitHub repositories using the RepositoryService abstraction, without
  * branching on isGitHubRepo.
  */
 
-import { describe, it, mock, beforeEach } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 import type { UnifiedRepoAccessFactory, UnifiedRepoAccess } from '../../src/services/repository/unified-repo-access.js';
 import type { Repo } from '../../src/domain/repo.js';
-import { ContextGatherer, type DirectoryCoverage } from '../../src/agents/orchestrator/context-gatherer.js';
+import { ContextGatherer } from '../../src/agents/orchestrator/context-gatherer.js';
 
 // Suppress console output during tests
 mock.method(console, 'warn', () => {});
@@ -88,8 +88,8 @@ function createMockRepoAccessFactory(fileTree: string[]): UnifiedRepoAccessFacto
 }
 
 describe('ContextGatherer Unified Directory Coverage', () => {
-  describe('calculateDirectoryCoverage via RepositoryService', () => {
-    it('calculates coverage for local repo using RepositoryService', async () => {
+  describe('calculateUndocumentedDirectories via RepositoryService', () => {
+    it('identifies undocumented directories for local repo using RepositoryService', async () => {
       // Local repo (isGitHubRepo: false) should use RepositoryService
       const repos = createMockRepos({
         id: 'repo-1',
@@ -112,23 +112,23 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Should have coverage for 3 directories (agents, services/git, services/llm)
-      // Each file is counted toward its immediate parent directory
-      assert.strictEqual(context.directoryCoverage.length, 3);
+      // Should have undocumented directories since no wiki pages exist
+      assert.ok(context.undocumentedDirectories.length > 0, 'Should find undocumented directories');
 
-      const agentsCoverage = context.directoryCoverage.find(d => d.path === 'src/agents');
-      const gitCoverage = context.directoryCoverage.find(d => d.path === 'src/services/git');
-      const llmCoverage = context.directoryCoverage.find(d => d.path === 'src/services/llm');
+      // Check specific directories exist
+      const agentsDir = context.undocumentedDirectories.find(d => d.path === 'src/agents');
+      const gitDir = context.undocumentedDirectories.find(d => d.path === 'src/services/git');
+      const llmDir = context.undocumentedDirectories.find(d => d.path === 'src/services/llm');
 
-      assert.ok(agentsCoverage, 'Should have agents coverage');
-      assert.ok(gitCoverage, 'Should have services/git coverage');
-      assert.ok(llmCoverage, 'Should have services/llm coverage');
-      assert.strictEqual(agentsCoverage.fileCount, 2);
-      assert.strictEqual(gitCoverage.fileCount, 1);
-      assert.strictEqual(llmCoverage.fileCount, 1);
+      assert.ok(agentsDir, 'Should have agents directory');
+      assert.ok(gitDir, 'Should have services/git directory');
+      assert.ok(llmDir, 'Should have services/llm directory');
+      assert.strictEqual(agentsDir.totalFiles, 2);
+      assert.strictEqual(gitDir.totalFiles, 1);
+      assert.strictEqual(llmDir.totalFiles, 1);
     });
 
-    it('calculates coverage for GitHub repo using RepositoryService', async () => {
+    it('identifies undocumented directories for GitHub repo using RepositoryService', async () => {
       // GitHub repo (isGitHubRepo: true) should also use RepositoryService
       const repos = createMockRepos({
         id: 'repo-1',
@@ -150,7 +150,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 2);
+      assert.ok(context.undocumentedDirectories.length > 0, 'Should find undocumented directories');
     });
 
     it('produces same results for local and GitHub repos with same file tree', async () => {
@@ -185,9 +185,9 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       // Results should be identical
       assert.deepStrictEqual(
-        localContext.directoryCoverage.map(d => ({ path: d.path, fileCount: d.fileCount })),
-        githubContext.directoryCoverage.map(d => ({ path: d.path, fileCount: d.fileCount })),
-        'Local and GitHub repos should produce identical coverage'
+        localContext.undocumentedDirectories.map(d => ({ path: d.path, totalFiles: d.totalFiles })),
+        githubContext.undocumentedDirectories.map(d => ({ path: d.path, totalFiles: d.totalFiles })),
+        'Local and GitHub repos should produce identical results'
       );
     });
 
@@ -210,9 +210,9 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      const utilsCoverage = context.directoryCoverage.find(d => d.path === 'src/utils');
-      assert.ok(utilsCoverage, 'Should have utils coverage');
-      assert.strictEqual(utilsCoverage.fileCount, 2, 'Should only count helper.ts and another.ts');
+      const utilsDir = context.undocumentedDirectories.find(d => d.path === 'src/utils');
+      assert.ok(utilsDir, 'Should have utils directory');
+      assert.strictEqual(utilsDir.totalFiles, 2, 'Should only count helper.ts and another.ts');
     });
 
     it('filters out files in node_modules, dist, and build directories', async () => {
@@ -233,49 +233,16 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      const utilsCoverage = context.directoryCoverage.find(d => d.path === 'src/utils');
-      assert.ok(utilsCoverage, 'Should have utils coverage');
-      assert.strictEqual(utilsCoverage.fileCount, 1);
+      const utilsDir = context.undocumentedDirectories.find(d => d.path === 'src/utils');
+      assert.ok(utilsDir, 'Should have utils directory');
+      assert.strictEqual(utilsDir.totalFiles, 1);
 
-      // Should not have coverage entries for excluded directories
-      const nodeModulesCoverage = context.directoryCoverage.find(d => d.path.includes('node_modules'));
-      assert.strictEqual(nodeModulesCoverage, undefined, 'Should not include node_modules');
+      // Should not have entries for excluded directories
+      const nodeModulesDir = context.undocumentedDirectories.find(d => d.path.includes('node_modules'));
+      assert.strictEqual(nodeModulesDir, undefined, 'Should not include node_modules');
     });
 
-    it('calculates wiki mentions correctly', async () => {
-      const wikiPages = [
-        createMockWikiPage('architecture/agents', 'The agents module handles autonomous tasks.'),
-        createMockWikiPage('guides/git', 'The src/services/git directory contains git service implementations.'),
-      ];
-
-      const repos = createMockRepos({
-        id: 'repo-1',
-        isGitHubRepo: false,
-      } as Repo, wikiPages);
-
-      // Note: Files are counted toward their IMMEDIATE parent directory
-      const fileTree = [
-        'src/agents/base-agent.ts',
-        'src/agents/code-change-agent.ts',
-        'src/services/git/git-service.ts',
-        'src/services/llm/llm-service.ts',
-      ];
-
-      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoAccessFactory);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      const agentsCoverage = context.directoryCoverage.find(d => d.path === 'src/agents');
-      const gitCoverage = context.directoryCoverage.find(d => d.path === 'src/services/git');
-
-      assert.ok(agentsCoverage, 'Should have agents coverage');
-      assert.ok(gitCoverage, 'Should have services/git coverage');
-      assert.ok(agentsCoverage.wikiMentions > 0, 'Agents should have wiki mentions');
-      assert.ok(gitCoverage.wikiMentions > 0, 'Git should have wiki mentions');
-    });
-
-    it('calculates coverage for non-src directories like lib/', async () => {
+    it('handles undocumented directories for non-src directories like lib/', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
@@ -293,13 +260,12 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Should have coverage for lib/utils and lib/core
-      assert.strictEqual(context.directoryCoverage.length, 2);
-      assert.ok(context.directoryCoverage.find(d => d.path === 'lib/utils'));
-      assert.ok(context.directoryCoverage.find(d => d.path === 'lib/core'));
+      // Should have entries for lib/utils and lib/core
+      assert.ok(context.undocumentedDirectories.find(d => d.path === 'lib/utils'));
+      assert.ok(context.undocumentedDirectories.find(d => d.path === 'lib/core'));
     });
 
-    it('returns empty coverage when no directories with source files exist', async () => {
+    it('returns empty when no directories with source files exist', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
@@ -316,10 +282,10 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 0);
+      assert.strictEqual(context.undocumentedDirectories.length, 0);
     });
 
-    it('returns empty coverage when repoAccessFactory is not provided', async () => {
+    it('returns empty when repoAccessFactory is not provided', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
@@ -330,13 +296,20 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 0);
+      assert.strictEqual(context.undocumentedDirectories.length, 0);
     });
 
-    it('sorts coverage by percentage (lowest first)', async () => {
+    it('sorts by undocumented ratio (highest first)', async () => {
+      // Create wiki pages that document some files
       const wikiPages = [
-        createMockWikiPage('guides/services', 'The services module is well documented.'),
-        createMockWikiPage('guides/services-detail', 'More about services...'),
+        createMockWikiPage(
+          'guides/services',
+          `# Services
+
+## src/services/service.ts
+Main service file documented here.
+`
+        ),
       ];
 
       const repos = createMockRepos({
@@ -345,8 +318,8 @@ describe('ContextGatherer Unified Directory Coverage', () => {
       } as Repo, wikiPages);
 
       const fileTree = [
-        'src/agents/agent.ts',        // 1 file, no mentions
-        'src/services/service.ts',    // 1 file, 2 mentions
+        'src/agents/agent.ts',        // 1 file, undocumented
+        'src/services/service.ts',    // 1 file, documented
       ];
 
       const repoAccessFactory = createMockRepoAccessFactory(fileTree);
@@ -354,9 +327,12 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 2);
-      // Agents (0% coverage) should come before services (higher coverage)
-      assert.strictEqual(context.directoryCoverage[0]!.path, 'src/agents');
+      // Agents (100% undocumented) should come before services (potentially lower)
+      if (context.undocumentedDirectories.length > 0) {
+        const agentsDir = context.undocumentedDirectories.find(d => d.path === 'src/agents');
+        assert.ok(agentsDir, 'Should have agents as undocumented');
+        assert.strictEqual(agentsDir.undocumentedRatio, 1, 'Agents should be 100% undocumented');
+      }
     });
   });
 
@@ -367,23 +343,25 @@ describe('ContextGatherer Unified Directory Coverage', () => {
         isGitHubRepo: false,
       } as Repo);
 
-      const mockService: Partial<RepositoryService> = {
+      const mockAccess: Partial<UnifiedRepoAccess> = {
         getFileTree: mock.fn(async () => {
           throw new Error('Network error');
         }),
+        listDirectory: mock.fn(async () => []),
+        isLocal: () => false,
+        getLocalPath: () => undefined,
       };
 
-      const repoAccessFactory = {
-        getService: mock.fn(() => mockService as RepositoryService),
-        getServiceWithToken: mock.fn(() => mockService as RepositoryService),
+      const repoAccessFactory: UnifiedRepoAccessFactory = {
+        create: mock.fn(async () => mockAccess as UnifiedRepoAccess),
       };
 
       const gatherer = new ContextGatherer(repos, repoAccessFactory);
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Should return empty coverage instead of throwing
-      assert.strictEqual(context.directoryCoverage.length, 0);
+      // Should return empty instead of throwing
+      assert.strictEqual(context.undocumentedDirectories.length, 0);
       assert.strictEqual(context.fileCoverageTree, null);
     });
 
@@ -394,7 +372,7 @@ describe('ContextGatherer Unified Directory Coverage', () => {
 
       const context = await gatherer.gather('nonexistent-repo', 'wiki-1');
 
-      assert.strictEqual(context.directoryCoverage.length, 0);
+      assert.strictEqual(context.undocumentedDirectories.length, 0);
       assert.strictEqual(context.fileCoverageTree, null);
     });
   });

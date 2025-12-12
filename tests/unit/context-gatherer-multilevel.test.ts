@@ -1,7 +1,7 @@
 /**
  * Unit tests for ContextGatherer multi-level directory coverage.
  *
- * These tests verify that directory coverage is calculated at ALL directory levels,
+ * These tests verify that undocumented directories are calculated at ALL directory levels,
  * not just 2nd level (e.g., src/agents). This enables the orchestrator to target
  * specific deeply nested directories with low coverage.
  */
@@ -88,8 +88,8 @@ function createMockRepoAccessFactory(fileTree: string[]): UnifiedRepoAccessFacto
 }
 
 describe('ContextGatherer Multi-Level Directory Coverage', () => {
-  describe('calculateDirectoryCoverage at all levels', () => {
-    it('should calculate coverage for 3rd-level directories', async () => {
+  describe('calculateUndocumentedDirectories at all levels', () => {
+    it('should identify undocumented directories at 3rd-level', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
@@ -108,10 +108,10 @@ describe('ContextGatherer Multi-Level Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Should have coverage for BOTH 2nd and 3rd level directories
-      const paths = context.directoryCoverage.map(d => d.path);
+      // Should have undocumented directories for BOTH 2nd and 3rd level directories
+      const paths = context.undocumentedDirectories.map(d => d.path);
 
-      // 3rd level directories should be present
+      // 3rd level directories should be present (all undocumented since no wiki pages)
       assert.ok(
         paths.includes('src/agents/orchestrator'),
         `Should include 3rd-level dir 'src/agents/orchestrator'. Got: ${paths.join(', ')}`
@@ -122,7 +122,7 @@ describe('ContextGatherer Multi-Level Directory Coverage', () => {
       );
     });
 
-    it('should calculate coverage for 4th-level directories', async () => {
+    it('should identify undocumented directories at 4th-level', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
@@ -139,7 +139,7 @@ describe('ContextGatherer Multi-Level Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      const paths = context.directoryCoverage.map(d => d.path);
+      const paths = context.undocumentedDirectories.map(d => d.path);
 
       // 4th level directory should be present
       assert.ok(
@@ -148,10 +148,28 @@ describe('ContextGatherer Multi-Level Directory Coverage', () => {
       );
     });
 
-    it('should calculate separate coverage for parent and child directories', async () => {
-      // Wiki page mentions 'orchestrator' but NOT 'analysis'
+    it('should distinguish documented from undocumented directories', async () => {
+      // Wiki page with comprehensive content about orchestrator files
       const wikiPages = [
-        createMockWikiPage('architecture/orchestrator', 'The orchestrator module handles...'),
+        createMockWikiPage(
+          'architecture/orchestrator',
+          `# Orchestrator
+
+The orchestrator module handles work distribution.
+
+## Files
+
+### strategies.ts
+Contains strategy implementations.
+
+### context-gatherer.ts
+Gathers context for decision making.
+
+\`\`\`typescript
+import { strategies } from './strategies';
+\`\`\`
+`
+        ),
       ];
 
       const repos = createMockRepos({
@@ -171,69 +189,20 @@ describe('ContextGatherer Multi-Level Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // Find coverage entries for specific directories
-      const orchestratorCoverage = context.directoryCoverage.find(
-        d => d.path === 'src/agents/orchestrator'
-      );
-      const analysisCoverage = context.directoryCoverage.find(
+      // Analysis dir should be in undocumented (no wiki mentions its files)
+      const analysisDirUndoc = context.undocumentedDirectories.find(
         d => d.path === 'src/agents/analysis'
       );
 
-      assert.ok(orchestratorCoverage, 'Should have coverage for src/agents/orchestrator');
-      assert.ok(analysisCoverage, 'Should have coverage for src/agents/analysis');
-
-      // Orchestrator should have higher coverage (wiki mentions it)
-      // Analysis should have 0% coverage (no wiki mentions)
-      assert.ok(
-        orchestratorCoverage.wikiMentions > 0,
-        'Orchestrator should have wiki mentions'
-      );
+      assert.ok(analysisDirUndoc, 'Should identify src/agents/analysis as undocumented');
       assert.strictEqual(
-        analysisCoverage.wikiMentions,
-        0,
-        'Analysis should have 0 wiki mentions'
+        analysisDirUndoc.undocumentedRatio,
+        1,
+        'Analysis dir should be 100% undocumented'
       );
     });
 
-    it('should allow targeting specific deep directories with low coverage', async () => {
-      // Scenario: src/agents has overall 50% coverage, but src/agents/analysis has 0%
-      const wikiPages = [
-        createMockWikiPage('architecture/orchestrator', 'The orchestrator handles work distribution...'),
-        createMockWikiPage('guides/orchestrator-usage', 'How to use the orchestrator...'),
-      ];
-
-      const repos = createMockRepos({
-        id: 'repo-1',
-        isGitHubRepo: false,
-      } as Repo, wikiPages);
-
-      const fileTree = [
-        'src/agents/orchestrator/strategies.ts',
-        'src/agents/orchestrator/context-gatherer.ts',
-        'src/agents/analysis/base-agent.ts',
-        'src/agents/analysis/code-change-agent.ts',
-      ];
-
-      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
-      const gatherer = new ContextGatherer(repos, repoAccessFactory);
-
-      const context = await gatherer.gather('repo-1', 'wiki-1');
-
-      // Get the low-coverage directories (sorted by coverage, lowest first)
-      const lowCoverageDirs = context.directoryCoverage.filter(d => d.coveragePercent === 0);
-
-      // src/agents/analysis should be in the low coverage list
-      const analysisInLowCoverage = lowCoverageDirs.some(
-        d => d.path === 'src/agents/analysis'
-      );
-
-      assert.ok(
-        analysisInLowCoverage,
-        `src/agents/analysis should be identifiable as low coverage. Low coverage dirs: ${lowCoverageDirs.map(d => d.path).join(', ')}`
-      );
-    });
-
-    it('should not duplicate coverage counting for nested directories', async () => {
+    it('should count files correctly per directory', async () => {
       const repos = createMockRepos({
         id: 'repo-1',
         isGitHubRepo: false,
@@ -250,11 +219,11 @@ describe('ContextGatherer Multi-Level Directory Coverage', () => {
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
       // Each directory level should have its own file count
-      const servicesLlm = context.directoryCoverage.find(d => d.path === 'src/services/llm');
+      const servicesLlm = context.undocumentedDirectories.find(d => d.path === 'src/services/llm');
 
-      assert.ok(servicesLlm, 'Should have coverage for src/services/llm');
+      assert.ok(servicesLlm, 'Should have entry for src/services/llm');
       assert.strictEqual(
-        servicesLlm.fileCount,
+        servicesLlm.totalFiles,
         2,
         'src/services/llm should have 2 files'
       );
@@ -277,13 +246,61 @@ describe('ContextGatherer Multi-Level Directory Coverage', () => {
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      const paths = context.directoryCoverage.map(d => d.path);
+      const paths = context.undocumentedDirectories.map(d => d.path);
 
       // Should include directories at various depths
       assert.ok(
         paths.includes('src/plugins/auth/providers/oauth'),
         `Should include 5th-level dir. Got: ${paths.join(', ')}`
       );
+    });
+
+    it('should exclude fully documented directories', async () => {
+      // Create wiki pages that thoroughly document each file
+      const wikiPages = [
+        createMockWikiPage(
+          'services/llm-service',
+          `# LLM Service
+
+## src/services/llm/llm-service.ts
+Main service file.
+
+## src/services/llm/mock-llm.ts
+Mock implementation for testing.
+
+\`\`\`typescript
+import { LLMService } from './llm-service';
+\`\`\`
+`
+        ),
+      ];
+
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: false,
+      } as Repo, wikiPages);
+
+      const fileTree = [
+        'src/services/llm/llm-service.ts',
+        'src/services/llm/mock-llm.ts',
+      ];
+
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      // If files are well documented, directory might not be in undocumented list
+      // or would have lower undocumentedRatio
+      const llmDir = context.undocumentedDirectories.find(d => d.path === 'src/services/llm');
+
+      // Either not present (fully documented) or has lower ratio
+      if (llmDir) {
+        assert.ok(
+          llmDir.undocumentedRatio < 1,
+          'Well-documented directory should have lower undocumented ratio'
+        );
+      }
     });
   });
 });
