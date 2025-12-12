@@ -75,9 +75,19 @@ export interface OrchestratorConfig {
 }
 
 /**
- * Orchestrator class.
+ * Orchestrator interface - the contract for work generation.
  */
-export class Orchestrator {
+export interface Orchestrator {
+  generateWorkList(repoId: string, wikiId: string, maxItems?: number): Promise<WorkItem[]>;
+  hasMoreWork(repoId: string, wikiId: string): Promise<boolean>;
+  getWorkSummary(repoId: string, wikiId: string): Promise<WorkSummary>;
+}
+
+/**
+ * Default orchestrator implementation.
+ * Supports both LLM-powered and deterministic modes.
+ */
+export class DefaultOrchestrator implements Orchestrator {
   private contextGatherer: ContextGatherer;
   private config: OrchestratorConfig;
 
@@ -810,8 +820,14 @@ export interface WorkSummary {
   openFindings: number;
 }
 
+// Import PhasedOrchestrator - no circular dependency since it only imports types from this file
+import { PhasedOrchestrator } from './phased-orchestrator.js';
+
 /**
  * Create an orchestrator instance.
+ * Uses ORCHESTRATOR_TYPE env var to select implementation.
+ * Default is 'phased' (the new phased orchestrator).
+ * Use 'legacy' for the original deterministic/LLM orchestrator.
  */
 export function createOrchestrator(
   repos: Repositories,
@@ -819,5 +835,13 @@ export function createOrchestrator(
   config?: OrchestratorConfig,
   repoAccessFactory?: UnifiedRepoAccessFactory
 ): Orchestrator {
-  return new Orchestrator(repos, llm, config, repoAccessFactory);
+  const type = process.env.ORCHESTRATOR_TYPE || 'phased';
+
+  switch (type) {
+    case 'legacy':
+      return new DefaultOrchestrator(repos, llm, config, repoAccessFactory);
+    case 'phased':
+    default:
+      return new PhasedOrchestrator(repos, llm, config, repoAccessFactory);
+  }
 }

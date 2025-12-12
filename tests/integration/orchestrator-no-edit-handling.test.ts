@@ -7,7 +7,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
 import { createTestContext, createTestRepo, type TestContext } from '../helpers/index.js';
-import { Orchestrator } from '../../src/agents/orchestrator/orchestrator.js';
+import { DefaultOrchestrator } from '../../src/agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { createEditRequest, createCommitEditSource } from '../../src/domain/edit-request.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
@@ -89,7 +89,7 @@ describe('Orchestrator No Edit Handling', () => {
       // Create many pending edits (more than old threshold of 5)
       await createPendingEdits(wiki.id, repoId, 10);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should NOT include wiki-editor work items
@@ -112,7 +112,7 @@ describe('Orchestrator No Edit Handling', () => {
       // Create 100 pending edits - Orchestrator should still not care
       await createPendingEdits(wiki.id, repoId, 100);
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should not have wiki-editor, regardless of how many edits are pending
@@ -157,7 +157,7 @@ describe('Orchestrator No Edit Handling', () => {
         createdAt: new Date(),
       });
 
-      const orchestrator = new Orchestrator(ctx.repos, ctx.llm);
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
       const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
 
       // Should still generate other work (e.g., code-change for the commit)

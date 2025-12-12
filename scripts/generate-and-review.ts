@@ -13,6 +13,9 @@ import { createExecutor } from '../dist/executor/executor.js';
 import { createOpenRouterLLM } from '../dist/services/llm/openrouter-llm-service.js';
 import { createRepo } from '../dist/domain/repo.js';
 import { createGitService } from '../dist/services/git/git-service.js';
+import { createRepositoryServiceFactory } from '../dist/services/repository/repository-service.js';
+import { createUnifiedRepoAccessFactory } from '../dist/services/repository/unified-repo-access.js';
+import { getOrCreateActiveWiki } from '../dist/commands/create-wiki.js';
 import { v4 as uuid } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -42,21 +45,35 @@ async function main() {
     model: process.env['OPENROUTER_MODEL'] ?? 'anthropic/claude-sonnet-4.5',
   });
 
-  const orchestrator = createOrchestrator(repos);
-  const executor = createExecutor(repos, git, llm, orchestrator);
-
-  // Register repo
+  // Register repo first so we can set up access
   const repo = createRepo({
     id: uuid(),
     fullName: REPO_PATH,
     cloneUrl: REPO_PATH,
     defaultBranch: 'main',
+    isGitHubRepo: false,
   });
   repo.status = 'pending';
   await repos.repos.save(repo);
 
   const repoId = repo.id;
   git.registerLocalRepo(repoId, REPO_PATH);
+
+  // Create repository service factory for unified file access
+  const repoServiceFactory = createRepositoryServiceFactory({
+    gitService: git,
+  });
+
+  // Create unified repo access factory for orchestrator
+  const repoAccessFactory = createUnifiedRepoAccessFactory({
+    repos,
+    repoServiceFactory,
+    gitService: git,
+  });
+
+  // Create orchestrator and executor with full access
+  const orchestrator = createOrchestrator(repos, llm, { useLLM: true }, repoAccessFactory);
+  const executor = createExecutor(repos, git, llm, orchestrator, repoServiceFactory);
 
   console.log(`Registered repo: ${repoId}\n`);
 
@@ -66,6 +83,10 @@ async function main() {
 
   await repos.commits.saveMany(commits);
   console.log(`Synced ${commits.length} commits\n`);
+
+  // Get or create the wiki for this repo
+  const wiki = await getOrCreateActiveWiki(repoId, repos);
+  const wikiId = wiki.id;
 
   // Run iterations
   let totalIterations = 0;
@@ -80,7 +101,7 @@ async function main() {
     totalIterations += summary.iterations;
     totalCost += summary.totalCost;
 
-    const pages = await repos.wikiPages.findByRepo(repoId);
+    const pages = await repos.wikiPages.findByWiki(wikiId);
     const agentRuns = await repos.agentRuns.findByRepo(repoId);
 
     // Count agent types
@@ -99,7 +120,7 @@ async function main() {
   }
 
   // Get final state
-  const finalPages = await repos.wikiPages.findByRepo(repoId);
+  const finalPages = await repos.wikiPages.findByWiki(wikiId);
   const agentRuns = await repos.agentRuns.findByRepo(repoId);
 
   console.log('\n=== Final Wiki Statistics ===');
