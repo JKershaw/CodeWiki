@@ -445,6 +445,64 @@ export * from './reverse-plugin.js';
   });
 
   describe('OverviewAgent', () => {
+    it('populates links array when creating category overview (fix verification)', async () => {
+      // This test verifies Fix #1: Synthesis agents populate links array
+      const repoId = 'llm-overview-links-array-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Links Array Test',
+      });
+
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create pages in a category - overview should link to these
+      await createWikiPages(agentCtx.wikiId, [
+        { path: 'api/users', title: 'Users API', content: '# Users API\n\nUser management endpoints.' },
+        { path: 'api/posts', title: 'Posts API', content: '# Posts API\n\nBlog post endpoints.' },
+        { path: 'api/comments', title: 'Comments API', content: '# Comments API\n\nComment endpoints.' },
+        { path: 'api/auth', title: 'Auth API', content: '# Auth API\n\nAuthentication endpoints.' },
+      ]);
+
+      const agent = new OverviewAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      if (result.updates.length > 0) {
+        const overview = result.updates[0]!;
+
+        // Verify links array exists and is populated
+        assert.ok(overview.links !== undefined, 'links array should be defined');
+
+        // Check if content has markdown links
+        const hasMarkdownLinks = /\[.+\]\([^)]+\)/.test(overview.content);
+
+        if (hasMarkdownLinks) {
+          assert.ok(
+            overview.links && overview.links.length > 0,
+            `Content has markdown links but links array is empty. ` +
+            `This means the fix for synthesizing links is not working.`
+          );
+          console.log(`\n✓ OverviewAgent populated links array with ${overview.links?.length || 0} links`);
+          if (overview.links && overview.links.length > 0) {
+            console.log(`  Links: [${overview.links.join(', ')}]`);
+          }
+        }
+
+        // Check if category pages are linked
+        const expectedPages = ['api/users', 'api/posts', 'api/comments', 'api/auth'];
+        const linkedPages = overview.links?.filter(l => expectedPages.includes(l)) || [];
+
+        console.log(`\n  Found ${linkedPages.length}/${expectedPages.length} expected category page links`);
+
+        logTestResult('Overview links array population', {
+          score: overview.links !== undefined && overview.links.length > 0 ? 10 : 5,
+          reasoning: `links array has ${overview.links?.length || 0} entries, ${linkedPages.length} are category pages`,
+          passed: overview.links !== undefined,
+        });
+      } else {
+        console.log('OverviewAgent skipped (conditions not met)');
+      }
+    });
+
     it('creates category overview page', async () => {
       const repoId = 'llm-category-overview-test';
 

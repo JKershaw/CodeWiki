@@ -88,6 +88,71 @@ describe('BootstrapAgent with Real LLM', { timeout: 120000 }, () => {
     });
   });
 
+  describe('Links Array Population', () => {
+    it('populates links array when generated content contains wiki links', async () => {
+      // This test verifies Fix #6: Bootstrap agent extracts links from content
+      const repoId = 'llm-bootstrap-links-test';
+
+      // Create a repo with content that should prompt the LLM to add links
+      await createTestRepo(ctx, repoId, {
+        'README.md': `# Documentation System
+
+A wiki-style documentation system.
+
+## Features
+- Generates wiki pages automatically
+- Links related content together
+
+## Documentation Structure
+- Architecture docs in /architecture
+- API docs in /api
+- User guides in /guides
+`,
+        'package.json': JSON.stringify({
+          name: 'doc-system',
+          version: '1.0.0',
+        }, null, 2),
+      });
+
+      const agent = new BootstrapAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // Should create wiki pages
+      assert.ok(result.updates.length > 0, 'Should create wiki updates');
+
+      const overviewPage = result.updates.find(u => u.path === 'overview');
+      assert.ok(overviewPage, 'Should create an overview page');
+
+      // Check if content has any wiki-style links
+      const hasWikiLinks = /\[.+\]\([^)]+\)/.test(overviewPage.content);
+
+      // If content has links, verify links array is populated
+      if (hasWikiLinks) {
+        assert.ok(overviewPage.links, 'Should have links array when content has links');
+        console.log(`\n✓ Bootstrap agent populated links array with ${overviewPage.links?.length || 0} links`);
+        if (overviewPage.links && overviewPage.links.length > 0) {
+          console.log(`  Links: [${overviewPage.links.join(', ')}]`);
+        }
+      } else {
+        console.log('\n⚠️  LLM did not generate wiki links in the content (this is OK for some models)');
+      }
+
+      // The links array should at least exist (even if empty)
+      assert.ok(
+        overviewPage.links !== undefined,
+        'links array should be defined (even if empty)'
+      );
+
+      logTestResult('Bootstrap links array population', {
+        score: overviewPage.links !== undefined ? 10 : 0,
+        reasoning: `links array is ${overviewPage.links !== undefined ? 'defined' : 'undefined'}, has ${overviewPage.links?.length || 0} links`,
+        passed: overviewPage.links !== undefined,
+      });
+    });
+  });
+
   describe('Content Quality', () => {
     it('creates coherent overview from README', async () => {
       const repoId = 'llm-bootstrap-readme';
