@@ -713,13 +713,13 @@ async function runQualityBenchmark() {
 
   const runBtn = document.getElementById('run-quality-benchmark-btn');
   const statusText = document.getElementById('benchmark-status-text');
-  const progressDiv = document.getElementById('benchmark-progress');
+  const progressDiv = document.getElementById('quality-benchmark-progress');
 
   runBtn.disabled = true;
   statusText.textContent = 'Starting quality benchmark...';
   progressDiv.classList.remove('hidden');
-  document.getElementById('benchmark-progress-fill').style.width = '0%';
-  document.getElementById('benchmark-progress-text').textContent = 'Starting quality benchmark...';
+  document.getElementById('quality-benchmark-progress-fill').style.width = '0%';
+  document.getElementById('quality-benchmark-progress-text').textContent = 'Starting quality benchmark...';
 
   try {
     const response = await fetch(`/api/repos/${currentRepo.id}/quality-benchmarks`, {
@@ -756,9 +756,19 @@ async function runBothBenchmarks() {
 
   const bothBtn = document.getElementById('run-both-benchmarks-btn');
   const statusText = document.getElementById('benchmark-status-text');
+  const accuracyProgressDiv = document.getElementById('benchmark-progress');
+  const qualityProgressDiv = document.getElementById('quality-benchmark-progress');
 
   bothBtn.disabled = true;
   statusText.textContent = 'Starting both benchmarks...';
+
+  // Show and reset both progress bars
+  accuracyProgressDiv.classList.remove('hidden');
+  qualityProgressDiv.classList.remove('hidden');
+  document.getElementById('benchmark-progress-fill').style.width = '0%';
+  document.getElementById('benchmark-progress-text').textContent = 'Starting accuracy benchmark...';
+  document.getElementById('quality-benchmark-progress-fill').style.width = '0%';
+  document.getElementById('quality-benchmark-progress-text').textContent = 'Starting quality benchmark...';
 
   try {
     await Promise.allSettled([
@@ -782,6 +792,8 @@ async function runBothBenchmarks() {
   } catch (error) {
     bothBtn.disabled = false;
     statusText.textContent = `Error: ${error.message}`;
+    accuracyProgressDiv.classList.add('hidden');
+    qualityProgressDiv.classList.add('hidden');
   }
 }
 
@@ -791,9 +803,9 @@ async function runBothBenchmarks() {
 function startQualityBenchmarkPolling(repoId) {
   stopQualityBenchmarkPolling();
 
-  const progressDiv = document.getElementById('benchmark-progress');
-  const progressFill = document.getElementById('benchmark-progress-fill');
-  const progressText = document.getElementById('benchmark-progress-text');
+  const progressDiv = document.getElementById('quality-benchmark-progress');
+  const progressFill = document.getElementById('quality-benchmark-progress-fill');
+  const progressText = document.getElementById('quality-benchmark-progress-text');
   progressDiv.classList.remove('hidden');
 
   qualityBenchmarkPollingInterval = setInterval(async () => {
