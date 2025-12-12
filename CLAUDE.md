@@ -66,6 +66,28 @@ Review `tests/helpers/` for available test utilities like `MockLLMService` and `
 - `npm run lint` - Run ESLint on source files
 - `npm run typecheck` - Run TypeScript type checking
 
+## Before Implementing Features
+
+When given a feature spec or guide, follow this process BEFORE writing any code:
+
+1. **Map spec to code locations** - For each file the spec says to modify, READ that file first. Understand what it does and why the spec targets it specifically. If you find yourself wanting to modify a different file, STOP and reconsider.
+
+2. **Trace the execution flow** - Before changing anything, trace how the relevant code actually executes. For example, if fixing "work generation," trace: What calls `generateWorkList`? What does it call? Where does the problematic behavior occur?
+
+3. **Write a failing integration test first** - Write a test that demonstrates the actual problem in the real system, not a unit test for new code you haven't written yet. The test should fail before your fix and pass after.
+
+4. **Verify your plan against the spec** - Before implementing, explicitly check:
+   - Am I modifying the files the spec says to modify?
+   - Am I following the approach the spec describes?
+   - If my plan differs from the spec, why? (Ask the user if unclear)
+
+5. **Keep changes minimal** - If the spec says "~50 lines new, ~50 modified," that's a constraint. Exceeding it significantly suggests you're overcomplicating the solution.
+
+**Common mistakes to avoid:**
+- Finding code that "looks relevant" and modifying it without verifying it's the right integration point
+- Writing unit tests for new isolated functions instead of integration tests for system behavior
+- Ignoring specific file names in the spec because you found something "similar"
+  
 ## Before Committing Code
 
 Always run the following checks before committing any code changes:
