@@ -5,6 +5,9 @@
 import { createRepositories } from '../../repositories/index.js';
 import { createOrchestrator } from '../../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../../commands/create-wiki.js';
+import { FileSystemGitService } from '../../services/git/git-service.js';
+import { createRepositoryServiceFactory } from '../../services/repository/repository-service.js';
+import { createUnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
 import {
   createGetRepositoryQuery,
   handleGetRepository,
@@ -34,7 +37,21 @@ export async function statusCommand(args: string[]): Promise<void> {
 
     const repo = repoResult.data;
 
-    const orchestrator = createOrchestrator(repos);
+    // Create git service and repo access factory for file coverage calculation
+    const gitService = new FileSystemGitService('.');
+    // Try to register the repo's clone URL as local path (for local repos)
+    if (repo.cloneUrl && !repo.cloneUrl.startsWith('http')) {
+      gitService.registerLocalRepo(repoId, repo.cloneUrl);
+    }
+
+    const repoServiceFactory = createRepositoryServiceFactory({ gitService });
+    const repoAccessFactory = createUnifiedRepoAccessFactory({
+      repos,
+      repoServiceFactory,
+      gitService,
+    });
+
+    const orchestrator = createOrchestrator(repos, undefined, undefined, repoAccessFactory);
     const wiki = await getOrCreateActiveWiki(repoId, repos);
     const summary = await orchestrator.getWorkSummary(repoId, wiki.id);
 
@@ -45,7 +62,16 @@ export async function statusCommand(args: string[]): Promise<void> {
     console.log(`   Wiki pages: ${summary.wikiPages}`);
     console.log(`   Avg confidence: ${(summary.avgConfidence * 100).toFixed(1)}%`);
     console.log(`   Pending work: ${summary.pendingWork}`);
-    console.log(`   Open conflicts: ${summary.openConflicts}\n`);
+    console.log(`   Open conflicts: ${summary.openConflicts}`);
+
+    // Show file coverage metrics
+    if (summary.totalSourceFiles > 0) {
+      console.log(`\n📁 File Coverage:`);
+      console.log(`   Source files: ${summary.documentedFiles}/${summary.totalSourceFiles} documented`);
+      console.log(`   Coverage: ${summary.fileDocCoverage.toFixed(1)}%`);
+    }
+
+    console.log('');
   } finally {
     await connection.close();
   }
