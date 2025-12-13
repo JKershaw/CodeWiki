@@ -71,6 +71,9 @@ export class FileWikiPageRepository implements WikiPageRepository {
     sourceAgentRunId?: string;
     category?: string;
     categoryConfidence?: number;
+    filesAccessed?: string[];
+    filesReferenced?: string[];
+    targetPaths?: string[];
   }): Promise<void> {
     const page = await this.store.get(id);
     if (page) {
@@ -98,6 +101,31 @@ export class FileWikiPageRepository implements WikiPageRepository {
       }
       if (updates.categoryConfidence !== undefined) {
         page.categoryConfidence = updates.categoryConfidence;
+      }
+      // Update file coverage - filesAccessed and targetPaths are accumulated
+      if (!page.filesAccessed) {
+        page.filesAccessed = [];
+      }
+      if (updates.filesAccessed) {
+        for (const file of updates.filesAccessed) {
+          if (!page.filesAccessed.includes(file)) {
+            page.filesAccessed.push(file);
+          }
+        }
+      }
+      // filesReferenced is replaced (based on current content)
+      if (updates.filesReferenced !== undefined) {
+        page.filesReferenced = updates.filesReferenced;
+      }
+      if (!page.targetPaths) {
+        page.targetPaths = [];
+      }
+      if (updates.targetPaths) {
+        for (const path of updates.targetPaths) {
+          if (!page.targetPaths.includes(path)) {
+            page.targetPaths.push(path);
+          }
+        }
       }
       await this.store.set(page);
     }

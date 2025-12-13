@@ -1,4 +1,4 @@
-import type { AgentRun, AgentType, AgentRunStatus, AgentResult } from '../../domain/agent-run.js';
+import type { AgentRun, AgentType, AgentRunStatus, AgentResult, ToolMetrics } from '../../domain/agent-run.js';
 
 /**
  * Repository interface for managing agent run history.
@@ -60,7 +60,7 @@ export interface AgentRunRepository {
   /**
    * Complete a run with results.
    */
-  complete(id: string, result: AgentResult, durationMs: number, costUsd: number): Promise<void>;
+  complete(id: string, result: AgentResult, durationMs: number, costUsd: number, toolMetrics?: ToolMetrics): Promise<void>;
 
   /**
    * Fail a run with an error.

@@ -159,6 +159,17 @@ function createMockRepos(): Repositories & { _pages: Map<string, WikiPage> } {
         if (updates.confidence !== undefined) {
           page.confidence = updates.confidence;
         }
+        if (updates.filesAccessed !== undefined) {
+          // Accumulate files accessed (like sourceCommits)
+          page.filesAccessed = [...new Set([...page.filesAccessed, ...updates.filesAccessed])];
+        }
+        if (updates.filesReferenced !== undefined) {
+          page.filesReferenced = updates.filesReferenced;
+        }
+        if (updates.targetPaths !== undefined) {
+          // Accumulate target paths (like sourceCommits)
+          page.targetPaths = [...new Set([...page.targetPaths, ...updates.targetPaths])];
+        }
         page.updatedAt = new Date();
       }
     },
@@ -784,6 +795,133 @@ describe('handleUpdateWikiPage', () => {
       assert.strictEqual(result.success, false);
       // Error should mention the existing page path
       assert.ok(result.error?.includes('services/llm'), `Error should mention existing path: ${result.error}`);
+    });
+  });
+
+  describe('file coverage tracking', () => {
+    it('stores filesAccessed when provided in create', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/page',
+        content: validContent('Test Page'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+        filesAccessed: ['src/utils.ts', 'src/config.json'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.deepStrictEqual(result.data?.filesAccessed, ['src/utils.ts', 'src/config.json']);
+    });
+
+    it('stores targetPaths when provided in create', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/page',
+        content: validContent('Test Page'),
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+        targetPaths: ['src/services/', 'src/utils/'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.deepStrictEqual(result.data?.targetPaths, ['src/services/', 'src/utils/']);
+    });
+
+    it('extracts filesReferenced from content on create', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'test/page',
+        content: '# Test Page\n\nCheck `src/utils/helper.ts` for details. Also see `src/config.json` for configuration.\n\nThis is enough content to pass validation requirements.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.ok(result.data?.filesReferenced.includes('src/utils/helper.ts'));
+      assert.ok(result.data?.filesReferenced.includes('src/config.json'));
+    });
+
+    it('accumulates filesAccessed on update', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page with some files accessed
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal content.',
+        filesAccessed: ['src/original.ts'],
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Update with additional files accessed
+      const command = createUpdateWikiPageCommand({
+        type: 'update',
+        path: 'test/page',
+        content: '# Test Page\n\nUpdated content.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.1,
+        filesAccessed: ['src/new.ts', 'src/updated.ts'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Should have accumulated files from both operations
+      assert.ok(result.data?.filesAccessed.includes('src/original.ts'));
+      assert.ok(result.data?.filesAccessed.includes('src/new.ts'));
+      assert.ok(result.data?.filesAccessed.includes('src/updated.ts'));
+    });
+
+    it('updates filesReferenced based on new content', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nCheck `src/old.ts` for details.',
+        filesReferenced: ['src/old.ts'],
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Update with new content referencing different files
+      const command = createUpdateWikiPageCommand({
+        type: 'update',
+        path: 'test/page',
+        content: '# Test Page\n\nNow check `src/new.ts` and `src/another.ts` for the updated implementation.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.1,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Should have files referenced from new content
+      assert.ok(result.data?.filesReferenced.includes('src/new.ts'));
+      assert.ok(result.data?.filesReferenced.includes('src/another.ts'));
     });
   });
 });

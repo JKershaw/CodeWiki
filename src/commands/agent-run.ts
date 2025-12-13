@@ -8,7 +8,7 @@
 import type { Command, CommandResult } from './types.js';
 import { success, failure } from './types.js';
 import type { Repositories } from '../repositories/index.js';
-import { createAgentRun, type AgentRun, type AgentType, type AgentResult } from '../domain/agent-run.js';
+import { createAgentRun, type AgentRun, type AgentType, type AgentResult, type ToolMetrics } from '../domain/agent-run.js';
 
 // ============================================================================
 // CreateAgentRun Command
@@ -83,21 +83,27 @@ export interface CompleteAgentRunCommand extends Command {
   readonly result: AgentResult;
   readonly durationMs: number;
   readonly costUsd: number;
+  readonly toolMetrics?: ToolMetrics;
 }
 
 export function createCompleteAgentRunCommand(
   agentRunId: string,
   result: AgentResult,
   durationMs: number,
-  costUsd: number
+  costUsd: number,
+  toolMetrics?: ToolMetrics
 ): CompleteAgentRunCommand {
-  return {
+  const command: CompleteAgentRunCommand = {
     type: 'CompleteAgentRun',
     agentRunId,
     result,
     durationMs,
     costUsd,
   };
+  if (toolMetrics !== undefined) {
+    return { ...command, toolMetrics };
+  }
+  return command;
 }
 
 /**
@@ -118,7 +124,8 @@ export async function handleCompleteAgentRun(
       command.agentRunId,
       command.result,
       command.durationMs,
-      command.costUsd
+      command.costUsd,
+      command.toolMetrics
     );
     return success();
   } catch (error) {

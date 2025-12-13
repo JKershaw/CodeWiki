@@ -1,5 +1,5 @@
 import type { AgentRunRepository } from '../interfaces/agent-run-repository.js';
-import type { AgentRun, AgentType, AgentRunStatus, AgentResult } from '../../domain/agent-run.js';
+import type { AgentRun, AgentType, AgentRunStatus, AgentResult, ToolMetrics } from '../../domain/agent-run.js';
 import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
 
@@ -94,14 +94,18 @@ export class FileAgentRunRepository implements AgentRunRepository {
     await this.store.update(id, { status });
   }
 
-  async complete(id: string, result: AgentResult, durationMs: number, costUsd: number): Promise<void> {
-    await this.store.update(id, {
+  async complete(id: string, result: AgentResult, durationMs: number, costUsd: number, toolMetrics?: ToolMetrics): Promise<void> {
+    const updates: Partial<AgentRun> = {
       status: 'completed',
       result,
       durationMs,
       costUsd,
       completedAt: new Date(),
-    });
+    };
+    if (toolMetrics) {
+      updates.toolMetrics = toolMetrics;
+    }
+    await this.store.update(id, updates);
   }
 
   async fail(id: string, error: string, durationMs: number): Promise<void> {

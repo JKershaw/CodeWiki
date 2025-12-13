@@ -62,6 +62,12 @@ export interface WikiPageRepository {
     category?: string;
     /** Confidence score for the category assignment (0-1) */
     categoryConfidence?: number;
+    /** Files that were read by agents during this update (accumulated) */
+    filesAccessed?: string[];
+    /** Files/folders mentioned in the page content (replaced on update) */
+    filesReferenced?: string[];
+    /** Files/folders that agents were asked to analyze (accumulated) */
+    targetPaths?: string[];
   }): Promise<void>;
 
   /**
