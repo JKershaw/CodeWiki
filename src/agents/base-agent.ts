@@ -1,4 +1,4 @@
-import type { AgentType, AgentResult, AgentFinding } from '../domain/agent-run.js';
+import type { AgentType, AgentResult, AgentFinding, ToolMetrics } from '../domain/agent-run.js';
 import type { WikiPageUpdate } from '../domain/wiki-page.js';
 import type { LLMService, ToolUseResult } from '../services/llm/llm-service.js';
 import type { Repositories } from '../repositories/index.js';
@@ -9,6 +9,9 @@ import { isCommitTarget, isPathTarget, isWikiTarget } from '../domain/work-targe
 // Re-export WorkTarget types for agent convenience
 export type { WorkTarget, CommitTarget, PathTarget, WikiTarget };
 export { isCommitTarget, isPathTarget, isWikiTarget };
+
+// Re-export ToolMetrics from domain for backwards compatibility
+export type { ToolMetrics };
 
 /**
  * Context provided to agents when they run.
@@ -28,19 +31,6 @@ export interface AgentContext {
    * Works with both local filesystem and GitHub API repositories.
    */
   repoAccess?: UnifiedRepoAccess;
-}
-
-/**
- * Metrics about tool usage during an agent run.
- * Used to validate that agents properly verify claims against source code.
- */
-export interface ToolMetrics {
-  /** Total number of tool calls made */
-  toolCallCount: number;
-  /** Map of tool name to usage count */
-  toolsUsed: Record<string, number>;
-  /** List of files read (for read_file calls) */
-  filesRead: string[];
 }
 
 /**
