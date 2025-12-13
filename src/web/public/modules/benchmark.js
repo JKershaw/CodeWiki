@@ -265,8 +265,20 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks, pageHistory
 
   // Use detailed page history if available, otherwise fall back to benchmark-derived data
   let pageCountPoints;
+  let commitCoveragePoints = [];
+  let fileCoveragePoints = [];
+
   if (pageHistory && pageHistory.length > 0) {
     pageCountPoints = pageHistory.map(p => ({ x: p.iteration, y: p.pageCount }));
+
+    // Extract coverage metrics from page history (when available from KPI snapshots)
+    commitCoveragePoints = pageHistory
+      .filter(p => p.commitCoverage !== undefined)
+      .map(p => ({ x: p.iteration, y: p.commitCoverage }));
+
+    fileCoveragePoints = pageHistory
+      .filter(p => p.fileCoverage !== undefined)
+      .map(p => ({ x: p.iteration, y: p.fileCoverage }));
   } else {
     const pageCountMap = new Map();
     [...sortedAccuracy, ...sortedQuality].forEach(b => {
@@ -334,6 +346,42 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks, pageHistory
       pointHoverRadius: 4,
       yAxisID: 'y2',
       borderDash: [5, 5],
+    });
+  }
+
+  // Add commit coverage (percentage of commits processed)
+  if (commitCoveragePoints.length > 0) {
+    datasets.push({
+      label: 'Commit Coverage',
+      data: commitCoveragePoints,
+      borderColor: '#8b5cf6',
+      backgroundColor: 'rgba(139, 92, 246, 0.1)',
+      borderWidth: 2,
+      fill: false,
+      tension: 0.3,
+      pointBackgroundColor: '#8b5cf6',
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      yAxisID: 'y',
+      borderDash: [2, 2],
+    });
+  }
+
+  // Add file coverage (percentage of source files documented)
+  if (fileCoveragePoints.length > 0) {
+    datasets.push({
+      label: 'File Coverage',
+      data: fileCoveragePoints,
+      borderColor: '#ec4899',
+      backgroundColor: 'rgba(236, 72, 153, 0.1)',
+      borderWidth: 2,
+      fill: false,
+      tension: 0.3,
+      pointBackgroundColor: '#ec4899',
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      yAxisID: 'y',
+      borderDash: [4, 2],
     });
   }
 

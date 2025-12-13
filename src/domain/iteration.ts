@@ -32,6 +32,8 @@ export interface Iteration {
   pagesUpdated: number;
   /** Error message if failed */
   error: string | null;
+  /** Snapshot of KPIs at iteration completion (for charting/tracking) */
+  kpiSnapshot?: Record<string, unknown>;
 }
 
 export type IterationStatus =

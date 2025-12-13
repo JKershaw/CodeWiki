@@ -235,6 +235,15 @@ export class Executor {
           const result = await this.executeWorkItem(wikiEditorWorkItem, repoId, wikiId);
 
           if (result.success) {
+            // Capture KPI snapshot for tracking/charting
+            let kpiSnapshot: Record<string, unknown> | undefined;
+            try {
+              const workSummary = await this.orchestrator.getWorkSummary(repoId, wikiId);
+              kpiSnapshot = workSummary as unknown as Record<string, unknown>;
+            } catch (error) {
+              console.warn('Failed to capture KPI snapshot:', error);
+            }
+
             await handleCompleteIteration(
               createCompleteIterationCommand(iterationId, {
                 agentRunId: result.agentRunId!,
@@ -242,6 +251,7 @@ export class Executor {
                 costUsd: result.cost,
                 pagesCreated: result.pagesCreated,
                 pagesUpdated: result.pagesUpdated,
+                ...(kpiSnapshot && { kpiSnapshot }),
               }),
               this.repos
             );
@@ -395,6 +405,15 @@ export class Executor {
             const { iterationId } = result as WorkItemResult & { iterationId: string; workItem: WorkItem };
 
             if (result.success) {
+              // Capture KPI snapshot for tracking/charting
+              let kpiSnapshot: Record<string, unknown> | undefined;
+              try {
+                const workSummary = await this.orchestrator.getWorkSummary(repoId, wikiId);
+                kpiSnapshot = workSummary as unknown as Record<string, unknown>;
+              } catch (error) {
+                console.warn('Failed to capture KPI snapshot:', error);
+              }
+
               await handleCompleteIteration(
                 createCompleteIterationCommand(iterationId, {
                   agentRunId: result.agentRunId!,
@@ -402,6 +421,7 @@ export class Executor {
                   costUsd: result.cost,
                   pagesCreated: result.pagesCreated,
                   pagesUpdated: result.pagesUpdated,
+                  ...(kpiSnapshot && { kpiSnapshot }),
                 }),
                 this.repos
               );

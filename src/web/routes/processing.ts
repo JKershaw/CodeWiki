@@ -456,6 +456,15 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    *                       pageCount:
    *                         type: integer
    *                         description: Cumulative number of pages created
+   *                       commitCoverage:
+   *                         type: number
+   *                         description: Percentage of commits processed (0-100)
+   *                       fileCoverage:
+   *                         type: number
+   *                         description: Percentage of source files documented (0-100)
+   *                       avgConfidence:
+   *                         type: number
+   *                         description: Average confidence of wiki pages (0-100)
    *       404:
    *         description: Repository not found
    *       500:
@@ -491,8 +500,15 @@ export function createProcessingRoutes(deps: Dependencies): Router {
         .filter(run => run.wikiId === wiki.id)
         .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
 
-      // Build cumulative page count history
-      const pageHistory: Array<{ iteration: number; pageCount: number }> = [];
+      // Build cumulative page count history with KPI snapshots
+      const pageHistory: Array<{
+        iteration: number;
+        pageCount: number;
+        // KPI snapshot fields (when available)
+        commitCoverage?: number;
+        fileCoverage?: number;
+        avgConfidence?: number;
+      }> = [];
       let globalIteration = 0;
       let cumulativePages = 0;
 
@@ -509,10 +525,21 @@ export function createProcessingRoutes(deps: Dependencies): Router {
             globalIteration++;
             cumulativePages += iteration.pagesCreated;
 
+            // Extract KPI data from snapshot if available
+            const kpi = iteration.kpiSnapshot as {
+              coveragePercent?: number;
+              fileDocCoverage?: number;
+              avgConfidence?: number;
+            } | undefined;
+
             // Add a data point for each iteration
             pageHistory.push({
               iteration: globalIteration,
               pageCount: cumulativePages,
+              // Include KPI metrics when available (renamed for clarity)
+              ...(kpi?.coveragePercent !== undefined && { commitCoverage: kpi.coveragePercent }),
+              ...(kpi?.fileDocCoverage !== undefined && { fileCoverage: kpi.fileDocCoverage }),
+              ...(kpi?.avgConfidence !== undefined && { avgConfidence: kpi.avgConfidence }),
             });
           }
         }

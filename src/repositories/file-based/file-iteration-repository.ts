@@ -71,6 +71,7 @@ export class FileIterationRepository implements IterationRepository {
     costUsd: number;
     pagesCreated: number;
     pagesUpdated: number;
+    kpiSnapshot?: Record<string, unknown>;
   }): Promise<void> {
     await this.store.update(id, {
       status: 'completed',
@@ -79,6 +80,7 @@ export class FileIterationRepository implements IterationRepository {
       costUsd: result.costUsd,
       pagesCreated: result.pagesCreated,
       pagesUpdated: result.pagesUpdated,
+      ...(result.kpiSnapshot && { kpiSnapshot: result.kpiSnapshot }),
       completedAt: new Date(),
     });
   }
