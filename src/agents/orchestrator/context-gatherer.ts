@@ -121,7 +121,8 @@ export class ContextGatherer {
    */
   async gather(repoId: string, wikiId: string): Promise<OrchestratorContext> {
     // Fetch all the data we need via CQRS queries
-    const commitsQuery = createListCommitsQuery(repoId, { limit: 100 });
+    // Only fetch recent commits for display - use counts for stats
+    const commitsQuery = createListCommitsQuery(repoId, { limit: 20 });
     const pagesQuery = createListWikiPagesQuery(wikiId);
     const runsQuery = createListAgentRunsQuery(repoId);
     const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
@@ -131,11 +132,13 @@ export class ContextGatherer {
       pagesResult,
       runsResult,
       pendingEditsResult,
+      totalCommits,
     ] = await Promise.all([
       handleListCommits(commitsQuery, this.repos),
       handleListWikiPages(pagesQuery, this.repos),
       handleListAgentRuns(runsQuery, this.repos),
       handleCountPendingEditRequests(pendingEditsQuery, this.repos),
+      this.repos.commits.countByRepo(repoId),
     ]);
 
     const commits = commitsResult.data || [];
@@ -143,15 +146,17 @@ export class ContextGatherer {
     const agentRuns = runsResult.data || [];
     const pendingEditRequests = pendingEditsResult.data || 0;
 
-    // Calculate commits by agent
+    // Calculate commits by agent using database counts (accurate for all commits)
     const commitsByAgent: Record<string, { processed: number; pending: number }> = {};
-    for (const agentType of ANALYSIS_AGENTS) {
-      const processed = commits.filter(c =>
-        c.processedBy.some(p => p.agentType === agentType)
-      ).length;
+    const agentCountPromises = ANALYSIS_AGENTS.map(async (agentType) => {
+      const processed = await this.repos.commits.countProcessedByAgent(repoId, agentType);
+      return { agentType, processed };
+    });
+    const agentCounts = await Promise.all(agentCountPromises);
+    for (const { agentType, processed } of agentCounts) {
       commitsByAgent[agentType] = {
         processed,
-        pending: commits.length - processed,
+        pending: totalCommits - processed,
       };
     }
 
@@ -295,7 +300,7 @@ export class ContextGatherer {
     }
 
     return {
-      totalCommits: commits.length,
+      totalCommits,
       commitsByAgent,
       recentCommits,
       wikiPages: wikiPages.length,

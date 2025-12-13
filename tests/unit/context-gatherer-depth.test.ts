@@ -229,6 +229,8 @@ describe('ContextGatherer GitHub Mode', () => {
       },
       commits: {
         findByRepo: mock.fn(async () => []),
+        countByRepo: mock.fn(async () => 0),
+        countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
         findByWiki: mock.fn(async () => []),
@@ -415,6 +417,8 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       commits: {
         findByRepo: mock.fn(async () => []),
+        countByRepo: mock.fn(async () => 0),
+        countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),
@@ -447,6 +451,8 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       commits: {
         findByRepo: mock.fn(async () => []),
+        countByRepo: mock.fn(async () => 0),
+        countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),
@@ -480,6 +486,8 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       commits: {
         findByRepo: mock.fn(async () => []),
+        countByRepo: mock.fn(async () => 0),
+        countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
         findByWiki: mock.fn(async () => []),
@@ -509,6 +517,8 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       commits: {
         findByRepo: mock.fn(async () => []),
+        countByRepo: mock.fn(async () => 0),
+        countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),
@@ -544,6 +554,8 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       commits: {
         findByRepo: mock.fn(async () => []),
+        countByRepo: mock.fn(async () => 0),
+        countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [architecturePage, bootstrapPage]),
@@ -578,6 +590,8 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       commits: {
         findByRepo: mock.fn(async () => []),
+        countByRepo: mock.fn(async () => 0),
+        countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),

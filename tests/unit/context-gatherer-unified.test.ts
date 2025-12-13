@@ -52,6 +52,8 @@ function createMockRepos(repo: Partial<Repo> | null, wikiPages: WikiPage[] = [])
     },
     commits: {
       findByRepo: mock.fn(async () => []),
+      countByRepo: mock.fn(async () => 0),
+      countProcessedByAgent: mock.fn(async () => 0),
     },
     wikiPages: {
       findByWiki: mock.fn(async () => wikiPages),
