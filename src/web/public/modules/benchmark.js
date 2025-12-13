@@ -239,15 +239,6 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks, pageHistory
   const completedAccuracy = (accuracyBenchmarks || []).filter(b => b.status === 'completed');
   const completedQuality = (qualityBenchmarks || []).filter(b => b.status === 'completed');
 
-  // Hide chart if less than 2 completed benchmarks total
-  const totalCompleted = completedAccuracy.length + completedQuality.length;
-  if (totalCompleted < 2) {
-    chartContainer.classList.add('hidden');
-    return;
-  }
-
-  chartContainer.classList.remove('hidden');
-
   // Sort by iteration count (ascending) for the chart
   const sortedAccuracy = [...completedAccuracy].sort((a, b) => a.iterationCount - b.iterationCount);
   const sortedQuality = [...completedQuality].sort((a, b) => a.iterationCount - b.iterationCount);
@@ -384,6 +375,14 @@ function renderBenchmarkChart(accuracyBenchmarks, qualityBenchmarks, pageHistory
       borderDash: [4, 2],
     });
   }
+
+  // Hide chart only if there's no data at all
+  if (datasets.length === 0) {
+    chartContainer.classList.add('hidden');
+    return;
+  }
+
+  chartContainer.classList.remove('hidden');
 
   const scales = {
     y: {
