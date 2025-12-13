@@ -64,12 +64,6 @@ import {
 // Import agent registry for type lists
 import { ANALYSIS_AGENTS } from '../../agents/registry.js';
 
-// Import file coverage calculation
-import {
-  calculateAggregateFileCoverage,
-  type FileData,
-} from './file-coverage-tree.js';
-
 /**
  * Orchestrator configuration.
  */
@@ -786,7 +780,9 @@ export class DefaultOrchestrator implements Orchestrator {
         ? wikiPages.reduce((sum, p) => sum + p.confidence, 0) / wikiPages.length
         : 0;
 
-    // Calculate file documentation coverage if repoAccessFactory is available
+    // Calculate file documentation coverage using tracked file relationships
+    // Wiki pages now track: filesAccessed (read by agents), filesReferenced (mentioned in content),
+    // and targetPaths (work item targets). This is more accurate than searching content for file names.
     let fileDocCoverage = 0;
     let totalSourceFiles = 0;
     let documentedFiles = 0;
@@ -796,23 +792,45 @@ export class DefaultOrchestrator implements Orchestrator {
         const repoAccess = await this.repoAccessFactory.create(repoId);
         const allFiles = await repoAccess.getFileTree();
         const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
+        const sourceFileSet = new Set(sourceFiles);
 
         if (sourceFiles.length > 0) {
-          const DEFAULT_LOC = 75; // Estimated LOC per file
-          const fileData: FileData[] = sourceFiles.map(path => ({
-            path,
-            loc: DEFAULT_LOC,
-          }));
+          // Collect all files covered by wiki pages from tracked relationships
+          const coveredFiles = new Set<string>();
+          for (const page of wikiPages) {
+            // Files read by agents when building this page
+            for (const file of page.filesAccessed ?? []) {
+              if (sourceFileSet.has(file)) {
+                coveredFiles.add(file);
+              }
+            }
+            // Files mentioned in the page content
+            for (const file of page.filesReferenced ?? []) {
+              if (sourceFileSet.has(file)) {
+                coveredFiles.add(file);
+              }
+            }
+            // Files/folders agents were asked to analyze
+            for (const path of page.targetPaths ?? []) {
+              // For target paths, check if any source file starts with this path
+              // (handles both exact matches and directory targets)
+              if (sourceFileSet.has(path)) {
+                coveredFiles.add(path);
+              } else {
+                // Check if it's a directory containing source files
+                const pathWithSlash = path.endsWith('/') ? path : path + '/';
+                for (const sourceFile of sourceFiles) {
+                  if (sourceFile.startsWith(pathWithSlash)) {
+                    coveredFiles.add(sourceFile);
+                  }
+                }
+              }
+            }
+          }
 
-          const wikiPagesForCoverage = wikiPages.map(p => ({
-            path: p.path,
-            content: p.content,
-          }));
-
-          const fileCoverage = calculateAggregateFileCoverage(fileData, wikiPagesForCoverage);
-          fileDocCoverage = fileCoverage.coveragePercent;
-          totalSourceFiles = fileCoverage.totalFiles;
-          documentedFiles = fileCoverage.documentedFiles;
+          totalSourceFiles = sourceFiles.length;
+          documentedFiles = coveredFiles.size;
+          fileDocCoverage = (documentedFiles / totalSourceFiles) * 100;
         }
       } catch (error) {
         // If file coverage calculation fails, continue with zeros
