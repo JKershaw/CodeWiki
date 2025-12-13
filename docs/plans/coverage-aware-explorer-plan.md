@@ -59,17 +59,14 @@ export interface PathTarget {
 }
 ```
 
-Update `getWorkTargetKey()` to include undocumented count for smarter deduplication:
-```typescript
-case 'path':
-  const undocCount = target.priorityFiles?.length ?? 0;
-  return `path:${target.path}:undoc=${undocCount}`;
-```
+**Decision**: Keep simple key format `path:${target.path}`. The intelligence comes from
+the changing `priorityFiles` list, not the key. Changing the key could cause duplicate
+work items if undoc count changes while items are still queued.
 
 **Tests to write first** (`tests/unit/work-target.test.ts`):
 - `createPathTarget` with priorityFiles
-- `getWorkTargetKey` includes undoc count
 - Type guard still works with extended type
+- Key format unchanged (priorityFiles doesn't affect key)
 
 ### Phase 2: Extend Context Gatherer with Low-Coverage File List
 
@@ -279,11 +276,15 @@ export interface ToolMetrics {
 
 ### Phase 6: Handle Index Files Properly (Improvement #4)
 
-**File: `src/agents/analysis/codebase-explorer-agent.ts`**
+**Files to update:**
+1. `src/agents/analysis/codebase-explorer-agent.ts` - explorer's `isSourceFile()`
+2. `src/agents/orchestrator/context-gatherer.ts` - context gatherer's `isSourceFile()`
 
 Currently, index files are:
 1. Filtered OUT from source files (line 332): `skipPatterns = ['.test.', '.spec.', '.d.ts', 'index.ts', 'index.js']`
 2. Deprioritized in selection (line 351): `if (aIsIndex && !bIsIndex) return 1`
+
+**Decision**: Update BOTH locations so index files count toward coverage metrics too.
 
 Change approach:
 - **Don't filter out index files** - they define public API
@@ -291,7 +292,7 @@ Change approach:
 - **BUT**: if index file has low coverage, it should be included via priorityFiles
 
 ```typescript
-// Change isSourceFile to NOT skip index files
+// Change isSourceFile in BOTH files to NOT skip index files
 private isSourceFile(filename: string): boolean {
   const sourceExtensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.kt'];
   const skipPatterns = ['.test.', '.spec.', '.d.ts'];  // REMOVED index.ts, index.js
@@ -304,10 +305,11 @@ private isSourceFile(filename: string): boolean {
 ```
 
 **Tests to write first** (`tests/unit/codebase-explorer-index-files.test.ts`):
-- Index files are included in source files
+- Index files are included in source files (both locations)
 - Index files are deprioritized in default sort
 - Index files with low coverage ARE included via priorityFiles
 - Index files can get wiki documentation
+- Index files count toward coverage metrics
 
 ---
 

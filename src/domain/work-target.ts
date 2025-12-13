@@ -23,6 +23,8 @@ export interface PathTarget {
   type: 'path';
   /** File system path relative to repo root */
   path: string;
+  /** Optional list of files to prioritize reading (low-coverage files) */
+  priorityFiles?: string[];
 }
 
 /**
@@ -69,7 +71,10 @@ export function createCommitTarget(commitId: string): CommitTarget {
 /**
  * Create a path target.
  */
-export function createPathTarget(path: string): PathTarget {
+export function createPathTarget(path: string, priorityFiles?: string[]): PathTarget {
+  if (priorityFiles) {
+    return { type: 'path', path, priorityFiles };
+  }
   return { type: 'path', path };
 }
 

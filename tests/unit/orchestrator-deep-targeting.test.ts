@@ -50,6 +50,7 @@ function createMockStrategyContext(
     hasTestingGuide: false,
     hasExtensionGuide: false,
     undocumentedDirectories,
+    lowCoverageFiles: [],
     fileCoverageTree: null,
     projectOverviewContent: null,
     pendingEditRequests: 0,

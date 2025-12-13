@@ -91,6 +91,10 @@ export interface OrchestratorContext {
   // Uses file-level coverage to identify directories needing documentation
   undocumentedDirectories: UndocumentedDirectory[];
 
+  // Individual files with low coverage (< 50%), for coverage-aware file selection
+  // Sorted by coverage ascending (0% first), then by path length
+  lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }>;
+
   // File-level coverage tree - prioritized view with individual files
   fileCoverageTree: string | null;
 
@@ -273,8 +277,9 @@ export class ContextGatherer {
       p.path === 'guides/patterns'
     );
 
-    // Calculate undocumented directories using file-level coverage
-    const undocumentedDirectories = await this.calculateUndocumentedDirectories(repoId, wikiPages);
+    // Calculate undocumented directories and low-coverage files using file-level coverage
+    const { directories: undocumentedDirectories, files: lowCoverageFiles } =
+      await this.calculateUndocumentedDirectoriesAndFiles(repoId, wikiPages);
 
     // Build file-level coverage tree
     const fileCoverageTree = await this.buildFileCoverageTree(repoId, wikiPages);
@@ -322,6 +327,7 @@ export class ContextGatherer {
       hasTestingGuide,
       hasExtensionGuide,
       undocumentedDirectories,
+      lowCoverageFiles,
       fileCoverageTree,
       projectOverviewContent,
       pendingEditRequests,
@@ -329,15 +335,22 @@ export class ContextGatherer {
   }
 
   /**
-   * Calculate which directories have undocumented files.
+   * Calculate which directories have undocumented files, and collect individual low-coverage files.
    * Uses file-level coverage (graduated coverage) instead of simple mention counting.
+   *
+   * Returns both:
+   * - directories: Aggregated stats per directory
+   * - files: Individual files with coverage < 50%
    */
-  private async calculateUndocumentedDirectories(
+  private async calculateUndocumentedDirectoriesAndFiles(
     repoId: string,
     wikiPages: Array<{ path: string; content: string }>
-  ): Promise<UndocumentedDirectory[]> {
+  ): Promise<{
+    directories: UndocumentedDirectory[];
+    files: Array<{ path: string; coverage: number; directory: string }>;
+  }> {
     if (!this.repoAccessFactory) {
-      return [];
+      return { directories: [], files: [] };
     }
 
     try {
@@ -346,11 +359,12 @@ export class ContextGatherer {
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
-        return [];
+        return { directories: [], files: [] };
       }
 
       // Group files by directory and calculate coverage for each file
       const dirStats = new Map<string, { total: number; undocumented: number }>();
+      const lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }> = [];
 
       for (const filePath of sourceFiles) {
         const parts = filePath.split('/');
@@ -370,6 +384,8 @@ export class ContextGatherer {
         stats.total++;
         if (isUndocumented) {
           stats.undocumented++;
+          // Collect low-coverage files
+          lowCoverageFiles.push({ path: filePath, coverage, directory: dirPath });
         }
       }
 
@@ -387,7 +403,7 @@ export class ContextGatherer {
         }
       }
 
-      // Sort by undocumented ratio (highest first), then by count
+      // Sort directories by undocumented ratio (highest first), then by count
       undocumentedDirs.sort((a, b) => {
         if (a.undocumentedRatio !== b.undocumentedRatio) {
           return b.undocumentedRatio - a.undocumentedRatio;
@@ -395,10 +411,18 @@ export class ContextGatherer {
         return b.undocumentedCount - a.undocumentedCount;
       });
 
-      return undocumentedDirs;
+      // Sort files by coverage (0% first), then by path length (shorter = more core)
+      lowCoverageFiles.sort((a, b) => {
+        if (a.coverage !== b.coverage) {
+          return a.coverage - b.coverage;
+        }
+        return a.path.length - b.path.length;
+      });
+
+      return { directories: undocumentedDirs, files: lowCoverageFiles };
     } catch (error) {
       console.warn(`Failed to calculate undocumented directories: ${error}`);
-      return [];
+      return { directories: [], files: [] };
     }
   }
 
