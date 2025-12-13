@@ -94,17 +94,34 @@ Example scenario:
 | `src/web/routes/processing.ts` | 477-552 | Page history endpoint |
 | `src/web/public/modules/benchmark.js` | 228-377 | Chart rendering with coverage lines |
 
-## Recommendations
+## Fix Implemented
 
-1. **Consider renaming the metric** - "File Coverage" implies all files should be covered. "File Documentation Mentions" would be more accurate.
+With the addition of file tracking fields to wiki pages (PR #301), we now have a much better solution.
 
-2. **Add tooltip explanation** - Explain in the UI that this metric tracks how many source files are explicitly mentioned in wiki pages.
+### New Wiki Page Fields
 
-3. **Consider alternative metrics**:
-   - Ratio of documented directories vs total directories
-   - Percentage of significant files (entry points, configs) documented
-   - Count of files with dedicated wiki pages
+Wiki pages now track:
+- `filesAccessed` - Files read by agents via tool use
+- `filesReferenced` - Files mentioned in content (auto-extracted via `extractFileReferencesFromContent`)
+- `targetPaths` - Work item targets (directories/files agents were asked to analyze)
 
-4. **For GitHub repos specifically**:
-   - Consider fetching actual LOC for weighted calculations
-   - Handle API truncation more gracefully (paginate or warn user)
+### Updated Coverage Calculation
+
+Instead of searching wiki content for file name mentions (the old `calculateGraduatedCoverage` approach), coverage is now calculated by:
+
+1. Collecting the **union** of `filesAccessed`, `filesReferenced`, and `targetPaths` across all wiki pages
+2. Filtering to only source files
+3. Calculating: `coverage = coveredFiles.size / totalSourceFiles * 100`
+
+This approach:
+- Is more accurate (tracks actual file relationships)
+- Will properly increase as more files are documented
+- Handles directory targets (all files in targeted directory count as covered)
+- No longer suffers from semantic mismatch
+
+### Files Modified
+
+- `src/agents/orchestrator/orchestrator.ts` - Updated `getWorkSummary()`
+- `src/agents/orchestrator/phased-orchestrator.ts` - Updated `getWorkSummary()`
+
+The old `calculateAggregateFileCoverage` and `calculateGraduatedCoverage` functions are no longer used for KPI calculation (but remain available for other uses like the coverage tree display).
