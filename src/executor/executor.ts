@@ -745,6 +745,15 @@ export class Executor {
       for (const update of result.updates) {
         update.agentRunId = agentRunId;
 
+        // Propagate file tracking data from agent run to wiki updates
+        // This enables accurate file coverage calculation
+        if (result.toolMetrics?.filesRead && result.toolMetrics.filesRead.length > 0) {
+          update.filesAccessed = result.toolMetrics.filesRead;
+        }
+        if (targetPath) {
+          update.targetPaths = [targetPath];
+        }
+
         if (shouldQueueEdits) {
           // Route analysis agent updates through EditRequest queue
           // This enables the WikiEditorAgent to handle out-of-order commits intelligently

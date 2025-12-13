@@ -797,34 +797,42 @@ export class DefaultOrchestrator implements Orchestrator {
         if (sourceFiles.length > 0) {
           // Collect all files covered by wiki pages from tracked relationships
           const coveredFiles = new Set<string>();
+
+          // Helper to add coverage for a path (handles both files and directories)
+          const addCoverage = (path: string) => {
+            if (sourceFileSet.has(path)) {
+              // Exact file match
+              coveredFiles.add(path);
+            } else if (path.endsWith('/')) {
+              // Directory path - match all files within
+              for (const sourceFile of sourceFiles) {
+                if (sourceFile.startsWith(path)) {
+                  coveredFiles.add(sourceFile);
+                }
+              }
+            } else {
+              // Could be a directory without trailing slash - check if it's a prefix
+              const pathWithSlash = path + '/';
+              for (const sourceFile of sourceFiles) {
+                if (sourceFile.startsWith(pathWithSlash)) {
+                  coveredFiles.add(sourceFile);
+                }
+              }
+            }
+          };
+
           for (const page of wikiPages) {
             // Files read by agents when building this page
             for (const file of page.filesAccessed ?? []) {
-              if (sourceFileSet.has(file)) {
-                coveredFiles.add(file);
-              }
+              addCoverage(file);
             }
             // Files mentioned in the page content
             for (const file of page.filesReferenced ?? []) {
-              if (sourceFileSet.has(file)) {
-                coveredFiles.add(file);
-              }
+              addCoverage(file);
             }
             // Files/folders agents were asked to analyze
             for (const path of page.targetPaths ?? []) {
-              // For target paths, check if any source file starts with this path
-              // (handles both exact matches and directory targets)
-              if (sourceFileSet.has(path)) {
-                coveredFiles.add(path);
-              } else {
-                // Check if it's a directory containing source files
-                const pathWithSlash = path.endsWith('/') ? path : path + '/';
-                for (const sourceFile of sourceFiles) {
-                  if (sourceFile.startsWith(pathWithSlash)) {
-                    coveredFiles.add(sourceFile);
-                  }
-                }
-              }
+              addCoverage(path);
             }
           }
 
