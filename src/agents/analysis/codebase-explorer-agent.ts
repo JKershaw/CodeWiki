@@ -48,6 +48,7 @@ export class CodebaseExplorerAgent implements Agent {
       throw new Error(`CodebaseExplorerAgent cannot handle target type: ${target.type}`);
     }
     const targetPath = target.path;
+    const priorityFiles = target.priorityFiles;
 
     // Check existing wiki pages to avoid duplication
     const pagesQuery = createListWikiPagesQuery(context.wikiId);
@@ -57,14 +58,14 @@ export class CodebaseExplorerAgent implements Agent {
 
     // Try pre-fetch approach first for simpler, more reliable execution
     if (context.repoAccess) {
-      const prefetchResult = await this.runWithPrefetch(targetPath, existingPagePaths, context);
+      const prefetchResult = await this.runWithPrefetch(targetPath, existingPagePaths, context, priorityFiles);
       if (prefetchResult) {
         return prefetchResult;
       }
     }
 
     // Fall back to tool-based exploration if pre-fetch failed or is unavailable
-    return this.runWithTools(targetPath, existingPagePaths, context);
+    return this.runWithTools(targetPath, existingPagePaths, context, priorityFiles);
   }
 
   /**
@@ -74,7 +75,8 @@ export class CodebaseExplorerAgent implements Agent {
   private async runWithPrefetch(
     targetPath: string,
     existingPagePaths: string[],
-    context: AgentContext
+    context: AgentContext,
+    priorityFiles?: string[]
   ): Promise<AgentRunResult | null> {
     if (!context.repoAccess) {
       return null;
@@ -93,8 +95,8 @@ export class CodebaseExplorerAgent implements Agent {
         return null;
       }
 
-      // Select key files to pre-read (prioritize implementations over index files)
-      const keyFiles = this.selectKeyFiles(dirListing.files);
+      // Select key files to pre-read (prioritizing low-coverage files if provided)
+      const keyFiles = this.selectKeyFiles(dirListing.files, priorityFiles);
 
       // Pre-fetch file contents
       const fileContents = await this.prefetchFiles(keyFiles, context);
@@ -167,7 +169,8 @@ export class CodebaseExplorerAgent implements Agent {
   private async runWithTools(
     targetPath: string,
     existingPagePaths: string[],
-    context: AgentContext
+    context: AgentContext,
+    _priorityFiles?: string[]  // Not yet used in tool mode
   ): Promise<AgentRunResult> {
     const existingContent = ''; // Not used in tool mode prompt
 
@@ -326,10 +329,13 @@ export class CodebaseExplorerAgent implements Agent {
 
   /**
    * Check if a filename looks like source code.
+   * Note: Index files ARE included (they define public API and should be documented).
+   * They are deprioritized in sortByDefaultPriority but not excluded.
    */
   private isSourceFile(filename: string): boolean {
     const sourceExtensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.kt'];
-    const skipPatterns = ['.test.', '.spec.', '.d.ts', 'index.ts', 'index.js'];
+    // Index files removed from skipPatterns - they define public API and should be documented
+    const skipPatterns = ['.test.', '.spec.', '.d.ts'];
 
     // Skip test and declaration files
     if (skipPatterns.some(p => filename.includes(p))) {
@@ -340,11 +346,36 @@ export class CodebaseExplorerAgent implements Agent {
   }
 
   /**
-   * Select key files to pre-read, prioritizing implementations over index files.
+   * Select key files to pre-read.
+   * If priorityFiles are provided (low-coverage files), read those first.
+   * Otherwise fall back to default heuristics.
    */
-  private selectKeyFiles(files: string[]): string[] {
-    // Sort to prioritize implementation files
-    const sorted = [...files].sort((a, b) => {
+  private selectKeyFiles(files: string[], priorityFiles?: string[]): string[] {
+    if (priorityFiles && priorityFiles.length > 0) {
+      // Use coverage-aware selection: priority files first, then fill with others
+      const filesSet = new Set(files);
+      const prioritySet = new Set(priorityFiles);
+
+      // Filter priority files to only those that exist in the file list
+      const validPriority = priorityFiles.filter(f => filesSet.has(f));
+
+      // Get remaining files sorted by default priority
+      const others = files.filter(f => !prioritySet.has(f));
+      const othersSorted = this.sortByDefaultPriority(others);
+
+      // Combine: priority first, then others
+      return [...validPriority, ...othersSorted].slice(0, this.MAX_FILES_TO_PREFETCH);
+    }
+
+    // Fall back to default behavior
+    return this.sortByDefaultPriority(files).slice(0, this.MAX_FILES_TO_PREFETCH);
+  }
+
+  /**
+   * Sort files by default priority: implementations over index files, shorter names first.
+   */
+  private sortByDefaultPriority(files: string[]): string[] {
+    return [...files].sort((a, b) => {
       const aName = a.split('/').pop() || '';
       const bName = b.split('/').pop() || '';
 
@@ -357,8 +388,6 @@ export class CodebaseExplorerAgent implements Agent {
       // Prioritize by name length (shorter = more likely core file)
       return aName.length - bName.length;
     });
-
-    return sorted.slice(0, this.MAX_FILES_TO_PREFETCH);
   }
 
   /**

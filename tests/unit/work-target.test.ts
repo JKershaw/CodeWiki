@@ -31,6 +31,25 @@ describe('WorkTarget', () => {
       assert.strictEqual(target.type, 'path');
       assert.strictEqual(target.path, 'src/services/llm');
     });
+
+    it('creates a path target with priorityFiles', () => {
+      const target = createPathTarget('src/agents', ['src/agents/base.ts', 'src/agents/registry.ts']);
+      assert.strictEqual(target.type, 'path');
+      assert.strictEqual(target.path, 'src/agents');
+      assert.deepStrictEqual(target.priorityFiles, ['src/agents/base.ts', 'src/agents/registry.ts']);
+    });
+
+    it('creates a path target with empty priorityFiles', () => {
+      const target = createPathTarget('src/agents', []);
+      assert.strictEqual(target.path, 'src/agents');
+      assert.deepStrictEqual(target.priorityFiles, []);
+    });
+
+    it('creates a path target without priorityFiles (undefined)', () => {
+      const target = createPathTarget('src/agents');
+      assert.strictEqual(target.path, 'src/agents');
+      assert.strictEqual(target.priorityFiles, undefined);
+    });
   });
 
   describe('createWikiTarget', () => {
@@ -72,6 +91,17 @@ describe('WorkTarget', () => {
     it('returns path:dir for path targets', () => {
       const target = createPathTarget('src/services/llm');
       assert.strictEqual(getWorkTargetKey(target), 'path:src/services/llm');
+    });
+
+    it('returns same key for path targets regardless of priorityFiles', () => {
+      const withPriority = createPathTarget('src/agents', ['src/agents/base.ts']);
+      const withoutPriority = createPathTarget('src/agents');
+      const withEmptyPriority = createPathTarget('src/agents', []);
+
+      // Key should be the same - priorityFiles doesn't affect deduplication
+      assert.strictEqual(getWorkTargetKey(withPriority), 'path:src/agents');
+      assert.strictEqual(getWorkTargetKey(withoutPriority), 'path:src/agents');
+      assert.strictEqual(getWorkTargetKey(withEmptyPriority), 'path:src/agents');
     });
 
     it('returns wiki for wiki targets', () => {

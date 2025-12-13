@@ -113,19 +113,38 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
   // Take top directories up to limit
   const dirsToExplore = sortedDirs.slice(0, Math.min(MAX_DIRECTORIES_PER_RUN, remainingSlots));
 
+  // Get low-coverage files for priority selection
+  const lowCoverageFiles = context.lowCoverageFiles || [];
+
+  // Maximum priority files to pass to avoid huge payloads
+  const MAX_PRIORITY_FILES = 20;
+
   for (const dir of dirsToExplore) {
     if (workItems.length >= remainingSlots) break;
 
     const key = `codebase-explorer:path:${dir.path}`;
     if (ctx.existingWorkKeys.has(key)) continue;
 
+    // Get low-coverage files in this directory
+    const priorityFiles = lowCoverageFiles
+      .filter(f => f.directory === dir.path)
+      .map(f => f.path)
+      .slice(0, MAX_PRIORITY_FILES);
+
     ctx.existingWorkKeys.add(key);
+
+    // Build target - only include priorityFiles if non-empty (for exactOptionalPropertyTypes)
+    const target: { type: 'path'; path: string; priorityFiles?: string[] } =
+      priorityFiles.length > 0
+        ? { type: 'path', path: dir.path, priorityFiles }
+        : { type: 'path', path: dir.path };
+
     workItems.push(
       createWorkItem({
         id: uuid(),
         repoId: ctx.repoId,
         agentType: 'codebase-explorer',
-        target: { type: 'path', path: dir.path },
+        target,
       })
     );
   }
