@@ -12,7 +12,7 @@ import type { GitHubRepoService } from '../github/github-repo-service.js';
 import type { GitService } from '../git/git-service.js';
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, relative, sep } from 'path';
-import { createIgnoreFilter } from '../cwignore.js';
+import { createIgnoreFilter, createIgnoreFilterFromContent } from '../cwignore.js';
 
 /**
  * Options for listing commits.
@@ -163,9 +163,18 @@ function createGitHubRepositoryService(
       // Get the tree
       try {
         const tree = await githubService.getTree(owner, repoName, treeRef, true);
-        return tree
+        const filePaths = tree
           .filter(entry => entry.type === 'blob')
           .map(entry => entry.path);
+
+        // Fetch .gitignore and .cwignore content (ignore 404s)
+        const [gitignoreContent, cwignoreContent] = await Promise.all([
+          githubService.getFileContent(owner, repoName, '.gitignore', treeRef).catch(() => null),
+          githubService.getFileContent(owner, repoName, '.cwignore', treeRef).catch(() => null),
+        ]);
+
+        const ignoreFilter = createIgnoreFilterFromContent(gitignoreContent, cwignoreContent);
+        return filePaths.filter(path => !ignoreFilter.ignores(path));
       } catch (treeError) {
         console.warn(`getFileTree: getTree failed for ${owner}/${repoName} at ref '${treeRef}': ${treeError}`);
         throw treeError;
