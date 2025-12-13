@@ -844,8 +844,17 @@ export class PhasedOrchestrator implements Orchestrator {
           // Collect all files covered by wiki pages from tracked relationships
           const coveredFiles = new Set<string>();
 
-          // Helper to add coverage for a path (handles both files and directories)
-          const addCoverage = (path: string) => {
+          // Helper to add exact file match only (for filesAccessed, filesReferenced)
+          // Directory paths in content mentions should NOT count as covering all files
+          const addExactFile = (path: string) => {
+            if (sourceFileSet.has(path)) {
+              coveredFiles.add(path);
+            }
+          };
+
+          // Helper to add coverage for a path - allows directory matching
+          // Only used for targetPaths (explicit work assignments)
+          const addPathCoverage = (path: string) => {
             if (sourceFileSet.has(path)) {
               // Exact file match
               coveredFiles.add(path);
@@ -868,17 +877,19 @@ export class PhasedOrchestrator implements Orchestrator {
           };
 
           for (const page of wikiPages) {
-            // Files read by agents when building this page
+            // Files read by agents when building this page (exact matches only)
             for (const file of page.filesAccessed ?? []) {
-              addCoverage(file);
+              addExactFile(file);
             }
-            // Files mentioned in the page content
+            // Files mentioned in the page content (exact matches only)
+            // Directory mentions in prose/tree views should NOT count as covering all files
             for (const file of page.filesReferenced ?? []) {
-              addCoverage(file);
+              addExactFile(file);
             }
-            // Files/folders agents were asked to analyze
+            // Files/folders agents were asked to analyze (allows directory coverage)
+            // This is the only source that should allow directory-level coverage
             for (const path of page.targetPaths ?? []) {
-              addCoverage(path);
+              addPathCoverage(path);
             }
           }
 

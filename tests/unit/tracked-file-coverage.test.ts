@@ -11,8 +11,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
 /**
- * Simulates the addCoverage helper from orchestrator.ts
+ * Simulates the coverage calculation from orchestrator.ts
  * This is extracted for unit testing without full orchestrator setup.
+ *
+ * Key design decisions:
+ * - filesAccessed: Only exact file matches (files actually read by agents)
+ * - filesReferenced: Only exact file matches (directory mentions in prose don't count)
+ * - targetPaths: Allows directory-level coverage (explicit work assignments)
  */
 function calculateCoveredFiles(
   sourceFiles: string[],
@@ -25,12 +30,20 @@ function calculateCoveredFiles(
   const sourceFileSet = new Set(sourceFiles);
   const coveredFiles = new Set<string>();
 
-  const addCoverage = (path: string) => {
+  // Helper to add exact file match only
+  const addExactFile = (path: string) => {
+    if (sourceFileSet.has(path)) {
+      coveredFiles.add(path);
+    }
+  };
+
+  // Helper to add coverage for a path - allows directory matching
+  const addPathCoverage = (path: string) => {
     if (sourceFileSet.has(path)) {
       // Exact file match
       coveredFiles.add(path);
     } else if (path.endsWith('/')) {
-      // Directory path - match all files within
+      // Directory path with trailing slash - match all files within
       for (const sourceFile of sourceFiles) {
         if (sourceFile.startsWith(path)) {
           coveredFiles.add(sourceFile);
@@ -48,14 +61,17 @@ function calculateCoveredFiles(
   };
 
   for (const page of wikiPages) {
+    // filesAccessed: Only exact file matches (agents read specific files)
     for (const file of page.filesAccessed ?? []) {
-      addCoverage(file);
+      addExactFile(file);
     }
+    // filesReferenced: Only exact file matches (directory mentions don't count)
     for (const file of page.filesReferenced ?? []) {
-      addCoverage(file);
+      addExactFile(file);
     }
+    // targetPaths: Allows directory coverage (explicit work assignments)
     for (const path of page.targetPaths ?? []) {
-      addCoverage(path);
+      addPathCoverage(path);
     }
   }
 
@@ -143,7 +159,70 @@ describe('Tracked File Coverage Calculation', () => {
     });
   });
 
-  describe('directory path matching with trailing slash', () => {
+  describe('filesReferenced does NOT allow directory coverage', () => {
+    it('directory path in filesReferenced does NOT match all files', () => {
+      const sourceFiles = [
+        'src/services/auth.ts',
+        'src/services/api.ts',
+        'src/services/db.ts',
+        'src/utils/helper.ts',
+      ];
+      // A page that mentions "src/" in a tree view should NOT cover all files
+      const wikiPages = [
+        { filesReferenced: ['src/'] },
+      ];
+
+      const covered = calculateCoveredFiles(sourceFiles, wikiPages);
+
+      // Directory path in filesReferenced should be ignored (no directory coverage)
+      assert.strictEqual(covered.size, 0);
+    });
+
+    it('prevents over-reporting from tree views in content', () => {
+      // Simulates the overview page showing a directory structure like:
+      // src/
+      // ├── agents/
+      // ├── services/
+      const sourceFiles = [
+        'src/agents/code-change.ts',
+        'src/agents/security.ts',
+        'src/services/auth.ts',
+        'src/services/api.ts',
+        'src/index.ts',
+      ];
+      const wikiPages = [
+        {
+          // These would be extracted from a tree view in the content
+          filesReferenced: ['src/', 'src/index.ts'],
+        },
+      ];
+
+      const covered = calculateCoveredFiles(sourceFiles, wikiPages);
+
+      // Only the specific file should match, not all files under src/
+      assert.strictEqual(covered.size, 1);
+      assert.ok(covered.has('src/index.ts'));
+      assert.ok(!covered.has('src/agents/code-change.ts'));
+      assert.ok(!covered.has('src/services/auth.ts'));
+    });
+
+    it('filesAccessed also does not allow directory coverage', () => {
+      const sourceFiles = [
+        'src/a.ts',
+        'src/b.ts',
+      ];
+      // Even if agent somehow recorded a directory as "accessed", it shouldn't match
+      const wikiPages = [
+        { filesAccessed: ['src/'] },
+      ];
+
+      const covered = calculateCoveredFiles(sourceFiles, wikiPages);
+
+      assert.strictEqual(covered.size, 0);
+    });
+  });
+
+  describe('directory path matching with trailing slash (targetPaths only)', () => {
     it('matches all files in directory with trailing slash', () => {
       const sourceFiles = [
         'src/services/auth.ts',
