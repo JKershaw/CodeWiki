@@ -26,6 +26,12 @@ import { createGitHubApiCache, createCachedGitHubRepoService } from '../../servi
 import { ensureValidToken, TokenRefreshError } from '../../services/github/token-refresh.js';
 
 /**
+ * Maximum number of commits to load when registering a repository.
+ * Can be overridden via COMMIT_LOAD_LIMIT environment variable.
+ */
+const COMMIT_LOAD_LIMIT = parseInt(process.env.COMMIT_LOAD_LIMIT || '1000', 10);
+
+/**
  * Validate a GitHub URL.
  * Accepts formats like:
  * - https://github.com/owner/repo
@@ -577,7 +583,7 @@ export function createReposRoutes(deps: Dependencies): Router {
 
         // Load commits using GitHub API
         try {
-          const commits = await githubService.listCommits(owner, repoName, registeredRepo.id, { limit: 100 });
+          const commits = await githubService.listCommits(owner, repoName, registeredRepo.id, { limit: COMMIT_LOAD_LIMIT });
 
           await handleLoadRepositoryCommits(
             createLoadRepositoryCommitsCommand(registeredRepo.id, commits),
