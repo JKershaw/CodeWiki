@@ -133,5 +133,97 @@ describe('WikiPage', () => {
       assert.ok(page.updatedAt.getTime() >= before);
       assert.ok(page.updatedAt.getTime() <= after);
     });
+
+    it('initializes empty filesAccessed when not provided', () => {
+      const page = createWikiPage({
+        id: 'page-1',
+        wikiId: 'wiki-1',
+        path: 'test/page',
+        title: 'Test',
+        content: 'Content',
+      });
+
+      assert.deepStrictEqual(page.filesAccessed, []);
+    });
+
+    it('includes filesAccessed when provided', () => {
+      const page = createWikiPage({
+        id: 'page-1',
+        wikiId: 'wiki-1',
+        path: 'test/page',
+        title: 'Test',
+        content: 'Content',
+        filesAccessed: ['src/utils.ts', 'src/config.json'],
+      });
+
+      assert.deepStrictEqual(page.filesAccessed, ['src/utils.ts', 'src/config.json']);
+    });
+
+    it('initializes empty filesReferenced when not provided', () => {
+      const page = createWikiPage({
+        id: 'page-1',
+        wikiId: 'wiki-1',
+        path: 'test/page',
+        title: 'Test',
+        content: 'Content',
+      });
+
+      assert.deepStrictEqual(page.filesReferenced, []);
+    });
+
+    it('includes filesReferenced when provided', () => {
+      const page = createWikiPage({
+        id: 'page-1',
+        wikiId: 'wiki-1',
+        path: 'test/page',
+        title: 'Test',
+        content: 'Content',
+        filesReferenced: ['src/api.ts', 'README.md'],
+      });
+
+      assert.deepStrictEqual(page.filesReferenced, ['src/api.ts', 'README.md']);
+    });
+
+    it('initializes empty targetPaths when not provided', () => {
+      const page = createWikiPage({
+        id: 'page-1',
+        wikiId: 'wiki-1',
+        path: 'test/page',
+        title: 'Test',
+        content: 'Content',
+      });
+
+      assert.deepStrictEqual(page.targetPaths, []);
+    });
+
+    it('includes targetPaths when provided', () => {
+      const page = createWikiPage({
+        id: 'page-1',
+        wikiId: 'wiki-1',
+        path: 'test/page',
+        title: 'Test',
+        content: 'Content',
+        targetPaths: ['src/services/', 'src/utils/'],
+      });
+
+      assert.deepStrictEqual(page.targetPaths, ['src/services/', 'src/utils/']);
+    });
+
+    it('includes all file coverage fields together', () => {
+      const page = createWikiPage({
+        id: 'page-1',
+        wikiId: 'wiki-1',
+        path: 'test/page',
+        title: 'Test',
+        content: 'Content',
+        filesAccessed: ['src/a.ts'],
+        filesReferenced: ['src/b.ts'],
+        targetPaths: ['src/'],
+      });
+
+      assert.deepStrictEqual(page.filesAccessed, ['src/a.ts']);
+      assert.deepStrictEqual(page.filesReferenced, ['src/b.ts']);
+      assert.deepStrictEqual(page.targetPaths, ['src/']);
+    });
   });
 });

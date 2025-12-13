@@ -25,6 +25,12 @@ export interface WikiPage {
   category?: string;
   /** Confidence score for the category assignment (0-1) */
   categoryConfidence?: number;
+  /** Files that were read by agents when building this page (from tool use) */
+  filesAccessed: string[];
+  /** Files/folders that are mentioned in the page content */
+  filesReferenced: string[];
+  /** Files/folders that agents were asked to analyze for this page (from work targets) */
+  targetPaths: string[];
   /** When the page was created */
   createdAt: Date;
   /** When the page was last updated */
@@ -54,6 +60,10 @@ export interface WikiPageUpdate {
   links?: string[];
   /** Skip content validation (for tests and programmatic updates) */
   skipValidation?: boolean;
+  /** Files that were read by agents during this update (from tool use) */
+  filesAccessed?: string[];
+  /** Files/folders that agents were asked to analyze for this update */
+  targetPaths?: string[];
 }
 
 export function createWikiPage(params: {
@@ -64,6 +74,9 @@ export function createWikiPage(params: {
   content: string;
   sourceCommitId?: string;
   sourceAgentRunId?: string;
+  filesAccessed?: string[];
+  filesReferenced?: string[];
+  targetPaths?: string[];
 }): WikiPage {
   return {
     id: params.id,
@@ -76,6 +89,9 @@ export function createWikiPage(params: {
     sourceAgentRunIds: params.sourceAgentRunId ? [params.sourceAgentRunId] : [],
     links: [],
     backlinks: [],
+    filesAccessed: params.filesAccessed ?? [],
+    filesReferenced: params.filesReferenced ?? [],
+    targetPaths: params.targetPaths ?? [],
     createdAt: new Date(),
     updatedAt: new Date(),
   };

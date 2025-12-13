@@ -11,6 +11,7 @@ import {
 import { validateContent } from '../utils/content-validation.js';
 import { findSimilarPage } from '../utils/similarity.js';
 import { extractLinksFromContent } from '../utils/link-extraction.js';
+import { extractFileReferencesFromContent } from '../utils/file-reference-extraction.js';
 
 /**
  * Command to update a wiki page.
@@ -74,12 +75,19 @@ export async function handleUpdateWikiPage(
         path: update.path,
         title: update.title ?? extractTitleWithFallback(update.content, update.path),
         content: update.content,
+        filesReferenced: extractFileReferencesFromContent(update.content),
       };
       if (update.sourceCommitId) {
         createParams.sourceCommitId = update.sourceCommitId;
       }
       if (update.agentRunId) {
         createParams.sourceAgentRunId = update.agentRunId;
+      }
+      if (update.filesAccessed) {
+        createParams.filesAccessed = update.filesAccessed;
+      }
+      if (update.targetPaths) {
+        createParams.targetPaths = update.targetPaths;
       }
       const page = createWikiPage(createParams);
 
@@ -120,16 +128,32 @@ export async function handleUpdateWikiPage(
       // Capture content before update for history
       const contentBefore = existing.content;
 
-      const updateParams: { content: string; title?: string; confidence?: number; sourceCommitId?: string; sourceAgentRunId?: string } = {
+      const updateParams: {
+        content: string;
+        title?: string;
+        confidence?: number;
+        sourceCommitId?: string;
+        sourceAgentRunId?: string;
+        filesAccessed?: string[];
+        filesReferenced?: string[];
+        targetPaths?: string[];
+      } = {
         content: update.content,
         title: update.title ?? extractTitleWithFallback(update.content, update.path),
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
+        filesReferenced: extractFileReferencesFromContent(update.content),
       };
       if (update.sourceCommitId) {
         updateParams.sourceCommitId = update.sourceCommitId;
       }
       if (update.agentRunId) {
         updateParams.sourceAgentRunId = update.agentRunId;
+      }
+      if (update.filesAccessed) {
+        updateParams.filesAccessed = update.filesAccessed;
+      }
+      if (update.targetPaths) {
+        updateParams.targetPaths = update.targetPaths;
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
 
