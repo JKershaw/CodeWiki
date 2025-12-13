@@ -16,7 +16,8 @@ import {
 } from '../../src/services/repository/repository-service.js';
 import type { Repo } from '../../src/domain/repo.js';
 import type { GitService } from '../../src/services/git/git-service.js';
-import { clearIgnoreCache } from '../../src/services/cwignore.js';
+import { clearIgnoreCache, createIgnoreFilterFromContent } from '../../src/services/cwignore.js';
+import type { GitHubRepoService } from '../../src/services/github/github-repo-service.js';
 
 describe('Local Repository Service - cwignore compliance', () => {
   let testDir: string;
@@ -294,6 +295,140 @@ describe('Local Repository Service - cwignore compliance', () => {
       const pycFiles = files.filter(f => f.endsWith('.pyc'));
       assert.strictEqual(pycFiles.length, 0,
         `Expected no .pyc files, but found: ${pycFiles.join(', ')}`);
+    });
+  });
+});
+
+describe('createIgnoreFilterFromContent', () => {
+  it('should apply default ignore patterns', () => {
+    const filter = createIgnoreFilterFromContent();
+
+    assert.ok(filter.ignores('node_modules/package/index.js'), 'Should ignore node_modules');
+    assert.ok(filter.ignores('.git/config'), 'Should ignore .git');
+    assert.ok(filter.ignores('dist/bundle.js'), 'Should ignore dist');
+    assert.ok(filter.ignores('.env'), 'Should ignore .env');
+    assert.ok(!filter.ignores('src/index.ts'), 'Should not ignore src files');
+  });
+
+  it('should apply gitignore content patterns', () => {
+    const filter = createIgnoreFilterFromContent('*.pyc\n__pycache__/');
+
+    assert.ok(filter.ignores('script.pyc'), 'Should ignore .pyc files');
+    assert.ok(filter.ignores('__pycache__/module.cpython-39.pyc'), 'Should ignore __pycache__');
+    assert.ok(!filter.ignores('script.py'), 'Should not ignore .py files');
+  });
+
+  it('should apply cwignore content patterns', () => {
+    const filter = createIgnoreFilterFromContent(null, 'docs/\nexamples/');
+
+    assert.ok(filter.ignores('docs/README.md'), 'Should ignore docs');
+    assert.ok(filter.ignores('examples/demo.ts'), 'Should ignore examples');
+    assert.ok(!filter.ignores('src/index.ts'), 'Should not ignore src files');
+  });
+
+  it('should apply both gitignore and cwignore patterns', () => {
+    const filter = createIgnoreFilterFromContent('*.pyc', 'docs/');
+
+    assert.ok(filter.ignores('script.pyc'), 'Should ignore .pyc from gitignore');
+    assert.ok(filter.ignores('docs/README.md'), 'Should ignore docs from cwignore');
+    assert.ok(filter.ignores('node_modules/x.js'), 'Should ignore node_modules from defaults');
+  });
+});
+
+describe('GitHub Repository Service - cwignore compliance', () => {
+  let service: RepositoryService;
+  let repo: Repo;
+  let mockGitHubService: GitHubRepoService;
+  let fileContents: Map<string, string>;
+
+  beforeEach(() => {
+    clearIgnoreCache();
+    fileContents = new Map();
+
+    // Mock GitHub service
+    mockGitHubService = {
+      getDefaultBranch: async () => 'main',
+      getTree: async () => [
+        { path: 'src/index.ts', type: 'blob' },
+        { path: 'src/utils/helper.ts', type: 'blob' },
+        { path: 'node_modules/package/index.js', type: 'blob' },
+        { path: 'dist/bundle.js', type: 'blob' },
+        { path: 'docs/README.md', type: 'blob' },
+        { path: 'examples/demo.ts', type: 'blob' },
+        { path: '.gitignore', type: 'blob' },
+        { path: '.cwignore', type: 'blob' },
+        { path: 'README.md', type: 'blob' },
+      ],
+      getFileContent: async (_owner: string, _repo: string, path: string) => {
+        const content = fileContents.get(path);
+        if (content === undefined) {
+          throw new Error(`File not found: ${path}`);
+        }
+        return content;
+      },
+    } as unknown as GitHubRepoService;
+
+    repo = {
+      id: 'test-github-repo',
+      fullName: 'owner/repo',
+      owner: 'owner',
+      repoName: 'repo',
+      isGitHubRepo: true,
+      cloneUrl: 'https://github.com/owner/repo',
+      defaultBranch: 'main',
+      status: 'ready',
+      config: { throttle: { maxCallsPerMinute: 10, maxCostPerHour: 1 }, enabledAgents: [] },
+      createdAt: new Date(),
+      lastProcessedAt: null,
+    };
+
+    service = createRepositoryService(repo, { githubRepoService: mockGitHubService });
+  });
+
+  describe('getFileTree', () => {
+    it('should exclude default ignore patterns from GitHub file tree', async () => {
+      const files = await service.getFileTree(repo);
+
+      assert.ok(!files.includes('node_modules/package/index.js'),
+        'Should exclude node_modules');
+      assert.ok(!files.includes('dist/bundle.js'),
+        'Should exclude dist');
+      assert.ok(files.includes('src/index.ts'),
+        'Should include src files');
+    });
+
+    it('should respect .cwignore from GitHub repo', async () => {
+      fileContents.set('.cwignore', 'examples/');
+
+      const files = await service.getFileTree(repo);
+
+      assert.ok(!files.includes('examples/demo.ts'),
+        'Should exclude examples based on .cwignore');
+      assert.ok(files.includes('docs/README.md'),
+        'Should include docs when not in .cwignore');
+    });
+
+    it('should respect .gitignore from GitHub repo', async () => {
+      fileContents.set('.gitignore', 'docs/');
+
+      const files = await service.getFileTree(repo);
+
+      assert.ok(!files.includes('docs/README.md'),
+        'Should exclude docs based on .gitignore');
+      assert.ok(files.includes('examples/demo.ts'),
+        'Should include examples when not in .gitignore');
+    });
+
+    it('should handle missing .cwignore and .gitignore gracefully', async () => {
+      // No files in fileContents, so getFileContent will throw
+
+      const files = await service.getFileTree(repo);
+
+      // Should still apply default patterns
+      assert.ok(!files.includes('node_modules/package/index.js'),
+        'Should exclude node_modules with defaults');
+      assert.ok(files.includes('src/index.ts'),
+        'Should include src files');
     });
   });
 });

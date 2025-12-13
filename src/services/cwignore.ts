@@ -129,6 +129,31 @@ export async function loadIgnorePatterns(repoPath: string): Promise<string[]> {
 }
 
 /**
+ * Create an Ignore instance from content strings.
+ *
+ * This is useful when you have the content of .gitignore and .cwignore
+ * files (e.g., fetched from GitHub API) rather than filesystem access.
+ *
+ * @param gitignoreContent - Content of .gitignore file (optional)
+ * @param cwignoreContent - Content of .cwignore file (optional)
+ * @returns Ignore instance for checking if paths should be ignored
+ */
+export function createIgnoreFilterFromContent(
+  gitignoreContent?: string | null,
+  cwignoreContent?: string | null
+): Ignore {
+  const ig = ignore();
+  ig.add(DEFAULT_IGNORE_PATTERNS);
+  if (gitignoreContent) {
+    ig.add(gitignoreContent);
+  }
+  if (cwignoreContent) {
+    ig.add(cwignoreContent);
+  }
+  return ig;
+}
+
+/**
  * Create an Ignore instance with the layered patterns.
  *
  * This uses the `ignore` package for proper gitignore syntax support,
