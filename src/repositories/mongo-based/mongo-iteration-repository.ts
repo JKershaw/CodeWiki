@@ -70,6 +70,7 @@ export class MongoIterationRepository implements IterationRepository {
       costUsd: number;
       pagesCreated: number;
       pagesUpdated: number;
+      kpiSnapshot?: Record<string, unknown>;
     }
   ): Promise<void> {
     await this.collection.updateOne(

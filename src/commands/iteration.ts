@@ -123,6 +123,8 @@ export interface IterationCompletionResult {
   costUsd: number;
   pagesCreated: number;
   pagesUpdated: number;
+  /** Optional snapshot of KPIs at iteration completion (for charting/tracking) */
+  kpiSnapshot?: Record<string, unknown>;
 }
 
 /**

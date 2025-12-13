@@ -50,6 +50,7 @@ function createMockRepos(): Repositories {
         iteration.costUsd = result.costUsd;
         iteration.pagesCreated = result.pagesCreated;
         iteration.pagesUpdated = result.pagesUpdated;
+        iteration.kpiSnapshot = result.kpiSnapshot;
         iteration.completedAt = new Date();
       }
     },
@@ -214,6 +215,69 @@ describe('Iteration Commands', () => {
         pagesUpdated: 0,
       });
       assert.strictEqual(command.type, 'CompleteIteration');
+    });
+
+    it('stores kpiSnapshot when provided', async () => {
+      const repos = createMockRepos();
+      const iterationId = uuid();
+
+      const iteration = createIteration({
+        id: iterationId,
+        processingRunId: uuid(),
+        iterationNumber: 1,
+      });
+      await repos.iterations.save(iteration);
+
+      const kpiSnapshot = {
+        totalCommits: 100,
+        processedCommits: 50,
+        coveragePercent: 50,
+        wikiPages: 10,
+        avgConfidence: 85,
+      };
+
+      const command = createCompleteIterationCommand(iterationId, {
+        agentRunId: 'run-123',
+        durationMs: 1500,
+        costUsd: 0.05,
+        pagesCreated: 2,
+        pagesUpdated: 1,
+        kpiSnapshot,
+      });
+      const result = await handleCompleteIteration(command, repos);
+
+      assert.strictEqual(result.success, true);
+
+      const completed = await repos.iterations.findById(iterationId);
+      assert.strictEqual(completed?.status, 'completed');
+      assert.deepStrictEqual(completed?.kpiSnapshot, kpiSnapshot);
+    });
+
+    it('allows completing without kpiSnapshot', async () => {
+      const repos = createMockRepos();
+      const iterationId = uuid();
+
+      const iteration = createIteration({
+        id: iterationId,
+        processingRunId: uuid(),
+        iterationNumber: 1,
+      });
+      await repos.iterations.save(iteration);
+
+      const command = createCompleteIterationCommand(iterationId, {
+        agentRunId: 'run-456',
+        durationMs: 1000,
+        costUsd: 0.02,
+        pagesCreated: 1,
+        pagesUpdated: 0,
+      });
+      const result = await handleCompleteIteration(command, repos);
+
+      assert.strictEqual(result.success, true);
+
+      const completed = await repos.iterations.findById(iterationId);
+      assert.strictEqual(completed?.status, 'completed');
+      assert.strictEqual(completed?.kpiSnapshot, undefined);
     });
   });
 
