@@ -64,6 +64,10 @@ export interface WikiPageUpdate {
   filesAccessed?: string[];
   /** Files/folders that agents were asked to analyze for this update */
   targetPaths?: string[];
+  /** Category for the page (e.g., "architecture", "security") */
+  category?: string;
+  /** Confidence score for the category assignment (0-1) */
+  categoryConfidence?: number;
 }
 
 export function createWikiPage(params: {

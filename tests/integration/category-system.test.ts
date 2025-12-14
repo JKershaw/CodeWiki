@@ -260,6 +260,140 @@ CONFIDENCE: 0.9`);
     });
   });
 
+  describe('Bug #4: Category must flow through update pipeline', () => {
+    it('WikiPageUpdate with category persists to database via UpdateWikiPageCommand', async () => {
+      const repoId = 'category-bug4-test';
+      await createTestRepo(ctx, repoId, { 'README.md': '# Test' });
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create a page without category
+      const page: WikiPage = {
+        id: 'page-b4-1',
+        wikiId: agentCtx.wikiId,
+        path: 'guides/auth-setup',
+        title: 'Auth Setup',
+        content: '# Auth Setup\n\nHow to set up authentication.',
+        confidence: 0.7,
+        sourceCommits: ['abc123'],
+        sourceAgentRunIds: [],
+        links: [],
+        backlinks: [],
+        filesAccessed: [],
+        filesReferenced: [],
+        targetPaths: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await ctx.repos.wikiPages.save(page);
+
+      // Import the command handler
+      const { createUpdateWikiPageCommand, handleUpdateWikiPage } = await import(
+        '../../src/commands/update-wiki-page.js'
+      );
+
+      // Create an update with category - this is what CategoryAgent should produce
+      const command = createUpdateWikiPageCommand({
+        type: 'update',
+        path: page.path,
+        content: page.content,
+        agentRunId: 'category-agent-run-1',
+        confidenceDelta: 0.0,
+        category: 'security',
+        categoryConfidence: 0.9,
+      });
+
+      const result = await handleUpdateWikiPage(command, ctx.repos, agentCtx.wikiId);
+
+      assert.strictEqual(result.success, true, `Update should succeed: ${result.error}`);
+
+      // Verify category was persisted
+      const updatedPage = await ctx.repos.wikiPages.findById(page.id);
+      assert.ok(updatedPage, 'Page should exist');
+      assert.strictEqual(
+        updatedPage.category,
+        'security',
+        'Category should be persisted through update command'
+      );
+      assert.strictEqual(
+        updatedPage.categoryConfidence,
+        0.9,
+        'Category confidence should be persisted through update command'
+      );
+    });
+
+    it('CategoryAgent updates include category data', async () => {
+      const repoId = 'category-bug4-agent-test';
+      await createTestRepo(ctx, repoId, { 'README.md': '# Test' });
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Create pages where one is miscategorized
+      const pages: WikiPage[] = [
+        {
+          id: 'page-b4a-1',
+          wikiId: agentCtx.wikiId,
+          path: 'guides/xss-vulnerabilities',
+          title: 'XSS Vulnerabilities',
+          content: '# XSS Vulnerabilities\n\nCross-site scripting is a security vulnerability...',
+          confidence: 0.7,
+          sourceCommits: ['abc123'],
+          sourceAgentRunIds: [],
+          links: [],
+          backlinks: [],
+          filesAccessed: [],
+          filesReferenced: [],
+          targetPaths: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'page-b4a-2',
+          wikiId: agentCtx.wikiId,
+          path: 'security/overview',
+          title: 'Security Overview',
+          content: '# Security Overview\n\nSecurity practices.',
+          confidence: 0.7,
+          sourceCommits: ['abc123'],
+          sourceAgentRunIds: [],
+          links: [],
+          backlinks: [],
+          filesAccessed: [],
+          filesReferenced: [],
+          targetPaths: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      for (const p of pages) {
+        await ctx.repos.wikiPages.save(p);
+      }
+
+      // Mock LLM to return a category mismatch
+      ctx.llm.setDefaultResponse(`- path: guides/xss-vulnerabilities | current: guides | suggested: security | reason: XSS is a security vulnerability
+- path: security/overview | current: security | suggested: security | reason: correct
+
+CONFIDENCE: 0.9`);
+
+      const agent = new CategoryAgent();
+      const result = await agent.run(createWikiTarget(), agentCtx);
+
+      // CategoryAgent should produce updates with category data
+      assert.ok(result.updates.length > 0, 'CategoryAgent should produce updates for mismatches');
+
+      const update = result.updates.find(u => u.path === 'guides/xss-vulnerabilities');
+      assert.ok(update, 'Should have update for miscategorized page');
+      assert.strictEqual(
+        update.category,
+        'security',
+        'Update should include suggested category'
+      );
+      assert.ok(
+        update.categoryConfidence !== undefined && update.categoryConfidence >= 0.8,
+        'Update should include category confidence'
+      );
+    });
+  });
+
   describe('End-to-end category flow', () => {
     it('CategoryAgent detects mismatch, saves finding, and finding can be retrieved', async () => {
       const repoId = 'category-e2e-test';

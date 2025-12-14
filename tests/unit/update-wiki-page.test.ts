@@ -170,6 +170,12 @@ function createMockRepos(): Repositories & { _pages: Map<string, WikiPage> } {
           // Accumulate target paths (like sourceCommits)
           page.targetPaths = [...new Set([...page.targetPaths, ...updates.targetPaths])];
         }
+        if (updates.category !== undefined) {
+          page.category = updates.category;
+        }
+        if (updates.categoryConfidence !== undefined) {
+          page.categoryConfidence = updates.categoryConfidence;
+        }
         page.updatedAt = new Date();
       }
     },
