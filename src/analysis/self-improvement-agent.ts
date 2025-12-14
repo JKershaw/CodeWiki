@@ -296,32 +296,26 @@ Do not use any more tools. Write the complete report now.`;
       sections.push('No accuracy benchmarks are available. Focus on wiki structure and quality assessment.');
     }
 
-    // Instructions
+    // Instructions - aligned with system prompt
     sections.push('');
     sections.push('## Your Task');
     sections.push('');
-    sections.push('Follow this investigation order:');
+    sections.push('**STEP 1: Call benchmark tools FIRST**');
+    sections.push('- `get_benchmark_summary` - See overall accuracy');
+    sections.push('- `get_question_trends` - Find STUCK questions (no_answer across runs)');
     sections.push('');
-    sections.push('**Step 1: Compare source to wiki (CRITICAL)**');
-    sections.push('- Use `list_source_directory` on `src/` to see what code exists');
-    sections.push('- Use `list_wiki_pages` to see what documentation exists');
-    sections.push('- Identify GAPS: source files/directories with NO wiki documentation');
-    sections.push('- Example: If `src/services/database.ts` exists but no `services/database` wiki page → COVERAGE GAP');
+    sections.push('**STEP 2: Compare source to wiki**');
+    sections.push('- `list_source_directory` on `src/` - See code structure');
+    sections.push('- `list_wiki_pages` - See documentation structure');
+    sections.push('- Identify coverage GAPS');
     sections.push('');
-    sections.push('**Step 2: Analyze benchmark trends**');
-    sections.push('- Use `get_question_trends` to find STUCK questions (no_answer across multiple runs)');
-    sections.push('- Use `get_benchmark_summary` to understand overall accuracy');
-    sections.push('- Correlate stuck questions with coverage gaps');
+    sections.push('**STEP 3: Quality and root causes**');
+    sections.push('- `get_quality_trends` - Quality dimension scores');
+    sections.push('- `get_orchestrator_decisions` / `get_agent_contributions` - Why gaps exist');
     sections.push('');
-    sections.push('**Step 3: Assess quality dimensions**');
-    sections.push('- Note both STRONG and WEAK dimensions');
-    sections.push('- Identify actionability, completeness, and structural issues');
+    sections.push('**STEP 4: Write comprehensive report**');
     sections.push('');
-    sections.push('**Step 4: Recommend process improvements**');
-    sections.push('- Specific changes to agents, orchestrator, or workflow');
-    sections.push('- Include verification criteria');
-    sections.push('');
-    sections.push('START NOW: Use `list_source_directory` with path `src/` to explore the source code structure.');
+    sections.push('START NOW: Call `get_benchmark_summary` to see overall accuracy trends.');
 
     return sections.join('\n');
   }
