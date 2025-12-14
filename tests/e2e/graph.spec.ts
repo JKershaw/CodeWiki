@@ -182,24 +182,30 @@ test.describe('Wiki Graph UI', () => {
     // Wait for graph container to be visible
     await expect(page.locator('#graph-container')).toBeVisible();
 
-    // Check if graph library loaded successfully (CDN may fail in test env)
+    // Wait for page initialization to complete (repo name is populated)
+    await expect(page.locator('#graph-repo-name')).not.toBeEmpty({ timeout: 10000 });
+
+    // Wait for graph to finish loading - either stats are populated or an error appears
+    // Initial HTML has .placeholder, JS replaces with .loading, then replaces with canvas/error
     const container = page.locator('#graph-container');
-    const hasError = await container.locator('.error').count() > 0;
-
-    if (hasError) {
-      // Graph library failed to load from CDN - skip stats check
-      const errorText = await container.locator('.error').textContent();
-      test.skip(true, `Graph library not available: ${errorText}`);
-      return;
-    }
-
-    // Wait for stats to be populated (async operation)
     const statsEl = page.locator('#graph-stats');
-    await expect(statsEl).toBeVisible();
 
-    // Stats may take time to populate, wait for content with longer timeout
-    await expect(statsEl).toContainText('pages', { timeout: 10000 });
-    await expect(statsEl).toContainText('links', { timeout: 10000 });
+    // Wait for either stats to have content or error to appear (with longer timeout for CDN/API)
+    try {
+      // Try waiting for stats to be populated (success case)
+      await expect(statsEl).toContainText('pages', { timeout: 30000 });
+      await expect(statsEl).toContainText('links', { timeout: 5000 });
+    } catch {
+      // If stats didn't populate, check if there's an error
+      const hasError = await container.locator('.error').count() > 0;
+      if (hasError) {
+        const errorText = await container.locator('.error').textContent();
+        test.skip(true, `Graph library not available: ${errorText}`);
+        return;
+      }
+      // No error but no stats - might still be loading, fail the test
+      throw new Error('Graph stats did not populate and no error was shown');
+    }
   });
 
   test('can navigate back to repos from graph', async ({ page }) => {
