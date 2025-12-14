@@ -33,7 +33,7 @@ export class CodebaseExplorerAgent implements Agent {
   // Size limits for pre-fetch approach
   private readonly MAX_FILE_SIZE = 20000;
   private readonly MAX_TOTAL_SIZE = 80000;
-  private readonly MAX_FILES_TO_PREFETCH = 10;
+  private readonly MAX_FILES_TO_PREFETCH = 15;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
