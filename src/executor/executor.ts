@@ -87,27 +87,17 @@ import {
 } from './tool-enforcement.js';
 
 /**
- * Queue water marks for proactive refill.
- * Low water mark: trigger refill when queue drops to this level
- * High water mark: target queue size, request items to reach this level
- */
-const QUEUE_LOW_WATER_MARK = 12;
-const QUEUE_HIGH_WATER_MARK = 50;
-
-/**
  * Executor - The inner loop that runs agents from the work queue.
  *
  * Takes work items and fires off agents, respecting throttle limits.
- * When the work list is exhausted, it triggers the orchestrator again.
- * Proactively refills the queue in the background to avoid blocking.
+ * Uses on-demand work computation - each worker requests one item at a time.
+ * Edit requests are checked on every claim, ensuring they're processed promptly.
  *
  * All state changes flow through CQRS commands for clean separation.
  */
 export class Executor {
   private running = false;
   private shouldStop = false;
-  private refillInProgress = false;
-  private refillPromise: Promise<void> | null = null;
 
   constructor(
     private readonly repos: Repositories,
@@ -177,7 +167,7 @@ export class Executor {
           break;
         }
 
-        // Check rate limits before claiming work
+        // Check rate limits before starting work
         const rateLimitStatus = this.llm.getRateLimitStatus();
         if (rateLimitStatus.isLimited) {
           const reason = rateLimitStatus.reason === 'requests_per_minute'
@@ -190,100 +180,6 @@ export class Executor {
             : '';
           console.log(`⏳ Rate limited (${reason}), clears in ${timeStr}...`);
           await new Promise(resolve => setTimeout(resolve, 5000));
-          continue;
-        }
-
-        // Process any pending edit requests first (before asking Orchestrator for work)
-        // This is a mechanical operation that always happens when edits exist
-        const pendingEdits = await this.repos.editRequests.countPending(wikiId);
-        if (pendingEdits > 0) {
-          console.log(`📝 Found ${pendingEdits} pending edit requests, processing first...`);
-
-          // Create a wiki-editor work item for tracking
-          const wikiEditorTarget = { type: 'wiki' as const };
-          const wikiEditorWorkItem = createWorkItem({
-            id: generateWorkItemId(repoId, 'wiki-editor', wikiEditorTarget),
-            repoId,
-            agentType: 'wiki-editor',
-            target: wikiEditorTarget,
-          });
-
-          // Save and immediately claim it
-          await handleSaveWorkItems(createSaveWorkItemsCommand([wikiEditorWorkItem]), this.repos);
-          wikiEditorWorkItem.status = 'claimed';
-          wikiEditorWorkItem.claimedAt = new Date();
-          await this.repos.workQueue.save(wikiEditorWorkItem);
-
-          // Execute the wiki-editor work item
-          iterationNumber++;
-          const iterationId = uuid();
-          await handleStartIteration(
-            createStartIterationCommand({
-              id: iterationId,
-              processingRunId,
-              iterationNumber,
-            }),
-            this.repos
-          );
-          await handleUpdateIterationWorkItem(
-            createUpdateIterationWorkItemCommand(iterationId, {
-              workItemId: wikiEditorWorkItem.id,
-              agentType: wikiEditorWorkItem.agentType,
-            }),
-            this.repos
-          );
-
-          const result = await this.executeWorkItem(wikiEditorWorkItem, repoId, wikiId);
-
-          if (result.success) {
-            // Capture KPI snapshot for tracking/charting
-            let kpiSnapshot: Record<string, unknown> | undefined;
-            try {
-              const workSummary = await this.orchestrator.getWorkSummary(repoId, wikiId);
-              kpiSnapshot = workSummary as unknown as Record<string, unknown>;
-            } catch (error) {
-              console.warn('Failed to capture KPI snapshot:', error);
-            }
-
-            await handleCompleteIteration(
-              createCompleteIterationCommand(iterationId, {
-                agentRunId: result.agentRunId!,
-                durationMs: result.durationMs,
-                costUsd: result.cost,
-                pagesCreated: result.pagesCreated,
-                pagesUpdated: result.pagesUpdated,
-                ...(kpiSnapshot && { kpiSnapshot }),
-              }),
-              this.repos
-            );
-            summary.successful++;
-          } else {
-            await handleFailIteration(
-              createFailIterationCommand(iterationId, result.error || 'Unknown error', result.durationMs),
-              this.repos
-            );
-            summary.failed++;
-          }
-
-          summary.iterations++;
-          summary.totalCost += result.cost;
-          summary.wikiPagesCreated += result.pagesCreated;
-          summary.wikiPagesUpdated += result.pagesUpdated;
-
-          // Update progress
-          await handleUpdateProcessingProgress(
-            createUpdateProcessingProgressCommand(processingRunId, {
-              completedIterations: summary.iterations,
-              successfulIterations: summary.successful,
-              failedIterations: summary.failed,
-              totalCostUsd: summary.totalCost,
-              wikiPagesCreated: summary.wikiPagesCreated,
-              wikiPagesUpdated: summary.wikiPagesUpdated,
-            }),
-            this.repos
-          );
-
-          // Continue to next iteration (check for more edits or regular work)
           continue;
         }
 
@@ -316,59 +212,76 @@ export class Executor {
               return null; // Will retry claiming
             }
 
-            // Check pending count and trigger proactive async refill if low
-            const pendingCount = await this.repos.workQueue.countPending(repoId);
-            if (pendingCount <= QUEUE_LOW_WATER_MARK && !this.refillInProgress) {
-              this.triggerAsyncRefill(repoId, wikiId, pendingCount);
+            // PRIORITY 1: Process any pending edit requests first
+            // This ensures edits created during the run are processed promptly
+            const pendingEdits = await this.repos.editRequests.countPending(wikiId);
+            if (pendingEdits > 0) {
+              console.log(`  📝 Found ${pendingEdits} pending edit(s), processing first...`);
+
+              // Create a wiki-editor work item for tracking
+              const wikiEditorTarget = { type: 'wiki' as const };
+              const wikiEditorWorkItem = createWorkItem({
+                id: generateWorkItemId(repoId, 'wiki-editor', wikiEditorTarget),
+                repoId,
+                agentType: 'wiki-editor',
+                target: wikiEditorTarget,
+              });
+
+              // Save and claim the work item
+              await handleSaveWorkItems(createSaveWorkItemsCommand([wikiEditorWorkItem]), this.repos);
+              wikiEditorWorkItem.status = 'claimed';
+              wikiEditorWorkItem.claimedAt = new Date();
+              await this.repos.workQueue.save(wikiEditorWorkItem);
+
+              // Return it for execution - the pool will execute and then call claimWork again
+              // On the next claimWork, we'll check for more edits and process them too
+              return wikiEditorWorkItem;
             }
 
-            // Try to claim a work item
+            // PRIORITY 2: Try to claim existing work from the queue
             const claimResult = await handleClaimWorkItemOne(
               createClaimWorkItemOneCommand(repoId, processedCommits),
               this.repos
             );
             let workItem = claimResult.success ? claimResult.data : null;
 
-            // If no work, try to generate more
+            // PRIORITY 3: If no work in queue, generate new work on-demand
             if (!workItem) {
-              // If async refill is in progress, wait for it
-              if (this.refillPromise) {
-                await this.refillPromise;
+              // Generate a small batch of work items (on-demand, not pre-filling)
+              const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
+              if (newWork.length === 0) {
+                // No orchestrator work - but edits might still arrive from in-flight agents
+                // Wait briefly and check for edits before declaring exhaustion
+                await new Promise(resolve => setTimeout(resolve, 100));
 
-                // Try claiming again after refill
-                const retryResult = await handleClaimWorkItemOne(
-                  createClaimWorkItemOneCommand(repoId, processedCommits),
-                  this.repos
-                );
-                workItem = retryResult.success ? retryResult.data : null;
+                // Check for edits one more time - if found, return null to trigger another
+                // claimWork call which will handle them via Priority 1
+                const finalEditCheck = await this.repos.editRequests.countPending(wikiId);
+                if (finalEditCheck > 0) {
+                  // Edits arrived - don't set workExhausted, let next claimWork handle them
+                  return null;
+                }
+
+                workExhausted = true;
+                return null;
               }
 
-              // Still no work? Do synchronous generation as fallback
+              // Save new work items via CQRS command
+              await handleSaveWorkItems(
+                createSaveWorkItemsCommand(newWork),
+                this.repos
+              );
+
+              // Claim the first item
+              const finalResult = await handleClaimWorkItemOne(
+                createClaimWorkItemOneCommand(repoId, processedCommits),
+                this.repos
+              );
+              workItem = finalResult.success ? finalResult.data : null;
+
               if (!workItem) {
-                const itemsToRequest = Math.max(10, QUEUE_HIGH_WATER_MARK);
-                const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, itemsToRequest);
-                if (newWork.length === 0) {
-                  workExhausted = true;
-                  return null;
-                }
-
-                // Save new work items via CQRS command
-                await handleSaveWorkItems(
-                  createSaveWorkItemsCommand(newWork),
-                  this.repos
-                );
-
-                // Try claiming again
-                const finalResult = await handleClaimWorkItemOne(
-                  createClaimWorkItemOneCommand(repoId, processedCommits),
-                  this.repos
-                );
-                workItem = finalResult.success ? finalResult.data : null;
-
-                if (!workItem) {
-                  workExhausted = true;
-                  return null;
-                }
+                workExhausted = true;
+                return null;
               }
             }
 
@@ -470,6 +383,14 @@ export class Executor {
 
         console.log(`\n▶ Pool completed: ${poolResult.completed} successful, ${poolResult.failed} failed`);
 
+        // Check for any edits that arrived during or after the pool ran
+        const postPoolEdits = await this.repos.editRequests.countPending(wikiId);
+        if (postPoolEdits > 0) {
+          console.log(`  📝 Found ${postPoolEdits} pending edit(s) after pool, continuing...`);
+          // Don't break - continue the main loop to process these edits
+          continue;
+        }
+
         // Exit the main loop if work is exhausted
         if (workExhausted) {
           console.log('No more work to do');
@@ -536,42 +457,6 @@ export class Executor {
     }
 
     return processedShas;
-  }
-
-  /**
-   * Trigger an asynchronous refill of the work queue.
-   * Runs in the background while execution continues.
-   * Requests enough items to reach the high water mark.
-   */
-  private triggerAsyncRefill(repoId: string, wikiId: string, currentPending: number): void {
-    if (this.refillInProgress) return;
-
-    this.refillInProgress = true;
-
-    // Calculate how many items to request to reach high water mark
-    const itemsToRequest = Math.max(10, QUEUE_HIGH_WATER_MARK - currentPending);
-    console.log(`🔄 Triggering async queue refill (requesting ${itemsToRequest} items)...`);
-
-    this.refillPromise = this.orchestrator
-      .generateWorkList(repoId, wikiId, itemsToRequest)
-      .then(async (newWork) => {
-        if (newWork.length > 0) {
-          await handleSaveWorkItems(
-            createSaveWorkItemsCommand(newWork),
-            this.repos
-          );
-          console.log(`🔄 Async refill complete: ${newWork.length} items added (target was ${itemsToRequest})`);
-        } else {
-          console.log('🔄 Async refill complete: no new work generated');
-        }
-      })
-      .catch((err) => {
-        console.error('🔄 Async refill failed:', err);
-      })
-      .finally(() => {
-        this.refillInProgress = false;
-        this.refillPromise = null;
-      });
   }
 
   /**

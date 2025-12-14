@@ -266,5 +266,76 @@ describe('Executor Edit Request Processing', () => {
       const wikiEditorRuns = agentRuns.filter(r => r.agentType === 'wiki-editor');
       assert.ok(wikiEditorRuns.length > 0, 'Should have wiki-editor agent run for tracking');
     });
+
+    it('processes all pending edits within a run (no backlog)', async () => {
+      // This test verifies that all pending edit requests are processed
+      // within a single run - no edits should remain pending after the run completes.
+
+      const repoId = 'executor-all-edits-processed';
+      await createTestRepo(ctx, repoId, { 'README.md': '# Test' });
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create a wiki page so bootstrap doesn't trigger
+      await createPage(wiki.id, 'overview', '# Overview\n\nExisting content.');
+
+      // Create multiple edits with sufficient content
+      await createPendingEdit(wiki.id, repoId, 'docs/edit-a', '# Edit A\n\nThis is comprehensive documentation for edit A with detailed explanations.');
+      await createPendingEdit(wiki.id, repoId, 'docs/edit-b', '# Edit B\n\nThis is comprehensive documentation for edit B with detailed explanations.');
+      await createPendingEdit(wiki.id, repoId, 'docs/edit-c', '# Edit C\n\nThis is comprehensive documentation for edit C with detailed explanations.');
+
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
+      const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
+
+      // Run with enough iterations
+      await executor.runIterations(repoId, 5);
+
+      // All edits should be processed - no pending edits remaining
+      const pendingEdits = await ctx.repos.editRequests.findPending(wiki.id);
+      assert.strictEqual(
+        pendingEdits.length,
+        0,
+        `Expected 0 pending edits but found ${pendingEdits.length}. All edits should be processed within a single run.`
+      );
+    });
+
+    it('does not allow edit backlog to accumulate during continuous processing', async () => {
+      // This test ensures that when analysis agents create edits rapidly,
+      // the executor processes them promptly without building a backlog.
+
+      const repoId = 'executor-no-backlog';
+      await createTestRepo(ctx, repoId, { 'README.md': '# Test' });
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create initial page
+      await createPage(wiki.id, 'overview', '# Overview\n\nExisting content.');
+
+      // Create 3 edits spread out
+      await createPendingEdit(wiki.id, repoId, 'docs/edit-1', '# Edit 1');
+
+      const orchestrator = new DefaultOrchestrator(ctx.repos, ctx.llm);
+      const executor = createExecutor(ctx.repos, ctx.git, ctx.llm, orchestrator);
+
+      // After first iteration, add more edits
+      const addMoreEdits = async () => {
+        await new Promise(resolve => setTimeout(resolve, 30));
+        await createPendingEdit(wiki.id, repoId, 'docs/edit-2', '# Edit 2');
+        await new Promise(resolve => setTimeout(resolve, 30));
+        await createPendingEdit(wiki.id, repoId, 'docs/edit-3', '# Edit 3');
+      };
+
+      // Run with enough iterations to process all
+      await Promise.all([
+        executor.runIterations(repoId, 5),
+        addMoreEdits(),
+      ]);
+
+      // All edits should be processed - no backlog
+      const pendingEdits = await ctx.repos.editRequests.findPending(wiki.id);
+      assert.strictEqual(
+        pendingEdits.length,
+        0,
+        `Backlog detected: ${pendingEdits.length} edits still pending. Edits should be processed as they arrive.`
+      );
+    });
   });
 });
