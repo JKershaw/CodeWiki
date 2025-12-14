@@ -112,6 +112,31 @@ export interface OrchestratorContext {
 const FILE_COVERAGE_THRESHOLD = 50;
 
 /**
+ * Sort undocumented directories for consistent, deterministic ordering.
+ *
+ * This function ensures that directories with the same undocumented ratio
+ * are always sorted in the same order (alphabetically by path). Without
+ * deterministic sorting, the orchestrator may select different directories
+ * on each iteration, causing the "round-robin" problem where no single
+ * directory gets completed before others are started.
+ *
+ * @param dirs - Array of undocumented directories to sort
+ * @returns New sorted array (original is not modified)
+ */
+export function sortUndocumentedDirectories(
+  dirs: UndocumentedDirectory[]
+): UndocumentedDirectory[] {
+  return [...dirs].sort((a, b) => {
+    // Primary sort: by undocumented ratio descending (highest ratio = lowest coverage first)
+    if (a.undocumentedRatio !== b.undocumentedRatio) {
+      return b.undocumentedRatio - a.undocumentedRatio;
+    }
+    // Secondary sort: alphabetically by path (deterministic tie-breaker)
+    return a.path.localeCompare(b.path);
+  });
+}
+
+/**
  * Gathers context about the current wiki state for orchestrator decisions.
  */
 export class ContextGatherer {
@@ -403,13 +428,8 @@ export class ContextGatherer {
         }
       }
 
-      // Sort directories by undocumented ratio (highest first), then by count
-      undocumentedDirs.sort((a, b) => {
-        if (a.undocumentedRatio !== b.undocumentedRatio) {
-          return b.undocumentedRatio - a.undocumentedRatio;
-        }
-        return b.undocumentedCount - a.undocumentedCount;
-      });
+      // Sort directories deterministically using the exported function
+      const sortedDirs = sortUndocumentedDirectories(undocumentedDirs);
 
       // Sort files by coverage (0% first), then by path length (shorter = more core)
       lowCoverageFiles.sort((a, b) => {
@@ -419,7 +439,7 @@ export class ContextGatherer {
         return a.path.length - b.path.length;
       });
 
-      return { directories: undocumentedDirs, files: lowCoverageFiles };
+      return { directories: sortedDirs, files: lowCoverageFiles };
     } catch (error) {
       console.warn(`Failed to calculate undocumented directories: ${error}`);
       return { directories: [], files: [] };
