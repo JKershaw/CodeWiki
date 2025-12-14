@@ -145,6 +145,62 @@ export function calculateLowestDirectoryCoverage(
 export const MAX_PRIORITY_FILES = 20;
 
 /**
+ * Maximum number of directories to focus on per batch.
+ *
+ * This limit ensures depth-first behavior: instead of spreading work
+ * across many directories, we focus on 2-3 at a time until they reach
+ * the phase threshold. This prevents the "round-robin" problem where
+ * no directory ever gets completed.
+ */
+export const MAX_FOCUS_DIRECTORIES = 3;
+
+/**
+ * Prioritize directories for exploration based on phase threshold.
+ *
+ * This function implements the "focus strategy" to ensure depth-first
+ * documentation within breadth-first phases:
+ *
+ * 1. Directories already at/above threshold are excluded
+ * 2. "In-progress" directories (started but not done) are prioritized
+ * 3. In-progress dirs are sorted by proximity to threshold (closest first)
+ * 4. Not-started directories come after in-progress ones
+ *
+ * @param dirs - Undocumented directories (should already be deterministically sorted)
+ * @param phaseThreshold - Maximum undocumented ratio to consider "done" (e.g., 0.70 = 30% coverage)
+ * @returns Prioritized directories, with in-progress first
+ */
+export function prioritizeDirectoriesForPhase(
+  dirs: UndocumentedDirectory[],
+  phaseThreshold: number
+): UndocumentedDirectory[] {
+  // Separate directories into categories
+  const inProgress: UndocumentedDirectory[] = [];
+  const notStarted: UndocumentedDirectory[] = [];
+
+  for (const dir of dirs) {
+    // Skip directories already at or above threshold
+    if (dir.undocumentedRatio <= phaseThreshold) {
+      continue;
+    }
+
+    // "In progress" = some work done (ratio < 1.0) but not at threshold
+    if (dir.undocumentedRatio < 1.0) {
+      inProgress.push(dir);
+    } else {
+      // "Not started" = 100% undocumented
+      notStarted.push(dir);
+    }
+  }
+
+  // Sort in-progress by undocumented ratio ascending (closest to threshold first)
+  // This ensures we finish directories that are almost done
+  inProgress.sort((a, b) => a.undocumentedRatio - b.undocumentedRatio);
+
+  // Combine: in-progress first (closest to threshold), then not-started
+  return [...inProgress, ...notStarted];
+}
+
+/**
  * Low coverage file type from context gatherer.
  */
 type LowCoverageFile = { path: string; coverage: number; directory: string };
@@ -583,7 +639,7 @@ export class PhasedOrchestrator implements Orchestrator {
 
   /**
    * Phase 1: Skeleton - Build navigable structure.
-   * 70% exploration (core → entry → active), 20% recent commits, 10% structure.
+   * Focus on MAX_FOCUS_DIRECTORIES at a time, plus commits and structure.
    */
   private async generateSkeletonWork(
     repoId: string,
@@ -593,14 +649,17 @@ export class PhasedOrchestrator implements Orchestrator {
   ): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
 
-    // 70% exploration
-    const explorationSlots = Math.ceil(maxItems * 0.7);
-    const undocumentedDirs = context.undocumentedDirectories
-      .filter(d => d.undocumentedRatio > 0.5)
-      .slice(0, explorationSlots);
+    // Phase 1→2 requires 30% coverage (undocumentedRatio <= 0.70)
+    const phaseThreshold = 0.70;
 
-    for (const dir of undocumentedDirs) {
-      if (workItems.length >= explorationSlots) break;
+    // Prioritize in-progress directories, limit to MAX_FOCUS_DIRECTORIES
+    const prioritizedDirs = prioritizeDirectoriesForPhase(
+      context.undocumentedDirectories,
+      phaseThreshold
+    ).slice(0, MAX_FOCUS_DIRECTORIES);
+
+    for (const dir of prioritizedDirs) {
+      if (workItems.length >= maxItems - 2) break; // Reserve slots for commits/structure
 
       const key = `codebase-explorer:path:${dir.path}`;
       if (existingWorkKeys.has(key)) continue;
@@ -653,8 +712,8 @@ export class PhasedOrchestrator implements Orchestrator {
   }
 
   /**
-   * Phase 2: Breadth - Cover all directories shallowly.
-   * 60% exploration, 20% commits, 10% overview, 10% link.
+   * Phase 2: Breadth - Cover all directories to 30% threshold.
+   * Focus on MAX_FOCUS_DIRECTORIES at a time for depth-first behavior.
    */
   private async generateBreadthWork(
     repoId: string,
@@ -665,14 +724,18 @@ export class PhasedOrchestrator implements Orchestrator {
   ): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
 
-    // 60% exploration - target lowest coverage directories
-    const explorationSlots = Math.ceil(maxItems * 0.6);
-    const undocumentedDirs = context.undocumentedDirectories
-      .sort((a, b) => b.undocumentedRatio - a.undocumentedRatio)
-      .slice(0, explorationSlots);
+    // Phase 2→3 requires 30% coverage (undocumentedRatio <= 0.70)
+    const phaseThreshold = 0.70;
 
-    for (const dir of undocumentedDirs) {
-      if (workItems.length >= explorationSlots) break;
+    // Prioritize in-progress directories, limit to MAX_FOCUS_DIRECTORIES
+    // This ensures we complete directories to threshold before starting new ones
+    const prioritizedDirs = prioritizeDirectoriesForPhase(
+      context.undocumentedDirectories,
+      phaseThreshold
+    ).slice(0, MAX_FOCUS_DIRECTORIES);
+
+    for (const dir of prioritizedDirs) {
+      if (workItems.length >= maxItems - 2) break; // Reserve slots for quality work
 
       const key = `codebase-explorer:path:${dir.path}`;
       if (existingWorkKeys.has(key)) continue;
@@ -740,7 +803,7 @@ export class PhasedOrchestrator implements Orchestrator {
 
   /**
    * Phase 3: Depth and Guides.
-   * 40% exploration, 25% synthesis, 20% commits, 15% quality.
+   * Deepen coverage to 60%, create synthesis pages, process commits.
    */
   private async generateDepthAndGuidesWork(
     repoId: string,
@@ -751,14 +814,17 @@ export class PhasedOrchestrator implements Orchestrator {
   ): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
 
-    // 40% exploration - deepen below-target directories
-    const explorationSlots = Math.ceil(maxItems * 0.4);
-    const belowTargetDirs = context.undocumentedDirectories
-      .filter(d => d.undocumentedRatio > 0.4) // Below 60% coverage
-      .slice(0, explorationSlots);
+    // Phase 3 targets 60% coverage (undocumentedRatio <= 0.40)
+    const phaseThreshold = 0.40;
 
-    for (const dir of belowTargetDirs) {
-      if (workItems.length >= explorationSlots) break;
+    // Prioritize in-progress directories, limit to MAX_FOCUS_DIRECTORIES
+    const prioritizedDirs = prioritizeDirectoriesForPhase(
+      context.undocumentedDirectories,
+      phaseThreshold
+    ).slice(0, MAX_FOCUS_DIRECTORIES);
+
+    for (const dir of prioritizedDirs) {
+      if (workItems.length >= maxItems - 3) break; // Reserve slots for synthesis/quality
 
       const key = `codebase-explorer:path:${dir.path}`;
       if (existingWorkKeys.has(key)) continue;
@@ -877,13 +943,16 @@ export class PhasedOrchestrator implements Orchestrator {
       }));
     }
 
-    // 30% coverage gaps
-    const gapSlots = Math.ceil(maxItems * 0.3);
-    const gapDirs = context.undocumentedDirectories
-      .filter(d => d.undocumentedRatio > 0.2)
-      .slice(0, gapSlots);
+    // Coverage gaps - target 80% coverage (undocumentedRatio <= 0.20)
+    const phaseThreshold = 0.20;
 
-    for (const dir of gapDirs) {
+    // Prioritize in-progress directories, limit to MAX_FOCUS_DIRECTORIES
+    const prioritizedDirs = prioritizeDirectoriesForPhase(
+      context.undocumentedDirectories,
+      phaseThreshold
+    ).slice(0, MAX_FOCUS_DIRECTORIES);
+
+    for (const dir of prioritizedDirs) {
       if (workItems.length >= maxItems - 2) break; // Reserve slots for commits
 
       const key = `codebase-explorer:path:${dir.path}`;
