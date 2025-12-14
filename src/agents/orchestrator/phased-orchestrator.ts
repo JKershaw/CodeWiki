@@ -14,6 +14,7 @@ import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
 import { createWorkItem } from '../../domain/work-item.js';
+import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { UnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
 import { ContextGatherer, type OrchestratorContext } from './context-gatherer.js';
@@ -135,9 +136,22 @@ export class PhasedOrchestrator implements Orchestrator {
     wikiId: string,
     maxItems: number = 10
   ): Promise<WorkItem[]> {
+    const startTime = Date.now();
+
     // Check for bootstrap first (special case)
     const bootstrapWork = await this.checkBootstrapNeeded(repoId, wikiId);
     if (bootstrapWork) {
+      // Record bootstrap decision
+      const context = await this.contextGatherer.gather(repoId, wikiId);
+      await this.recordOrchestratorRun(
+        repoId,
+        context,
+        Phase.Reconnaissance,
+        null,
+        'Bootstrap required - wiki is empty, initializing documentation.',
+        [bootstrapWork],
+        startTime
+      );
       return [bootstrapWork];
     }
 
@@ -176,7 +190,176 @@ export class PhasedOrchestrator implements Orchestrator {
       remainingSlots
     );
 
+    // Record orchestrator decision
+    if (workItems.length > 0) {
+      const reasoning = this.buildPhaseReasoning(phase, phaseCtx, workItems);
+      await this.recordOrchestratorRun(
+        repoId,
+        context,
+        phase,
+        phaseCtx,
+        reasoning,
+        workItems,
+        startTime
+      );
+    }
+
     return workItems;
+  }
+
+  /**
+   * Build human-readable reasoning for the phase-based decision.
+   */
+  private buildPhaseReasoning(
+    phase: Phase,
+    phaseCtx: PhaseContext,
+    workItems: WorkItem[]
+  ): string {
+    const phaseName = Phase[phase];
+    const metrics = [
+      `${phaseCtx.pages} pages`,
+      `${phaseCtx.directoriesWithAnyCoverage} dirs covered`,
+      `${(phaseCtx.avgConfidence * 100).toFixed(0)}% avg confidence`,
+    ];
+
+    // Add phase-specific metrics
+    if (phase === Phase.Breadth || phase === Phase.Skeleton) {
+      metrics.push(`lowest dir coverage: ${phaseCtx.lowestDirectoryCoverage.toFixed(0)}%`);
+    }
+    if (phase === Phase.DepthAndGuides) {
+      const missing = [];
+      if (!phaseCtx.hasProjectOverview) missing.push('project-overview');
+      if (!phaseCtx.hasGettingStarted) missing.push('getting-started');
+      if (!phaseCtx.hasTestingGuide) missing.push('testing-guide');
+      if (!phaseCtx.hasExtensionGuide) missing.push('extension-guide');
+      if (missing.length > 0) {
+        metrics.push(`missing: ${missing.join(', ')}`);
+      }
+    }
+    if (phase === Phase.Polish) {
+      metrics.push(`${(phaseCtx.lowConfidenceRatio * 100).toFixed(0)}% low confidence`);
+      metrics.push(`${phaseCtx.openFindings} findings`);
+    }
+
+    // Summarize work items by type
+    const workSummary = this.summarizeWorkItems(workItems);
+
+    return `Phase ${phase} (${phaseName}): ${metrics.join(', ')}. Scheduling: ${workSummary}`;
+  }
+
+  /**
+   * Summarize work items by agent type.
+   */
+  private summarizeWorkItems(workItems: WorkItem[]): string {
+    const counts: Record<string, number> = {};
+    for (const item of workItems) {
+      counts[item.agentType] = (counts[item.agentType] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([agent, count]) => `${count} ${agent}`)
+      .join(', ');
+  }
+
+  /**
+   * Record an orchestrator run for provenance tracking.
+   */
+  private async recordOrchestratorRun(
+    repoId: string,
+    context: OrchestratorContext,
+    phase: Phase,
+    phaseCtx: PhaseContext | null,
+    reasoning: string,
+    workItems: WorkItem[],
+    startTime: number
+  ): Promise<void> {
+    try {
+      const runId = uuid();
+
+      // Build work item details for the decision record
+      const workItemDetails = workItems.map(item => {
+        const detail: {
+          agentType: string;
+          targetCommitId?: string;
+          targetPath?: string;
+          reason: string;
+        } = {
+          agentType: item.agentType,
+          reason: this.getWorkItemReason(item, phase),
+        };
+        if (item.target.type === 'commit') {
+          detail.targetCommitId = item.target.commitId;
+        } else if (item.target.type === 'path') {
+          detail.targetPath = item.target.path;
+        }
+        return detail;
+      });
+
+      const orchestratorRun = createOrchestratorRun({
+        id: runId,
+        repoId,
+        context,
+        promptSent: `[phased orchestrator - Phase ${phase} (${Phase[phase]})]`,
+      });
+
+      orchestratorRun.rawResponse = reasoning;
+      orchestratorRun.decision = {
+        reasoning,
+        workItems: workItemDetails,
+      };
+      orchestratorRun.workItemsCreated = workItems.map(w => w.id);
+      orchestratorRun.model = `phased-orchestrator:${Phase[phase]}`;
+      orchestratorRun.costUsd = 0; // No LLM cost for phased orchestrator
+      orchestratorRun.durationMs = Date.now() - startTime;
+      orchestratorRun.usedLLM = false;
+
+      // Link work items back to this orchestrator run
+      for (const item of workItems) {
+        item.orchestratorRunId = runId;
+      }
+
+      await this.repos.orchestratorRuns.save(orchestratorRun);
+    } catch (error) {
+      // Don't fail work generation if recording fails
+      console.warn('Failed to record orchestrator run:', error);
+    }
+  }
+
+  /**
+   * Get a reason description for a work item based on phase context.
+   */
+  private getWorkItemReason(item: WorkItem, phase: Phase): string {
+    const phaseName = Phase[phase];
+
+    switch (item.agentType) {
+      case 'bootstrap':
+        return 'Initialize wiki with project structure';
+      case 'codebase-explorer':
+        if (item.target.type === 'path') {
+          return `${phaseName}: Explore undocumented path ${item.target.path}`;
+        }
+        return `${phaseName}: Explore codebase`;
+      case 'code-change':
+        if (item.target.type === 'commit') {
+          return `${phaseName}: Analyze commit ${item.target.commitId.slice(0, 8)}`;
+        }
+        return `${phaseName}: Analyze code changes`;
+      case 'project-overview':
+      case 'getting-started':
+      case 'testing-guide':
+      case 'extension-guide':
+        return `${phaseName}: Create missing key page`;
+      case 'quality':
+      case 'consistency':
+      case 'writer':
+      case 'consolidation':
+        return `${phaseName}: Improve wiki quality`;
+      case 'wiki-index':
+      case 'overview':
+      case 'link':
+        return `${phaseName}: Improve wiki structure`;
+      default:
+        return `${phaseName}: ${item.agentType} task`;
+    }
   }
 
   /**

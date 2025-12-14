@@ -25,6 +25,72 @@ describe('PhasedOrchestrator Integration', () => {
     ctx.llm.reset();
   });
 
+  describe('Orchestrator Run Recording', () => {
+    it('records orchestrator run when generating work items', async () => {
+      const repoId = 'phased-recording-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test Project',
+        'src/index.ts': 'export const x = 1;',
+        'src/utils/helpers.ts': 'export const helper = () => {};',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Add some pages to get past bootstrap
+      for (let i = 0; i < 5; i++) {
+        await ctx.repos.wikiPages.save(createWikiPage({
+          id: `page-${i}`,
+          wikiId: wiki.id,
+          path: `docs/page-${i}`,
+          title: `Page ${i}`,
+          content: `# Page ${i}\n\nContent.`,
+          confidence: 0.6,
+        }));
+      }
+
+      const orchestrator = new PhasedOrchestrator(ctx.repos, ctx.llm, {}, ctx.repoAccessFactory);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
+
+      // Should have generated some work
+      assert.ok(workItems.length > 0, 'Should generate work items');
+
+      // Should have recorded an orchestrator run
+      const runs = await ctx.repos.orchestratorRuns.findByRepo(repoId, { limit: 10 });
+      assert.ok(runs.length > 0, 'Should have recorded orchestrator run');
+
+      const latestRun = runs[0]!;
+      assert.ok(latestRun.decision.reasoning.includes('Phase'), 'Reasoning should include phase info');
+      assert.strictEqual(latestRun.usedLLM, false, 'Should not use LLM');
+      assert.ok(latestRun.model.startsWith('phased-orchestrator:'), 'Model should indicate phased orchestrator');
+      assert.ok(latestRun.workItemsCreated.length > 0, 'Should record work items created');
+      assert.ok(latestRun.decision.workItems.length > 0, 'Should record work item details');
+    });
+
+    it('records bootstrap decision with proper reasoning', async () => {
+      const repoId = 'phased-bootstrap-recording';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test Project',
+        'src/index.ts': 'export const x = 1;',
+      });
+
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+      const orchestrator = new PhasedOrchestrator(ctx.repos, ctx.llm, {}, ctx.repoAccessFactory);
+      const workItems = await orchestrator.generateWorkList(repoId, wiki.id, 10);
+
+      assert.strictEqual(workItems[0]?.agentType, 'bootstrap', 'Should schedule bootstrap');
+
+      // Check that bootstrap decision was recorded
+      const runs = await ctx.repos.orchestratorRuns.findByRepo(repoId, { limit: 10 });
+      assert.ok(runs.length > 0, 'Should have recorded orchestrator run');
+
+      const latestRun = runs[0]!;
+      assert.ok(latestRun.decision.reasoning.includes('Bootstrap'), 'Reasoning should mention bootstrap');
+      assert.ok(latestRun.decision.reasoning.includes('empty'), 'Reasoning should mention empty wiki');
+    });
+  });
+
   describe('Phase 0: Reconnaissance', () => {
     it('schedules bootstrap on empty wiki', async () => {
       const repoId = 'phased-recon-bootstrap';

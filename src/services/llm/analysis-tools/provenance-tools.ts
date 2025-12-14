@@ -183,9 +183,10 @@ export const getAgentContributionsTool: AnalysisToolDefinition = {
 export const getOrchestratorDecisionsTool: AnalysisToolDefinition = {
   name: 'get_orchestrator_decisions',
   description:
-    'Get orchestrator decision history showing the LLM reasoning used to prioritize work and the work items created. ' +
+    'Get orchestrator decision history showing the reasoning used to prioritize work and the work items created. ' +
     'Use this to understand how the orchestrator decided what agents to run and in what order. ' +
-    'Helps identify if orchestration strategy is effective or needs adjustment.',
+    'Helps identify if orchestration strategy is effective or needs adjustment. ' +
+    'Shows both LLM-powered decisions (legacy) and phase-based decisions (current).',
   inputSchema: {
     type: 'object',
     properties: {
@@ -201,7 +202,7 @@ export const getOrchestratorDecisionsTool: AnalysisToolDefinition = {
 
     const query = createListOrchestratorRunsQuery(context.repoId, {
       limit,
-      usedLLM: true,
+      // No usedLLM filter - show all orchestrator decisions (LLM and phased)
     });
     const result = await handleListOrchestratorRuns(query, context.repos);
 
@@ -210,11 +211,20 @@ export const getOrchestratorDecisionsTool: AnalysisToolDefinition = {
     }
 
     if (result.data.length === 0) {
-      return 'No orchestrator decisions found. The orchestrator may not have run yet, or all runs used deterministic fallback.';
+      return 'No orchestrator decisions found. The orchestrator may not have run yet.';
     }
 
+    // Count LLM vs phased runs for summary
+    const llmRuns = result.data.filter(r => r.usedLLM).length;
+    const phasedRuns = result.data.length - llmRuns;
+    const runTypeSummary = llmRuns > 0 && phasedRuns > 0
+      ? `${llmRuns} LLM-powered, ${phasedRuns} phase-based`
+      : llmRuns > 0
+        ? `${llmRuns} LLM-powered`
+        : `${phasedRuns} phase-based`;
+
     const sections: string[] = [];
-    sections.push(`## Orchestrator Decisions (${result.data.length} LLM-powered runs)`);
+    sections.push(`## Orchestrator Decisions (${result.data.length} runs: ${runTypeSummary})`);
     sections.push('');
 
     // Summary stats

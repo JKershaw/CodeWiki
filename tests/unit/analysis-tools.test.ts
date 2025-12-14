@@ -1084,7 +1084,8 @@ describe('Analysis Tools', () => {
 
       // Check summary section
       assert.ok(result.includes('Orchestrator Decisions'));
-      assert.ok(result.includes('1 LLM-powered runs'));
+      assert.ok(result.includes('1 runs'));
+      assert.ok(result.includes('LLM-powered'));
       assert.ok(result.includes('Total cost:'));
       assert.ok(result.includes('Total work items created: 2'));
 
@@ -1177,7 +1178,7 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('Failed to list orchestrator runs'));
     });
 
-    it('filters to only LLM runs', async () => {
+    it('does not filter by usedLLM to show all orchestrator decisions', async () => {
       let capturedUsedLLM: boolean | undefined;
       const context = createMockContext({
         repos: {
@@ -1195,7 +1196,43 @@ describe('Analysis Tools', () => {
       });
 
       await getOrchestratorDecisionsTool.execute({}, context);
-      assert.strictEqual(capturedUsedLLM, true);
+      // Should NOT filter by usedLLM - show all orchestrator decisions (LLM and phased)
+      assert.strictEqual(capturedUsedLLM, undefined);
+    });
+
+    it('shows both LLM and phase-based runs with correct summary', async () => {
+      const runs = [
+        createMockOrchestratorRun('run-1', 'test-repo', {
+          reasoning: 'LLM decision',
+          usedLLM: true,
+        }),
+        createMockOrchestratorRun('run-2', 'test-repo', {
+          reasoning: 'Phase 2 (Breadth): 15 pages, 5 dirs covered. Scheduling: 3 codebase-explorer',
+          usedLLM: false,
+        }),
+      ];
+
+      const context = createMockContext({
+        repos: {
+          orchestratorRuns: {
+            findByRepo: async () => runs,
+          },
+          editRequests: {
+            findByPagePath: async () => [],
+            findByStatus: async () => [],
+          },
+        } as unknown as Repositories,
+      });
+
+      const result = await getOrchestratorDecisionsTool.execute({}, context);
+
+      // Should show mixed summary
+      assert.ok(result.includes('2 runs'));
+      assert.ok(result.includes('1 LLM-powered'));
+      assert.ok(result.includes('1 phase-based'));
+      // Should include both reasonings
+      assert.ok(result.includes('LLM decision'));
+      assert.ok(result.includes('Phase 2 (Breadth)'));
     });
 
     it('truncates long reason text', async () => {
