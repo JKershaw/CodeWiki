@@ -22,58 +22,82 @@
  *  - modules/debug.js - Debug/observability view
  */
 
+/**
+ * Detect which page we're on based on the URL path.
+ * @returns {string} Page name: repos, wiki, graph, query, spec, benchmark, or debug
+ */
+function detectCurrentPage() {
+  const path = window.location.pathname;
+  if (path.startsWith('/wiki/')) return 'wiki';
+  if (path.startsWith('/graph/')) return 'graph';
+  if (path.startsWith('/query/')) return 'query';
+  if (path.startsWith('/spec/')) return 'spec';
+  if (path.startsWith('/benchmark/')) return 'benchmark';
+  if (path.startsWith('/debug/')) return 'debug';
+  return 'repos';
+}
+
 // Initialize application when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
-  // Initialize UI components
+  const currentPage = detectCurrentPage();
+
+  // Initialize UI components (needed on all pages)
   initModalListeners();
   initSidePanelListeners();
-  initNavigation();
 
-  // Initialize feature modules
-  initBrowserListeners();
-  initWikiListeners();
-  initGraphListeners();
-  initQueryListeners();
-  initSpecListeners();
-  initBenchmarkListeners();
-  initChatListeners();
-  initDebugListeners();
+  // Initialize event listeners for modules present on this page
+  if (currentPage === 'repos') {
+    initBrowserListeners();
+  }
+  if (currentPage === 'wiki') {
+    initWikiListeners();
+  }
+  if (currentPage === 'graph') {
+    initGraphListeners();
+  }
+  if (currentPage === 'query') {
+    initQueryListeners();
+  }
+  if (currentPage === 'spec') {
+    initSpecListeners();
+  }
+  if (currentPage === 'benchmark') {
+    initBenchmarkListeners();
+    initChatListeners();
+  }
+  if (currentPage === 'debug') {
+    initDebugListeners();
+  }
 
-  // Initialize back buttons
-  initBackButtons();
-
-  // Load initial data
+  // Load common data (config, version, user)
   await Promise.all([
     loadConfig(),
     loadVersionInfo(),
     loadCurrentUser(),
-    loadRepos(),
   ]);
-});
 
-/**
- * Initialize back button event listeners.
- */
-function initBackButtons() {
-  document.getElementById('back-to-repos').addEventListener('click', () => {
-    showView('repos');
-    loadRepos();
-  });
-  document.getElementById('back-to-repos-graph')?.addEventListener('click', () => {
-    destroyGraph();
-    showView('repos');
-    loadRepos();
-  });
-  document.getElementById('back-to-repos-query').addEventListener('click', () => {
-    showView('repos');
-    loadRepos();
-  });
-  document.getElementById('back-to-repos-spec').addEventListener('click', () => {
-    showView('repos');
-    loadRepos();
-  });
-  document.getElementById('back-to-repos-debug')?.addEventListener('click', () => {
-    showView('repos');
-    loadRepos();
-  });
-}
+  // Initialize page-specific content
+  switch (currentPage) {
+    case 'repos':
+      await loadRepos();
+      break;
+    case 'wiki':
+      await initWikiPage();
+      break;
+    case 'graph':
+      await initGraphPage();
+      break;
+    case 'query':
+      await initQueryPage();
+      break;
+    case 'spec':
+      await initSpecPage();
+      break;
+    case 'benchmark':
+      await initBenchmarkPage();
+      break;
+    case 'debug':
+      await initDebugPage();
+      break;
+  }
+});

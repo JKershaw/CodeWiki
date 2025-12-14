@@ -8,56 +8,44 @@ let currentWiki = null;
 let currentPage = null;
 let currentUser = null;
 
-// DOM element references for views
-const views = {
-  repos: document.getElementById('repos-view'),
-  wiki: document.getElementById('wiki-view'),
-  graph: document.getElementById('graph-view'),
-  query: document.getElementById('query-view'),
-  spec: document.getElementById('spec-view'),
-  benchmark: document.getElementById('benchmark-view'),
-  debug: document.getElementById('debug-view'),
-};
-
-const navBtns = document.querySelectorAll('.nav-btn');
-
 /**
- * Switch to a different view.
- * @param {string} viewName - Name of the view to show
+ * Navigate to a repository-specific page.
+ * @param {string} page - Page name (wiki, graph, query, spec, benchmark, debug)
+ * @param {string} repoId - Repository ID
  */
-function showView(viewName) {
-  Object.values(views).forEach(v => v.classList.remove('active'));
-  views[viewName].classList.add('active');
-
-  navBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === viewName);
-  });
+function navigateToPage(page, repoId) {
+  window.location.href = `/${page}/${repoId}`;
 }
 
 /**
- * Initialize navigation event listeners.
+ * Navigate to the repos list.
  */
-function initNavigation() {
-  navBtns.forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!btn.disabled) {
-        showView(btn.dataset.view);
-        // Reload data when switching to benchmark view
-        if (btn.dataset.view === 'benchmark' && currentRepo) {
-          await loadBenchmarkHistory(currentRepo.id);
-        }
-      }
-    });
-  });
+function navigateToRepos() {
+  window.location.href = '/';
 }
 
 /**
- * Enable repository-specific nav buttons.
+ * Initialize state from server-provided data.
+ * Should be called on page load.
  */
-function enableRepoNavButtons() {
-  document.querySelector('[data-view="wiki"]').disabled = false;
-  document.querySelector('[data-view="graph"]').disabled = false;
-  document.querySelector('[data-view="query"]').disabled = false;
-  document.querySelector('[data-view="spec"]').disabled = false;
-  document.querySelector('[data-view="benchmark"]').disabled = false;
+async function initializeStateFromServer() {
+  // Check if server provided a repoId
+  if (window.currentRepoId) {
+    try {
+      currentRepo = await api(`/repos/${window.currentRepoId}`);
+
+      // Get active wiki
+      const wikis = await api(`/repos/${window.currentRepoId}/wikis`);
+      currentWiki = wikis.find(w => w.isActive) || wikis[0] || null;
+    } catch (error) {
+      console.error('Failed to load repo state:', error);
+    }
+  }
+}
+
+/**
+ * Get the current repo ID from either state or server-provided value.
+ */
+function getCurrentRepoId() {
+  return currentRepo?.id || window.currentRepoId || null;
 }

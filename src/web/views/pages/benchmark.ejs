@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeWiki - Benchmark</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <%- include('../partials/header') %>
+    <%- include('../partials/nav', { activePage: 'benchmark', repoId: repoId }) %>
+
+    <main>
+      <!-- Benchmark View -->
+      <section id="benchmark-view" class="view active">
+        <div class="section-header">
+          <h2>Benchmark: <span id="benchmark-repo-name"></span></h2>
+          <a href="/" class="btn secondary">Back to Repos</a>
+        </div>
+
+        <div class="benchmark-container">
+          <div class="benchmark-actions">
+            <button id="run-benchmark-btn" class="btn primary">Run Accuracy</button>
+            <button id="run-quality-benchmark-btn" class="btn primary">Run Quality</button>
+            <button id="run-both-benchmarks-btn" class="btn secondary">Run Both</button>
+            <span id="benchmark-status-text" class="benchmark-status-text"></span>
+          </div>
+
+          <!-- Auto Benchmark Section -->
+          <div class="auto-benchmark-section">
+            <div class="auto-benchmark-config">
+              <label>
+                Iterations per cycle:
+                <input type="number" id="auto-benchmark-iterations" value="5" min="1" max="50">
+              </label>
+              <label>
+                Max cycles:
+                <input type="number" id="auto-benchmark-max-cycles" value="10" min="1" max="100">
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-benchmark-include-quality" checked>
+                Include Quality
+              </label>
+              <button id="auto-benchmark-btn" class="btn primary">Start Auto Benchmark</button>
+              <button id="stop-auto-benchmark-btn" class="btn danger hidden">Stop</button>
+            </div>
+            <div id="auto-benchmark-progress" class="auto-benchmark-progress hidden">
+              <div class="auto-benchmark-status">
+                <span id="auto-benchmark-cycle">Cycle 0/0</span>
+                <span id="auto-benchmark-phase">-</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="auto-benchmark-progress-fill"></div>
+              </div>
+              <div id="auto-benchmark-status-text" class="progress-text"></div>
+            </div>
+          </div>
+
+          <div id="benchmark-progress" class="benchmark-progress hidden">
+            <div class="progress-bar">
+              <div class="progress-fill" id="benchmark-progress-fill"></div>
+            </div>
+            <div class="progress-text" id="benchmark-progress-text">Starting benchmark...</div>
+          </div>
+
+          <div id="quality-benchmark-progress" class="benchmark-progress hidden">
+            <div class="progress-bar">
+              <div class="progress-fill" id="quality-benchmark-progress-fill"></div>
+            </div>
+            <div class="progress-text" id="quality-benchmark-progress-text">Starting quality benchmark...</div>
+          </div>
+
+          <div class="benchmark-history-section">
+            <h3>History</h3>
+            <div id="benchmark-chart-container" class="benchmark-chart-container hidden">
+              <canvas id="benchmark-chart"></canvas>
+            </div>
+            <div id="benchmark-history" class="benchmark-history">
+              <p class="placeholder">No benchmarks yet. Run one to measure wiki quality.</p>
+            </div>
+          </div>
+
+          <!-- Self-Improvement Analysis Section -->
+          <div class="self-improvement-section">
+            <h3>Self-Improvement Analysis</h3>
+            <p class="section-hint">Select 2 or more completed accuracy benchmarks to analyze trends and get improvement recommendations.</p>
+            <div class="self-improvement-controls">
+              <div id="benchmark-selector" class="benchmark-selector">
+                <p class="placeholder">Run benchmarks to enable analysis.</p>
+              </div>
+              <div class="self-improvement-actions">
+                <button id="run-self-improvement-btn" class="btn primary" disabled>Analyze Selected</button>
+                <button id="select-all-benchmarks-btn" class="btn secondary">Select All</button>
+                <button id="clear-benchmark-selection-btn" class="btn secondary">Clear</button>
+              </div>
+            </div>
+            <div id="self-improvement-status" class="self-improvement-status hidden">
+              <p>Analysis in progress...</p>
+            </div>
+            <div id="self-improvement-report" class="self-improvement-report hidden">
+              <div class="report-header">
+                <h4>Analysis Report</h4>
+                <button id="close-report-btn" class="btn secondary">Close</button>
+              </div>
+              <div id="report-content" class="report-content"></div>
+              <div id="analysis-trace-section" class="analysis-trace-section hidden">
+                <button id="toggle-trace-btn" class="trace-toggle-btn">
+                  <span class="toggle-icon">></span>
+                  <span class="toggle-text">Show Analysis Trace</span>
+                  <span id="trace-summary" class="trace-summary"></span>
+                </button>
+                <div id="analysis-trace-content" class="analysis-trace-content hidden"></div>
+              </div>
+
+              <!-- Chat Section for Follow-up Questions -->
+              <div id="chat-section" class="chat-section">
+                <div class="chat-header">
+                  <h4>Ask Follow-up Questions</h4>
+                  <span id="chat-status" class="chat-status"></span>
+                  <span id="chat-cost" class="chat-cost"></span>
+                </div>
+                <div id="chat-messages" class="chat-messages">
+                  <div class="chat-welcome">
+                    <p>Ask questions about this analysis. The AI has access to the report and can investigate further using the same tools.</p>
+                  </div>
+                </div>
+                <div class="chat-input-area">
+                  <textarea id="chat-input" placeholder="Ask about the analysis..." rows="2" disabled></textarea>
+                  <button id="send-chat-btn" class="btn primary" disabled>Send</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Benchmark Detail Modal/Panel -->
+        <div id="benchmark-detail" class="benchmark-detail hidden">
+          <div class="benchmark-detail-header">
+            <h3>Benchmark Details</h3>
+            <button id="close-benchmark-detail" class="btn secondary">Close</button>
+          </div>
+          <div id="benchmark-detail-content"></div>
+        </div>
+      </section>
+    </main>
+
+    <%- include('../partials/footer') %>
+    <%- include('../partials/modals') %>
+  </div>
+
+  <%- include('../partials/scripts') %>
+  <script>
+    window.currentRepoId = '<%= repoId %>';
+  </script>
+</body>
+</html>

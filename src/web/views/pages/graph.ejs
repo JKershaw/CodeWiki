@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeWiki - Graph</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <%- include('../partials/header') %>
+    <%- include('../partials/nav', { activePage: 'graph', repoId: repoId }) %>
+
+    <main>
+      <!-- Graph View -->
+      <section id="graph-view" class="view active">
+        <div class="section-header">
+          <h2>Graph: <span id="graph-repo-name"></span></h2>
+          <div class="header-actions">
+            <div class="graph-controls">
+              <input type="text" id="graph-search" placeholder="Search pages..." class="graph-search-input">
+              <select id="graph-category-filter" class="graph-filter">
+                <option value="all">All Categories</option>
+              </select>
+              <button id="graph-center-btn" class="btn secondary small" title="Center graph">Center</button>
+              <button id="graph-layout-btn" class="btn secondary small" title="Toggle layout">Layout</button>
+              <button id="graph-refresh-btn" class="btn secondary small" title="Refresh graph">Refresh</button>
+              <span id="graph-connection-status" class="status-indicator status-disconnected" title="Disconnected"></span>
+            </div>
+            <a href="/" class="btn secondary">Back to Repos</a>
+          </div>
+        </div>
+
+        <div class="graph-layout">
+          <div id="graph-container" class="graph-container">
+            <p class="placeholder">Loading graph...</p>
+          </div>
+          <div id="graph-stats" class="graph-stats"></div>
+        </div>
+
+        <!-- Graph tooltip -->
+        <div id="graph-tooltip" class="graph-tooltip hidden"></div>
+      </section>
+    </main>
+
+    <%- include('../partials/footer') %>
+    <%- include('../partials/modals') %>
+  </div>
+
+  <%- include('../partials/scripts') %>
+  <script>
+    window.currentRepoId = '<%= repoId %>';
+  </script>
+</body>
+</html>

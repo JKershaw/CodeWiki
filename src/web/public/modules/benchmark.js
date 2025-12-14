@@ -14,25 +14,25 @@ let selectedBenchmarkIds = new Set();
 let selfImprovementPollingInterval = null;
 
 /**
- * Open the benchmark view for a repository.
+ * Initialize the benchmark page.
+ * Called on page load when on the benchmark page.
  */
-async function openBenchmark(repoId) {
-  currentRepo = await api(`/repos/${repoId}`);
-  document.getElementById('benchmark-repo-name').textContent = currentRepo.fullName;
+async function initBenchmarkPage() {
+  const repoId = window.currentRepoId;
+  if (!repoId) return;
 
-  // Enable nav buttons
-  document.querySelector('[data-view="wiki"]').disabled = false;
-  document.querySelector('[data-view="query"]').disabled = false;
-  document.querySelector('[data-view="spec"]').disabled = false;
-  document.querySelector('[data-view="benchmark"]').disabled = false;
+  try {
+    currentRepo = await api(`/repos/${repoId}`);
+    document.getElementById('benchmark-repo-name').textContent = currentRepo.fullName;
 
-  showView('benchmark');
+    // Close detail panel if open
+    closeSidePanel('benchmark-detail');
 
-  // Close detail panel if open
-  closeSidePanel('benchmark-detail');
-
-  // Load benchmark history
-  await loadBenchmarkHistory(repoId);
+    // Load benchmark history
+    await loadBenchmarkHistory(repoId);
+  } catch (error) {
+    console.error('Failed to initialize benchmark page:', error);
+  }
 }
 
 /**
@@ -1657,12 +1657,6 @@ function initBenchmarkListeners() {
   document.getElementById('run-both-benchmarks-btn').addEventListener('click', runBothBenchmarks);
   document.getElementById('close-benchmark-detail').addEventListener('click', () => {
     closeSidePanel('benchmark-detail');
-  });
-  document.getElementById('back-to-repos-benchmark').addEventListener('click', () => {
-    stopBenchmarkPolling();
-    stopAutoBenchmark();
-    showView('repos');
-    loadRepos();
   });
   document.getElementById('auto-benchmark-btn').addEventListener('click', runAutoBenchmark);
   document.getElementById('stop-auto-benchmark-btn').addEventListener('click', stopAutoBenchmark);

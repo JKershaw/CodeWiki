@@ -1,0 +1,18 @@
+<nav id="nav">
+  <a href="/" class="nav-btn <%= activePage === 'repos' ? 'active' : '' %>">Repositories</a>
+  <% if (repoId) { %>
+    <a href="/wiki/<%= repoId %>" class="nav-btn <%= activePage === 'wiki' ? 'active' : '' %>">Wiki</a>
+    <a href="/graph/<%= repoId %>" class="nav-btn <%= activePage === 'graph' ? 'active' : '' %>">Graph</a>
+    <a href="/query/<%= repoId %>" class="nav-btn <%= activePage === 'query' ? 'active' : '' %>">Ask</a>
+    <a href="/spec/<%= repoId %>" class="nav-btn <%= activePage === 'spec' ? 'active' : '' %>">Spec</a>
+    <a href="/benchmark/<%= repoId %>" class="nav-btn <%= activePage === 'benchmark' ? 'active' : '' %>">Benchmark</a>
+    <a href="/debug/<%= repoId %>" class="nav-btn <%= activePage === 'debug' ? 'active' : '' %>">Debug</a>
+  <% } else { %>
+    <span class="nav-btn disabled" title="Select a repository first">Wiki</span>
+    <span class="nav-btn disabled" title="Select a repository first">Graph</span>
+    <span class="nav-btn disabled" title="Select a repository first">Ask</span>
+    <span class="nav-btn disabled" title="Select a repository first">Spec</span>
+    <span class="nav-btn disabled" title="Select a repository first">Benchmark</span>
+    <span class="nav-btn disabled" title="Select a repository first">Debug</span>
+  <% } %>
+</nav>

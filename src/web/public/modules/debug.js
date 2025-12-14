@@ -41,9 +41,13 @@ function initDebugListeners() {
 }
 
 /**
- * Open the debug view for a repository.
+ * Initialize the debug page.
+ * Called on page load when on the debug page.
  */
-async function openDebug(repoId) {
+async function initDebugPage() {
+  const repoId = window.currentRepoId;
+  if (!repoId) return;
+
   debugCurrentRepoId = repoId;
 
   // Get repo info for display
@@ -53,9 +57,6 @@ async function openDebug(repoId) {
   } catch {
     document.getElementById('debug-repo-name').textContent = repoId;
   }
-
-  // Show the debug view
-  showView('debug');
 
   // Load data
   await Promise.all([

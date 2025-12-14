@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeWiki - Wiki</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <%- include('../partials/header') %>
+    <%- include('../partials/nav', { activePage: 'wiki', repoId: repoId }) %>
+
+    <main>
+      <!-- Wiki View -->
+      <section id="wiki-view" class="view active">
+        <div class="section-header">
+          <h2>Wiki: <span id="wiki-repo-name"></span></h2>
+          <div class="header-actions">
+            <select id="wiki-selector" class="wiki-selector">
+              <option value="">Loading wikis...</option>
+            </select>
+            <button id="delete-wiki-btn" class="btn danger small" title="Delete this wiki">Delete Wiki</button>
+            <a href="/" class="btn secondary">Back to Repos</a>
+          </div>
+        </div>
+
+        <div class="wiki-layout">
+          <aside id="wiki-sidebar">
+            <h3>Pages</h3>
+            <div id="wiki-categories"></div>
+          </aside>
+
+          <article id="wiki-content">
+            <p class="placeholder">Select a page from the sidebar</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <%- include('../partials/footer') %>
+    <%- include('../partials/modals') %>
+  </div>
+
+  <%- include('../partials/scripts') %>
+  <script>
+    window.currentRepoId = '<%= repoId %>';
+  </script>
+</body>
+</html>

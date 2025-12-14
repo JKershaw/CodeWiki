@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeWiki - Repositories</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <%- include('../partials/header') %>
+    <%- include('../partials/nav', { activePage: 'repos', repoId: null }) %>
+
+    <main>
+      <!-- Repositories View -->
+      <section id="repos-view" class="view active">
+        <div class="section-header">
+          <h2>Repositories</h2>
+          <button id="add-repo-btn" class="btn primary">Add Repository</button>
+        </div>
+
+        <div id="add-repo-form" class="form-container hidden">
+          <div class="repo-source-toggle">
+            <button id="source-local-btn" class="toggle-btn active" data-source="local">Local Folder</button>
+            <button id="source-github-btn" class="toggle-btn" data-source="github">GitHub URL</button>
+          </div>
+
+          <div id="local-source-panel">
+            <div id="folder-browser">
+              <div class="browser-header">
+                <button id="browser-up-btn" class="btn secondary">Up</button>
+                <span id="browser-path"></span>
+              </div>
+              <div id="folder-list"></div>
+            </div>
+          </div>
+
+          <div id="github-source-panel" class="hidden">
+            <!-- Accessible repos section (shown when logged in) -->
+            <div id="github-repos-section" class="github-repos-section hidden">
+              <div class="github-repos-header">
+                <label>Your Repositories</label>
+                <a id="github-manage-access" href="#" target="_blank" class="manage-access-link" title="Add or remove repository access">Manage access</a>
+              </div>
+              <div id="github-repos-list" class="github-repos-list">
+                <p class="loading">Loading repositories...</p>
+              </div>
+            </div>
+
+            <!-- Empty state (shown when logged in but no repos) -->
+            <div id="github-empty-state" class="github-empty-state hidden">
+              <div class="empty-state-content">
+                <h4>Connect Your Repositories</h4>
+                <p>Install the CodeWiki GitHub App to access your repositories, including private ones.</p>
+                <a id="github-install-app" href="#" target="_blank" class="btn primary">Install GitHub App</a>
+              </div>
+            </div>
+
+            <!-- Login prompt (shown when not logged in) -->
+            <div id="github-login-prompt" class="github-login-prompt hidden">
+              <p>Log in with GitHub to access your private repositories, or enter a public repo URL below.</p>
+              <a href="/auth/github" class="btn secondary">Login with GitHub</a>
+            </div>
+
+            <!-- Manual URL input (always available) -->
+            <div class="github-url-section">
+              <div class="github-url-divider">
+                <span>or enter repository URL</span>
+              </div>
+              <div class="github-url-input">
+                <input type="url" id="github-url" placeholder="https://github.com/owner/repository" />
+                <p class="input-hint">Works with public repos, or private repos you've granted access to.</p>
+              </div>
+            </div>
+
+            <!-- Error message for access issues -->
+            <div id="github-access-error" class="github-access-error hidden">
+              <div class="error-content">
+                <strong>Can't access this repository</strong>
+                <p>This might be a private repo. To access it, install the GitHub App and grant access to this repository.</p>
+                <a id="github-error-install" href="#" target="_blank" class="btn secondary">Install GitHub App</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="browser-actions">
+            <button id="submit-repo-btn" class="btn primary" disabled>Add Selected</button>
+            <button id="cancel-repo-btn" class="btn secondary">Cancel</button>
+          </div>
+        </div>
+
+        <div id="repos-list" class="card-list">
+          <p class="loading">Loading repositories...</p>
+        </div>
+      </section>
+    </main>
+
+    <%- include('../partials/footer') %>
+    <%- include('../partials/modals') %>
+  </div>
+
+  <%- include('../partials/scripts') %>
+</body>
+</html>

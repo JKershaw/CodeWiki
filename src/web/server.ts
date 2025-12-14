@@ -19,6 +19,7 @@ import type { LLMService } from '../services/llm/llm-service.js';
 import { createApiRoutes } from './routes/index.js';
 import { createAuthRoutes } from './routes/auth.js';
 import { createGitHubAuthRouter } from './routes/github-auth.js';
+import { createPageRoutes } from './routes/pages.js';
 import { passwordProtection } from './middleware/password-protection.js';
 import { createJwtService } from '../services/auth/jwt-service.js';
 import { createGitHubAuthService } from '../services/github/github-auth-service.js';
@@ -254,10 +255,8 @@ export async function startServer(port = PORT) {
   // Resume any incomplete auto-benchmark runs from before server restart
   resumeIncompleteAutoBenchmarks(repos, git, createLLM, repoServiceFactory);
 
-  // Render the main page for all non-API routes (SPA support)
-  app.get('*', (_req: Request, res: Response) => {
-    res.render('index');
-  });
+  // Page routes (multi-page application)
+  app.use(createPageRoutes());
 
   const server = app.listen(port, () => {
     console.log(`CodeWiki web server running at http://localhost:${port}`);

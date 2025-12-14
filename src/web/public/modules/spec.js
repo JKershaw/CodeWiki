@@ -7,23 +7,24 @@
 let lastSpecResult = null;
 
 /**
- * Open the spec view for a repository.
+ * Initialize the spec page.
+ * Called on page load when on the spec page.
  */
-async function openSpec(repoId) {
-  currentRepo = await api(`/repos/${repoId}`);
-  document.getElementById('spec-repo-name').textContent = currentRepo.fullName;
+async function initSpecPage() {
+  const repoId = window.currentRepoId;
+  if (!repoId) return;
 
-  // Enable nav buttons
-  document.querySelector('[data-view="wiki"]').disabled = false;
-  document.querySelector('[data-view="query"]').disabled = false;
-  document.querySelector('[data-view="spec"]').disabled = false;
+  try {
+    currentRepo = await api(`/repos/${repoId}`);
+    document.getElementById('spec-repo-name').textContent = currentRepo.fullName;
 
-  showView('spec');
-
-  // Clear previous results
-  document.getElementById('spec-result').classList.add('hidden');
-  document.getElementById('spec-task').value = '';
-  document.getElementById('spec-task').focus();
+    // Clear previous results and focus input
+    document.getElementById('spec-result').classList.add('hidden');
+    document.getElementById('spec-task').value = '';
+    document.getElementById('spec-task').focus();
+  } catch (error) {
+    console.error('Failed to initialize spec page:', error);
+  }
 }
 
 /**
