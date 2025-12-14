@@ -69,6 +69,17 @@ export interface ToolUseOptions extends CompletionOptions {
   }>;
   /** Maximum number of tool call rounds (default: 5) */
   maxToolRounds?: number;
+  /**
+   * Force the model to use tools for the first N rounds.
+   * Uses tool_choice: "required" until this many rounds have completed.
+   * Helps ensure the model engages with tools before producing final output.
+   */
+  forceToolUseRounds?: number;
+  /**
+   * Custom prompt to use when forcing final output after exhausting tool rounds.
+   * If not provided, uses a generic prompt asking for markdown output.
+   */
+  finalOutputPrompt?: string;
   /** Function to execute tools */
   executeTools: (
     calls: Array<{ id: string; name: string; input: Record<string, unknown> }>

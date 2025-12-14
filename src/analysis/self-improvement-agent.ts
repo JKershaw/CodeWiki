@@ -134,6 +134,20 @@ export class SelfImprovementAgent {
       // Create tool executor
       const executeTools = this.createToolExecutor(toolContext);
 
+      // Custom prompt for when tool rounds are exhausted
+      const finalOutputPrompt = `You have completed your investigation. Now write your comprehensive analysis report in markdown format.
+
+Your report MUST include these sections:
+1. **Executive Summary** - Key strengths, top 3 coverage gaps, top 3 quality issues
+2. **Wiki Quality Assessment** - Overall quality with specific examples
+3. **Coverage Analysis** - Source files/directories without wiki documentation
+4. **Root Cause Analysis** - Why issues exist (orchestrator decisions, agent behavior, process gaps)
+5. **Benchmark Correlation** - How accuracy benchmarks align with your findings, list any STUCK questions
+6. **Actionable Recommendations** - Specific, prioritized process improvements with verification criteria
+7. **Assessment Limitations** - What you couldn't fully assess
+
+Do not use any more tools. Write the complete report now.`;
+
       // Run the agentic analysis
       const completion = await this.llm.completeWithTools({
         system: getSystemPrompt(),
@@ -150,6 +164,8 @@ export class SelfImprovementAgent {
         })),
         executeTools,
         maxToolRounds: DEFAULT_MAX_TOOL_ROUNDS,
+        forceToolUseRounds: 3, // Ensure at least 3 rounds of tool use before allowing text-only response
+        finalOutputPrompt,
         maxTokens: DEFAULT_MAX_TOKENS,
         temperature: 0.3,
       });
