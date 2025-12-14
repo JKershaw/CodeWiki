@@ -1,5 +1,7 @@
+import { createHash } from 'crypto';
 import type { AgentType } from './agent-run.js';
 import type { WorkTarget } from './work-target.js';
+import { getWorkTargetKey } from './work-target.js';
 
 // Re-export WorkTarget types for convenience
 export {
@@ -15,6 +17,26 @@ export {
   isPathTarget,
   isWikiTarget,
 } from './work-target.js';
+
+/**
+ * Generate a deterministic work item ID based on repo, agent type, and target.
+ *
+ * This ensures that concurrent orchestrator calls creating work for the same
+ * target will produce the same ID, preventing duplicates when saved to the
+ * work queue (the save operation acts as an upsert by ID).
+ *
+ * Format: work-{hash} where hash is derived from repoId:agentType:targetKey
+ */
+export function generateWorkItemId(
+  repoId: string,
+  agentType: AgentType,
+  target: WorkTarget
+): string {
+  const targetKey = getWorkTargetKey(target);
+  const input = `${repoId}:${agentType}:${targetKey}`;
+  const hash = createHash('sha256').update(input).digest('hex').slice(0, 32);
+  return `work-${hash}`;
+}
 
 /**
  * Represents a pending work item in the queue.

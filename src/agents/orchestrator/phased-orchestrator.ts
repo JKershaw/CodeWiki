@@ -13,7 +13,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
-import { createWorkItem } from '../../domain/work-item.js';
+import { createWorkItem, generateWorkItemId } from '../../domain/work-item.js';
 import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { UnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
@@ -236,7 +236,7 @@ export function createExplorationWorkItem(
       : { type: 'path', path: dirPath };
 
   return createWorkItem({
-    id: uuid(),
+    id: generateWorkItemId(repoId, 'codebase-explorer', target),
     repoId,
     agentType: 'codebase-explorer',
     target,
@@ -606,11 +606,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
+      const target = { type: 'commit' as const, commitId: commit.id };
       workItems.push(createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, 'code-change', target),
         repoId,
         agentType: 'code-change',
-        target: { type: 'commit', commitId: commit.id },
+        target,
       }));
     }
 
@@ -626,11 +627,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
+      const target = { type: 'commit' as const, commitId: commit.id };
       workItems.push(createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, 'narrative', target),
         repoId,
         agentType: 'narrative',
-        target: { type: 'commit', commitId: commit.id },
+        target,
       }));
     }
 
@@ -686,11 +688,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
+      const commitTarget = { type: 'commit' as const, commitId: commit.id };
       workItems.push(createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, 'code-change', commitTarget),
         repoId,
         agentType: 'code-change',
-        target: { type: 'commit', commitId: commit.id },
+        target: commitTarget,
       }));
     }
 
@@ -699,11 +702,12 @@ export class PhasedOrchestrator implements Orchestrator {
       const key = 'wiki-index:wiki';
       if (!existingWorkKeys.has(key)) {
         existingWorkKeys.add(key);
+        const wikiTarget = { type: 'wiki' as const };
         workItems.push(createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(repoId, 'wiki-index', wikiTarget),
           repoId,
           agentType: 'wiki-index',
-          target: { type: 'wiki' },
+          target: wikiTarget,
         }));
       }
     }
@@ -762,11 +766,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
+      const commitTarget = { type: 'commit' as const, commitId: commit.id };
       workItems.push(createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, 'code-change', commitTarget),
         repoId,
         agentType: 'code-change',
-        target: { type: 'commit', commitId: commit.id },
+        target: commitTarget,
       }));
     }
 
@@ -775,11 +780,12 @@ export class PhasedOrchestrator implements Orchestrator {
       const key = 'overview:wiki';
       if (!existingWorkKeys.has(key)) {
         existingWorkKeys.add(key);
+        const wikiTarget = { type: 'wiki' as const };
         workItems.push(createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(repoId, 'overview', wikiTarget),
           repoId,
           agentType: 'overview',
-          target: { type: 'wiki' },
+          target: wikiTarget,
         }));
       }
     }
@@ -789,11 +795,12 @@ export class PhasedOrchestrator implements Orchestrator {
       const key = 'link:wiki';
       if (!existingWorkKeys.has(key)) {
         existingWorkKeys.add(key);
+        const wikiTarget = { type: 'wiki' as const };
         workItems.push(createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(repoId, 'link', wikiTarget),
           repoId,
           agentType: 'link',
-          target: { type: 'wiki' },
+          target: wikiTarget,
         }));
       }
     }
@@ -856,11 +863,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
+      const wikiTarget = { type: 'wiki' as const };
       workItems.push(createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, agent as AgentType, wikiTarget),
         repoId,
         agentType: agent as AgentType,
-        target: { type: 'wiki' },
+        target: wikiTarget,
       }));
       synthesisAdded++;
     }
@@ -882,11 +890,12 @@ export class PhasedOrchestrator implements Orchestrator {
         if (existingWorkKeys.has(key)) continue;
         existingWorkKeys.add(key);
 
+        const commitTarget = { type: 'commit' as const, commitId: commit.id };
         workItems.push(createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(repoId, agentType, commitTarget),
           repoId,
           agentType,
-          target: { type: 'commit', commitId: commit.id },
+          target: commitTarget,
         }));
       }
     }
@@ -896,11 +905,12 @@ export class PhasedOrchestrator implements Orchestrator {
       const key = 'quality:wiki';
       if (!existingWorkKeys.has(key)) {
         existingWorkKeys.add(key);
+        const wikiTarget = { type: 'wiki' as const };
         workItems.push(createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(repoId, 'quality', wikiTarget),
           repoId,
           agentType: 'quality',
-          target: { type: 'wiki' },
+          target: wikiTarget,
         }));
       }
     }
@@ -935,11 +945,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (agentType === 'writer' && context.pagesNeedingRewrite === 0) continue;
 
       existingWorkKeys.add(key);
+      const wikiTarget = { type: 'wiki' as const };
       workItems.push(createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, agentType, wikiTarget),
         repoId,
         agentType,
-        target: { type: 'wiki' },
+        target: wikiTarget,
       }));
     }
 
@@ -982,11 +993,12 @@ export class PhasedOrchestrator implements Orchestrator {
         if (existingWorkKeys.has(key)) continue;
         existingWorkKeys.add(key);
 
+        const commitTarget = { type: 'commit' as const, commitId: commit.id };
         workItems.push(createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(repoId, agentType, commitTarget),
           repoId,
           agentType,
-          target: { type: 'commit', commitId: commit.id },
+          target: commitTarget,
         }));
       }
     }
@@ -1018,11 +1030,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
+      const commitTarget = { type: 'commit' as const, commitId: commit.id };
       workItems.push(createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, 'code-change', commitTarget),
         repoId,
         agentType: 'code-change',
-        target: { type: 'commit', commitId: commit.id },
+        target: commitTarget,
       }));
     }
 
@@ -1063,11 +1076,12 @@ export class PhasedOrchestrator implements Orchestrator {
       return null;
     }
 
+    const target = { type: 'wiki' as const };
     return createWorkItem({
-      id: uuid(),
+      id: generateWorkItemId(repoId, 'bootstrap', target),
       repoId,
       agentType: 'bootstrap',
-      target: { type: 'wiki' },
+      target,
     });
   }
 

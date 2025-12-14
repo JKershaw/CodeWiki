@@ -4,7 +4,7 @@ import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { createWorkItem, isCommitTarget, isPathTarget } from '../domain/work-item.js';
+import { createWorkItem, generateWorkItemId, isCommitTarget, isPathTarget } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -200,11 +200,12 @@ export class Executor {
           console.log(`📝 Found ${pendingEdits} pending edit requests, processing first...`);
 
           // Create a wiki-editor work item for tracking
+          const wikiEditorTarget = { type: 'wiki' as const };
           const wikiEditorWorkItem = createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(repoId, 'wiki-editor', wikiEditorTarget),
             repoId,
             agentType: 'wiki-editor',
-            target: { type: 'wiki' },
+            target: wikiEditorTarget,
           });
 
           // Save and immediately claim it
