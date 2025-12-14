@@ -264,19 +264,18 @@ describe('PhasedOrchestrator Integration', () => {
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
       // Add 35+ wiki pages that properly cover the source files
-      // Coverage calculation needs:
-      // - 50%+ coverage: heading about file OR 3+ mentions with context
-      // Create pages with file names in the path (100% coverage for matching files)
+      // Use filesAccessed for binary coverage (covered vs not covered)
       for (let i = 0; i < 35; i++) {
         const category = categories[i % 5];
-        // Use file name (without extension) in the page path for 100% coverage
+        // Use filesAccessed to indicate coverage
         await ctx.repos.wikiPages.save(createWikiPage({
           id: `page-${i}`,
           wikiId: wiki.id,
-          path: `${category}/file${i}`,  // Matches file name for 100% coverage
+          path: `${category}/file${i}`,
           title: `File ${i} Documentation`,
-          content: `# file${i}.ts\n\nDocumentation for file${i}.ts in src/${category}/. The file${i}.ts module handles important functionality.`,
+          content: `# file${i}.ts\n\nDocumentation for file${i}.ts in src/${category}/.`,
           confidence: 0.65,
+          filesAccessed: [`src/${category}/file${i}.ts`],
         }));
       }
 
