@@ -37,6 +37,9 @@ test.describe('Wiki Query', () => {
     // Wait for query page to load
     await page.waitForURL(/\/query\//, { timeout: 10000 });
 
+    // Wait for page initialization to complete (repo name is populated)
+    await expect(page.locator('#query-repo-name')).not.toBeEmpty({ timeout: 10000 });
+
     // Input should be focused
     await expect(page.locator('#query-question')).toBeFocused();
   });
@@ -47,6 +50,9 @@ test.describe('Wiki Query', () => {
 
     // Wait for query page to load
     await page.waitForURL(/\/query\//, { timeout: 10000 });
+
+    // Wait for page initialization to complete (repo name is populated)
+    await expect(page.locator('#query-repo-name')).not.toBeEmpty({ timeout: 10000 });
 
     // Enter a question
     await page.fill('#query-question', 'What is the architecture?');
@@ -71,6 +77,9 @@ test.describe('Wiki Query', () => {
     // Wait for query page to load
     await page.waitForURL(/\/query\//, { timeout: 10000 });
 
+    // Wait for page initialization to complete (repo name is populated)
+    await expect(page.locator('#query-repo-name')).not.toBeEmpty({ timeout: 10000 });
+
     await page.fill('#query-question', 'What is the architecture?');
     await page.click('#submit-query');
 
@@ -87,6 +96,9 @@ test.describe('Wiki Query', () => {
 
     // Wait for query page to load
     await page.waitForURL(/\/query\//, { timeout: 10000 });
+
+    // Wait for page initialization to complete (repo name is populated)
+    await expect(page.locator('#query-repo-name')).not.toBeEmpty({ timeout: 10000 });
 
     // Enter a question and press Enter (textarea requires Enter without Shift to submit)
     await page.fill('#query-question', 'What is the architecture?');
