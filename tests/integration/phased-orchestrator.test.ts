@@ -251,21 +251,31 @@ describe('PhasedOrchestrator Integration', () => {
     it('schedules synthesis agents when key pages missing', async () => {
       const repoId = 'phased-depth-guides';
 
-      await createTestRepo(ctx, repoId, {
-        'src/index.ts': 'export const x = 1;',
-      });
+      // Create source files matching the wiki page categories
+      // 5 directories with 7 files each = 35 total files
+      const sourceFiles: Record<string, string> = {};
+      const categories = ['agents', 'services', 'utils', 'core', 'api'];
+      for (let i = 0; i < 35; i++) {
+        const category = categories[i % 5];
+        sourceFiles[`src/${category}/file${i}.ts`] = `export const val${i} = ${i};`;
+      }
+      await createTestRepo(ctx, repoId, sourceFiles);
 
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      // Add 30+ pages across multiple categories (past breadth phase)
+      // Add 35+ wiki pages that properly cover the source files
+      // Coverage calculation needs:
+      // - 50%+ coverage: heading about file OR 3+ mentions with context
+      // Create pages with file names in the path (100% coverage for matching files)
       for (let i = 0; i < 35; i++) {
-        const category = ['agents', 'services', 'utils', 'core', 'api'][i % 5];
+        const category = categories[i % 5];
+        // Use file name (without extension) in the page path for 100% coverage
         await ctx.repos.wikiPages.save(createWikiPage({
           id: `page-${i}`,
           wikiId: wiki.id,
-          path: `${category}/page-${i}`,
-          title: `Page ${i}`,
-          content: `# Page ${i}\n\nThis is substantial documentation content for page ${i} that provides good detail.`,
+          path: `${category}/file${i}`,  // Matches file name for 100% coverage
+          title: `File ${i} Documentation`,
+          content: `# file${i}.ts\n\nDocumentation for file${i}.ts in src/${category}/. The file${i}.ts module handles important functionality.`,
           confidence: 0.65,
         }));
       }

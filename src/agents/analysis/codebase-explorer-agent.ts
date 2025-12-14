@@ -33,7 +33,7 @@ export class CodebaseExplorerAgent implements Agent {
   // Size limits for pre-fetch approach
   private readonly MAX_FILE_SIZE = 20000;
   private readonly MAX_TOTAL_SIZE = 80000;
-  private readonly MAX_FILES_TO_PREFETCH = 10;
+  private readonly MAX_FILES_TO_PREFETCH = 15;
 
   getSystemPrompt(): string {
     return SYSTEM_PROMPT;
@@ -367,7 +367,12 @@ export class CodebaseExplorerAgent implements Agent {
       return [...validPriority, ...othersSorted].slice(0, this.MAX_FILES_TO_PREFETCH);
     }
 
-    // Fall back to default behavior
+    // No priorityFiles provided - this indicates a problem in the orchestrator
+    // since lowCoverageFiles should always be computed when undocumentedDirectories exist
+    console.warn(
+      `[codebase-explorer] No priorityFiles provided for file selection. ` +
+      `This may cause inefficient exploration. Files: ${files.length}`
+    );
     return this.sortByDefaultPriority(files).slice(0, this.MAX_FILES_TO_PREFETCH);
   }
 

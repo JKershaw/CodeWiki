@@ -17,7 +17,7 @@ import { createWorkItem } from '../../domain/work-item.js';
 import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { UnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
-import { ContextGatherer, type OrchestratorContext } from './context-gatherer.js';
+import { ContextGatherer, type OrchestratorContext, type UndocumentedDirectory } from './context-gatherer.js';
 import type { Orchestrator, OrchestratorConfig, WorkSummary } from './orchestrator.js';
 import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 
@@ -106,6 +106,85 @@ export function detectPhase(ctx: PhaseContext): Phase {
 
   // Phase 5: Maintenance
   return Phase.Maintenance;
+}
+
+/**
+ * Calculate the lowest directory coverage from undocumented directories.
+ *
+ * This function correctly includes ALL directories in the calculation,
+ * including those with undocumentedRatio === 1.0 (0% coverage).
+ *
+ * Bug fix: The previous implementation excluded ratio=1.0 directories,
+ * which caused lowestDirectoryCoverage to be artificially high when
+ * some directories were completely undocumented.
+ *
+ * @param undocumentedDirectories - Array of directories with their coverage ratios
+ * @param wikiPages - Number of wiki pages (used for fallback estimate)
+ * @returns Lowest coverage percentage (0-100) across all directories
+ */
+export function calculateLowestDirectoryCoverage(
+  undocumentedDirectories: UndocumentedDirectory[],
+  wikiPages: number
+): number {
+  if (undocumentedDirectories.length === 0) {
+    // No directory info - use page-based estimate as fallback
+    return Math.min(wikiPages * 2, 80);
+  }
+
+  // Calculate coverage for ALL directories (including ratio=1.0)
+  // Coverage = (1 - undocumentedRatio) * 100
+  // e.g., ratio 0.6 = 40% coverage, ratio 1.0 = 0% coverage
+  const coverages = undocumentedDirectories.map(d => (1 - d.undocumentedRatio) * 100);
+  return Math.min(...coverages);
+}
+
+/**
+ * Maximum number of priority files to include in a work item.
+ * Prevents payload bloat while still providing coverage guidance.
+ */
+export const MAX_PRIORITY_FILES = 20;
+
+/**
+ * Low coverage file type from context gatherer.
+ */
+type LowCoverageFile = { path: string; coverage: number; directory: string };
+
+/**
+ * Create an exploration work item with priority files.
+ *
+ * This helper function extracts low-coverage files for the target directory
+ * and includes them as priorityFiles in the work item. This ensures the
+ * codebase-explorer agent reads undocumented files first, fixing the issue
+ * where it would re-read the same files on every visit.
+ *
+ * @param dirPath - Directory path to explore
+ * @param repoId - Repository ID
+ * @param lowCoverageFiles - Array of files with low coverage
+ * @returns WorkItem with priorityFiles for coverage-aware exploration
+ */
+export function createExplorationWorkItem(
+  dirPath: string,
+  repoId: string,
+  lowCoverageFiles: LowCoverageFile[]
+): ReturnType<typeof createWorkItem> {
+  // Get low-coverage files in this directory
+  const priorityFiles = lowCoverageFiles
+    .filter(f => f.directory === dirPath)
+    .map(f => f.path)
+    .slice(0, MAX_PRIORITY_FILES);
+
+  // Build target - only include priorityFiles if non-empty
+  const target: { type: 'path'; path: string; priorityFiles?: string[] } =
+    priorityFiles.length > 0
+      ? { type: 'path', path: dirPath, priorityFiles }
+      : { type: 'path', path: dirPath };
+
+  return createWorkItem({
+    id: uuid(),
+    repoId,
+    agentType: 'codebase-explorer',
+    target,
+  });
 }
 
 /**
@@ -388,14 +467,12 @@ export class PhasedOrchestrator implements Orchestrator {
     // Use the higher of actual coverage or estimate
     const dirsWithCoverage = Math.max(dirsWithSomeCoverage, estimatedDirs);
 
-    // Find lowest coverage among documented directories
-    // If all dirs are 100% undocumented, use page-based estimate
-    const documentedDirs = hasDirectoryInfo
-      ? context.undocumentedDirectories.filter(d => d.undocumentedRatio < 1.0)
-      : [];
-    const lowestCoverage = documentedDirs.length > 0
-      ? Math.min(...documentedDirs.map(d => (1 - d.undocumentedRatio) * 100))
-      : Math.min(context.wikiPages * 2, 80); // Estimate: coverage scales with pages
+    // Find lowest coverage among ALL directories (including fully undocumented ones)
+    // This fixes a bug where ratio=1.0 directories were excluded from the calculation
+    const lowestCoverage = calculateLowestDirectoryCoverage(
+      context.undocumentedDirectories,
+      context.wikiPages
+    );
 
     // Get open findings count
     const findingsQuery = createListOpenFindingsQuery(wikiId);
@@ -529,12 +606,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
-      workItems.push(createWorkItem({
-        id: uuid(),
+      // Use helper that includes priorityFiles for coverage-aware exploration
+      workItems.push(createExplorationWorkItem(
+        dir.path,
         repoId,
-        agentType: 'codebase-explorer',
-        target: { type: 'path', path: dir.path },
-      }));
+        context.lowCoverageFiles
+      ));
     }
 
     // 20% recent commits
@@ -601,12 +678,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
-      workItems.push(createWorkItem({
-        id: uuid(),
+      // Use helper that includes priorityFiles for coverage-aware exploration
+      workItems.push(createExplorationWorkItem(
+        dir.path,
         repoId,
-        agentType: 'codebase-explorer',
-        target: { type: 'path', path: dir.path },
-      }));
+        context.lowCoverageFiles
+      ));
     }
 
     // 20% commits
@@ -687,12 +764,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
-      workItems.push(createWorkItem({
-        id: uuid(),
+      // Use helper that includes priorityFiles for coverage-aware exploration
+      workItems.push(createExplorationWorkItem(
+        dir.path,
         repoId,
-        agentType: 'codebase-explorer',
-        target: { type: 'path', path: dir.path },
-      }));
+        context.lowCoverageFiles
+      ));
     }
 
     // 25% synthesis - key pages in priority order
@@ -813,12 +890,12 @@ export class PhasedOrchestrator implements Orchestrator {
       if (existingWorkKeys.has(key)) continue;
       existingWorkKeys.add(key);
 
-      workItems.push(createWorkItem({
-        id: uuid(),
+      // Use helper that includes priorityFiles for coverage-aware exploration
+      workItems.push(createExplorationWorkItem(
+        dir.path,
         repoId,
-        agentType: 'codebase-explorer',
-        target: { type: 'path', path: dir.path },
-      }));
+        context.lowCoverageFiles
+      ));
     }
 
     // 20% remaining commits
