@@ -163,6 +163,10 @@ export function createSaveWorkItemsCommand(workItems: WorkItem[]): SaveWorkItems
 /**
  * Handler for SaveWorkItems command.
  * Returns the number of items saved.
+ *
+ * Note: With deterministic IDs, work items for the same target will have the
+ * same ID. We skip saving items that already exist with status 'pending' or
+ * 'claimed' to avoid overwriting in-progress work.
  */
 export async function handleSaveWorkItems(
   command: SaveWorkItemsCommand,
@@ -172,8 +176,23 @@ export async function handleSaveWorkItems(
     if (command.workItems.length === 0) {
       return success(0);
     }
-    await repos.workQueue.saveMany(command.workItems);
-    return success(command.workItems.length);
+
+    // Filter out items that already exist with pending/claimed status
+    // This prevents overwriting work that's in progress
+    const itemsToSave: WorkItem[] = [];
+    for (const item of command.workItems) {
+      const existing = await repos.workQueue.findById(item.id);
+      if (!existing || existing.status === 'completed' || existing.status === 'failed') {
+        // Item doesn't exist or is done - safe to save/overwrite
+        itemsToSave.push(item);
+      }
+      // If existing is pending or claimed, skip - don't overwrite in-progress work
+    }
+
+    if (itemsToSave.length > 0) {
+      await repos.workQueue.saveMany(itemsToSave);
+    }
+    return success(itemsToSave.length);
   } catch (error) {
     return failure(`Failed to save work items: ${error}`);
   }

@@ -12,6 +12,7 @@ import { PhasedOrchestrator } from '../../src/agents/orchestrator/phased-orchest
 import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import { createWikiPage } from '../../src/domain/wiki-page.js';
 import { createWorkItem, createPathTarget, createCommitTarget, generateWorkItemId } from '../../src/domain/work-item.js';
+import { createSaveWorkItemsCommand, handleSaveWorkItems } from '../../src/commands/work-queue.js';
 
 describe('Work Item Deduplication', () => {
   let ctx: TestContext;
@@ -165,6 +166,84 @@ describe('Work Item Deduplication', () => {
         workItem2.id,
         'Work items with same target should have same deterministic ID'
       );
+    });
+  });
+
+  describe('In-progress work protection', () => {
+    it('should not overwrite pending work items when saving duplicates via command', async () => {
+      const repoId = 'dedup-pending-protection-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      // Create and save a work item
+      const target = createPathTarget('src/services');
+      const workItem1 = createWorkItem({
+        id: generateWorkItemId(repoId, 'codebase-explorer', target),
+        repoId,
+        agentType: 'codebase-explorer',
+        target,
+      });
+
+      await handleSaveWorkItems(createSaveWorkItemsCommand([workItem1]), ctx.repos);
+
+      // Try to save another work item with the same ID via command
+      const workItem2 = createWorkItem({
+        id: generateWorkItemId(repoId, 'codebase-explorer', target),
+        repoId,
+        agentType: 'codebase-explorer',
+        target,
+      });
+
+      const result = await handleSaveWorkItems(createSaveWorkItemsCommand([workItem2]), ctx.repos);
+
+      // Should report 0 items saved (skipped because pending already exists)
+      assert.strictEqual(result.data, 0, 'Should skip saving duplicate pending work item');
+
+      // Should still have exactly one work item
+      const allWork = await ctx.repos.workQueue.findPending(repoId);
+      assert.strictEqual(allWork.length, 1, 'Should have exactly one work item');
+    });
+
+    it('should not overwrite claimed work items when saving duplicates', async () => {
+      const repoId = 'dedup-claimed-protection-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Test',
+      });
+
+      // Create, save, and claim a work item
+      const target = createPathTarget('src/utils');
+      const workItem1 = createWorkItem({
+        id: generateWorkItemId(repoId, 'codebase-explorer', target),
+        repoId,
+        agentType: 'codebase-explorer',
+        target,
+      });
+
+      await ctx.repos.workQueue.save(workItem1);
+      const claimed = await ctx.repos.workQueue.claimNext(repoId);
+      assert.ok(claimed, 'Should have claimed work item');
+      assert.strictEqual(claimed.status, 'claimed');
+
+      // Try to save a new work item with the same ID
+      const workItem2 = createWorkItem({
+        id: generateWorkItemId(repoId, 'codebase-explorer', target),
+        repoId,
+        agentType: 'codebase-explorer',
+        target,
+      });
+
+      const result = await handleSaveWorkItems(createSaveWorkItemsCommand([workItem2]), ctx.repos);
+
+      // Should report 0 items saved (skipped because claimed already exists)
+      assert.strictEqual(result.data, 0, 'Should skip saving duplicate claimed work item');
+
+      // The existing item should still be claimed, not overwritten
+      const existingItem = await ctx.repos.workQueue.findById(workItem1.id);
+      assert.ok(existingItem, 'Work item should still exist');
+      assert.strictEqual(existingItem.status, 'claimed', 'Work item should still be claimed');
     });
   });
 });
