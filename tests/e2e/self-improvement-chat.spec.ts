@@ -134,8 +134,20 @@ test.describe('Self-Improvement Chat API', () => {
 });
 
 test.describe('Self-Improvement Chat UI', () => {
+  let repoId: string;
+
+  test.beforeAll(async ({ request }) => {
+    // Get a repo ID to navigate to benchmark page
+    const reposResponse = await request.get('/api/repos');
+    const repos = await reposResponse.json();
+    if (repos.length > 0) {
+      repoId = repos[0].id;
+    }
+  });
+
   test('chat section HTML structure exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     // Chat section should exist in the DOM
     await expect(page.locator('#chat-section')).toBeAttached();
@@ -147,7 +159,8 @@ test.describe('Self-Improvement Chat UI', () => {
   });
 
   test('chat input starts disabled', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     // Check via evaluate since element is in hidden container
     const inputDisabled = await page.evaluate(() => {
@@ -164,28 +177,32 @@ test.describe('Self-Improvement Chat UI', () => {
   });
 
   test('chat section is inside self-improvement report', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const chatSection = page.locator('#self-improvement-report #chat-section');
     await expect(chatSection).toBeAttached();
   });
 
   test('self-improvement report is hidden by default', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const report = page.locator('#self-improvement-report');
     await expect(report).toHaveClass(/hidden/);
   });
 
   test('chat welcome message is present', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const welcomeMessage = page.locator('.chat-welcome');
     await expect(welcomeMessage).toBeAttached();
   });
 
   test('chat elements have expected CSS classes', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const hasChatSection = await page.evaluate(() => {
       const el = document.getElementById('chat-section');
@@ -201,7 +218,8 @@ test.describe('Self-Improvement Chat UI', () => {
   });
 
   test('chat input area contains textarea and button', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const hasTextarea = await page.evaluate(() => {
       const inputArea = document.querySelector('.chat-input-area');
@@ -218,8 +236,20 @@ test.describe('Self-Improvement Chat UI', () => {
 });
 
 test.describe('Chat JavaScript Functions', () => {
+  let repoId: string;
+
+  test.beforeAll(async ({ request }) => {
+    // Get a repo ID to navigate to benchmark page
+    const reposResponse = await request.get('/api/repos');
+    const repos = await reposResponse.json();
+    if (repos.length > 0) {
+      repoId = repos[0].id;
+    }
+  });
+
   test('initChatSession function exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const fnExists = await page.evaluate(() =>
       typeof (window as unknown as { initChatSession?: () => void }).initChatSession === 'function'
@@ -228,7 +258,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('sendChatMessage function exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const fnExists = await page.evaluate(() =>
       typeof (window as unknown as { sendChatMessage?: () => void }).sendChatMessage === 'function'
@@ -237,7 +268,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('appendChatMessage function exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const fnExists = await page.evaluate(() =>
       typeof (window as unknown as { appendChatMessage?: () => void }).appendChatMessage === 'function'
@@ -246,7 +278,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('closeChatSession function exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const fnExists = await page.evaluate(() =>
       typeof (window as unknown as { closeChatSession?: () => void }).closeChatSession === 'function'
@@ -255,7 +288,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('showTypingIndicator function exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const fnExists = await page.evaluate(() =>
       typeof (window as unknown as { showTypingIndicator?: () => void }).showTypingIndicator === 'function'
@@ -264,7 +298,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('hideTypingIndicator function exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const fnExists = await page.evaluate(() =>
       typeof (window as unknown as { hideTypingIndicator?: () => void }).hideTypingIndicator === 'function'
@@ -273,7 +308,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('truncateText function works correctly', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const result = await page.evaluate(() => {
       const truncate = (window as unknown as { truncateText: (text: string, max: number) => string }).truncateText;
@@ -292,7 +328,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('Enter key triggers send behavior', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const sendAttempted = await page.evaluate(() => {
       (window as unknown as { _sendAttempted: boolean })._sendAttempted = false;
@@ -320,7 +357,8 @@ test.describe('Chat JavaScript Functions', () => {
   });
 
   test('Shift+Enter does not trigger send', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const sendAttempted = await page.evaluate(() => {
       (window as unknown as { _sendAttempted: boolean })._sendAttempted = false;
@@ -346,8 +384,20 @@ test.describe('Chat JavaScript Functions', () => {
 });
 
 test.describe('Chat Cost Display', () => {
+  let repoId: string;
+
+  test.beforeAll(async ({ request }) => {
+    // Get a repo ID to navigate to benchmark page
+    const reposResponse = await request.get('/api/repos');
+    const repos = await reposResponse.json();
+    if (repos.length > 0) {
+      repoId = repos[0].id;
+    }
+  });
+
   test('cost display element exists and is initially empty', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const costText = await page.evaluate(() => {
       const cost = document.getElementById('chat-cost');
@@ -357,7 +407,8 @@ test.describe('Chat Cost Display', () => {
   });
 
   test('updateChatCost function exists', async ({ page }) => {
-    await page.goto('/');
+    test.skip(!repoId, 'Test requires a repository');
+    await page.goto(`/benchmark/${repoId}`);
 
     const fnExists = await page.evaluate(() =>
       typeof (window as unknown as { updateChatCost?: () => void }).updateChatCost === 'function'

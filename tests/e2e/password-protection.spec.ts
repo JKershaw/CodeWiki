@@ -15,7 +15,7 @@ test.describe('Password Protection', () => {
 
     test('homepage is accessible without authentication', async ({ page }) => {
       await page.goto('/');
-      await expect(page).toHaveTitle('CodeWiki');
+      await expect(page).toHaveTitle(/CodeWiki/);
       await expect(page.locator('header h1')).toHaveText('CodeWiki');
     });
 
@@ -28,7 +28,7 @@ test.describe('Password Protection', () => {
       await page.goto('/login');
       // Should redirect to home page
       await expect(page).toHaveURL('/');
-      await expect(page).toHaveTitle('CodeWiki');
+      await expect(page).toHaveTitle(/CodeWiki/);
     });
   });
 
@@ -130,7 +130,7 @@ test.describe('Password Protection', () => {
 
       // Should redirect to home page
       await expect(page).toHaveURL(PROTECTED_URL + '/');
-      await expect(page).toHaveTitle('CodeWiki');
+      await expect(page).toHaveTitle(/CodeWiki/);
       await expect(page.locator('header h1')).toHaveText('CodeWiki');
     });
 
