@@ -137,6 +137,8 @@ export async function handleUpdateWikiPage(
         filesAccessed?: string[];
         filesReferenced?: string[];
         targetPaths?: string[];
+        category?: string;
+        categoryConfidence?: number;
       } = {
         content: update.content,
         title: update.title ?? extractTitleWithFallback(update.content, update.path),
@@ -154,6 +156,12 @@ export async function handleUpdateWikiPage(
       }
       if (update.targetPaths) {
         updateParams.targetPaths = update.targetPaths;
+      }
+      if (update.category) {
+        updateParams.category = update.category;
+      }
+      if (update.categoryConfidence !== undefined) {
+        updateParams.categoryConfidence = update.categoryConfidence;
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
 

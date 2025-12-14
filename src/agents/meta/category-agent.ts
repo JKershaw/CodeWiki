@@ -338,6 +338,8 @@ Now analyze each page (one line per page, no duplicates):
           content: page.content, // Keep content unchanged
           agentRunId: '',
           confidenceDelta: 0.0, // No confidence change for category updates
+          category: cat.suggestedCategory,
+          categoryConfidence: cat.confidence,
         });
       }
     }
