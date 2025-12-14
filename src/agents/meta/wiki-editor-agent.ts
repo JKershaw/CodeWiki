@@ -472,6 +472,13 @@ ${content}`;
     if (editRequest.redirectTo) {
       update.redirectTo = editRequest.redirectTo;
     }
+    // Propagate file tracking data for coverage calculation
+    if (editRequest.filesAccessed && editRequest.filesAccessed.length > 0) {
+      update.filesAccessed = editRequest.filesAccessed;
+    }
+    if (editRequest.targetPaths && editRequest.targetPaths.length > 0) {
+      update.targetPaths = editRequest.targetPaths;
+    }
 
     return update;
   }
