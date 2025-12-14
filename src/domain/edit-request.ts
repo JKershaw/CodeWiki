@@ -66,6 +66,12 @@ export interface EditRequest {
   /** For delete: optional redirect target */
   redirectTo?: string;
 
+  // File tracking for coverage calculation
+  /** Files read by the agent when generating this edit */
+  filesAccessed?: string[];
+  /** Target paths assigned to this work (files or directories) */
+  targetPaths?: string[];
+
   // Queue metadata
   /** Current status of the edit request */
   status: EditRequestStatus;
@@ -109,6 +115,8 @@ export function createEditRequest(params: {
   proposedContent: string;
   confidenceDelta: number;
   redirectTo?: string;
+  filesAccessed?: string[];
+  targetPaths?: string[];
 }): EditRequest {
   const editRequest: EditRequest = {
     id: params.id,
@@ -135,6 +143,12 @@ export function createEditRequest(params: {
   }
   if (params.redirectTo !== undefined) {
     editRequest.redirectTo = params.redirectTo;
+  }
+  if (params.filesAccessed !== undefined && params.filesAccessed.length > 0) {
+    editRequest.filesAccessed = params.filesAccessed;
+  }
+  if (params.targetPaths !== undefined && params.targetPaths.length > 0) {
+    editRequest.targetPaths = params.targetPaths;
   }
 
   return editRequest;

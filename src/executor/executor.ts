@@ -779,6 +779,13 @@ export class Executor {
           if (update.redirectTo !== undefined) {
             editRequestParams.redirectTo = update.redirectTo;
           }
+          // Pass file tracking data for coverage calculation
+          if (update.filesAccessed && update.filesAccessed.length > 0) {
+            editRequestParams.filesAccessed = update.filesAccessed;
+          }
+          if (update.targetPaths && update.targetPaths.length > 0) {
+            editRequestParams.targetPaths = update.targetPaths;
+          }
 
           const editRequest = createEditRequest(editRequestParams);
           await this.repos.editRequests.save(editRequest);
