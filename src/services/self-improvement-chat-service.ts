@@ -133,26 +133,51 @@ export class SelfImprovementChatService {
       // Add the new user message
       messages.push({ role: 'user', content: userMessage });
 
+      // Load the same data that the original analysis had access to
+      // This ensures tools work identically in chat as in the main analysis
+      const benchmarkRuns = [];
+      for (const id of run.benchmarkRunIds) {
+        const br = await this.repos.benchmarks.findById(id);
+        if (br && br.status === 'completed') {
+          benchmarkRuns.push(br);
+        }
+      }
+      benchmarkRuns.sort((a, b) => a.iterationCount - b.iterationCount);
+
+      // Load quality benchmarks for the same iteration range
+      const minIteration = benchmarkRuns.length > 0 ? benchmarkRuns[0]!.iterationCount : 0;
+      const maxIteration = benchmarkRuns.length > 0 ? benchmarkRuns[benchmarkRuns.length - 1]!.iterationCount : Infinity;
+
+      const allQualityRuns = await this.repos.qualityBenchmarks.findByWiki(session.wikiId);
+      const qualityBenchmarkRuns = allQualityRuns
+        .filter(r =>
+          r.status === 'completed' &&
+          r.iterationCount >= minIteration &&
+          r.iterationCount <= maxIteration
+        )
+        .sort((a, b) => a.iterationCount - b.iterationCount);
+
+      // Load wiki pages
+      const wikiPages = await this.repos.wikiPages.findByWiki(session.wikiId);
+
       // Create unified repo access for source code exploration
       let repoAccess;
       if (this.repoAccessFactory) {
         try {
           repoAccess = await this.repoAccessFactory.create(session.repoId);
         } catch (err) {
-          // Continue without source access if creation fails
           console.warn(`[ChatService] Failed to create repo access: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
-      // Build the tool context
-      // For Q&A, we don't need the full benchmark data loaded - tools will fetch as needed
+      // Build the tool context with all data loaded
       const toolContext: AnalysisToolContext = {
         repos: this.repos,
         repoId: session.repoId,
         wikiId: session.wikiId,
-        benchmarkRuns: [],
-        qualityBenchmarkRuns: [],
-        wikiPages: [],
+        benchmarkRuns,
+        qualityBenchmarkRuns,
+        wikiPages,
         ...(repoAccess && { repoAccess }),
       };
 
