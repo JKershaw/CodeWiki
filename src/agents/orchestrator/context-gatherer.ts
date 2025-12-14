@@ -7,7 +7,6 @@ import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 // Import file-level coverage tree
 import {
   buildPrioritizedCoverageTree,
-  calculateGraduatedCoverage,
   type FileData,
 } from './file-coverage-tree.js';
 
@@ -106,10 +105,62 @@ export interface OrchestratorContext {
 }
 
 /**
- * Coverage threshold for considering a file "documented".
- * Files below this threshold need documentation.
+ * Wiki page with file tracking fields for coverage calculation.
  */
-const FILE_COVERAGE_THRESHOLD = 50;
+export interface WikiPageWithFileTracking {
+  path: string;
+  content: string;
+  filesAccessed?: string[];
+  filesReferenced?: string[];
+  targetPaths?: string[];
+}
+
+/**
+ * Build a set of covered files from wiki page tracking data.
+ *
+ * This function collects all files that have been:
+ * - Read by agents (filesAccessed)
+ * - Referenced in content (filesReferenced)
+ * - Targeted by work items (targetPaths)
+ *
+ * Using this approach instead of text-based mention matching ensures:
+ * - Progress is guaranteed (once read, always covered)
+ * - No stall at intermediate coverage levels
+ * - Coverage aligns with KPI calculation
+ *
+ * @param wikiPages - Wiki pages with file tracking fields
+ * @returns Set of covered file paths
+ */
+export function buildCoveredFilesSet(
+  wikiPages: WikiPageWithFileTracking[]
+): Set<string> {
+  const covered = new Set<string>();
+
+  for (const page of wikiPages) {
+    // Add files accessed by agents
+    if (page.filesAccessed) {
+      for (const file of page.filesAccessed) {
+        covered.add(file);
+      }
+    }
+
+    // Add files referenced in content
+    if (page.filesReferenced) {
+      for (const file of page.filesReferenced) {
+        covered.add(file);
+      }
+    }
+
+    // Add target paths (files or directories)
+    if (page.targetPaths) {
+      for (const path of page.targetPaths) {
+        covered.add(path);
+      }
+    }
+  }
+
+  return covered;
+}
 
 /**
  * Sort undocumented directories for consistent, deterministic ordering.
@@ -361,15 +412,20 @@ export class ContextGatherer {
 
   /**
    * Calculate which directories have undocumented files, and collect individual low-coverage files.
-   * Uses file-level coverage (graduated coverage) instead of simple mention counting.
+   * Uses filesAccessed/filesReferenced/targetPaths tracking instead of text-based mention matching.
+   *
+   * This approach ensures:
+   * - Progress is guaranteed (once read, always covered)
+   * - No stall at intermediate coverage levels (25% → 50% gap)
+   * - Coverage aligns with KPI calculation
    *
    * Returns both:
    * - directories: Aggregated stats per directory
-   * - files: Individual files with coverage < 50%
+   * - files: Individual files not yet covered (coverage = 0%)
    */
   private async calculateUndocumentedDirectoriesAndFiles(
     repoId: string,
-    wikiPages: Array<{ path: string; content: string }>
+    wikiPages: WikiPageWithFileTracking[]
   ): Promise<{
     directories: UndocumentedDirectory[];
     files: Array<{ path: string; coverage: number; directory: string }>;
@@ -387,6 +443,25 @@ export class ContextGatherer {
         return { directories: [], files: [] };
       }
 
+      // Build set of covered files from wiki page tracking data
+      const coveredFiles = buildCoveredFilesSet(wikiPages);
+
+      // Also expand directory targetPaths to cover all files under them
+      for (const page of wikiPages) {
+        if (page.targetPaths) {
+          for (const targetPath of page.targetPaths) {
+            // If target is a directory (ends with / or matches a prefix), cover all files under it
+            if (targetPath.endsWith('/')) {
+              for (const file of sourceFiles) {
+                if (file.startsWith(targetPath)) {
+                  coveredFiles.add(file);
+                }
+              }
+            }
+          }
+        }
+      }
+
       // Group files by directory and calculate coverage for each file
       const dirStats = new Map<string, { total: number; undocumented: number }>();
       const lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }> = [];
@@ -397,9 +472,10 @@ export class ContextGatherer {
 
         const dirPath = parts.slice(0, -1).join('/');
 
-        // Calculate file-level coverage using graduated coverage
-        const coverage = calculateGraduatedCoverage(filePath, wikiPages);
-        const isUndocumented = coverage < FILE_COVERAGE_THRESHOLD;
+        // Binary coverage: 100% if covered, 0% if not
+        const isCovered = coveredFiles.has(filePath);
+        const coverage = isCovered ? 100 : 0;
+        const isUndocumented = !isCovered;
 
         if (!dirStats.has(dirPath)) {
           dirStats.set(dirPath, { total: 0, undocumented: 0 });

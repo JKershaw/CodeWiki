@@ -24,7 +24,7 @@ mock.method(console, 'error', () => {});
 function createMockWikiPage(
   path: string,
   content: string,
-  options?: { confidence?: number }
+  options?: { confidence?: number; filesAccessed?: string[] }
 ): WikiPage {
   return {
     id: `page-${path.replace(/\//g, '-')}`,
@@ -37,6 +37,9 @@ function createMockWikiPage(
     sourceAgentRunIds: [],
     links: [],
     backlinks: [],
+    filesAccessed: options?.filesAccessed ?? [],
+    filesReferenced: [],
+    targetPaths: [],
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -258,22 +261,21 @@ import { strategies } from './strategies';
     });
 
     it('should exclude fully documented directories', async () => {
-      // Create wiki pages that thoroughly document each file
+      // Create wiki pages that cover all files via filesAccessed
       const wikiPages = [
         createMockWikiPage(
           'services/llm-service',
           `# LLM Service
 
-## src/services/llm/llm-service.ts
-Main service file.
-
-## src/services/llm/mock-llm.ts
-Mock implementation for testing.
-
-\`\`\`typescript
-import { LLMService } from './llm-service';
-\`\`\`
-`
+Documentation for the LLM service files.
+`,
+          {
+            // Use filesAccessed for coverage (binary: covered or not)
+            filesAccessed: [
+              'src/services/llm/llm-service.ts',
+              'src/services/llm/mock-llm.ts',
+            ],
+          }
         ),
       ];
 
@@ -292,11 +294,11 @@ import { LLMService } from './llm-service';
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // If files are well documented, directory might not be in undocumented list
-      // or would have lower undocumentedRatio
+      // If files are covered via filesAccessed, directory should not be in undocumented list
+      // or would have 0% undocumented ratio
       const llmDir = context.undocumentedDirectories.find(d => d.path === 'src/services/llm');
 
-      // Either not present (fully documented) or has lower ratio
+      // Either not present (fully documented) or has 0 undocumented ratio
       if (llmDir) {
         assert.ok(
           llmDir.undocumentedRatio < 1,
