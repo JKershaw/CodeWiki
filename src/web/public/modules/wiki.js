@@ -7,21 +7,30 @@
 const expandedTreeNodes = new Set();
 
 /**
- * Open the wiki view for a repository.
+ * Initialize the wiki page.
+ * Called on page load when on the wiki page.
  */
-async function openWiki(repoId) {
-  currentRepo = await api(`/repos/${repoId}`);
-  document.getElementById('wiki-repo-name').textContent = currentRepo.fullName;
+async function initWikiPage() {
+  const repoId = window.currentRepoId;
+  if (!repoId) return;
 
-  // Enable nav buttons
-  document.querySelector('[data-view="wiki"]').disabled = false;
-  document.querySelector('[data-view="query"]').disabled = false;
-  document.querySelector('[data-view="spec"]').disabled = false;
+  try {
+    currentRepo = await api(`/repos/${repoId}`);
+    document.getElementById('wiki-repo-name').textContent = currentRepo.fullName;
 
-  showView('wiki');
+    // Load wikis for selector
+    await loadWikiSelector(repoId);
 
-  // Load wikis for selector
-  await loadWikiSelector(repoId);
+    // Check if a specific page was requested via query parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestedPage = urlParams.get('page');
+    if (requestedPage && currentWiki) {
+      loadWikiPage(repoId, requestedPage, currentWiki.id);
+    }
+  } catch (error) {
+    console.error('Failed to initialize wiki page:', error);
+    document.getElementById('wiki-content').innerHTML = `<p class="placeholder">Error: ${escapeHtml(error.message)}</p>`;
+  }
 }
 
 /**

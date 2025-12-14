@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeWiki - Spec</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <%- include('../partials/header') %>
+    <%- include('../partials/nav', { activePage: 'spec', repoId: repoId }) %>
+
+    <main>
+      <!-- Spec View -->
+      <section id="spec-view" class="view active">
+        <div class="section-header">
+          <h2>Spec: <span id="spec-repo-name"></span></h2>
+          <a href="/" class="btn secondary">Back to Repos</a>
+        </div>
+
+        <div class="agent-container">
+          <div class="agent-input-section">
+            <label for="spec-task">Describe the task for a coding agent</label>
+            <textarea id="spec-task" placeholder="e.g., Add a new API endpoint for user preferences that follows the existing patterns..." rows="6"></textarea>
+            <div class="agent-actions">
+              <button id="submit-spec" class="btn primary">Generate Spec</button>
+            </div>
+          </div>
+
+          <div id="spec-result" class="agent-result hidden">
+            <div class="result-header">
+              <h3>Generated Specification</h3>
+              <button id="copy-spec" class="btn secondary">Copy</button>
+            </div>
+            <div id="spec-content" class="result-content"></div>
+            <div id="spec-meta" class="result-meta"></div>
+            <div id="spec-sources" class="result-sources"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <%- include('../partials/footer') %>
+    <%- include('../partials/modals') %>
+  </div>
+
+  <%- include('../partials/scripts') %>
+  <script>
+    window.currentRepoId = '<%= repoId %>';
+  </script>
+</body>
+</html>

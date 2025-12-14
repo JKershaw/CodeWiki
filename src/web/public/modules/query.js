@@ -4,23 +4,24 @@
  */
 
 /**
- * Open the query view for a repository.
+ * Initialize the query page.
+ * Called on page load when on the query page.
  */
-async function openQuery(repoId) {
-  currentRepo = await api(`/repos/${repoId}`);
-  document.getElementById('query-repo-name').textContent = currentRepo.fullName;
+async function initQueryPage() {
+  const repoId = window.currentRepoId;
+  if (!repoId) return;
 
-  // Enable nav buttons
-  document.querySelector('[data-view="wiki"]').disabled = false;
-  document.querySelector('[data-view="query"]').disabled = false;
-  document.querySelector('[data-view="spec"]').disabled = false;
+  try {
+    currentRepo = await api(`/repos/${repoId}`);
+    document.getElementById('query-repo-name').textContent = currentRepo.fullName;
 
-  showView('query');
-
-  // Clear previous results
-  document.getElementById('query-result').classList.add('hidden');
-  document.getElementById('query-question').value = '';
-  document.getElementById('query-question').focus();
+    // Clear previous results and focus input
+    document.getElementById('query-result').classList.add('hidden');
+    document.getElementById('query-question').value = '';
+    document.getElementById('query-question').focus();
+  } catch (error) {
+    console.error('Failed to initialize query page:', error);
+  }
 }
 
 /**

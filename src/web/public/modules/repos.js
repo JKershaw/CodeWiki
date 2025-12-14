@@ -88,22 +88,22 @@ async function loadRepos() {
       btn.addEventListener('click', () => processRepo(btn.dataset.id));
     });
     container.querySelectorAll('.wiki-btn').forEach(btn => {
-      btn.addEventListener('click', () => openWiki(btn.dataset.id));
+      btn.addEventListener('click', () => navigateToPage('wiki', btn.dataset.id));
     });
     container.querySelectorAll('.graph-btn').forEach(btn => {
-      btn.addEventListener('click', () => openGraph(btn.dataset.id));
+      btn.addEventListener('click', () => navigateToPage('graph', btn.dataset.id));
     });
     container.querySelectorAll('.query-btn').forEach(btn => {
-      btn.addEventListener('click', () => openQuery(btn.dataset.id));
+      btn.addEventListener('click', () => navigateToPage('query', btn.dataset.id));
     });
     container.querySelectorAll('.spec-btn').forEach(btn => {
-      btn.addEventListener('click', () => openSpec(btn.dataset.id));
+      btn.addEventListener('click', () => navigateToPage('spec', btn.dataset.id));
     });
     container.querySelectorAll('.benchmark-btn').forEach(btn => {
-      btn.addEventListener('click', () => openBenchmark(btn.dataset.id));
+      btn.addEventListener('click', () => navigateToPage('benchmark', btn.dataset.id));
     });
     container.querySelectorAll('.debug-btn').forEach(btn => {
-      btn.addEventListener('click', () => openDebug(btn.dataset.id));
+      btn.addEventListener('click', () => navigateToPage('debug', btn.dataset.id));
     });
     container.querySelectorAll('.delete-repo-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -463,14 +463,9 @@ async function deleteRepository(repoId, repoName) {
       currentRepo = null;
       currentWiki = null;
       currentPage = null;
-      // Disable repo-specific nav buttons
-      document.querySelector('[data-view="wiki"]').disabled = true;
-      document.querySelector('[data-view="graph"]').disabled = true;
-      document.querySelector('[data-view="query"]').disabled = true;
-      document.querySelector('[data-view="spec"]').disabled = true;
-      document.querySelector('[data-view="benchmark"]').disabled = true;
       // Go back to repos view
-      showView('repos');
+      navigateToRepos();
+      return; // Don't reload repos list since we're navigating away
     }
 
     // Reload the repos list
@@ -480,48 +475,6 @@ async function deleteRepository(repoId, repoName) {
   }
 }
 
-/**
- * Open the graph view for a repository.
- */
-async function openGraph(repoId) {
-  currentRepo = await api(`/repos/${repoId}`);
-  document.getElementById('graph-repo-name').textContent = currentRepo.fullName;
-
-  // Enable nav buttons
-  document.querySelector('[data-view="wiki"]').disabled = false;
-  document.querySelector('[data-view="graph"]').disabled = false;
-  document.querySelector('[data-view="query"]').disabled = false;
-  document.querySelector('[data-view="spec"]').disabled = false;
-
-  showView('graph');
-
-  // Get the active wiki for this repo
-  const wikis = await api(`/repos/${repoId}/wikis`);
-  const activeWiki = wikis.find(w => w.isActive) || wikis[0];
-
-  if (activeWiki) {
-    currentWiki = activeWiki;
-
-    // Populate category filter
-    try {
-      const graph = await api(`/repos/${repoId}/wiki-graph?wikiId=${activeWiki.id}`);
-      const categoryFilter = document.getElementById('graph-category-filter');
-      if (categoryFilter && graph.stats.categories.length > 0) {
-        categoryFilter.innerHTML = `
-          <option value="all">All Categories</option>
-          ${graph.stats.categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('')}
-        `;
-      }
-    } catch (e) {
-      // Ignore category filter error
-    }
-
-    // Initialize the graph
-    await initGraph(repoId, activeWiki.id);
-  } else {
-    document.getElementById('graph-container').innerHTML = '<p class="placeholder">No wiki available. Process the repository first.</p>';
-  }
-}
 
 /**
  * Get CSS class for coverage percentage coloring.

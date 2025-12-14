@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeWiki - Ask</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <%- include('../partials/header') %>
+    <%- include('../partials/nav', { activePage: 'query', repoId: repoId }) %>
+
+    <main>
+      <!-- Query View -->
+      <section id="query-view" class="view active">
+        <div class="section-header">
+          <h2>Ask: <span id="query-repo-name"></span></h2>
+          <a href="/" class="btn secondary">Back to Repos</a>
+        </div>
+
+        <div class="agent-container">
+          <div class="agent-input-section">
+            <label for="query-question">Ask a question about the codebase</label>
+            <textarea id="query-question" placeholder="e.g., How does authentication work? What patterns are used for API endpoints?" rows="6"></textarea>
+            <div class="agent-actions">
+              <button id="submit-query" class="btn primary">Ask</button>
+            </div>
+          </div>
+
+          <div id="query-result" class="agent-result hidden">
+            <div class="result-header">
+              <h3>Answer</h3>
+            </div>
+            <div id="query-answer" class="result-content"></div>
+            <div id="query-meta" class="result-meta"></div>
+            <div id="query-sources" class="result-sources"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <%- include('../partials/footer') %>
+    <%- include('../partials/modals') %>
+  </div>
+
+  <%- include('../partials/scripts') %>
+  <script>
+    window.currentRepoId = '<%= repoId %>';
+  </script>
+</body>
+</html>

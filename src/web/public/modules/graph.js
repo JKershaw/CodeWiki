@@ -332,7 +332,7 @@ function setupInteractions() {
 
     // Double-click to navigate to page
     if (event.originalEvent.detail === 2) {
-      navigateToPage(path);
+      navigateToWikiPage(path);
     }
   });
 
@@ -383,12 +383,12 @@ function hideNodeTooltip() {
 }
 
 /**
- * Navigate to a wiki page.
+ * Navigate to a wiki page from graph node click.
  */
-function navigateToPage(path) {
-  if (graphRepoId && currentWiki) {
-    loadWikiPage(graphRepoId, path, currentWiki.id);
-    showView('wiki');
+function navigateToWikiPage(path) {
+  if (graphRepoId) {
+    // Navigate to wiki page with the path as a query parameter
+    window.location.href = `/wiki/${graphRepoId}?page=${encodeURIComponent(path)}`;
   }
 }
 
@@ -794,6 +794,50 @@ function destroyGraph() {
   }
   graphRepoId = null;
   graphWikiId = null;
+}
+
+/**
+ * Initialize the graph page.
+ * Called on page load when on the graph page.
+ */
+async function initGraphPage() {
+  const repoId = window.currentRepoId;
+  if (!repoId) return;
+
+  try {
+    currentRepo = await api(`/repos/${repoId}`);
+    document.getElementById('graph-repo-name').textContent = currentRepo.fullName;
+
+    // Get the active wiki for this repo
+    const wikis = await api(`/repos/${repoId}/wikis`);
+    const activeWiki = wikis.find(w => w.isActive) || wikis[0];
+
+    if (activeWiki) {
+      currentWiki = activeWiki;
+
+      // Populate category filter
+      try {
+        const graph = await api(`/repos/${repoId}/wiki-graph?wikiId=${activeWiki.id}`);
+        const categoryFilter = document.getElementById('graph-category-filter');
+        if (categoryFilter && graph.stats.categories.length > 0) {
+          categoryFilter.innerHTML = `
+            <option value="all">All Categories</option>
+            ${graph.stats.categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('')}
+          `;
+        }
+      } catch (e) {
+        // Ignore category filter error
+      }
+
+      // Initialize the graph
+      await initGraph(repoId, activeWiki.id);
+    } else {
+      document.getElementById('graph-container').innerHTML = '<p class="placeholder">No wiki available. Process the repository first.</p>';
+    }
+  } catch (error) {
+    console.error('Failed to initialize graph page:', error);
+    document.getElementById('graph-container').innerHTML = `<p class="placeholder">Error: ${escapeHtml(error.message)}</p>`;
+  }
 }
 
 /**
