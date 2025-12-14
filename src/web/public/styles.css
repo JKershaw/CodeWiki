@@ -2557,7 +2557,7 @@ body.side-panel-open {
 	}
 
 	.benchmark-chart-container {
-		height: 300px;
+		height: 600px;
 		padding: 10px;
 	}
 
@@ -2974,7 +2974,7 @@ body.side-panel-open {
 
 	/* Benchmark */
 	.benchmark-chart-container {
-		height: 220px;
+		height: 440px;
 	}
 
 	.benchmark-detail-summary {
