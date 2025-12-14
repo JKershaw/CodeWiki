@@ -12,30 +12,34 @@ test.describe('Smoke Tests', () => {
     await page.goto('/');
 
     // Check title
-    await expect(page).toHaveTitle('CodeWiki');
+    await expect(page).toHaveTitle(/CodeWiki/);
 
     // Check header is visible
     await expect(page.locator('header h1')).toHaveText('CodeWiki');
     await expect(page.locator('.tagline')).toHaveText('Living documentation from your Git history');
   });
 
-  test('navigation buttons are present', async ({ page }) => {
+  test('navigation links are present', async ({ page }) => {
     await page.goto('/');
 
-    // Check navigation buttons
-    await expect(page.locator('[data-view="repos"]')).toBeVisible();
-    await expect(page.locator('[data-view="wiki"]')).toBeVisible();
-    await expect(page.locator('[data-view="query"]')).toBeVisible();
+    // Check navigation links in nav bar
+    const nav = page.locator('#nav');
+    await expect(nav).toBeVisible();
 
-    // Repos should be active by default
-    await expect(page.locator('[data-view="repos"]')).toHaveClass(/active/);
+    // Repositories link should be active and visible
+    const reposLink = nav.locator('a[href="/"]');
+    await expect(reposLink).toBeVisible();
+    await expect(reposLink).toHaveClass(/active/);
+
+    // Other nav items should be disabled (no repo selected)
+    await expect(nav.locator('.nav-btn.disabled')).toHaveCount(6);
   });
 
   test('repositories view is visible by default', async ({ page }) => {
     await page.goto('/');
 
-    // Repos view should be active
-    await expect(page.locator('#repos-view')).toHaveClass(/active/);
+    // Repos view should be visible
+    await expect(page.locator('#repos-view')).toBeVisible();
 
     // Add Repository button should be visible
     await expect(page.locator('#add-repo-btn')).toBeVisible();
