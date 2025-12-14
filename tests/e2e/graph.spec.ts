@@ -150,14 +150,19 @@ test.describe('Wiki Graph UI', () => {
     const graphBtn = page.locator('.graph-btn:not([disabled])').first();
     await graphBtn.click();
 
-    // Graph view should be visible
-    await expect(page.locator('#graph-view')).toHaveClass(/active/);
+    // Should navigate to graph page
+    await page.waitForURL(/\/graph\//, { timeout: 10000 });
+
+    // Graph container should be visible
     await expect(page.locator('#graph-container')).toBeVisible();
   });
 
   test('graph view shows controls', async ({ page }) => {
     const graphBtn = page.locator('.graph-btn:not([disabled])').first();
     await graphBtn.click();
+
+    // Wait for graph page to load
+    await page.waitForURL(/\/graph\//, { timeout: 10000 });
 
     // Controls should be visible
     await expect(page.locator('#graph-search')).toBeVisible();
@@ -170,6 +175,9 @@ test.describe('Wiki Graph UI', () => {
   test('graph view shows stats', async ({ page }) => {
     const graphBtn = page.locator('.graph-btn:not([disabled])').first();
     await graphBtn.click();
+
+    // Wait for graph page to load
+    await page.waitForURL(/\/graph\//, { timeout: 10000 });
 
     // Wait for graph container to be visible
     await expect(page.locator('#graph-container')).toBeVisible();
@@ -198,22 +206,27 @@ test.describe('Wiki Graph UI', () => {
     const graphBtn = page.locator('.graph-btn:not([disabled])').first();
     await graphBtn.click();
 
-    await expect(page.locator('#graph-view')).toHaveClass(/active/);
+    // Wait for graph page to load
+    await page.waitForURL(/\/graph\//, { timeout: 10000 });
 
-    // Click back button
-    await page.click('#back-to-repos-graph');
+    // Click Repositories link in nav
+    await page.click('#nav a[href="/"]');
 
-    // Should be back on repos view
-    await expect(page.locator('#repos-view')).toHaveClass(/active/);
+    // Should be back on repos page
+    await page.waitForURL('/', { timeout: 10000 });
+    await expect(page.locator('#repos-view')).toBeVisible();
   });
 
-  test('graph navigation button is enabled after opening graph', async ({ page }) => {
+  test('graph navigation link is active after opening graph', async ({ page }) => {
     const graphBtn = page.locator('.graph-btn:not([disabled])').first();
     await graphBtn.click();
 
-    // The Graph nav button should be enabled
-    const navBtn = page.locator('[data-view="graph"]');
-    await expect(navBtn).not.toBeDisabled();
+    // Wait for graph page to load
+    await page.waitForURL(/\/graph\//, { timeout: 10000 });
+
+    // The Graph nav link should be active
+    const navLink = page.locator('#nav a[href*="/graph/"]');
+    await expect(navLink).toHaveClass(/active/);
   });
 });
 

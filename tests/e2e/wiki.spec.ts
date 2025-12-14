@@ -5,42 +5,39 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Wiki Browser', () => {
+  let repoWithWiki: { id: string; wikiPages: number } | undefined;
+
   test.beforeEach(async ({ page, request }) => {
     // Ensure we have a repo with wiki pages
     const response = await request.get('/api/repos');
     const repos = await response.json();
 
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
+    repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
     expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
 
     await page.goto('/');
     await page.waitForSelector('.card', { timeout: 10000 });
   });
 
-  test('can open wiki view from repository card', async ({ page, request }) => {
-    const response = await request.get('/api/repos');
-    const repos = await response.json();
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
-
+  test('can open wiki view from repository card', async ({ page }) => {
     // Find the card with wiki pages and click Browse Wiki
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
-    // Wiki view should be visible
-    await expect(page.locator('#wiki-view')).toHaveClass(/active/);
+    // Should navigate to wiki page
+    await page.waitForURL(/\/wiki\//, { timeout: 10000 });
+
+    // Wiki elements should be visible
     await expect(page.locator('#wiki-sidebar')).toBeVisible();
     await expect(page.locator('#wiki-content')).toBeVisible();
   });
 
-  test('wiki sidebar shows tree structure', async ({ page, request }) => {
-    const response = await request.get('/api/repos');
-    const repos = await response.json();
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
-
+  test('wiki sidebar shows tree structure', async ({ page }) => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
+
+    // Wait for wiki page to load
+    await page.waitForURL(/\/wiki\//, { timeout: 10000 });
 
     // Wait for sidebar to load
     await page.waitForLoadState('networkidle', { timeout: 15000 });
@@ -59,14 +56,12 @@ test.describe('Wiki Browser', () => {
     }
   });
 
-  test('can click on a wiki page to view content', async ({ page, request }) => {
-    const response = await request.get('/api/repos');
-    const repos = await response.json();
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
-
+  test('can click on a wiki page to view content', async ({ page }) => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
+
+    // Wait for wiki page to load
+    await page.waitForURL(/\/wiki\//, { timeout: 10000 });
 
     // Wait for tree to load
     await page.waitForSelector('.tree-node-header', { timeout: 10000 });
@@ -95,14 +90,12 @@ test.describe('Wiki Browser', () => {
     await expect(page.locator('#wiki-content .wiki-body, #wiki-content .wiki-meta').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('wiki page shows confidence score', async ({ page, request }) => {
-    const response = await request.get('/api/repos');
-    const repos = await response.json();
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
-
+  test('wiki page shows confidence score', async ({ page }) => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
+
+    // Wait for wiki page to load
+    await page.waitForURL(/\/wiki\//, { timeout: 10000 });
 
     // Wait for tree to load
     await page.waitForSelector('.tree-node-header', { timeout: 10000 });
@@ -129,14 +122,12 @@ test.describe('Wiki Browser', () => {
     await expect(page.locator('.confidence-bar')).toBeVisible();
   });
 
-  test('can expand and collapse tree nodes', async ({ page, request }) => {
-    const response = await request.get('/api/repos');
-    const repos = await response.json();
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
-
+  test('can expand and collapse tree nodes', async ({ page }) => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
+
+    // Wait for wiki page to load
+    await page.waitForURL(/\/wiki\//, { timeout: 10000 });
 
     // Wait for tree to load
     await page.waitForSelector('.tree-node-header', { timeout: 10000 });
@@ -161,32 +152,27 @@ test.describe('Wiki Browser', () => {
     await expect(childrenContainer).not.toHaveClass(/expanded/);
   });
 
-  test('can navigate back to repos from wiki', async ({ page, request }) => {
-    const response = await request.get('/api/repos');
-    const repos = await response.json();
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
-
+  test('can navigate back to repos from wiki', async ({ page }) => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
 
-    await expect(page.locator('#wiki-view')).toHaveClass(/active/);
+    // Wait for wiki page to load
+    await page.waitForURL(/\/wiki\//, { timeout: 10000 });
 
-    // Click back button
-    await page.click('#back-to-repos');
+    // Click Repositories link in nav
+    await page.click('#nav a[href="/"]');
 
-    // Should be back on repos view
-    await expect(page.locator('#repos-view')).toHaveClass(/active/);
+    // Should be back on repos page
+    await page.waitForURL('/', { timeout: 10000 });
+    await expect(page.locator('#repos-view')).toBeVisible();
   });
 
-  test('selected page is highlighted in tree', async ({ page, request }) => {
-    const response = await request.get('/api/repos');
-    const repos = await response.json();
-    const repoWithWiki = repos.find((r: { wikiPages: number }) => r.wikiPages > 0);
-    expect(repoWithWiki, 'Test requires a repository with wiki pages (wikiPages > 0)').toBeTruthy();
-
+  test('selected page is highlighted in tree', async ({ page }) => {
     const wikiBtn = page.locator('.wiki-btn:not([disabled])').first();
     await wikiBtn.click();
+
+    // Wait for wiki page to load
+    await page.waitForURL(/\/wiki\//, { timeout: 10000 });
 
     // Wait for tree to load
     await page.waitForSelector('.tree-node-header', { timeout: 10000 });
