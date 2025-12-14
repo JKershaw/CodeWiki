@@ -275,6 +275,13 @@ export function createSelfImprovementRoutes(
         });
       }
 
+      // Self-improvement analysis requires source code access
+      if (!repoServiceFactory) {
+        return res.status(500).json({
+          error: 'Self-improvement analysis requires source code access configuration',
+        });
+      }
+
       // Verify repo exists via CQRS query
       const repoQuery = createGetRepositoryQuery(repoId);
       const repoResult = await handleGetRepository(repoQuery, repos);
@@ -739,7 +746,7 @@ async function runAnalysisInBackground(
   repos: Repositories,
   llm: LLMService,
   git: GitService,
-  repoServiceFactory: RepositoryServiceFactory | undefined,
+  repoServiceFactory: RepositoryServiceFactory,
   runId: string,
   repoId: string,
   wikiId: string,

@@ -251,7 +251,7 @@ export const CONFIG = {
       ]);
 
       // Run the self-improvement agent
-      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git);
+      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git, ctx.repoServiceFactory);
       const result = await agent.analyze(repoId, agentCtx.wikiId, [run1.id, run2.id]);
 
       assert.strictEqual(result.status, 'completed', `Agent failed: ${result.error}`);
@@ -359,7 +359,7 @@ export function rateLimit(limit: number) {
         },
       ]);
 
-      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git);
+      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git, ctx.repoServiceFactory);
       const result = await agent.analyze(repoId, agentCtx.wikiId, [run1.id, run2.id, run3.id]);
 
       assert.strictEqual(result.status, 'completed', `Agent failed: ${result.error}`);
@@ -401,7 +401,7 @@ export function rateLimit(limit: number) {
         { questionId: 'q1', grade: 'accurate', wikiAnswer: 'Full info', reasoning: 'Complete' },
       ]);
 
-      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git);
+      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git, ctx.repoServiceFactory);
       const result = await agent.analyze(repoId, agentCtx.wikiId, [run1.id, run2.id]);
 
       assert.strictEqual(result.status, 'completed', `Agent failed: ${result.error}`);
@@ -469,7 +469,7 @@ export function rateLimit(limit: number) {
         structural_quality: 72,
       });
 
-      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git);
+      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git, ctx.repoServiceFactory);
       const result = await agent.analyze(repoId, agentCtx.wikiId, [run1.id, run2.id]);
 
       assert.strictEqual(result.status, 'completed', `Agent failed: ${result.error}`);
@@ -543,7 +543,7 @@ export function formatDate(date: Date): string {
         { questionId: 'q1', grade: 'accurate', wikiAnswer: 'Answer', reasoning: 'Good' },
       ]);
 
-      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git);
+      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git, ctx.repoServiceFactory);
       const result = await agent.analyze(repoId, agentCtx.wikiId, [run1.id, run2.id]);
 
       assert.strictEqual(result.status, 'completed', `Agent failed: ${result.error}`);
@@ -608,7 +608,7 @@ export function loggingMiddleware(req, res, next) {
         { questionId: 'q1', grade: 'accurate', wikiAnswer: 'A', reasoning: 'R' },
       ]);
 
-      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git);
+      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git, ctx.repoServiceFactory);
       const result = await agent.analyze(repoId, agentCtx.wikiId, [run1.id, run2.id]);
 
       assert.strictEqual(result.status, 'completed', `Agent failed: ${result.error}`);
@@ -657,7 +657,7 @@ export function loggingMiddleware(req, res, next) {
         { questionId: 'q2', grade: 'inaccurate', wikiAnswer: 'Wrong', reasoning: 'Still incorrect' },
       ]);
 
-      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git);
+      const agent = new SelfImprovementAgent(ctx.repos, ctx.llm, ctx.git, ctx.repoServiceFactory);
       const result = await agent.analyze(repoId, agentCtx.wikiId, [run1.id, run2.id]);
 
       assert.strictEqual(result.status, 'completed', `Agent failed: ${result.error}`);

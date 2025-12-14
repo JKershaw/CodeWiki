@@ -509,6 +509,7 @@ export class OpenRouterLLMService extends BaseLLMService {
     }
 
     const maxRounds = options.maxToolRounds ?? 5;
+    const forceToolUseRounds = options.forceToolUseRounds ?? 0;
     const allToolCalls: ToolUseResult['toolCalls'] = [];
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -518,12 +519,16 @@ export class OpenRouterLLMService extends BaseLLMService {
     try {
       const providerConfig = this.getProviderConfig();
       while (toolRounds < maxRounds) {
+        // Force tool use for first N rounds if configured
+        const shouldForceToolUse = toolRounds < forceToolUseRounds;
+        const toolChoice = shouldForceToolUse ? 'required' : 'auto';
+
         const response = await this.callAPI({
           model: this.model,
           max_tokens: options.maxTokens ?? 4000,
           messages,
           tools,
-          tool_choice: 'auto',
+          tool_choice: toolChoice,
           ...(providerConfig ? { provider: providerConfig } : {}),
         });
 
@@ -583,6 +588,27 @@ export class OpenRouterLLMService extends BaseLLMService {
 
             toolRounds++;
             continue; // Continue the loop to get the model's response to the tool result
+          }
+
+          // No tool calls found - log diagnostic info
+          if (shouldForceToolUse) {
+            console.warn(`[LLM] Model did not use tools despite tool_choice=required (round ${toolRounds + 1}/${forceToolUseRounds} forced). Response: "${textContent.slice(0, 200)}..."`);
+            // Add assistant message and prompt model to use tools
+            messages.push({
+              role: 'assistant',
+              content: textContent || null,
+            });
+            messages.push({
+              role: 'user',
+              content: 'Please use one of the available tools to gather information. Do not respond with text - call a tool.',
+            });
+            toolRounds++;
+            continue; // Try again
+          }
+
+          // Log if we exit early without tool use
+          if (toolRounds === 0) {
+            console.warn(`[LLM] Tool loop exiting on first round without any tool calls. Model responded with text only. Content preview: "${textContent.slice(0, 300)}..."`);
           }
 
           finalContent = textContent;
@@ -648,9 +674,10 @@ export class OpenRouterLLMService extends BaseLLMService {
 
       // If we exhausted tool rounds, force a final response
       if (finalContent === '' && messages.length > 0) {
+        const defaultFinalPrompt = 'You have gathered enough information. Now write the complete markdown output based on what you learned. Do not use any more tools.';
         messages.push({
           role: 'user',
-          content: 'You have gathered enough information. Now write the complete markdown output based on what you learned. Do not use any more tools.',
+          content: options.finalOutputPrompt ?? defaultFinalPrompt,
         });
 
         const finalResponse = await this.callAPI({

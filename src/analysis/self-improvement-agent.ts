@@ -44,22 +44,20 @@ const DEFAULT_MAX_TOKENS = 16000;
 // ============================================================================
 
 export class SelfImprovementAgent {
-  private readonly repoAccessFactory?: UnifiedRepoAccessFactory;
+  private readonly repoAccessFactory: UnifiedRepoAccessFactory;
 
   constructor(
     private readonly repos: Repositories,
     private readonly llm: LLMService,
-    private readonly git?: GitService,
-    private readonly repoServiceFactory?: RepositoryServiceFactory
+    private readonly git: GitService,
+    private readonly repoServiceFactory: RepositoryServiceFactory
   ) {
-    // Create unified repo access factory if we have the required dependencies
-    if (repoServiceFactory) {
-      this.repoAccessFactory = createUnifiedRepoAccessFactory({
-        repos,
-        repoServiceFactory,
-        ...(git && { gitService: git }),
-      });
-    }
+    // Create unified repo access factory - required for source code exploration
+    this.repoAccessFactory = createUnifiedRepoAccessFactory({
+      repos,
+      repoServiceFactory,
+      gitService: git,
+    });
   }
 
   /**
@@ -116,16 +114,8 @@ export class SelfImprovementAgent {
     });
 
     try {
-      // Create unified repo access for source code exploration
-      let repoAccess;
-      if (this.repoAccessFactory) {
-        try {
-          repoAccess = await this.repoAccessFactory.create(repoId);
-        } catch (err) {
-          // Continue without source access if creation fails
-          console.warn(`[SelfImprovement] Failed to create repo access: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
+      // Create unified repo access for source code exploration (required)
+      const repoAccess = await this.repoAccessFactory.create(repoId);
 
       // Build the analysis context
       const toolContext: AnalysisToolContext = {
@@ -135,7 +125,7 @@ export class SelfImprovementAgent {
         benchmarkRuns,
         qualityBenchmarkRuns,
         wikiPages,
-        ...(repoAccess && { repoAccess }),
+        repoAccess,
       };
 
       // Build warm-start context for wiki-quality-first analysis
@@ -143,6 +133,20 @@ export class SelfImprovementAgent {
 
       // Create tool executor
       const executeTools = this.createToolExecutor(toolContext);
+
+      // Custom prompt for when tool rounds are exhausted
+      const finalOutputPrompt = `You have completed your investigation. Now write your comprehensive analysis report in markdown format.
+
+Your report MUST include these sections:
+1. **Executive Summary** - Key strengths, top 3 coverage gaps, top 3 quality issues
+2. **Wiki Quality Assessment** - Overall quality with specific examples
+3. **Coverage Analysis** - Source files/directories without wiki documentation
+4. **Root Cause Analysis** - Why issues exist (orchestrator decisions, agent behavior, process gaps)
+5. **Benchmark Correlation** - How accuracy benchmarks align with your findings, list any STUCK questions
+6. **Actionable Recommendations** - Specific, prioritized process improvements with verification criteria
+7. **Assessment Limitations** - What you couldn't fully assess
+
+Do not use any more tools. Write the complete report now.`;
 
       // Run the agentic analysis
       const completion = await this.llm.completeWithTools({
@@ -160,6 +164,8 @@ export class SelfImprovementAgent {
         })),
         executeTools,
         maxToolRounds: DEFAULT_MAX_TOOL_ROUNDS,
+        forceToolUseRounds: 3, // Ensure at least 3 rounds of tool use before allowing text-only response
+        finalOutputPrompt,
         maxTokens: DEFAULT_MAX_TOKENS,
         temperature: 0.3,
       });
@@ -188,7 +194,7 @@ export class SelfImprovementAgent {
     wikiPages: WikiPage[],
     qualityRuns: QualityBenchmarkRun[],
     benchmarkRuns: BenchmarkRun[],
-    repoAccess?: UnifiedRepoAccess
+    _repoAccess: UnifiedRepoAccess
   ): string {
     const sections: string[] = [];
 
@@ -267,11 +273,7 @@ export class SelfImprovementAgent {
     sections.push('');
     sections.push('## Repository Context');
     sections.push('');
-    if (repoAccess) {
-      sections.push('Source code access is available. Use `list_source_directory` and `read_source_file` to explore.');
-    } else {
-      sections.push('Source code access is not available for this analysis.');
-    }
+    sections.push('Source code access is available. Use `list_source_directory` and `read_source_file` to explore.');
 
     // Available Benchmark Data (as supporting evidence)
     if (benchmarkRuns.length > 0) {
@@ -294,32 +296,26 @@ export class SelfImprovementAgent {
       sections.push('No accuracy benchmarks are available. Focus on wiki structure and quality assessment.');
     }
 
-    // Instructions
+    // Instructions - aligned with system prompt
     sections.push('');
     sections.push('## Your Task');
     sections.push('');
-    sections.push('Follow this investigation order:');
+    sections.push('**STEP 1: Call benchmark tools FIRST**');
+    sections.push('- `get_benchmark_summary` - See overall accuracy');
+    sections.push('- `get_question_trends` - Find STUCK questions (no_answer across runs)');
     sections.push('');
-    sections.push('**Step 1: Compare source to wiki (CRITICAL)**');
-    sections.push('- Use `list_source_directory` on `src/` to see what code exists');
-    sections.push('- Use `list_wiki_pages` to see what documentation exists');
-    sections.push('- Identify GAPS: source files/directories with NO wiki documentation');
-    sections.push('- Example: If `src/services/database.ts` exists but no `services/database` wiki page → COVERAGE GAP');
+    sections.push('**STEP 2: Compare source to wiki**');
+    sections.push('- `list_source_directory` on `src/` - See code structure');
+    sections.push('- `list_wiki_pages` - See documentation structure');
+    sections.push('- Identify coverage GAPS');
     sections.push('');
-    sections.push('**Step 2: Analyze benchmark trends**');
-    sections.push('- Use `get_question_trends` to find STUCK questions (no_answer across multiple runs)');
-    sections.push('- Use `get_benchmark_summary` to understand overall accuracy');
-    sections.push('- Correlate stuck questions with coverage gaps');
+    sections.push('**STEP 3: Quality and root causes**');
+    sections.push('- `get_quality_trends` - Quality dimension scores');
+    sections.push('- `get_orchestrator_decisions` / `get_agent_contributions` - Why gaps exist');
     sections.push('');
-    sections.push('**Step 3: Assess quality dimensions**');
-    sections.push('- Note both STRONG and WEAK dimensions');
-    sections.push('- Identify actionability, completeness, and structural issues');
+    sections.push('**STEP 4: Write comprehensive report**');
     sections.push('');
-    sections.push('**Step 4: Recommend process improvements**');
-    sections.push('- Specific changes to agents, orchestrator, or workflow');
-    sections.push('- Include verification criteria');
-    sections.push('');
-    sections.push('START NOW: Use `list_source_directory` with path `src/` to explore the source code structure.');
+    sections.push('START NOW: Call `get_benchmark_summary` to see overall accuracy trends.');
 
     return sections.join('\n');
   }
@@ -359,8 +355,8 @@ export class SelfImprovementAgent {
 export function createSelfImprovementAgent(
   repos: Repositories,
   llm: LLMService,
-  git?: GitService,
-  repoServiceFactory?: RepositoryServiceFactory
+  git: GitService,
+  repoServiceFactory: RepositoryServiceFactory
 ): SelfImprovementAgent {
   return new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
 }

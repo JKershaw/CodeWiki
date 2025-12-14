@@ -10,6 +10,8 @@ import type { QualityBenchmarkRun } from '../../src/domain/quality-benchmark.js'
 import type { WikiPage } from '../../src/domain/wiki-page.js';
 import type { Repositories } from '../../src/repositories/index.js';
 import type { LLMService, ToolUseResult } from '../../src/services/llm/llm-service.js';
+import type { GitService } from '../../src/services/git/git-service.js';
+import type { RepositoryServiceFactory, RepositoryService } from '../../src/services/repository/repository-service.js';
 
 // Helper to create a mock benchmark run
 function createMockBenchmarkRun(
@@ -174,12 +176,47 @@ function createMockLLM(responseContent: string): LLMService {
   };
 }
 
+// Helper to create a mock GitService
+function createMockGitService(): GitService {
+  return {
+    registerLocalRepo: () => {},
+    getRepoPath: () => '/mock/repo/path',
+    cloneRepo: async () => '/mock/repo/path',
+    pullRepo: async () => {},
+    getCommitDiff: async () => 'mock diff',
+    getCommitsBetween: async () => [],
+    getLatestCommit: async () => null,
+  };
+}
+
+// Helper to create a mock RepositoryService
+function createMockRepositoryService(): RepositoryService {
+  return {
+    getFileContent: async () => 'mock file content',
+    listDirectory: async () => [],
+    getFileTree: async () => ['README.md', 'src/index.ts'],
+    fileExists: async () => true,
+    getCommitDiff: async () => 'mock diff',
+  };
+}
+
+// Helper to create a mock RepositoryServiceFactory
+function createMockRepoServiceFactory(): RepositoryServiceFactory {
+  const mockService = createMockRepositoryService();
+  return {
+    getService: () => mockService,
+    getServiceWithToken: () => mockService,
+  };
+}
+
 describe('SelfImprovementAgent', () => {
   describe('analyze', () => {
     it('allows wiki-only analysis without benchmarks', async () => {
       const repos = createMockRepos([]) as Repositories;
       const llm = createMockLLM('Wiki quality report');
-      const agent = new SelfImprovementAgent(repos, llm);
+      const git = createMockGitService();
+      const repoServiceFactory = createMockRepoServiceFactory();
+      const agent = new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
 
       // Wiki-quality-first approach doesn't require benchmarks
       const result = await agent.analyze('test-repo', 'test-wiki', []);
@@ -210,7 +247,9 @@ Score improved from 40% to 75%
 
       const repos = createMockRepos(benchmarks) as Repositories;
       const llm = createMockLLM(expectedReport);
-      const agent = new SelfImprovementAgent(repos, llm);
+      const git = createMockGitService();
+      const repoServiceFactory = createMockRepoServiceFactory();
+      const agent = new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
 
       const result = await agent.analyze('test-repo', 'test-wiki', ['run-1', 'run-2']);
 
@@ -228,6 +267,8 @@ Score improved from 40% to 75%
       ];
 
       const repos = createMockRepos(benchmarks) as Repositories;
+      const git = createMockGitService();
+      const repoServiceFactory = createMockRepoServiceFactory();
 
       // Create an LLM that throws
       const llm: LLMService = {
@@ -237,7 +278,7 @@ Score improved from 40% to 75%
         },
       };
 
-      const agent = new SelfImprovementAgent(repos, llm);
+      const agent = new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
       const result = await agent.analyze('test-repo', 'test-wiki', ['run-1', 'run-2']);
 
       assert.strictEqual(result.status, 'failed');
@@ -256,7 +297,9 @@ Score improved from 40% to 75%
       const allBenchmarks = [completedRun1, runningRun, completedRun2];
       const repos = createMockRepos(allBenchmarks) as Repositories;
       const llm = createMockLLM('Report');
-      const agent = new SelfImprovementAgent(repos, llm);
+      const git = createMockGitService();
+      const repoServiceFactory = createMockRepoServiceFactory();
+      const agent = new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
 
       // Should work with just the completed runs
       const result = await agent.analyze('test-repo', 'test-wiki', ['run-1', 'run-2', 'run-3']);
@@ -275,7 +318,9 @@ Score improved from 40% to 75%
 
       const repos = createMockRepos(benchmarks) as Repositories;
       const llm = createMockLLM('Report');
-      const agent = new SelfImprovementAgent(repos, llm);
+      const git = createMockGitService();
+      const repoServiceFactory = createMockRepoServiceFactory();
+      const agent = new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
 
       const result = await agent.analyze('test-repo', 'test-wiki', ['run-2', 'run-1']);
 
