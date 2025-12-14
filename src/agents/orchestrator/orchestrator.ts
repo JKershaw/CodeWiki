@@ -11,7 +11,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
 import type { WorkItem } from '../../domain/work-item.js';
-import { createWorkItem } from '../../domain/work-item.js';
+import { createWorkItem, generateWorkItemId } from '../../domain/work-item.js';
 import type { WorkTarget } from '../../domain/work-target.js';
 import type { AgentType } from '../../domain/agent-run.js';
 import type { LLMService, ToolUseResult } from '../../services/llm/llm-service.js';
@@ -244,11 +244,12 @@ export class DefaultOrchestrator implements Orchestrator {
       return null;
     }
 
+    const target = { type: 'wiki' as const };
     return createWorkItem({
-      id: uuid(),
+      id: generateWorkItemId(repoId, 'bootstrap', target),
       repoId,
       agentType: 'bootstrap',
-      target: { type: 'wiki' },
+      target,
     });
   }
 
@@ -360,7 +361,7 @@ export class DefaultOrchestrator implements Orchestrator {
           : { type: 'wiki' };
 
       const workItem = createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(repoId, item.agentType as AgentType, target),
         repoId,
         agentType: item.agentType as AgentType,
         target,

@@ -10,9 +10,8 @@
  * - The wiki is "done" when files are documented, not when page count is high
  */
 
-import { v4 as uuid } from 'uuid';
 import type { Repositories } from '../../repositories/index.js';
-import { createWorkItem, type WorkItem } from '../../domain/work-item.js';
+import { createWorkItem, generateWorkItemId, type WorkItem } from '../../domain/work-item.js';
 import type { WikiPage } from '../../domain/wiki-page.js';
 import type { AgentRun } from '../../domain/agent-run.js';
 import type { OrchestratorContext } from './context-gatherer.js';
@@ -141,7 +140,7 @@ export const codebaseExplorationStrategy: Strategy = async (ctx, remainingSlots)
 
     workItems.push(
       createWorkItem({
-        id: uuid(),
+        id: generateWorkItemId(ctx.repoId, 'codebase-explorer', target),
         repoId: ctx.repoId,
         agentType: 'codebase-explorer',
         target,
@@ -181,12 +180,13 @@ export const commitAnalysisStrategy: Strategy = async (ctx, remainingSlots) => {
 
       ctx.existingWorkKeys.add(key);
 
+      const target = { type: 'commit' as const, commitId: commit.sha };
       workItems.push(
         createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(ctx.repoId, agentType, target),
           repoId: ctx.repoId,
           agentType,
-          target: { type: 'commit', commitId: commit.sha },
+          target,
         })
       );
     }
@@ -245,12 +245,13 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
       const linkKey = 'link:wiki';
       if (!ctx.existingWorkKeys.has(linkKey)) {
         ctx.existingWorkKeys.add(linkKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'link', target),
             repoId: ctx.repoId,
             agentType: 'link',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -262,12 +263,13 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     const structureKey = 'structure:wiki';
     if (!ctx.existingWorkKeys.has(structureKey) && !hasRunWithinCooldown('structure')) {
       ctx.existingWorkKeys.add(structureKey);
+      const target = { type: 'wiki' as const };
       workItems.push(
         createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(ctx.repoId, 'structure', target),
           repoId: ctx.repoId,
           agentType: 'structure',
-          target: { type: 'wiki' },
+          target,
         })
       );
     }
@@ -280,12 +282,13 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
       const qualityKey = 'quality:wiki';
       if (!ctx.existingWorkKeys.has(qualityKey) && !hasRunWithinCooldown('quality')) {
         ctx.existingWorkKeys.add(qualityKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'quality', target),
             repoId: ctx.repoId,
             agentType: 'quality',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -297,12 +300,13 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
     const consistencyKey = 'consistency:wiki';
     if (!ctx.existingWorkKeys.has(consistencyKey) && !hasRunWithinCooldown('consistency')) {
       ctx.existingWorkKeys.add(consistencyKey);
+      const target = { type: 'wiki' as const };
       workItems.push(
         createWorkItem({
-          id: uuid(),
+          id: generateWorkItemId(ctx.repoId, 'consistency', target),
           repoId: ctx.repoId,
           agentType: 'consistency',
-          target: { type: 'wiki' },
+          target,
         })
       );
     }
@@ -321,12 +325,13 @@ export const metaAgentsStrategy: Strategy = async (ctx, remainingSlots) => {
 
       if (!ctx.existingWorkKeys.has(consolidationKey) && shouldRun) {
         ctx.existingWorkKeys.add(consolidationKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'consolidation', target),
             repoId: ctx.repoId,
             agentType: 'consolidation',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -392,12 +397,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const overviewKey = 'overview:wiki';
       if (!ctx.existingWorkKeys.has(overviewKey) && !hasCompletedRecently('overview')) {
         ctx.existingWorkKeys.add(overviewKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'overview', target),
             repoId: ctx.repoId,
             agentType: 'overview',
-            target: { type: 'wiki' },
+            target,
           })
         );
         break;
@@ -415,12 +421,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const projectOverviewKey = 'project-overview:wiki';
       if (!ctx.existingWorkKeys.has(projectOverviewKey) && !hasCompletedRecently('project-overview')) {
         ctx.existingWorkKeys.add(projectOverviewKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'project-overview', target),
             repoId: ctx.repoId,
             agentType: 'project-overview',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -439,12 +446,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const gettingStartedKey = 'getting-started:wiki';
       if (!ctx.existingWorkKeys.has(gettingStartedKey) && !hasCompletedRecently('getting-started')) {
         ctx.existingWorkKeys.add(gettingStartedKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'getting-started', target),
             repoId: ctx.repoId,
             agentType: 'getting-started',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -463,12 +471,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const testingGuideKey = 'testing-guide:wiki';
       if (!ctx.existingWorkKeys.has(testingGuideKey) && !hasCompletedRecently('testing-guide')) {
         ctx.existingWorkKeys.add(testingGuideKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'testing-guide', target),
             repoId: ctx.repoId,
             agentType: 'testing-guide',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -488,12 +497,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const extensionGuideKey = 'extension-guide:wiki';
       if (!ctx.existingWorkKeys.has(extensionGuideKey) && !hasCompletedRecently('extension-guide')) {
         ctx.existingWorkKeys.add(extensionGuideKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'extension-guide', target),
             repoId: ctx.repoId,
             agentType: 'extension-guide',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -520,12 +530,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
       const writerKey = 'writer:wiki';
       if (!ctx.existingWorkKeys.has(writerKey)) {
         ctx.existingWorkKeys.add(writerKey);
+        const target = { type: 'wiki' as const };
         workItems.push(
           createWorkItem({
-            id: uuid(),
+            id: generateWorkItemId(ctx.repoId, 'writer', target),
             repoId: ctx.repoId,
             agentType: 'writer',
-            target: { type: 'wiki' },
+            target,
           })
         );
       }
@@ -552,12 +563,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
         const wikiIndexKey = 'wiki-index:wiki';
         if (!ctx.existingWorkKeys.has(wikiIndexKey)) {
           ctx.existingWorkKeys.add(wikiIndexKey);
+          const target = { type: 'wiki' as const };
           workItems.push(
             createWorkItem({
-              id: uuid(),
+              id: generateWorkItemId(ctx.repoId, 'wiki-index', target),
               repoId: ctx.repoId,
               agentType: 'wiki-index',
-              target: { type: 'wiki' },
+              target,
             })
           );
         }
@@ -590,12 +602,13 @@ export const synthesisStrategy: Strategy = async (ctx, remainingSlots) => {
         const tocKey = 'toc:wiki';
         if (!ctx.existingWorkKeys.has(tocKey)) {
           ctx.existingWorkKeys.add(tocKey);
+          const target = { type: 'wiki' as const };
           workItems.push(
             createWorkItem({
-              id: uuid(),
+              id: generateWorkItemId(ctx.repoId, 'toc', target),
               repoId: ctx.repoId,
               agentType: 'toc',
-              target: { type: 'wiki' },
+              target,
             })
           );
         }
