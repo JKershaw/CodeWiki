@@ -31,6 +31,8 @@ export interface LLMTestContext {
   git: FileSystemGitService;
   /** Real LLM service */
   llm: LLMService;
+  /** Repository service factory for creating repo access */
+  repoServiceFactory: ReturnType<typeof createRepositoryServiceFactory>;
   /** Create an AgentContext for a repo (auto-creates wiki if needed) */
   agentContext(repoId: string): Promise<AgentContext>;
   /** Clean up all test data */
@@ -70,6 +72,7 @@ export async function createLLMTestContext(): Promise<LLMTestContext> {
     repos,
     git: gitService,
     llm,
+    repoServiceFactory,
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
 

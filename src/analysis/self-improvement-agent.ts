@@ -44,22 +44,20 @@ const DEFAULT_MAX_TOKENS = 16000;
 // ============================================================================
 
 export class SelfImprovementAgent {
-  private readonly repoAccessFactory?: UnifiedRepoAccessFactory;
+  private readonly repoAccessFactory: UnifiedRepoAccessFactory;
 
   constructor(
     private readonly repos: Repositories,
     private readonly llm: LLMService,
-    private readonly git?: GitService,
-    private readonly repoServiceFactory?: RepositoryServiceFactory
+    private readonly git: GitService,
+    private readonly repoServiceFactory: RepositoryServiceFactory
   ) {
-    // Create unified repo access factory if we have the required dependencies
-    if (repoServiceFactory) {
-      this.repoAccessFactory = createUnifiedRepoAccessFactory({
-        repos,
-        repoServiceFactory,
-        ...(git && { gitService: git }),
-      });
-    }
+    // Create unified repo access factory - required for source code exploration
+    this.repoAccessFactory = createUnifiedRepoAccessFactory({
+      repos,
+      repoServiceFactory,
+      gitService: git,
+    });
   }
 
   /**
@@ -116,16 +114,8 @@ export class SelfImprovementAgent {
     });
 
     try {
-      // Create unified repo access for source code exploration
-      let repoAccess;
-      if (this.repoAccessFactory) {
-        try {
-          repoAccess = await this.repoAccessFactory.create(repoId);
-        } catch (err) {
-          // Continue without source access if creation fails
-          console.warn(`[SelfImprovement] Failed to create repo access: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
+      // Create unified repo access for source code exploration (required)
+      const repoAccess = await this.repoAccessFactory.create(repoId);
 
       // Build the analysis context
       const toolContext: AnalysisToolContext = {
@@ -135,7 +125,7 @@ export class SelfImprovementAgent {
         benchmarkRuns,
         qualityBenchmarkRuns,
         wikiPages,
-        ...(repoAccess && { repoAccess }),
+        repoAccess,
       };
 
       // Build warm-start context for wiki-quality-first analysis
@@ -188,7 +178,7 @@ export class SelfImprovementAgent {
     wikiPages: WikiPage[],
     qualityRuns: QualityBenchmarkRun[],
     benchmarkRuns: BenchmarkRun[],
-    repoAccess?: UnifiedRepoAccess
+    _repoAccess: UnifiedRepoAccess
   ): string {
     const sections: string[] = [];
 
@@ -267,11 +257,7 @@ export class SelfImprovementAgent {
     sections.push('');
     sections.push('## Repository Context');
     sections.push('');
-    if (repoAccess) {
-      sections.push('Source code access is available. Use `list_source_directory` and `read_source_file` to explore.');
-    } else {
-      sections.push('Source code access is not available for this analysis.');
-    }
+    sections.push('Source code access is available. Use `list_source_directory` and `read_source_file` to explore.');
 
     // Available Benchmark Data (as supporting evidence)
     if (benchmarkRuns.length > 0) {
@@ -359,8 +345,8 @@ export class SelfImprovementAgent {
 export function createSelfImprovementAgent(
   repos: Repositories,
   llm: LLMService,
-  git?: GitService,
-  repoServiceFactory?: RepositoryServiceFactory
+  git: GitService,
+  repoServiceFactory: RepositoryServiceFactory
 ): SelfImprovementAgent {
   return new SelfImprovementAgent(repos, llm, git, repoServiceFactory);
 }
