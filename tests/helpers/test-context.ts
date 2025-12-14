@@ -26,7 +26,7 @@ export interface TestContext {
   dataDir: string;
   /** Directory for git repositories */
   reposDir: string;
-  /** Real file-based repositories */
+  /** MongoDB repositories (uses memory-server in tests) */
   repos: Repositories;
   /** Real git service */
   git: FileSystemGitService;
@@ -43,11 +43,9 @@ export interface TestContext {
 /**
  * Create an isolated test context with real services except LLM.
  *
- * Uses the repository factory which auto-detects storage backend:
- * - If MONGODB_URI is set, uses MongoDB
- * - Otherwise, uses file-based storage
- *
- * This allows the same tests to run against both backends in CI.
+ * Uses MongoDB for storage:
+ * - If MONGODB_URI is set, uses that MongoDB instance
+ * - Otherwise, uses mongodb-memory-server (in-memory MongoDB)
  */
 export async function createTestContext(): Promise<TestContext> {
   const baseDir = await mkdtemp(join(tmpdir(), 'codewiki-test-'));
@@ -57,8 +55,8 @@ export async function createTestContext(): Promise<TestContext> {
   await mkdir(dataDir, { recursive: true });
   await mkdir(reposDir, { recursive: true });
 
-  // Use the async factory - auto-detects MongoDB vs file-based
-  const connection = await createRepositories({ fileBasePath: dataDir });
+  // Use the async factory - auto-detects MongoDB vs memory-server
+  const connection = await createRepositories();
   const repos = connection.repositories;
   const gitService = new FileSystemGitService(reposDir);
   const llm = new MockLLMService();

@@ -1,115 +1,115 @@
 /**
  * Repository module for CodeWiki.
  *
- * Storage is abstracted behind repository interfaces.
- * Two implementations exist:
- * - MongoDB: Used in production, staging, and CI/CD tests
- * - File-based: Used in local development and restricted environments
+ * Storage uses MongoDB for all environments:
+ * - Production/Staging: Real MongoDB via MONGODB_URI
+ * - Local development: mongodb-memory-server (in-memory MongoDB)
  *
  * The application auto-detects which to use based on environment configuration.
  */
 
-import { MongoClient } from 'mongodb';
+import { MongoClient, type Db } from 'mongodb';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 
 export * from './interfaces/index.js';
-export { createFileRepositories } from './file-based/index.js';
 export { createMongoRepositories, createMongoIndexes } from './mongo-based/index.js';
 
 import type { Repositories } from './interfaces/index.js';
-import { createFileRepositories } from './file-based/index.js';
 import { createMongoRepositories, createMongoIndexes } from './mongo-based/index.js';
+
+// Singleton for memory server to avoid multiple instances
+let memoryServerInstance: MongoMemoryServer | null = null;
 
 /**
  * Environment configuration for repository selection.
  */
 export interface RepositoryConfig {
-  /** Storage type: 'mongodb' or 'file' */
-  type?: 'mongodb' | 'file';
-  /** MongoDB connection string (for mongodb type) */
+  /** MongoDB connection string (uses memory-server if not provided) */
   mongoUri?: string;
   /** MongoDB database name (defaults to 'codewiki') */
   mongoDbName?: string;
-  /** Base directory for file storage (for file type) */
-  fileBasePath?: string;
-  /** Whether to create indexes on startup (for mongodb, defaults to true) */
+  /** Whether to create indexes on startup (defaults to true) */
   createIndexes?: boolean;
 }
 
 /**
  * Connection to repositories with lifecycle management.
- *
- * For file-based storage, close() is a no-op.
- * For MongoDB, close() properly closes the connection pool.
+ * close() properly closes the MongoDB connection pool.
  */
 export interface RepositoryConnection {
   /** The repository instances */
   readonly repositories: Repositories;
-  /** Close the connection (no-op for file-based) */
+  /** The MongoDB database instance (for advanced usage) */
+  readonly db: Db;
+  /** Close the connection */
   close(): Promise<void>;
+}
+
+/**
+ * Get or create the mongodb-memory-server instance.
+ * Uses a singleton to avoid starting multiple servers.
+ */
+async function getMemoryServer(): Promise<MongoMemoryServer> {
+  if (!memoryServerInstance) {
+    memoryServerInstance = await MongoMemoryServer.create();
+  }
+  return memoryServerInstance;
+}
+
+/**
+ * Stop the memory server if running.
+ * Call this during application shutdown for clean exit.
+ */
+export async function stopMemoryServer(): Promise<void> {
+  if (memoryServerInstance) {
+    await memoryServerInstance.stop();
+    memoryServerInstance = null;
+  }
 }
 
 /**
  * Create repositories based on configuration.
  * Auto-detects based on environment if config not provided.
  *
+ * - If MONGODB_URI is set, connects to that MongoDB instance
+ * - Otherwise, starts mongodb-memory-server for local development
+ *
  * Returns a RepositoryConnection with a close() method for cleanup.
- * For file-based storage, close() is a no-op.
  */
 export async function createRepositories(config?: RepositoryConfig): Promise<RepositoryConnection> {
-  const effectiveConfig = { ...detectConfig(), ...config };
+  const mongoUri = config?.mongoUri ?? process.env['MONGODB_URI'];
+  const dbName = config?.mongoDbName ?? process.env['MONGODB_DB_NAME'] ?? 'codewiki';
+  const createIndexes = config?.createIndexes !== false;
 
-  if (effectiveConfig.type === 'mongodb') {
-    if (!effectiveConfig.mongoUri) {
-      throw new Error('MongoDB URI is required for mongodb storage type');
-    }
+  let client: MongoClient;
 
-    const client = new MongoClient(effectiveConfig.mongoUri);
-    await client.connect();
-
-    const dbName = effectiveConfig.mongoDbName ?? 'codewiki';
-    const db = client.db(dbName);
-
-    // Create indexes by default
-    if (effectiveConfig.createIndexes !== false) {
-      await createMongoIndexes(db);
-    }
-
-    const repositories = createMongoRepositories(db);
-
-    return {
-      repositories,
-      close: async () => {
-        await client.close();
-      },
-    };
+  if (mongoUri) {
+    // Use provided MongoDB URI
+    client = new MongoClient(mongoUri);
+  } else {
+    // Start in-memory MongoDB for local development
+    const memoryServer = await getMemoryServer();
+    const memoryUri = memoryServer.getUri();
+    client = new MongoClient(memoryUri);
   }
 
-  const repositories = createFileRepositories(effectiveConfig.fileBasePath);
+  await client.connect();
+  const db = client.db(dbName);
+
+  // Create indexes by default
+  if (createIndexes) {
+    await createMongoIndexes(db);
+  }
+
+  const repositories = createMongoRepositories(db);
 
   return {
     repositories,
+    db,
     close: async () => {
-      // No-op for file-based storage
+      await client.close();
+      // Note: We don't stop the memory server here to allow reuse
+      // Call stopMemoryServer() explicitly during app shutdown if needed
     },
-  };
-}
-
-/**
- * Auto-detect repository configuration from environment.
- */
-function detectConfig(): RepositoryConfig {
-  const mongoUri = process.env['MONGODB_URI'];
-
-  if (mongoUri) {
-    return {
-      type: 'mongodb',
-      mongoUri,
-      mongoDbName: process.env['MONGODB_DB_NAME'] ?? 'codewiki',
-    };
-  }
-
-  return {
-    type: 'file',
-    fileBasePath: process.env['CODEWIKI_DATA_PATH'] ?? '.codewiki-data',
   };
 }

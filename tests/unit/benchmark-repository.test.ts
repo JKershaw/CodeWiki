@@ -3,22 +3,23 @@
  * Tests benchmark run storage, querying, and wiki isolation.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileBenchmarkRepository } from '../../src/repositories/file-based/file-benchmark-repository.js';
+import { createRepositories, type RepositoryConnection, type BenchmarkRepository } from '../../src/repositories/index.js';
 import { createBenchmarkRun, type BenchmarkRun, type BenchmarkRunStatus } from '../../src/domain/benchmark.js';
-import { mkdtemp, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 describe('BenchmarkRepository', () => {
-  let repo: FileBenchmarkRepository;
-  let tempDir: string;
+  let connection: RepositoryConnection;
+  let repo: BenchmarkRepository;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'benchmark-repo-test-'));
-    repo = new FileBenchmarkRepository(tempDir);
+    connection = await createRepositories({ mongoDbName: `test-benchmark-${uuid()}` });
+    repo = connection.repositories.benchmarks;
+  });
+
+  afterEach(async () => {
+    await connection.close();
   });
 
   /**

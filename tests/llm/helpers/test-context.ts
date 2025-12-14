@@ -25,7 +25,7 @@ export interface LLMTestContext {
   dataDir: string;
   /** Directory for git repositories */
   reposDir: string;
-  /** Real file-based repositories */
+  /** MongoDB repositories (uses memory-server in tests) */
   repos: Repositories;
   /** Real git service */
   git: FileSystemGitService;
@@ -50,7 +50,7 @@ export async function createLLMTestContext(): Promise<LLMTestContext> {
   await mkdir(dataDir, { recursive: true });
   await mkdir(reposDir, { recursive: true });
 
-  const connection = await createRepositories({ fileBasePath: dataDir });
+  const connection = await createRepositories();
   const repos = connection.repositories;
   const gitService = new FileSystemGitService(reposDir);
   const llm = createOpenRouterLLM();

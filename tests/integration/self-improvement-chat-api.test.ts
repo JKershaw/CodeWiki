@@ -59,7 +59,7 @@ describe('Self-Improvement Chat API', () => {
 
   before(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'chat-api-test-'));
-    repoConnection = await createRepositories({ fileBasePath: tempDir });
+    repoConnection = await createRepositories({ mongoDbName: `test-chat-api-${uuid()}` });
     repos = repoConnection.repositories;
 
     // Create Express app for testing

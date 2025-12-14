@@ -3,22 +3,23 @@
  * Tests quality benchmark run storage, querying, and wiki isolation.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileQualityBenchmarkRepository } from '../../src/repositories/file-based/file-quality-benchmark-repository.js';
+import { createRepositories, type RepositoryConnection, type QualityBenchmarkRepository } from '../../src/repositories/index.js';
 import { createQualityBenchmarkRun, type QualityBenchmarkRun, type QualityBenchmarkRunStatus } from '../../src/domain/quality-benchmark.js';
-import { mkdtemp, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 describe('QualityBenchmarkRepository', () => {
-  let repo: FileQualityBenchmarkRepository;
-  let tempDir: string;
+  let connection: RepositoryConnection;
+  let repo: QualityBenchmarkRepository;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'quality-benchmark-repo-test-'));
-    repo = new FileQualityBenchmarkRepository(tempDir);
+    connection = await createRepositories({ mongoDbName: `test-quality-benchmark-${uuid()}` });
+    repo = connection.repositories.qualityBenchmarks;
+  });
+
+  afterEach(async () => {
+    await connection.close();
   });
 
   /**

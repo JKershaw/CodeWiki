@@ -3,22 +3,23 @@
  * Tests auto-benchmark run storage, querying, and status management.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileAutoBenchmarkRepository } from '../../src/repositories/file-based/file-auto-benchmark-repository.js';
+import { createRepositories, type RepositoryConnection, type AutoBenchmarkRepository } from '../../src/repositories/index.js';
 import { createAutoBenchmarkRun, type AutoBenchmarkRun, type AutoBenchmarkStatus } from '../../src/domain/auto-benchmark.js';
-import { mkdtemp, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 describe('AutoBenchmarkRepository', () => {
-  let repo: FileAutoBenchmarkRepository;
-  let tempDir: string;
+  let connection: RepositoryConnection;
+  let repo: AutoBenchmarkRepository;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'auto-benchmark-repo-test-'));
-    repo = new FileAutoBenchmarkRepository(tempDir);
+    connection = await createRepositories({ mongoDbName: `test-auto-benchmark-${uuid()}` });
+    repo = connection.repositories.autoBenchmarks;
+  });
+
+  afterEach(async () => {
+    await connection.close();
   });
 
   /**

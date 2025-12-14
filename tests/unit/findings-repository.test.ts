@@ -3,22 +3,23 @@
  * Tests findings storage, querying, and grouping functionality.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileFindingsRepository } from '../../src/repositories/file-based/file-findings-repository.js';
+import { createRepositories, type RepositoryConnection, type FindingsRepository } from '../../src/repositories/index.js';
 import { createFinding, type Finding, type FindingType } from '../../src/domain/finding.js';
-import { mkdtemp, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 describe('FindingsRepository', () => {
-  let repo: FileFindingsRepository;
-  let tempDir: string;
+  let connection: RepositoryConnection;
+  let repo: FindingsRepository;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'findings-test-'));
-    repo = new FileFindingsRepository(tempDir);
+    connection = await createRepositories({ mongoDbName: `test-findings-${uuid()}` });
+    repo = connection.repositories.findings;
+  });
+
+  afterEach(async () => {
+    await connection.close();
   });
 
   describe('save and find', () => {

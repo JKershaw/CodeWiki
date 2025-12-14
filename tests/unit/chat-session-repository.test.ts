@@ -3,27 +3,28 @@
  * Tests chat session storage, querying, and message management.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileChatSessionRepository } from '../../src/repositories/file-based/file-chat-session-repository.js';
+import { createRepositories, type RepositoryConnection, type ChatSessionRepository } from '../../src/repositories/index.js';
 import {
   createChatSession,
   createChatMessage,
   type ChatSession,
   type ChatMessage,
 } from '../../src/domain/chat-session.js';
-import { mkdtemp, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 describe('ChatSessionRepository', () => {
-  let repo: FileChatSessionRepository;
-  let tempDir: string;
+  let connection: RepositoryConnection;
+  let repo: ChatSessionRepository;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'chat-session-test-'));
-    repo = new FileChatSessionRepository(tempDir);
+    connection = await createRepositories({ mongoDbName: `test-chat-${uuid()}` });
+    repo = connection.repositories.chatSessions;
+  });
+
+  afterEach(async () => {
+    await connection.close();
   });
 
   /**

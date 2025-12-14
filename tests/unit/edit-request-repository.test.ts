@@ -3,27 +3,28 @@
  * Tests edit request storage, querying, and status management.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileEditRequestRepository } from '../../src/repositories/file-based/file-edit-request-repository.js';
+import { createRepositories, type RepositoryConnection, type EditRequestRepository } from '../../src/repositories/index.js';
 import {
   createEditRequest,
   createCommitEditSource,
   isCommitEditSource,
   type EditRequest,
 } from '../../src/domain/edit-request.js';
-import { mkdtemp, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 describe('EditRequestRepository', () => {
-  let repo: FileEditRequestRepository;
-  let tempDir: string;
+  let connection: RepositoryConnection;
+  let repo: EditRequestRepository;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'edit-request-test-'));
-    repo = new FileEditRequestRepository(tempDir);
+    connection = await createRepositories({ mongoDbName: `test-edit-request-${uuid()}` });
+    repo = connection.repositories.editRequests;
+  });
+
+  afterEach(async () => {
+    await connection.close();
   });
 
   /**

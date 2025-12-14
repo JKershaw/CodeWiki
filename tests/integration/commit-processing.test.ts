@@ -1,6 +1,6 @@
 /**
  * Integration tests for commit processing workflow.
- * Uses real file-based repos, real git, fake LLM only.
+ * Uses real MongoDB repos (memory-server), real git, fake LLM only.
  */
 
 import { describe, it, before, after } from 'node:test';
