@@ -213,17 +213,33 @@ export function calculatePriorityScoreWithEntryPoint(
 // ============================================================================
 
 /**
- * Calculate file coverage using tracked file relationships.
+ * Calculate file coverage using documentation depth scores.
  *
- * Returns binary coverage: 100% if the file is in the covered set, 0% otherwise.
- * This replaces the old text-based mention matching which didn't update correctly.
+ * Coverage is normalized to 0-100% based on the score relative to maxScore.
+ * This provides finer granularity than binary coverage - files with more
+ * documentation get higher coverage percentages.
+ *
+ * Formula: coverage% = min(100, score / max(maxScore, 100) * 100)
  *
  * @param filePath - Full path to the file
- * @param coveredFilesSet - Set of file paths that are covered (from filesAccessed, filesReferenced, targetPaths)
- * @returns Coverage percentage (0 or 100)
+ * @param documentationScores - Map of file paths to documentation depth scores
+ * @param maxScore - Maximum score in the map (used for normalization)
+ * @returns Coverage percentage (0-100)
  */
-export function calculateFileCoverage(filePath: string, coveredFilesSet: Set<string>): number {
-  return coveredFilesSet.has(filePath) ? 100 : 0;
+export function calculateFileCoverage(
+  filePath: string,
+  documentationScores: Map<string, number>,
+  maxScore: number
+): number {
+  const score = documentationScores.get(filePath) ?? 0;
+  if (score === 0) return 0;
+
+  // Normalize: use max(maxScore, 100) as the denominator
+  const normalizer = Math.max(maxScore, 100);
+  const coverage = (score / normalizer) * 100;
+
+  // Cap at 100%
+  return Math.min(100, Math.round(coverage));
 }
 
 /**
@@ -316,23 +332,26 @@ export function createDirectoryNode(
 }
 
 /**
- * Build a coverage tree from file data using tracked coverage.
+ * Build a coverage tree from file data using documentation depth scores.
  *
  * @param files - Array of file data with paths and LOC
- * @param coveredFilesSet - Set of file paths that are covered
+ * @param documentationScores - Map of file paths to documentation depth scores
  * @returns Root directory node, or null if no files
  */
 export function buildCoverageTree(
   files: FileData[],
-  coveredFilesSet: Set<string>
+  documentationScores: Map<string, number>
 ): DirectoryNode | null {
   if (files.length === 0) {
     return null;
   }
 
-  // Build file nodes with binary coverage
+  // Calculate max score for normalization
+  const maxScore = Math.max(...documentationScores.values(), 0);
+
+  // Build file nodes with score-based coverage
   const fileNodes: FileNode[] = files.map(f =>
-    createFileNode(f.path, f.loc, calculateFileCoverage(f.path, coveredFilesSet))
+    createFileNode(f.path, f.loc, calculateFileCoverage(f.path, documentationScores, maxScore))
   );
 
   // Group files by directory
@@ -573,20 +592,20 @@ export function formatCoverageTree(
  * Build and format a prioritized coverage tree for LLM prompt.
  *
  * This is the main entry point for generating file-level coverage context.
- * Uses tracked file relationships for coverage (binary: covered or not).
+ * Uses documentation depth scores for finer-grained coverage percentages.
  *
  * @param files - Array of file data with paths and LOC
- * @param coveredFilesSet - Set of file paths that are covered (from tracked relationships)
+ * @param documentationScores - Map of file paths to documentation depth scores
  * @param budget - Maximum lines to output (default: 100)
  * @returns Formatted coverage tree string
  */
 export function buildPrioritizedCoverageTree(
   files: FileData[],
-  coveredFilesSet: Set<string>,
+  documentationScores: Map<string, number>,
   budget: number = DEFAULT_LINE_BUDGET
 ): string {
   // Build the full tree
-  const tree = buildCoverageTree(files, coveredFilesSet);
+  const tree = buildCoverageTree(files, documentationScores);
 
   if (!tree) {
     return '*No source files found*';

@@ -1,10 +1,11 @@
 /**
  * Unit tests for building coverage trees with file-level detail.
  *
- * This tests the function that takes raw file data and a covered files set,
+ * This tests the function that takes raw file data and documentation scores,
  * calculates file-level coverage, and builds a hierarchical tree structure.
  *
- * Coverage is binary: 100% if in covered set, 0% otherwise.
+ * Coverage is based on documentation depth scores:
+ * - score / max(maxScore, 100) * 100 = coverage %
  */
 
 import { describe, it } from 'node:test';
@@ -23,9 +24,9 @@ describe('buildCoverageTree', () => {
         { path: 'src/app.ts', loc: 200 },
         { path: 'src/utils.ts', loc: 150 },
       ];
-      const coveredFilesSet = new Set<string>();
+      const scores = new Map<string, number>();
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree, 'Tree should not be null');
       assert.strictEqual(tree.name, 'src');
@@ -40,7 +41,7 @@ describe('buildCoverageTree', () => {
         { path: 'src/large.ts', loc: 500 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       const smallFile = tree.files.find(f => f.name === 'small.ts');
@@ -50,15 +51,15 @@ describe('buildCoverageTree', () => {
       assert.strictEqual(largeFile?.loc, 500);
     });
 
-    it('includes coverage % for each file based on tracked coverage', () => {
+    it('includes coverage % for each file based on documentation scores', () => {
       const files: FileData[] = [
         { path: 'src/documented.ts', loc: 100 },
         { path: 'src/undocumented.ts', loc: 100 },
       ];
-      // Only documented.ts is in the covered set
-      const coveredFilesSet = new Set(['src/documented.ts']);
+      // documented.ts has a score of 100, undocumented.ts has no score
+      const scores = new Map([['src/documented.ts', 100]]);
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
       const documented = tree.files.find(f => f.name === 'documented.ts');
@@ -75,7 +76,7 @@ describe('buildCoverageTree', () => {
         { path: 'src/a/b/c/d/deep.ts', loc: 500 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       // Navigate down the tree
@@ -99,10 +100,10 @@ describe('buildCoverageTree', () => {
       const files: FileData[] = [
         { path: 'src/a/b/deep.ts', loc: 100 },
       ];
-      // File is covered
-      const coveredFilesSet = new Set(['src/a/b/deep.ts']);
+      // File has full documentation score
+      const scores = new Map([['src/a/b/deep.ts', 100]]);
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
       // Coverage should propagate up
@@ -115,7 +116,7 @@ describe('buildCoverageTree', () => {
         { path: 'src/deep/nested/file.ts', loc: 200 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 2);
@@ -126,42 +127,44 @@ describe('buildCoverageTree', () => {
     });
   });
 
-  describe('tracked coverage calculation', () => {
-    it('marks file as covered when in covered set', () => {
+  describe('documentation score coverage calculation', () => {
+    it('marks file as covered when it has a high score', () => {
       const files: FileData[] = [
         { path: 'src/orchestrator.ts', loc: 800 },
       ];
-      const coveredFilesSet = new Set(['src/orchestrator.ts']);
+      const scores = new Map([['src/orchestrator.ts', 200]]);
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
+      // 200/200 * 100 = 100%
       assert.strictEqual(tree.files[0]?.coveragePercent, 100);
     });
 
-    it('marks file as uncovered when not in covered set', () => {
+    it('marks file as uncovered when not in scores map', () => {
       const files: FileData[] = [
         { path: 'src/secret.ts', loc: 300 },
       ];
-      const coveredFilesSet = new Set<string>(); // Empty set
+      const scores = new Map<string, number>(); // Empty map
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
       assert.strictEqual(tree.files[0]?.coveragePercent, 0);
     });
 
-    it('handles partial coverage (some files covered)', () => {
+    it('handles partial coverage with different scores', () => {
       const files: FileData[] = [
         { path: 'src/covered.ts', loc: 100 },
         { path: 'src/uncovered.ts', loc: 100 },
       ];
-      const coveredFilesSet = new Set(['src/covered.ts']);
+      // covered.ts has score 100, uncovered.ts has no score
+      const scores = new Map([['src/covered.ts', 100]]);
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
-      // Directory should have 50% coverage (1 of 2 files covered, equal LOC)
+      // Directory: covered=100% (100 LOC), uncovered=0% (100 LOC) = 50% weighted
       assert.strictEqual(tree.coveragePercent, 50);
     });
   });
@@ -176,7 +179,7 @@ describe('buildCoverageTree', () => {
         { path: 'src/sub/deep/e.ts', loc: 100 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 5);
@@ -195,7 +198,7 @@ describe('buildCoverageTree', () => {
         { path: 'src/sub/large.ts', loc: 500 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalLoc, 750);
@@ -210,9 +213,9 @@ describe('buildCoverageTree', () => {
         { path: 'src/covered.ts', loc: 200 },    // Will be covered
         { path: 'src/uncovered.ts', loc: 800 },  // Will not be covered
       ];
-      const coveredFilesSet = new Set(['src/covered.ts']);
+      const scores = new Map([['src/covered.ts', 100]]);
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
       // 200 LOC at 100% + 800 LOC at 0% = 20% weighted coverage
@@ -222,7 +225,7 @@ describe('buildCoverageTree', () => {
 
   describe('edge cases', () => {
     it('returns null for empty file list', () => {
-      const tree = buildCoverageTree([], new Set());
+      const tree = buildCoverageTree([], new Map());
       assert.strictEqual(tree, null);
     });
 
@@ -232,7 +235,7 @@ describe('buildCoverageTree', () => {
         { path: 'package.json', loc: 50 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       // Should handle gracefully - might create virtual root
       // The exact behavior depends on implementation choice
@@ -244,7 +247,7 @@ describe('buildCoverageTree', () => {
         { path: 'src/only.ts', loc: 100 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 1);
@@ -256,10 +259,10 @@ describe('buildCoverageTree', () => {
         { path: 'src/services/index.ts', loc: 100 },
         { path: 'src/models/index.ts', loc: 75 },
       ];
-      // Only utils/index.ts is covered
-      const coveredFilesSet = new Set(['src/utils/index.ts']);
+      // Only utils/index.ts has a score
+      const scores = new Map([['src/utils/index.ts', 100]]);
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 3);
@@ -279,7 +282,7 @@ describe('buildCoverageTree', () => {
         { path: 'a/b/c/d/e/f/g/h/i/j/deep.ts', loc: 100 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 1);
@@ -298,13 +301,13 @@ describe('buildCoverageTree', () => {
         { path: 'src/utils/helpers.ts', loc: 100 },
         { path: 'src/utils/validators.ts', loc: 80 },
       ];
-      // Services directory is covered
-      const coveredFilesSet = new Set([
-        'src/services/user-service.ts',
-        'src/services/auth-service.ts',
+      // Services directory is covered with high scores
+      const scores = new Map([
+        ['src/services/user-service.ts', 100],
+        ['src/services/auth-service.ts', 100],
       ]);
 
-      const tree = buildCoverageTree(files, coveredFilesSet);
+      const tree = buildCoverageTree(files, scores);
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 7);
@@ -328,7 +331,7 @@ describe('buildCoverageTree', () => {
         { path: 'packages/cli/src/commands.ts', loc: 300 },
       ];
 
-      const tree = buildCoverageTree(files, new Set());
+      const tree = buildCoverageTree(files, new Map());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 4);
@@ -336,6 +339,36 @@ describe('buildCoverageTree', () => {
       // Should have packages as root with core and cli children
       const packagesDir = tree.name === 'packages' ? tree : tree.children.find(c => c.name === 'packages');
       assert.ok(packagesDir, 'Should have packages directory');
+    });
+
+    it('shows finer granularity with different documentation depths', () => {
+      const files: FileData[] = [
+        { path: 'src/well-documented.ts', loc: 100 },
+        { path: 'src/partially-documented.ts', loc: 100 },
+        { path: 'src/barely-documented.ts', loc: 100 },
+        { path: 'src/undocumented.ts', loc: 100 },
+      ];
+      // Different documentation scores
+      const scores = new Map([
+        ['src/well-documented.ts', 1000],      // Dedicated page
+        ['src/partially-documented.ts', 500],  // Half as much
+        ['src/barely-documented.ts', 100],     // Mentioned in overview
+        // undocumented.ts has no score
+      ]);
+
+      const tree = buildCoverageTree(files, scores);
+
+      assert.ok(tree);
+      const wellDoc = tree.files.find(f => f.name === 'well-documented.ts');
+      const partialDoc = tree.files.find(f => f.name === 'partially-documented.ts');
+      const barelyDoc = tree.files.find(f => f.name === 'barely-documented.ts');
+      const undoc = tree.files.find(f => f.name === 'undocumented.ts');
+
+      // All should have different coverage percentages
+      assert.strictEqual(wellDoc?.coveragePercent, 100);  // 1000/1000 = 100%
+      assert.strictEqual(partialDoc?.coveragePercent, 50); // 500/1000 = 50%
+      assert.strictEqual(barelyDoc?.coveragePercent, 10);  // 100/1000 = 10%
+      assert.strictEqual(undoc?.coveragePercent, 0);       // No score = 0%
     });
   });
 });
