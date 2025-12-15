@@ -345,20 +345,55 @@ describe('GitHub Repository Service - cwignore compliance', () => {
     clearIgnoreCache();
     fileContents = new Map();
 
-    // Mock GitHub service
+    // Mock GitHub service with directory-by-directory traversal support
     mockGitHubService = {
       getDefaultBranch: async () => 'main',
-      getTree: async () => [
-        { path: 'src/index.ts', type: 'blob' },
-        { path: 'src/utils/helper.ts', type: 'blob' },
-        { path: 'node_modules/package/index.js', type: 'blob' },
-        { path: 'dist/bundle.js', type: 'blob' },
-        { path: 'docs/README.md', type: 'blob' },
-        { path: 'examples/demo.ts', type: 'blob' },
-        { path: '.gitignore', type: 'blob' },
-        { path: '.cwignore', type: 'blob' },
-        { path: 'README.md', type: 'blob' },
-      ],
+      getDirectoryContents: async (_owner: string, _repo: string, path: string) => {
+        // Return different contents based on directory path for proper traversal
+        if (path === '' || path === '.') {
+          // Root directory
+          return [
+            { name: 'src', path: 'src', type: 'dir', size: 0, sha: 'sha1' },
+            { name: 'node_modules', path: 'node_modules', type: 'dir', size: 0, sha: 'sha2' },
+            { name: 'dist', path: 'dist', type: 'dir', size: 0, sha: 'sha3' },
+            { name: 'docs', path: 'docs', type: 'dir', size: 0, sha: 'sha4' },
+            { name: 'examples', path: 'examples', type: 'dir', size: 0, sha: 'sha5' },
+            { name: '.gitignore', path: '.gitignore', type: 'file', size: 100, sha: 'sha6' },
+            { name: '.cwignore', path: '.cwignore', type: 'file', size: 100, sha: 'sha7' },
+            { name: 'README.md', path: 'README.md', type: 'file', size: 100, sha: 'sha8' },
+          ];
+        } else if (path === 'src') {
+          return [
+            { name: 'index.ts', path: 'src/index.ts', type: 'file', size: 100, sha: 'sha9' },
+            { name: 'utils', path: 'src/utils', type: 'dir', size: 0, sha: 'sha10' },
+          ];
+        } else if (path === 'src/utils') {
+          return [
+            { name: 'helper.ts', path: 'src/utils/helper.ts', type: 'file', size: 100, sha: 'sha11' },
+          ];
+        } else if (path === 'node_modules') {
+          return [
+            { name: 'package', path: 'node_modules/package', type: 'dir', size: 0, sha: 'sha12' },
+          ];
+        } else if (path === 'node_modules/package') {
+          return [
+            { name: 'index.js', path: 'node_modules/package/index.js', type: 'file', size: 100, sha: 'sha13' },
+          ];
+        } else if (path === 'dist') {
+          return [
+            { name: 'bundle.js', path: 'dist/bundle.js', type: 'file', size: 100, sha: 'sha14' },
+          ];
+        } else if (path === 'docs') {
+          return [
+            { name: 'README.md', path: 'docs/README.md', type: 'file', size: 100, sha: 'sha15' },
+          ];
+        } else if (path === 'examples') {
+          return [
+            { name: 'demo.ts', path: 'examples/demo.ts', type: 'file', size: 100, sha: 'sha16' },
+          ];
+        }
+        return [];
+      },
       getFileContent: async (_owner: string, _repo: string, path: string) => {
         const content = fileContents.get(path);
         if (content === undefined) {

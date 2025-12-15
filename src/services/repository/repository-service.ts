@@ -160,25 +160,45 @@ function createGitHubRepositoryService(
         }
       }
 
-      // Get the tree
-      try {
-        const tree = await githubService.getTree(owner, repoName, treeRef, true);
-        const filePaths = tree
-          .filter(entry => entry.type === 'blob')
-          .map(entry => entry.path);
+      // Fetch .gitignore and .cwignore content (ignore 404s)
+      const [gitignoreContent, cwignoreContent] = await Promise.all([
+        githubService.getFileContent(owner, repoName, '.gitignore', treeRef).catch(() => null),
+        githubService.getFileContent(owner, repoName, '.cwignore', treeRef).catch(() => null),
+      ]);
+      const ignoreFilter = createIgnoreFilterFromContent(gitignoreContent, cwignoreContent);
 
-        // Fetch .gitignore and .cwignore content (ignore 404s)
-        const [gitignoreContent, cwignoreContent] = await Promise.all([
-          githubService.getFileContent(owner, repoName, '.gitignore', treeRef).catch(() => null),
-          githubService.getFileContent(owner, repoName, '.cwignore', treeRef).catch(() => null),
-        ]);
+      // Use directory-by-directory traversal via Contents API.
+      // This avoids GitHub's recursive tree API which truncates for large repos (>100K files).
+      // The Contents API is slightly slower (more requests) but works reliably for any repo size.
+      const files: string[] = [];
+      const dirsToVisit: string[] = ['']; // Start from root
 
-        const ignoreFilter = createIgnoreFilterFromContent(gitignoreContent, cwignoreContent);
-        return filePaths.filter(path => !ignoreFilter.ignores(path));
-      } catch (treeError) {
-        console.warn(`getFileTree: getTree failed for ${owner}/${repoName} at ref '${treeRef}': ${treeError}`);
-        throw treeError;
+      while (dirsToVisit.length > 0) {
+        const currentDir = dirsToVisit.shift()!;
+
+        try {
+          const entries = await githubService.getDirectoryContents(owner, repoName, currentDir, treeRef);
+
+          for (const entry of entries) {
+            // Skip ignored paths
+            if (ignoreFilter.ignores(entry.path)) {
+              continue;
+            }
+
+            if (entry.type === 'dir') {
+              // Queue subdirectory for traversal
+              dirsToVisit.push(entry.path);
+            } else if (entry.type === 'file') {
+              files.push(entry.path);
+            }
+          }
+        } catch (dirError) {
+          // Log but continue - some directories may be inaccessible
+          console.warn(`[GitHub] Failed to list directory '${currentDir}': ${dirError}`);
+        }
       }
+
+      return files;
     },
 
     async fileExists(_repo: Repo, path: string, ref?: string): Promise<boolean> {
