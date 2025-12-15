@@ -77,6 +77,8 @@ export interface ProcessingProgress {
   totalCostUsd: number;
   wikiPagesCreated: number;
   wikiPagesUpdated: number;
+  /** Cumulative count of work items filtered as duplicates */
+  duplicatesFiltered?: number;
 }
 
 /**

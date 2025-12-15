@@ -161,38 +161,53 @@ export function createSaveWorkItemsCommand(workItems: WorkItem[]): SaveWorkItems
 }
 
 /**
+ * Result of saving work items, including duplicate detection info.
+ */
+export interface SaveWorkItemsResult {
+  /** Number of items actually saved to the queue */
+  saved: number;
+  /** Number of items filtered because they already exist as pending/claimed */
+  duplicatesFiltered: number;
+}
+
+/**
  * Handler for SaveWorkItems command.
- * Returns the number of items saved.
+ * Returns save results including duplicate count.
  *
  * Note: With deterministic IDs, work items for the same target will have the
  * same ID. We skip saving items that already exist with status 'pending' or
- * 'claimed' to avoid overwriting in-progress work.
+ * 'claimed' to avoid overwriting in-progress work. The duplicatesFiltered
+ * count signals that work is already in progress for those targets.
  */
 export async function handleSaveWorkItems(
   command: SaveWorkItemsCommand,
   repos: Repositories
-): Promise<CommandResult<number>> {
+): Promise<CommandResult<SaveWorkItemsResult>> {
   try {
     if (command.workItems.length === 0) {
-      return success(0);
+      return success({ saved: 0, duplicatesFiltered: 0 });
     }
 
     // Filter out items that already exist with pending/claimed status
     // This prevents overwriting work that's in progress
     const itemsToSave: WorkItem[] = [];
+    let duplicatesFiltered = 0;
+
     for (const item of command.workItems) {
       const existing = await repos.workQueue.findById(item.id);
       if (!existing || existing.status === 'completed' || existing.status === 'failed') {
         // Item doesn't exist or is done - safe to save/overwrite
         itemsToSave.push(item);
+      } else {
+        // Existing is pending or claimed - this is a duplicate of in-progress work
+        duplicatesFiltered++;
       }
-      // If existing is pending or claimed, skip - don't overwrite in-progress work
     }
 
     if (itemsToSave.length > 0) {
       await repos.workQueue.saveMany(itemsToSave);
     }
-    return success(itemsToSave.length);
+    return success({ saved: itemsToSave.length, duplicatesFiltered });
   } catch (error) {
     return failure(`Failed to save work items: ${error}`);
   }

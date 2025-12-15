@@ -24,6 +24,8 @@ export interface ProcessingRun {
   totalCostUsd: number;
   wikiPagesCreated: number;
   wikiPagesUpdated: number;
+  /** Number of work items filtered as duplicates (already pending/claimed) */
+  duplicatesFiltered: number;
   /** Error message if failed */
   error: string | null;
 }
@@ -58,6 +60,7 @@ export function createProcessingRun(params: {
     totalCostUsd: 0,
     wikiPagesCreated: 0,
     wikiPagesUpdated: 0,
+    duplicatesFiltered: 0,
     error: null,
   };
 }

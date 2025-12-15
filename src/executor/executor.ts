@@ -126,6 +126,7 @@ export class Executor {
       totalCost: 0,
       wikiPagesCreated: 0,
       wikiPagesUpdated: 0,
+      duplicatesFiltered: 0,
     };
 
     // Get or create the active wiki for this repo
@@ -228,16 +229,42 @@ export class Executor {
               // Generate a small batch of work items (on-demand, not pre-filling)
               const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
               if (newWork.length === 0) {
-                // No more work from orchestrator
+                // No work from orchestrator - but check if work is in progress
+                // If there's pending/claimed work, we should wait rather than exit
+                const statusCounts = await this.repos.workQueue.countByStatus(repoId);
+                const inProgressCount = (statusCounts.pending || 0) + (statusCounts.claimed || 0);
+                if (inProgressCount > 0) {
+                  console.log(`  ⏳ No new work generated, ${inProgressCount} item(s) in progress, waiting...`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  return null; // Retry - don't mark exhausted
+                }
+                // Genuinely no more work
                 workExhausted = true;
                 return null;
               }
 
               // Save new work items via CQRS command
-              await handleSaveWorkItems(
+              const saveResult = await handleSaveWorkItems(
                 createSaveWorkItemsCommand(newWork),
                 this.repos
               );
+
+              // Track duplicates filtered
+              if (saveResult.success && saveResult.data) {
+                const { saved, duplicatesFiltered } = saveResult.data;
+
+                if (duplicatesFiltered > 0) {
+                  summary.duplicatesFiltered += duplicatesFiltered;
+                  console.log(`  ⚠ ${duplicatesFiltered} duplicate(s) filtered (already in progress)`);
+                }
+
+                // If all items were duplicates, work is in progress - wait and retry
+                if (saved === 0 && duplicatesFiltered > 0) {
+                  console.log(`  ⏳ All ${duplicatesFiltered} item(s) already in progress, waiting...`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  return null; // Retry - don't mark exhausted
+                }
+              }
 
               // Claim the first item
               const finalResult = await handleClaimWorkItemOne(
@@ -247,6 +274,14 @@ export class Executor {
               workItem = finalResult.success ? finalResult.data : null;
 
               if (!workItem) {
+                // Still nothing to claim - check if work is in progress
+                const statusCounts = await this.repos.workQueue.countByStatus(repoId);
+                const inProgressCount = (statusCounts.pending || 0) + (statusCounts.claimed || 0);
+                if (inProgressCount > 0) {
+                  console.log(`  ⏳ Claim failed but ${inProgressCount} item(s) in progress, waiting...`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  return null; // Retry - don't mark exhausted
+                }
                 workExhausted = true;
                 return null;
               }
@@ -334,6 +369,7 @@ export class Executor {
                 totalCostUsd: summary.totalCost,
                 wikiPagesCreated: summary.wikiPagesCreated,
                 wikiPagesUpdated: summary.wikiPagesUpdated,
+                duplicatesFiltered: summary.duplicatesFiltered,
               }),
               this.repos
             );
@@ -831,6 +867,8 @@ export interface ExecutionSummary {
   totalCost: number;
   wikiPagesCreated: number;
   wikiPagesUpdated: number;
+  /** Cumulative count of work items filtered as duplicates (already in progress) */
+  duplicatesFiltered: number;
 }
 
 /**

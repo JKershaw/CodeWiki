@@ -76,6 +76,7 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
     totalCostUsd: number;
     wikiPagesCreated: number;
     wikiPagesUpdated: number;
+    duplicatesFiltered?: number;
   }): Promise<void> {
     await this.store.update(id, updates);
   }

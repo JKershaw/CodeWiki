@@ -256,6 +256,10 @@ function startProcessingPolling(id) {
           ? `<button class="btn danger small" disabled>Stopping...</button>`
           : `<button class="btn danger small stop-btn" data-id="${id}">Stop</button>`;
 
+        const duplicatesHtml = processing.duplicatesFiltered > 0
+          ? `<div class="progress-duplicates">⚠ ${processing.duplicatesFiltered} duplicate(s) filtered</div>`
+          : '';
+
         progressDiv.innerHTML = `
           <div class="progress-bar">
             <div class="progress-fill" style="width: ${percent}%"></div>
@@ -264,6 +268,7 @@ function startProcessingPolling(id) {
             <span class="progress-text">${progressText}</span>
             ${stopButtonHtml}
           </div>
+          ${duplicatesHtml}
         `;
 
         // Add stop button event listener
