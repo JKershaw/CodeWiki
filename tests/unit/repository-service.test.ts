@@ -137,12 +137,27 @@ describe('Repository Service', () => {
           return `content of ${path}`;
         },
 
-        async getDirectoryContents(): Promise<DirectoryEntry[]> {
+        async getDirectoryContents(_owner: string, _repo: string, path: string): Promise<DirectoryEntry[]> {
           callCounts.getDirectoryContents++;
-          return [
-            { name: 'file.ts', path: 'src/file.ts', type: 'file', size: 100, sha: 'sha1' },
-            { name: 'utils', path: 'src/utils', type: 'dir', size: 0, sha: 'sha2' },
-          ];
+          // Return different contents based on directory path for proper traversal
+          if (path === '' || path === '.') {
+            // Root directory
+            return [
+              { name: 'src', path: 'src', type: 'dir', size: 0, sha: 'sha1' },
+            ];
+          } else if (path === 'src') {
+            // src directory
+            return [
+              { name: 'index.ts', path: 'src/index.ts', type: 'file', size: 100, sha: 'sha2' },
+              { name: 'utils', path: 'src/utils', type: 'dir', size: 0, sha: 'sha3' },
+            ];
+          } else if (path === 'src/utils') {
+            // src/utils directory
+            return [
+              { name: 'helper.ts', path: 'src/utils/helper.ts', type: 'file', size: 200, sha: 'sha4' },
+            ];
+          }
+          return [];
         },
 
         async getTree(): Promise<TreeEntry[]> {
@@ -204,16 +219,17 @@ describe('Repository Service', () => {
 
       assert.strictEqual(callCounts.getDirectoryContents, 1);
       assert.strictEqual(entries.length, 2);
-      assert.strictEqual(entries[0].name, 'file.ts');
+      assert.strictEqual(entries[0].name, 'index.ts');
       assert.strictEqual(entries[0].type, 'file');
       assert.strictEqual(entries[1].name, 'utils');
       assert.strictEqual(entries[1].type, 'dir');
     });
 
-    it('getFileTree returns file paths from tree', async () => {
+    it('getFileTree returns file paths from directory traversal', async () => {
       const files = await service.getFileTree(repo);
 
-      assert.strictEqual(callCounts.getTree, 1);
+      // Uses directory-by-directory traversal (3 directories: root, src, src/utils)
+      assert.strictEqual(callCounts.getDirectoryContents, 3);
       assert.strictEqual(files.length, 2);
       assert.ok(files.includes('src/index.ts'));
       assert.ok(files.includes('src/utils/helper.ts'));
