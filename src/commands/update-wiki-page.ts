@@ -62,6 +62,14 @@ export async function handleUpdateWikiPage(
       const existingPages = await repos.wikiPages.findByWiki(wikiId);
       const similarMatch = findSimilarPage(newTitle, update.path, update.content, existingPages, 0.5);
       if (similarMatch) {
+        // Transfer tracking data to the similar page so exploration effort isn't lost
+        if (update.filesAccessed?.length || update.targetPaths?.length) {
+          await repos.wikiPages.updateContent(similarMatch.page.id, {
+            content: similarMatch.page.content, // Keep content unchanged
+            ...(update.filesAccessed && { filesAccessed: update.filesAccessed }),
+            ...(update.targetPaths && { targetPaths: update.targetPaths }),
+          });
+        }
         return failure(
           `A similar page already exists at path: ${similarMatch.page.path} ` +
           `(${similarMatch.matchType} similarity: ${(similarMatch.similarity * 100).toFixed(0)}%). ` +
@@ -207,6 +215,14 @@ export async function handleUpdateWikiPage(
         const existingPages = await repos.wikiPages.findByWiki(wikiId);
         const similarMatch = findSimilarPage(newTitle, update.path, update.content, existingPages, 0.5);
         if (similarMatch) {
+          // Transfer tracking data to the similar page so exploration effort isn't lost
+          if (update.filesAccessed?.length || update.targetPaths?.length) {
+            await repos.wikiPages.updateContent(similarMatch.page.id, {
+              content: similarMatch.page.content, // Keep content unchanged
+              ...(update.filesAccessed && { filesAccessed: update.filesAccessed }),
+              ...(update.targetPaths && { targetPaths: update.targetPaths }),
+            });
+          }
           return failure(
             `A similar page already exists at path: ${similarMatch.page.path} ` +
             `(${similarMatch.matchType} similarity: ${(similarMatch.similarity * 100).toFixed(0)}%). ` +
