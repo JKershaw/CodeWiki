@@ -161,6 +161,43 @@ export function buildCoveredFilesSet(
 }
 
 /**
+ * Build documentation depth scores for files based on wiki page content.
+ *
+ * For each file, calculates a score based on how much documentation references it:
+ *   score(file) = Σ content.length / filesReferenced.length
+ *
+ * This gives finer granularity than binary coverage:
+ * - Files with dedicated pages get higher scores
+ * - Files mentioned in overview pages get lower scores (diluted by other files)
+ * - Two files are unlikely to have exactly the same score
+ *
+ * @param wikiPages - Wiki pages with file tracking fields
+ * @returns Map of file path to documentation depth score
+ */
+export function buildFileDocumentationScores(
+  wikiPages: WikiPageWithFileTracking[]
+): Map<string, number> {
+  const scores = new Map<string, number>();
+
+  for (const page of wikiPages) {
+    const filesReferenced = page.filesReferenced ?? [];
+    if (filesReferenced.length === 0) {
+      continue;
+    }
+
+    // Score per file = content length / number of files referenced
+    const scorePerFile = page.content.length / filesReferenced.length;
+
+    for (const file of filesReferenced) {
+      const currentScore = scores.get(file) ?? 0;
+      scores.set(file, currentScore + scorePerFile);
+    }
+  }
+
+  return scores;
+}
+
+/**
  * Sort undocumented directories for consistent, deterministic ordering.
  *
  * This function ensures that directories with the same undocumented ratio
@@ -512,10 +549,14 @@ export class ContextGatherer {
 
   /**
    * Build a file-level coverage tree with prioritized output.
+   *
+   * Uses tracked file relationships (filesAccessed, filesReferenced, targetPaths)
+   * for coverage instead of text-based content matching. This ensures coverage
+   * updates correctly when files are documented.
    */
   private async buildFileCoverageTree(
     repoId: string,
-    wikiPages: Array<{ path: string; content: string }>
+    wikiPages: WikiPageWithFileTracking[]
   ): Promise<string | null> {
     if (!this.repoAccessFactory) {
       return null;
@@ -537,7 +578,10 @@ export class ContextGatherer {
         loc: DEFAULT_LOC,
       }));
 
-      return buildPrioritizedCoverageTree(fileData, wikiPages, 100);
+      // Build documentation scores for finer-grained coverage
+      const documentationScores = buildFileDocumentationScores(wikiPages);
+
+      return buildPrioritizedCoverageTree(fileData, documentationScores, 100);
     } catch (error) {
       console.warn(`Failed to build file coverage tree: ${error}`);
       return null;

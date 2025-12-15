@@ -51,7 +51,7 @@ export interface WikiPage {
 
 export interface WikiPageUpdate {
   /** Type of update */
-  type: 'create' | 'update' | 'merge' | 'delete';
+  type: 'create' | 'update' | 'merge' | 'delete' | 'track';
   /** Target page path */
   path: string;
   /** Page title (optional, extracted from content if not provided) */

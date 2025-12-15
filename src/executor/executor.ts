@@ -660,9 +660,10 @@ export class Executor {
           update.targetPaths = [targetPath];
         }
 
-        if (shouldQueueEdits) {
+        if (shouldQueueEdits && update.type !== 'track') {
           // Route analysis agent updates through EditRequest queue
           // This enables the WikiEditorAgent to handle out-of-order commits intelligently
+          // Note: 'track' updates bypass the queue since they only update file tracking
           const editRequestParams: Parameters<typeof createEditRequest>[0] = {
             id: uuid(),
             repoId,

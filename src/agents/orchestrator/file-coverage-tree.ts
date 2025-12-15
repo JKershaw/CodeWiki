@@ -3,16 +3,11 @@
  *
  * Provides prioritized views of codebase coverage at the file level,
  * helping the Orchestrator identify the most important documentation gaps.
+ *
+ * Coverage is determined using tracked file relationships (filesAccessed,
+ * filesReferenced, targetPaths) from wiki pages - NOT text-based content matching.
+ * This ensures coverage updates correctly when files are documented.
  */
-
-/**
- * Minimal wiki page interface for coverage calculation.
- * Only requires path and content for checking mentions.
- */
-export interface WikiPageLike {
-  path: string;
-  content: string;
-}
 
 // ============================================================================
 // Types
@@ -29,7 +24,7 @@ export interface FileNode {
   path: string;
   /** Lines of code */
   loc: number;
-  /** Coverage percentage (0-100) based on wiki mentions */
+  /** Coverage percentage (0 or 100) based on tracked file relationships */
   coveragePercent: number;
   /** Priority score for sorting (higher = more important to document) */
   score: number;
@@ -218,142 +213,33 @@ export function calculatePriorityScoreWithEntryPoint(
 // ============================================================================
 
 /**
- * Calculate file coverage based on wiki mentions.
- * A file is considered "covered" if its name or path appears in wiki content.
+ * Calculate file coverage using documentation depth scores.
+ *
+ * Coverage is normalized to 0-100% based on the score relative to maxScore.
+ * This provides finer granularity than binary coverage - files with more
+ * documentation get higher coverage percentages.
+ *
+ * Formula: coverage% = min(100, score / max(maxScore, 100) * 100)
  *
  * @param filePath - Full path to the file
- * @param wikiPages - Wiki pages to search for mentions
- * @returns Coverage percentage (0 or 100 for now - binary)
- * @deprecated Use calculateGraduatedCoverage for more nuanced scoring
+ * @param documentationScores - Map of file paths to documentation depth scores
+ * @param maxScore - Maximum score in the map (used for normalization)
+ * @returns Coverage percentage (0-100)
  */
-export function calculateFileCoverage(filePath: string, wikiPages: WikiPageLike[]): number {
-  // Delegate to graduated coverage for consistency
-  return calculateGraduatedCoverage(filePath, wikiPages);
-}
+export function calculateFileCoverage(
+  filePath: string,
+  documentationScores: Map<string, number>,
+  maxScore: number
+): number {
+  const score = documentationScores.get(filePath) ?? 0;
+  if (score === 0) return 0;
 
-/**
- * Calculate graduated file coverage based on wiki mentions.
- *
- * Returns tiered coverage levels:
- * - 0%   - No mention at all
- * - 25%  - Mentioned in passing (filename appears somewhere)
- * - 50%  - Has dedicated section (heading about file or multiple mentions with context)
- * - 100% - Has dedicated wiki page about the file
- *
- * @param filePath - Full path to the file (e.g., "src/agents/orchestrator.ts")
- * @param wikiPages - Wiki pages to search for mentions
- * @returns Coverage percentage (0, 25, 50, or 100)
- */
-export function calculateGraduatedCoverage(filePath: string, wikiPages: WikiPageLike[]): number {
-  const fileName = filePath.split('/').pop() ?? '';
-  // Remove only the final extension for standard files
-  // For files like foo.config.ts, we want "foo.config" not "foo"
-  const fileNameWithoutExt = fileName.replace(/\.(?:ts|js|tsx|jsx|mjs|cjs)$/, '');
-  // Handle camelCase to kebab-case conversion (e.g., baseAgent -> base-agent)
-  const kebabName = fileNameWithoutExt.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
-  // Also create dot-to-kebab version (e.g., env.config -> env-config)
-  const dotToKebab = fileNameWithoutExt.replace(/\./g, '-').toLowerCase();
+  // Normalize: use max(maxScore, 100) as the denominator
+  const normalizer = Math.max(maxScore, 100);
+  const coverage = (score / normalizer) * 100;
 
-  let highestCoverage = 0;
-
-  for (const page of wikiPages) {
-    const pageContent = page.content;
-    const pageContentLower = pageContent.toLowerCase();
-    const pagePath = page.path.toLowerCase();
-    const fileNameLower = fileName.toLowerCase();
-    const fileNameWithoutExtLower = fileNameWithoutExt.toLowerCase();
-
-    // Check for 100% - dedicated wiki page about the file
-    // Page path should end with or be exactly the file name (without extension)
-    const pagePathSegments = pagePath.split('/');
-    const lastSegment = pagePathSegments[pagePathSegments.length - 1] ?? '';
-
-    const pathMatchesFile =
-      lastSegment === fileNameWithoutExtLower ||
-      lastSegment === kebabName ||
-      lastSegment === dotToKebab;
-
-    if (pathMatchesFile) {
-      // Page path exactly matches the file name - this is strong evidence of a dedicated page.
-      // We trust path matches because wiki pages are typically named after what they document.
-      // Only reject if content explicitly mentions a DIFFERENT file with similar name.
-      //
-      // Check if content mentions a different but similar filename (e.g., auth-helper.ts vs auth.ts)
-      const similarFilePattern = new RegExp(
-        `${escapeRegex(fileNameWithoutExtLower)}-[a-z]+\\.(?:ts|js)`,
-        'i'
-      );
-      const mentionsDifferentFile = similarFilePattern.test(pageContent) &&
-        !pageContentLower.includes(fileNameLower);
-
-      if (!mentionsDifferentFile) {
-        return 100; // Early return - this is the highest tier
-      }
-    }
-
-    // Check for 50% - has dedicated section (heading containing filename)
-    // Look for markdown headings that mention the file
-    const headingPattern = new RegExp(
-      `^#{1,6}\\s+.*\\b${escapeRegex(fileNameWithoutExtLower)}\\b.*$`,
-      'im'
-    );
-    if (headingPattern.test(pageContent.toLowerCase())) {
-      highestCoverage = Math.max(highestCoverage, 50);
-      continue; // Keep looking for potentially higher coverage
-    }
-
-    // Check for 50% - multiple mentions with context (3+ mentions)
-    const mentionCount = countMentions(pageContentLower, fileNameLower, fileNameWithoutExtLower);
-    if (mentionCount >= 3) {
-      highestCoverage = Math.max(highestCoverage, 50);
-      continue;
-    }
-
-    // Check for 25% - mentioned in passing (at least one mention)
-    if (mentionCount >= 1) {
-      highestCoverage = Math.max(highestCoverage, 25);
-      continue;
-    }
-
-    // Check if full path is mentioned
-    if (pageContentLower.includes(filePath.toLowerCase())) {
-      highestCoverage = Math.max(highestCoverage, 25);
-    }
-  }
-
-  return highestCoverage;
-}
-
-/**
- * Count how many times a filename appears in content.
- * Uses strict boundaries to avoid matching partial names like "auth" in "auth-helper".
- */
-function countMentions(content: string, fileName: string, fileNameWithoutExt: string): number {
-  // Count filename mentions (with extension)
-  // For "executor.ts", match "executor.ts" but not "executors.ts" or "pre-executor.ts"
-  const fileNameRegex = new RegExp(
-    `(?<![a-zA-Z0-9_-])${escapeRegex(fileName)}(?![a-zA-Z0-9_-])`,
-    'gi'
-  );
-  const fileNameMatches = content.match(fileNameRegex) || [];
-
-  // Also count mentions of just the name without extension
-  // For "executor", match "executor" but not "executor-helper" or "pre-executor"
-  const nameOnlyRegex = new RegExp(
-    `(?<![a-zA-Z0-9_-])${escapeRegex(fileNameWithoutExt)}(?![a-zA-Z0-9_-])`,
-    'gi'
-  );
-  const nameOnlyMatches = content.match(nameOnlyRegex) || [];
-
-  // Return the higher count (don't sum - they may overlap)
-  return Math.max(fileNameMatches.length, nameOnlyMatches.length);
-}
-
-/**
- * Escape special regex characters in a string.
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Cap at 100%
+  return Math.min(100, Math.round(coverage));
 }
 
 /**
@@ -446,23 +332,26 @@ export function createDirectoryNode(
 }
 
 /**
- * Build a coverage tree from file data and wiki pages.
+ * Build a coverage tree from file data using documentation depth scores.
  *
  * @param files - Array of file data with paths and LOC
- * @param wikiPages - Wiki pages for coverage calculation
+ * @param documentationScores - Map of file paths to documentation depth scores
  * @returns Root directory node, or null if no files
  */
-export function buildCoverageTreeWithFiles(
+export function buildCoverageTree(
   files: FileData[],
-  wikiPages: WikiPageLike[]
+  documentationScores: Map<string, number>
 ): DirectoryNode | null {
   if (files.length === 0) {
     return null;
   }
 
-  // Build file nodes with coverage
+  // Calculate max score for normalization
+  const maxScore = Math.max(...documentationScores.values(), 0);
+
+  // Build file nodes with score-based coverage
   const fileNodes: FileNode[] = files.map(f =>
-    createFileNode(f.path, f.loc, calculateFileCoverage(f.path, wikiPages))
+    createFileNode(f.path, f.loc, calculateFileCoverage(f.path, documentationScores, maxScore))
   );
 
   // Group files by directory
@@ -531,8 +420,7 @@ export function buildCoverageTreeWithFiles(
  * Each directory costs 1 line.
  * Ancestor directories are included automatically.
  *
- * @param files - All files with their data
- * @param wikiPages - Wiki pages for coverage calculation
+ * @param files - All files with their coverage data
  * @param budget - Maximum lines to output
  * @returns Truncation result with selected files and directories
  */
@@ -606,7 +494,7 @@ export function truncateToBudget(
  * @param truncationInfo - Info about hidden items
  * @returns Formatted ASCII tree string
  */
-export function formatCoverageTreeWithFiles(
+export function formatCoverageTree(
   root: DirectoryNode | null,
   selectedFiles: FileNode[],
   selectedDirs: string[],
@@ -704,19 +592,20 @@ export function formatCoverageTreeWithFiles(
  * Build and format a prioritized coverage tree for LLM prompt.
  *
  * This is the main entry point for generating file-level coverage context.
+ * Uses documentation depth scores for finer-grained coverage percentages.
  *
- * @param files - Array of file data with paths and content
- * @param wikiPages - Wiki pages for coverage calculation
+ * @param files - Array of file data with paths and LOC
+ * @param documentationScores - Map of file paths to documentation depth scores
  * @param budget - Maximum lines to output (default: 100)
  * @returns Formatted coverage tree string
  */
 export function buildPrioritizedCoverageTree(
   files: FileData[],
-  wikiPages: WikiPageLike[],
+  documentationScores: Map<string, number>,
   budget: number = DEFAULT_LINE_BUDGET
 ): string {
   // Build the full tree
-  const tree = buildCoverageTreeWithFiles(files, wikiPages);
+  const tree = buildCoverageTree(files, documentationScores);
 
   if (!tree) {
     return '*No source files found*';
@@ -743,7 +632,7 @@ export function buildPrioritizedCoverageTree(
   const truncation = truncateToBudget(allFiles, budget);
 
   // Format the result
-  return formatCoverageTreeWithFiles(
+  return formatCoverageTree(
     tree,
     truncation.files,
     truncation.directories,
@@ -754,90 +643,4 @@ export function buildPrioritizedCoverageTree(
       wasTruncated: truncation.wasTruncated,
     }
   );
-}
-
-/**
- * Result of aggregate file documentation coverage calculation.
- */
-export interface FileDocCoverageResult {
-  /** Overall documentation coverage percentage (0-100), weighted by LOC */
-  coveragePercent: number;
-  /** Total number of source files analyzed */
-  totalFiles: number;
-  /** Number of files with any documentation (coverage > 0) */
-  documentedFiles: number;
-  /** Number of files with full documentation (coverage = 100) */
-  fullyDocumentedFiles: number;
-  /** Breakdown by coverage tier */
-  byTier: {
-    none: number;      // 0%
-    mentioned: number; // 25%
-    sectioned: number; // 50%
-    dedicated: number; // 100%
-  };
-}
-
-/**
- * Calculate aggregate file documentation coverage metrics.
- *
- * This provides an overall view of how well the wiki documents the codebase files.
- * Coverage is weighted by lines of code so larger files have more impact on the score.
- *
- * @param files - Array of file data with paths and LOC
- * @param wikiPages - Wiki pages to check for file mentions
- * @returns Aggregate coverage metrics
- */
-export function calculateAggregateFileCoverage(
-  files: FileData[],
-  wikiPages: WikiPageLike[]
-): FileDocCoverageResult {
-  if (files.length === 0) {
-    return {
-      coveragePercent: 0,
-      totalFiles: 0,
-      documentedFiles: 0,
-      fullyDocumentedFiles: 0,
-      byTier: { none: 0, mentioned: 0, sectioned: 0, dedicated: 0 },
-    };
-  }
-
-  let totalLoc = 0;
-  let weightedCoverageSum = 0;
-  let documentedFiles = 0;
-  let fullyDocumentedFiles = 0;
-  const byTier = { none: 0, mentioned: 0, sectioned: 0, dedicated: 0 };
-
-  for (const file of files) {
-    const coverage = calculateGraduatedCoverage(file.path, wikiPages);
-    totalLoc += file.loc;
-    weightedCoverageSum += coverage * file.loc;
-
-    if (coverage > 0) {
-      documentedFiles++;
-    }
-    if (coverage === 100) {
-      fullyDocumentedFiles++;
-    }
-
-    // Categorize by tier
-    if (coverage === 0) {
-      byTier.none++;
-    } else if (coverage === 25) {
-      byTier.mentioned++;
-    } else if (coverage === 50) {
-      byTier.sectioned++;
-    } else {
-      byTier.dedicated++;
-    }
-  }
-
-  const coveragePercent = totalLoc > 0 ? weightedCoverageSum / totalLoc : 0;
-
-  return {
-    coveragePercent,
-    totalFiles: files.length,
-    documentedFiles,
-    fullyDocumentedFiles,
-    byTier,
-  };
 }
