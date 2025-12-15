@@ -260,8 +260,10 @@ export function createCachedGitHubRepoService(
     },
 
     async getTree(owner: string, repo: string, sha: string, recursive = true): Promise<TreeEntry[]> {
-      const key = makeCacheKey('tree', owner, repo, sha, recursive ? 'recursive' : 'shallow');
-      return cache.getOrSet(key, () => service.getTree(owner, repo, sha, recursive), cache.getTtl('tree'));
+      // Don't cache tree results - they can be truncated by GitHub's API for large repos.
+      // If truncation occurs, the error should propagate immediately rather than being cached.
+      // Tree listings are typically only called once per iteration anyway.
+      return service.getTree(owner, repo, sha, recursive);
     },
 
     async getDefaultBranch(owner: string, repo: string): Promise<string> {

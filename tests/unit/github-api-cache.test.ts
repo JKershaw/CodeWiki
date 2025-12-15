@@ -285,11 +285,15 @@ describe('Cached GitHub Repo Service', () => {
     assert.strictEqual(callCounts.getDirectoryContents, 1);
   });
 
-  it('caches getTree calls', async () => {
+  it('does NOT cache getTree calls (to avoid caching truncated data)', async () => {
+    // Tree results are intentionally NOT cached because GitHub's tree API
+    // can return truncated data for large repos. Caching truncated data
+    // would cause coverage calculation instability.
     await cachedService.getTree('owner', 'repo', 'sha123');
     await cachedService.getTree('owner', 'repo', 'sha123');
 
-    assert.strictEqual(callCounts.getTree, 1);
+    // Each call should hit the underlying service
+    assert.strictEqual(callCounts.getTree, 2);
   });
 
   it('caches different repositories separately', async () => {

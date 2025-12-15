@@ -381,7 +381,11 @@ export function createGitHubRepoService(config: GitHubApiConfig = {}): GitHubRep
       }>(`/repos/${owner}/${repo}/git/trees/${sha}${params}`);
 
       if (data.truncated) {
-        console.warn(`Tree for ${owner}/${repo} at ${sha} was truncated`);
+        throw new Error(
+          `GitHub tree API returned truncated data for ${owner}/${repo}. ` +
+          `Repository has too many files for recursive tree listing. ` +
+          `Consider using directory-by-directory traversal instead.`
+        );
       }
 
       return data.tree.map(item => ({
