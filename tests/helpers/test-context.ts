@@ -18,6 +18,7 @@ import { getOrCreateActiveWiki } from '../../src/commands/create-wiki.js';
 import type { AgentContext } from '../../src/agents/base-agent.js';
 import type { Repositories } from '../../src/repositories/index.js';
 import type { UnifiedRepoAccessFactory } from '../../src/services/repository/unified-repo-access.js';
+import type { RepositoryServiceFactory } from '../../src/services/repository/repository-service.js';
 
 export interface TestContext {
   /** Base directory for all test data */
@@ -32,6 +33,8 @@ export interface TestContext {
   git: FileSystemGitService;
   /** Mock LLM service */
   llm: MockLLMService;
+  /** Repository service factory for executor */
+  repoServiceFactory: RepositoryServiceFactory;
   /** Unified repo access factory */
   repoAccessFactory: UnifiedRepoAccessFactory;
   /** Create an AgentContext for a repo (auto-creates wiki if needed) */
@@ -82,6 +85,7 @@ export async function createTestContext(): Promise<TestContext> {
     repos,
     git: gitService,
     llm,
+    repoServiceFactory,
     repoAccessFactory,
     async agentContext(repoId: string): Promise<AgentContext> {
       const wiki = await getOrCreateActiveWiki(repoId, repos);
