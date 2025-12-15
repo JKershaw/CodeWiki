@@ -929,5 +929,135 @@ describe('handleUpdateWikiPage', () => {
       assert.ok(result.data?.filesReferenced.includes('src/new.ts'));
       assert.ok(result.data?.filesReferenced.includes('src/another.ts'));
     });
+
+    it('stores filesAccessed when merge creates a new page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/merge-new',
+        content: '# Merge Created Page\n\nContent here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.3,
+        skipValidation: true,
+        filesAccessed: ['src/merged.ts', 'src/utils.ts'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.deepStrictEqual(result.data?.filesAccessed, ['src/merged.ts', 'src/utils.ts']);
+    });
+
+    it('stores targetPaths when merge creates a new page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/merge-new',
+        content: '# Merge Created Page\n\nContent here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.3,
+        skipValidation: true,
+        targetPaths: ['src/services/', 'src/utils/'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.deepStrictEqual(result.data?.targetPaths, ['src/services/', 'src/utils/']);
+    });
+
+    it('extracts filesReferenced when merge creates a new page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/merge-new',
+        content: '# Merge Created Page\n\nSee `src/helper.ts` and `src/config.json` for details.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.3,
+        skipValidation: true,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      assert.ok(result.data?.filesReferenced.includes('src/helper.ts'));
+      assert.ok(result.data?.filesReferenced.includes('src/config.json'));
+    });
+
+    it('accumulates filesAccessed when merge updates existing page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page with some files accessed
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal content.',
+        filesAccessed: ['src/original.ts'],
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Merge with additional files accessed
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/page',
+        content: '## Additional Section\n\nMore content here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.1,
+        filesAccessed: ['src/new.ts', 'src/merged.ts'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Should have accumulated files from both operations
+      assert.ok(result.data?.filesAccessed.includes('src/original.ts'));
+      assert.ok(result.data?.filesAccessed.includes('src/new.ts'));
+      assert.ok(result.data?.filesAccessed.includes('src/merged.ts'));
+    });
+
+    it('accumulates targetPaths when merge updates existing page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page with target paths
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal content.',
+        targetPaths: ['src/original/'],
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Merge with additional target paths
+      const command = createUpdateWikiPageCommand({
+        type: 'merge',
+        path: 'test/page',
+        content: '## Additional Section\n\nMore content here.',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.1,
+        targetPaths: ['src/new/', 'src/merged/'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Should have accumulated target paths from both operations
+      assert.ok(result.data?.targetPaths.includes('src/original/'));
+      assert.ok(result.data?.targetPaths.includes('src/new/'));
+      assert.ok(result.data?.targetPaths.includes('src/merged/'));
+    });
   });
 });

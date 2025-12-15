@@ -450,10 +450,20 @@ export class ContextGatherer {
       for (const page of wikiPages) {
         if (page.targetPaths) {
           for (const targetPath of page.targetPaths) {
-            // If target is a directory (ends with / or matches a prefix), cover all files under it
+            // If target is a directory, cover all files under it
+            // Handle both with and without trailing slash
             if (targetPath.endsWith('/')) {
+              // Explicit directory path with trailing slash
               for (const file of sourceFiles) {
                 if (file.startsWith(targetPath)) {
+                  coveredFiles.add(file);
+                }
+              }
+            } else if (!coveredFiles.has(targetPath)) {
+              // Could be a directory without trailing slash - check if it's a prefix
+              const pathWithSlash = targetPath + '/';
+              for (const file of sourceFiles) {
+                if (file.startsWith(pathWithSlash)) {
                   coveredFiles.add(file);
                 }
               }

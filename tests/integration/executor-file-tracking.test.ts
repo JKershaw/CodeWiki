@@ -148,5 +148,53 @@ describe('File Coverage Calculation with Tracked Fields', () => {
         `Coverage should be ~${expectedCoverage.toFixed(1)}%, got ${summary.fileDocCoverage.toFixed(1)}%`
       );
     });
+
+    it('directory targetPaths without trailing slash contribute to coverage', async () => {
+      const repoId = 'executor-dir-no-slash';
+      await createTestRepo(ctx, repoId, {
+        'src/services/auth.ts': 'export const login = () => {}',
+        'src/services/api.ts': 'export const fetch = () => {}',
+        'src/other.ts': 'export const other = () => {}',
+      });
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+
+      // Create a wiki page that targets a directory WITHOUT trailing slash
+      const page: WikiPage = {
+        id: uuid(),
+        wikiId: wiki.id,
+        path: 'services-docs',
+        title: 'Services Documentation',
+        content: '# Services\n\nDocuments the services directory',
+        confidence: 0.8,
+        sourceCommits: [],
+        links: [],
+        backlinks: [],
+        targetPaths: ['src/services'],  // Directory path WITHOUT trailing slash
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await ctx.repos.wikiPages.save(page);
+
+      const orchestrator = new DefaultOrchestrator(
+        ctx.repos,
+        ctx.llm,
+        { useLLM: false },
+        ctx.repoAccessFactory
+      );
+
+      const summary = await orchestrator.getWorkSummary(repoId, wiki.id);
+
+      // The directory target should cover both files within src/services/
+      // even without the trailing slash
+      assert.ok(summary.totalSourceFiles >= 3, 'Should have at least 3 source files');
+      assert.ok(summary.documentedFiles >= 2, 'Directory targetPath without slash should cover 2 files');
+
+      // Coverage should be approximately 66.67% (2/3 files)
+      const expectedCoverage = (2 / 3) * 100;
+      assert.ok(
+        Math.abs(summary.fileDocCoverage - expectedCoverage) < 1,
+        `Coverage should be ~${expectedCoverage.toFixed(1)}%, got ${summary.fileDocCoverage.toFixed(1)}%`
+      );
+    });
   });
 });
