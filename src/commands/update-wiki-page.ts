@@ -96,6 +96,9 @@ export async function handleUpdateWikiPage(
       if (update.targetPaths) {
         createParams.targetPaths = update.targetPaths;
       }
+      if (update.synthesisType) {
+        createParams.synthesisType = update.synthesisType;
+      }
       const page = createWikiPage(createParams);
 
       // Apply confidenceDelta to the page's confidence (base is 0.5, cap at 1.0)
@@ -245,6 +248,9 @@ export async function handleUpdateWikiPage(
         }
         if (update.targetPaths) {
           createParams.targetPaths = update.targetPaths;
+        }
+        if (update.synthesisType) {
+          createParams.synthesisType = update.synthesisType;
         }
         const page = createWikiPage(createParams);
 

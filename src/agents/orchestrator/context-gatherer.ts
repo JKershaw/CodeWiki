@@ -16,8 +16,6 @@ import {
   handleListCommits,
   createListWikiPagesQuery,
   handleListWikiPages,
-  createGetWikiPageQuery,
-  handleGetWikiPage,
   createListAgentRunsQuery,
   handleListAgentRuns,
   createCountPendingEditRequestsQuery,
@@ -330,28 +328,14 @@ export class ContextGatherer {
       .map(p => p.path);
     const pagesLackingExamples = pagesLackingExamplesList.length;
 
-    // Key pages existence
-    const hasProjectOverview = wikiPages.some(p =>
-      p.path === 'overview' ||
-      p.path === 'architecture/overview' ||
-      p.path === 'architecture/index'
-    );
-    const hasGettingStarted = wikiPages.some(p =>
-      p.path === 'guides/getting-started' ||
-      p.path === 'guides/quickstart' ||
-      p.path === 'guides/index'
-    );
-    const hasTestingGuide = wikiPages.some(p =>
-      p.path === 'guides/testing' ||
-      p.path === 'guides/tests' ||
-      p.path === 'guides/testing-guide'
-    );
-    const hasExtensionGuide = wikiPages.some(p =>
-      p.path === 'guides/extension-patterns' ||
-      p.path === 'guides/extending' ||
-      p.path === 'guides/adding-features' ||
-      p.path === 'guides/patterns'
-    );
+    // Key pages existence - check synthesisType to avoid collision with category overviews
+    // The synthesisType field distinguishes actual synthesis-generated guide pages from
+    // regular exploration pages that happen to have similar paths (e.g., category overviews
+    // created at architecture/overview vs the ProjectOverviewAgent's synthesis page)
+    const hasProjectOverview = wikiPages.some(p => p.synthesisType === 'project-overview');
+    const hasGettingStarted = wikiPages.some(p => p.synthesisType === 'getting-started');
+    const hasTestingGuide = wikiPages.some(p => p.synthesisType === 'testing-guide');
+    const hasExtensionGuide = wikiPages.some(p => p.synthesisType === 'extension-guide');
 
     // Calculate undocumented directories and low-coverage files using file-level coverage
     const { directories: undocumentedDirectories, files: lowCoverageFiles } =
@@ -360,22 +344,17 @@ export class ContextGatherer {
     // Build file-level coverage tree
     const fileCoverageTree = await this.buildFileCoverageTree(repoId, wikiPages);
 
-    // Fetch project overview content
+    // Fetch project overview content - find by synthesisType
     let projectOverviewContent: string | null = null;
     if (hasProjectOverview) {
-      const overviewPaths = ['architecture/overview', 'overview'];
-      for (const overviewPath of overviewPaths) {
-        const overviewQuery = createGetWikiPageQuery(wikiId, overviewPath);
-        const overviewResult = await handleGetWikiPage(overviewQuery, this.repos);
-        if (overviewResult.success && overviewResult.data) {
-          const content = overviewResult.data.content;
-          const maxOverviewLength = 4000;
-          if (content.length > maxOverviewLength) {
-            projectOverviewContent = content.slice(0, maxOverviewLength) + '\n\n[... truncated ...]';
-          } else {
-            projectOverviewContent = content;
-          }
-          break;
+      const overviewPage = wikiPages.find(p => p.synthesisType === 'project-overview');
+      if (overviewPage) {
+        const content = overviewPage.content;
+        const maxOverviewLength = 4000;
+        if (content.length > maxOverviewLength) {
+          projectOverviewContent = content.slice(0, maxOverviewLength) + '\n\n[... truncated ...]';
+        } else {
+          projectOverviewContent = content;
         }
       }
     }

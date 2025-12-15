@@ -1,4 +1,10 @@
 /**
+ * Type of synthesis page - used to distinguish specialized guide pages
+ * from regular exploration-generated pages.
+ */
+export type SynthesisType = 'project-overview' | 'getting-started' | 'testing-guide' | 'extension-guide';
+
+/**
  * Represents a page in the generated wiki.
  */
 export interface WikiPage {
@@ -31,6 +37,12 @@ export interface WikiPage {
   filesReferenced: string[];
   /** Files/folders that agents were asked to analyze for this page (from work targets) */
   targetPaths: string[];
+  /**
+   * Type of synthesis page - distinguishes specialized guide pages from
+   * regular exploration pages. Only set by synthesis agents like
+   * project-overview, getting-started, testing-guide, extension-guide.
+   */
+  synthesisType?: SynthesisType;
   /** When the page was created */
   createdAt: Date;
   /** When the page was last updated */
@@ -68,6 +80,8 @@ export interface WikiPageUpdate {
   category?: string;
   /** Confidence score for the category assignment (0-1) */
   categoryConfidence?: number;
+  /** Type of synthesis page (for key guide pages) */
+  synthesisType?: SynthesisType;
 }
 
 export function createWikiPage(params: {
@@ -81,8 +95,9 @@ export function createWikiPage(params: {
   filesAccessed?: string[];
   filesReferenced?: string[];
   targetPaths?: string[];
+  synthesisType?: SynthesisType;
 }): WikiPage {
-  return {
+  const page: WikiPage = {
     id: params.id,
     wikiId: params.wikiId,
     path: params.path,
@@ -99,6 +114,13 @@ export function createWikiPage(params: {
     createdAt: new Date(),
     updatedAt: new Date(),
   };
+
+  // Only set synthesisType if provided (exactOptionalPropertyTypes compliance)
+  if (params.synthesisType) {
+    page.synthesisType = params.synthesisType;
+  }
+
+  return page;
 }
 
 /**
