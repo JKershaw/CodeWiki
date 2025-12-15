@@ -74,12 +74,16 @@ export class MongoWikiPageRepository implements WikiPageRepository {
       sourceAgentRunId?: string;
       category?: string;
       categoryConfidence?: number;
+      filesAccessed?: string[];
+      filesReferenced?: string[];
+      targetPaths?: string[];
     }
   ): Promise<void> {
     const setFields: Record<string, unknown> = {
       content: updates.content,
       updatedAt: new Date(),
     };
+    const addToSetFields: Record<string, unknown> = {};
 
     if (updates.title !== undefined) {
       setFields.title = updates.title;
@@ -88,10 +92,12 @@ export class MongoWikiPageRepository implements WikiPageRepository {
       setFields.confidence = updates.confidence;
     }
     if (updates.sourceCommitId !== undefined) {
-      setFields.sourceCommitId = updates.sourceCommitId;
+      // Use $addToSet for sourceCommits array
+      addToSetFields.sourceCommits = updates.sourceCommitId;
     }
     if (updates.sourceAgentRunId !== undefined) {
-      setFields.sourceAgentRunId = updates.sourceAgentRunId;
+      // Use $addToSet for sourceAgentRunIds array
+      addToSetFields.sourceAgentRunIds = updates.sourceAgentRunId;
     }
     if (updates.category !== undefined) {
       setFields.category = updates.category;
@@ -99,8 +105,24 @@ export class MongoWikiPageRepository implements WikiPageRepository {
     if (updates.categoryConfidence !== undefined) {
       setFields.categoryConfidence = updates.categoryConfidence;
     }
+    // filesReferenced is replaced (based on current content)
+    if (updates.filesReferenced !== undefined) {
+      setFields.filesReferenced = updates.filesReferenced;
+    }
+    // filesAccessed and targetPaths are accumulated
+    if (updates.filesAccessed) {
+      addToSetFields.filesAccessed = { $each: updates.filesAccessed };
+    }
+    if (updates.targetPaths) {
+      addToSetFields.targetPaths = { $each: updates.targetPaths };
+    }
 
-    await this.collection.updateOne(byId(id), { $set: setFields });
+    const updateDoc: Record<string, unknown> = { $set: setFields };
+    if (Object.keys(addToSetFields).length > 0) {
+      updateDoc.$addToSet = addToSetFields;
+    }
+
+    await this.collection.updateOne(byId(id), updateDoc as Document);
   }
 
   async addBacklink(pageId: string, linkingPagePath: string): Promise<void> {
