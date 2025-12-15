@@ -1,7 +1,7 @@
 import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
 import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
-import type { WikiPage, WikiPageUpdate } from '../../domain/wiki-page.js';
+import type { WikiPage, WikiPageUpdate, SynthesisType } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
 import {
@@ -236,6 +236,7 @@ Output ONLY the markdown content. No explanations before or after.
       agentRunId: '',
       confidenceDelta: 0.8,
       links,
+      synthesisType: 'project-overview' as SynthesisType,
     };
   }
 
@@ -377,6 +378,7 @@ ${relatedPagesSection}
       agentRunId: '',
       confidenceDelta: 0.7,
       links,
+      synthesisType: 'project-overview' as SynthesisType,
     };
   }
 }

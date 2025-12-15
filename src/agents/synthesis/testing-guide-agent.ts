@@ -1,7 +1,7 @@
 import type { Agent, AgentContext, AgentRunResult, WorkTarget } from '../base-agent.js';
 import { createAgentResult, createFinding, isWikiTarget } from '../base-agent.js';
 import type { AgentType } from '../../domain/agent-run.js';
-import type { WikiPageUpdate } from '../../domain/wiki-page.js';
+import type { WikiPageUpdate, SynthesisType } from '../../domain/wiki-page.js';
 import { createListWikiPagesQuery, handleListWikiPages } from '../../queries/index.js';
 import { createCodebaseToolExecutor } from '../agent-helpers.js';
 import { extractLinksFromContent } from '../../utils/link-extraction.js';
@@ -110,6 +110,7 @@ export class TestingGuideAgent implements Agent {
       agentRunId: '',
       confidenceDelta: 0.7,
       links,
+      synthesisType: 'testing-guide' as SynthesisType,
     };
 
     return {

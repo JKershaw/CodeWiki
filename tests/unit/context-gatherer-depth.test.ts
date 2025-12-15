@@ -6,7 +6,7 @@
 
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import type { WikiPage } from '../../src/domain/wiki-page.js';
+import type { WikiPage, SynthesisType } from '../../src/domain/wiki-page.js';
 import type { UnifiedRepoAccessFactory, UnifiedRepoAccess, FileEntry } from '../../src/services/repository/unified-repo-access.js';
 import type { Repo } from '../../src/domain/repo.js';
 import { ContextGatherer } from '../../src/agents/orchestrator/context-gatherer.js';
@@ -38,6 +38,9 @@ function createMockWikiPage(
     sourceAgentRunIds: [],
     links: [],
     backlinks: [],
+    filesAccessed: [],
+    filesReferenced: [],
+    targetPaths: [],
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -386,12 +389,15 @@ describe('ContextGatherer GitHub Mode', () => {
 describe('ContextGatherer Project Overview Content', () => {
   /**
    * Create mock wiki page with specified content.
+   * Note: synthesisType must be set to 'project-overview' for pages to be
+   * recognized as project overviews (not just path-based matching).
    */
   function createMockWikiPage(
     path: string,
-    content: string
+    content: string,
+    synthesisType?: SynthesisType
   ): WikiPage {
-    return {
+    const page: WikiPage = {
       id: `page-${path.replace(/\//g, '-')}`,
       wikiId: 'wiki-1',
       path,
@@ -402,14 +408,22 @@ describe('ContextGatherer Project Overview Content', () => {
       sourceAgentRunIds: [],
       links: [],
       backlinks: [],
+      filesAccessed: [],
+      filesReferenced: [],
+      targetPaths: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    if (synthesisType) {
+      page.synthesisType = synthesisType;
+    }
+    return page;
   }
 
-  it('should include project overview content when architecture/overview exists', async () => {
+  it('should include project overview content when page has synthesisType project-overview', async () => {
     const overviewContent = '# Project Overview\n\nThis is a great project.';
-    const overviewPage = createMockWikiPage('architecture/overview', overviewContent);
+    // Key: synthesisType must be set for the page to be recognized as project overview
+    const overviewPage = createMockWikiPage('overview', overviewContent, 'project-overview');
 
     const repos = {
       repos: {
@@ -422,10 +436,6 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),
-        findByPath: mock.fn(async (_wikiId: string, path: string) => {
-          if (path === 'architecture/overview') return overviewPage;
-          return null;
-        }),
       },
       agentRuns: {
         findByRepo: mock.fn(async () => []),
@@ -443,7 +453,7 @@ describe('ContextGatherer Project Overview Content', () => {
 
   it('should truncate long overview content to 4000 chars', async () => {
     const longContent = 'A'.repeat(5000);
-    const overviewPage = createMockWikiPage('architecture/overview', longContent);
+    const overviewPage = createMockWikiPage('overview', longContent, 'project-overview');
 
     const repos = {
       repos: {
@@ -456,10 +466,6 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),
-        findByPath: mock.fn(async (_wikiId: string, path: string) => {
-          if (path === 'architecture/overview') return overviewPage;
-          return null;
-        }),
       },
       agentRuns: {
         findByRepo: mock.fn(async () => []),
@@ -479,7 +485,10 @@ describe('ContextGatherer Project Overview Content', () => {
     assert.ok(context.projectOverviewContent.includes('[... truncated ...]'));
   });
 
-  it('should return null when no overview page exists', async () => {
+  it('should return null when no page has synthesisType project-overview', async () => {
+    // Page exists but without synthesisType - should not be detected as project overview
+    const categoryOverview = createMockWikiPage('architecture/overview', 'Category overview');
+
     const repos = {
       repos: {
         findById: mock.fn(async () => ({ id: 'repo-1', isGitHubRepo: false })),
@@ -490,8 +499,7 @@ describe('ContextGatherer Project Overview Content', () => {
         countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
-        findByWiki: mock.fn(async () => []),
-        findByPath: mock.fn(async () => null),
+        findByWiki: mock.fn(async () => [categoryOverview]),
       },
       agentRuns: {
         findByRepo: mock.fn(async () => []),
@@ -504,12 +512,14 @@ describe('ContextGatherer Project Overview Content', () => {
     const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
+    // Category overview pages should NOT be detected as project overview
+    assert.strictEqual(context.hasProjectOverview, false);
     assert.strictEqual(context.projectOverviewContent, null);
   });
 
-  it('should include overview content from bootstrap overview page (root level)', async () => {
-    const overviewContent = '# Bootstrap Overview\n\nCreated by bootstrap agent.';
-    const overviewPage = createMockWikiPage('overview', overviewContent);
+  it('should detect project overview via synthesisType not path', async () => {
+    const overviewContent = '# Project Overview\n\nCreated by project-overview agent.';
+    const overviewPage = createMockWikiPage('overview', overviewContent, 'project-overview');
 
     const repos = {
       repos: {
@@ -522,10 +532,6 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),
-        findByPath: mock.fn(async (_wikiId: string, path: string) => {
-          if (path === 'overview') return overviewPage;
-          return null;
-        }),
       },
       agentRuns: {
         findByRepo: mock.fn(async () => []),
@@ -542,11 +548,12 @@ describe('ContextGatherer Project Overview Content', () => {
     assert.strictEqual(context.projectOverviewContent, overviewContent);
   });
 
-  it('should prefer architecture/overview over root overview when both exist', async () => {
-    const architectureContent = '# Architecture Overview\n\nMore comprehensive.';
-    const bootstrapContent = '# Bootstrap Overview\n\nBasic starter.';
-    const architecturePage = createMockWikiPage('architecture/overview', architectureContent);
-    const bootstrapPage = createMockWikiPage('overview', bootstrapContent);
+  it('should use page with project-overview synthesisType, not path-based category overview', async () => {
+    const synthesisContent = '# Project Overview\n\nComprehensive synthesis.';
+    const categoryContent = '# Architecture Overview\n\nCategory-specific overview.';
+    // Only the synthesis page has synthesisType
+    const synthesisPage = createMockWikiPage('overview', synthesisContent, 'project-overview');
+    const categoryPage = createMockWikiPage('architecture/overview', categoryContent);
 
     const repos = {
       repos: {
@@ -558,12 +565,7 @@ describe('ContextGatherer Project Overview Content', () => {
         countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
-        findByWiki: mock.fn(async () => [architecturePage, bootstrapPage]),
-        findByPath: mock.fn(async (_wikiId: string, path: string) => {
-          if (path === 'architecture/overview') return architecturePage;
-          if (path === 'overview') return bootstrapPage;
-          return null;
-        }),
+        findByWiki: mock.fn(async () => [categoryPage, synthesisPage]),
       },
       agentRuns: {
         findByRepo: mock.fn(async () => []),
@@ -577,12 +579,12 @@ describe('ContextGatherer Project Overview Content', () => {
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
     assert.strictEqual(context.hasProjectOverview, true);
-    // Should prefer architecture/overview (more comprehensive)
-    assert.strictEqual(context.projectOverviewContent, architectureContent);
+    // Should use the synthesis page (has synthesisType), not the category overview
+    assert.strictEqual(context.projectOverviewContent, synthesisContent);
   });
 
-  it('should set hasProjectOverview true when root overview exists', async () => {
-    const overviewPage = createMockWikiPage('overview', 'Basic overview');
+  it('should set hasProjectOverview true only when synthesisType is set', async () => {
+    const overviewPage = createMockWikiPage('overview', 'Basic overview', 'project-overview');
 
     const repos = {
       repos: {
@@ -595,10 +597,6 @@ describe('ContextGatherer Project Overview Content', () => {
       },
       wikiPages: {
         findByWiki: mock.fn(async () => [overviewPage]),
-        findByPath: mock.fn(async (_wikiId: string, path: string) => {
-          if (path === 'overview') return overviewPage;
-          return null;
-        }),
       },
       agentRuns: {
         findByRepo: mock.fn(async () => []),
