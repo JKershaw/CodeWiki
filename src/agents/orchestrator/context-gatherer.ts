@@ -459,8 +459,10 @@ export class ContextGatherer {
                   coveredFiles.add(file);
                 }
               }
-            } else if (!coveredFiles.has(targetPath)) {
+            } else {
               // Could be a directory without trailing slash - check if it's a prefix
+              // Note: We check all paths, even if already in coveredFiles,
+              // because buildCoveredFilesSet adds the path as-is without expansion
               const pathWithSlash = targetPath + '/';
               for (const file of sourceFiles) {
                 if (file.startsWith(pathWithSlash)) {
