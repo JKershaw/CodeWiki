@@ -358,7 +358,7 @@ CONFIDENCE: [0-1]
 
       if (improvedContent) {
         updates.push({
-          type: 'merge',
+          type: 'update',
           path: pagePath,
           content: improvedContent,
           sourceCommitId: page.sourceCommits[0] ?? '',
@@ -387,15 +387,16 @@ ${suggestions.map(s => `- ${s}`).join('\n')}
 
 ## Your Task
 
-Write improved content that addresses the suggestions. Focus on:
+Write the COMPLETE improved page content that addresses the suggestions. Focus on:
 1. Adding depth - explain HOW things work, not just WHAT they are
 2. Including specific details like method names, configuration options, or code examples
 3. Explaining mechanisms, not just listing features
+4. Preserving all existing valuable content while enhancing it
 
 ## Required Output Format
 
 IMPROVED_CONTENT:
-[Your improved markdown content here - this will be appended to the page]
+[The complete improved page content - this will REPLACE the current page]
 
 CONFIDENCE: [0-1]`;
   }
@@ -407,7 +408,7 @@ CONFIDENCE: [0-1]`;
       const content = contentMatch[1].trim();
       // Validate content is not empty or just whitespace
       if (content.length > 20) {
-        return '\n\n' + content;
+        return content;
       }
     }
     return null;
@@ -470,7 +471,8 @@ When improving content:
 2. **Be specific** - Include method names, configuration options, code examples
 3. **Explain mechanisms** - Describe the underlying implementation details
 4. **Keep it practical** - Focus on information developers actually need
+5. **Preserve existing value** - Keep all useful existing content, enhance rather than remove
 
 Write in a clear, technical style. Use markdown formatting appropriately.
 
-Output ONLY the improved content section - it will be appended to the existing page.`;
+Output the COMPLETE improved page content - it will replace the existing page.`;

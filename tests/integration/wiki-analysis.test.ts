@@ -323,15 +323,15 @@ CONFIDENCE: 0.8`);
       const agentCtx = await ctx.agentContext(fixableRepoId);
       const result = await agent.run(createWikiTarget(), agentCtx);
 
-      // Should generate merge updates for improvement suggestions
+      // Should generate update updates for improvement suggestions
       assert.ok(result.updates.length > 0, 'Should generate updates for improvements');
 
-      // Updates should be merge type (append improvement content)
-      const mergeUpdates = result.updates.filter(u => u.type === 'merge');
-      assert.ok(mergeUpdates.length > 0, 'Should create merge updates for improvements');
+      // Updates should be update type (full content replacement with improvements)
+      const updateUpdates = result.updates.filter(u => u.type === 'update');
+      assert.ok(updateUpdates.length > 0, 'Should create update updates for improvements');
 
       // Updates should target pages with issues
-      const updatePaths = mergeUpdates.map(u => u.path);
+      const updatePaths = updateUpdates.map(u => u.path);
       assert.ok(
         updatePaths.some(p => p === 'guides/shallow' || p === 'guides/needs-depth'),
         'Updates should target pages with quality issues'

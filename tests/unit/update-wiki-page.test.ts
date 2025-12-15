@@ -1075,7 +1075,7 @@ describe('handleUpdateWikiPage', () => {
   });
 
   describe('similarity-triggered merge', () => {
-    it('merges content into similar page when create detects similarity', async () => {
+    it('replaces content in similar page when create detects similarity', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -1088,7 +1088,6 @@ describe('handleUpdateWikiPage', () => {
         content: validContent('Auth Service'),
       });
       repos._pages.set(existingPage.id, existingPage);
-      const originalContent = existingPage.content;
 
       // Try to create similar page with new content
       const newContent = validContent('Auth Service Handler');
@@ -1103,16 +1102,15 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      // Should succeed (merged into similar page)
+      // Should succeed (updated the similar page)
       assert.strictEqual(result.success, true, `Expected success but got error: ${result.error}`);
 
       // Should return the similar page (updated)
       assert.strictEqual(result.data?.path, 'services/auth');
 
-      // Content should be merged (original + separator + new)
+      // Content should be replaced with new content (not merged/appended)
       const updatedPage = repos._pages.get(existingPage.id);
-      assert.ok(updatedPage?.content.includes(originalContent.substring(0, 50)), 'Original content should be preserved');
-      assert.ok(updatedPage?.content.includes('Auth Service Handler'), 'New content should be merged');
+      assert.ok(updatedPage?.content.includes('Auth Service Handler'), 'New content should replace old');
 
       // No new page should be created
       assert.strictEqual(repos._pages.size, 1, 'Should not create a new page');

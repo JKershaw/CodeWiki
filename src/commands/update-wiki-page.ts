@@ -62,12 +62,13 @@ export async function handleUpdateWikiPage(
       const existingPages = await repos.wikiPages.findByWiki(wikiId);
       const similarMatch = findSimilarPage(newTitle, update.path, update.content, existingPages, 0.5);
       if (similarMatch) {
-        // Instead of rejecting, merge content into the similar page
-        // This preserves both content insights AND metadata
+        // When similarity is detected, replace (update) rather than append
+        // The new agent-generated content is typically more complete/current
+        // This avoids creating messy pages with duplicated content separated by ---
         return handleUpdateWikiPage(
           createUpdateWikiPageCommand({
             ...update,
-            type: 'merge',
+            type: 'update',
             path: similarMatch.page.path,  // Target the similar page
           }),
           repos,
@@ -213,12 +214,11 @@ export async function handleUpdateWikiPage(
         const existingPages = await repos.wikiPages.findByWiki(wikiId);
         const similarMatch = findSimilarPage(newTitle, update.path, update.content, existingPages, 0.5);
         if (similarMatch) {
-          // Instead of rejecting, merge content into the similar page
-          // This preserves both content insights AND metadata
-          // Redirect to merge on the similar page (which exists)
+          // When similarity is detected, replace (update) rather than append
           return handleUpdateWikiPage(
             createUpdateWikiPageCommand({
               ...update,
+              type: 'update',
               path: similarMatch.page.path,  // Target the similar page
             }),
             repos,
@@ -280,8 +280,10 @@ export async function handleUpdateWikiPage(
       // Capture content before merge for history
       const contentBefore = existing.content;
 
-      // Merge content (append new content to existing)
-      const mergedContent = mergeContent(existing.content, update.content);
+      // Intelligent section-aware merge:
+      // - If incoming content is a section (like "## Related Pages"), append it properly
+      // - Otherwise, treat as a full content update (replace)
+      const mergedContent = mergeContentIntelligently(existing.content, update.content);
       const mergeUpdateParams: {
         content: string;
         title?: string;
@@ -441,12 +443,60 @@ export function extractTitleWithFallback(content: string, path: string): string 
 }
 
 /**
- * Simple content merge - appends new sections.
- * A more sophisticated implementation would do semantic merging.
+ * Intelligent section-aware content merge.
+ *
+ * Handles two cases:
+ * 1. Incoming content is a section addition (e.g., "## Related Pages" from LinkAgent)
+ *    → Append to existing section or add new section at end
+ * 2. Incoming content is full page content
+ *    → Replace existing content (the new content wins)
+ *
+ * This replaces the old simple append that created messy pages with --- separators.
  */
-function mergeContent(existing: string, incoming: string): string {
-  // For now, just append with a separator
-  return `${existing}\n\n---\n\n${incoming}`;
+function mergeContentIntelligently(existing: string, incoming: string): string {
+  const trimmedIncoming = incoming.trim();
+
+  // Check if incoming content is a section addition (starts with ## or list items for a section)
+  // LinkAgent sends content like "\n\n## Related Pages\n\n- [Link](path)" or just "\n- [Link](path)"
+  const isSectionAddition = /^(\n*##\s|\n*-\s*\[)/.test(incoming);
+
+  if (!isSectionAddition) {
+    // Full content replacement - new content wins
+    return trimmedIncoming;
+  }
+
+  // Section addition - handle intelligently
+  // Extract section header if present (e.g., "## Related Pages")
+  const sectionMatch = trimmedIncoming.match(/^(##\s+[^\n]+)/);
+  const sectionHeader = sectionMatch?.[1];
+
+  if (sectionHeader) {
+    // Check if this section already exists in the page
+    if (existing.includes(sectionHeader)) {
+      // Append content to existing section (without duplicating header)
+      const contentAfterHeader = trimmedIncoming.slice(sectionHeader.length).trim();
+      // Find the section and append to it
+      const sectionIndex = existing.indexOf(sectionHeader);
+      const afterSection = existing.slice(sectionIndex + sectionHeader.length);
+      // Find where the next section starts (or end of content)
+      const nextSectionMatch = afterSection.match(/\n##\s/);
+      if (nextSectionMatch && nextSectionMatch.index !== undefined) {
+        // Insert before next section
+        const insertPoint = sectionIndex + sectionHeader.length + nextSectionMatch.index;
+        return existing.slice(0, insertPoint) + '\n' + contentAfterHeader + existing.slice(insertPoint);
+      } else {
+        // Append to end of page (section is last)
+        return existing.trimEnd() + '\n' + contentAfterHeader;
+      }
+    } else {
+      // Add new section at end
+      return existing.trimEnd() + '\n\n' + trimmedIncoming;
+    }
+  } else {
+    // Content without section header (e.g., just list items to append)
+    // Append to end of page
+    return existing.trimEnd() + '\n' + trimmedIncoming;
+  }
 }
 
 /**
