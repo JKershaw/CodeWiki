@@ -1254,30 +1254,6 @@ export class PhasedOrchestrator implements Orchestrator {
             }
           };
 
-          // Helper to add coverage for a path - allows directory matching
-          // Only used for targetPaths (explicit work assignments)
-          const addPathCoverage = (path: string) => {
-            if (sourceFileSet.has(path)) {
-              // Exact file match
-              coveredFiles.add(path);
-            } else if (path.endsWith('/')) {
-              // Directory path - match all files within
-              for (const sourceFile of sourceFiles) {
-                if (sourceFile.startsWith(path)) {
-                  coveredFiles.add(sourceFile);
-                }
-              }
-            } else {
-              // Could be a directory without trailing slash - check if it's a prefix
-              const pathWithSlash = path + '/';
-              for (const sourceFile of sourceFiles) {
-                if (sourceFile.startsWith(pathWithSlash)) {
-                  coveredFiles.add(sourceFile);
-                }
-              }
-            }
-          };
-
           for (const page of wikiPages) {
             // Files read by agents when building this page (exact matches only)
             for (const file of page.filesAccessed ?? []) {
@@ -1288,10 +1264,13 @@ export class PhasedOrchestrator implements Orchestrator {
             for (const file of page.filesReferenced ?? []) {
               addExactFile(file);
             }
-            // Files/folders agents were asked to analyze (allows directory coverage)
-            // This is the only source that should allow directory-level coverage
+            // Target paths from work items - exact file matches only
+            // Directory expansion was causing coverage to spike to 100% when broad
+            // directories like "src" were explored - the system would mark ALL files
+            // under the directory as "covered" even if the agent only documented a few.
+            // Coverage should reflect what was actually documented, not what was requested.
             for (const path of page.targetPaths ?? []) {
-              addPathCoverage(path);
+              addExactFile(path);
             }
           }
 

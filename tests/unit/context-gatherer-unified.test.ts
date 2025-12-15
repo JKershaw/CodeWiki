@@ -338,17 +338,17 @@ Main service file documented here.
     });
   });
 
-  describe('targetPaths directory expansion', () => {
-    it('expands directory targetPaths WITHOUT trailing slash to cover all files under them', async () => {
-      // This test verifies the fix for a bug where directories without trailing slashes
-      // were not expanded because buildCoveredFilesSet added them to the set first,
-      // and the expansion condition `!coveredFiles.has(targetPath)` was always false.
+  describe('targetPaths do NOT expand directories (prevents coverage spike)', () => {
+    it('directory targetPaths WITHOUT trailing slash do NOT cover files', async () => {
+      // This test verifies that directory targetPaths do NOT expand to cover files.
+      // Directory expansion was causing coverage to spike to 100% when broad directories
+      // like "src" were explored - even if the agent only documented a few files.
 
       // Wiki page with targetPaths pointing to a directory WITHOUT trailing slash
       const wikiPages: WikiPage[] = [
         {
           ...createMockWikiPage('agents/orchestrator', 'Orchestrator docs'),
-          targetPaths: ['src/agents'],  // No trailing slash - should still expand
+          targetPaths: ['src/agents'],  // Work target - should NOT cause coverage
           filesAccessed: [],
           filesReferenced: [],
         },
@@ -363,7 +363,7 @@ Main service file documented here.
         'src/agents/base-agent.ts',
         'src/agents/code-change-agent.ts',
         'src/agents/security-agent.ts',
-        'src/services/llm-service.ts',  // Not under src/agents, should be undocumented
+        'src/services/llm-service.ts',
       ];
 
       const repoAccessFactory = createMockRepoAccessFactory(fileTree);
@@ -371,24 +371,24 @@ Main service file documented here.
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // With the fix: src/agents directory expansion should cover all 3 agent files
-      // So only src/services should be undocumented
+      // Directory targetPaths should NOT expand to cover files
       const agentsDir = context.undocumentedDirectories.find(d => d.path === 'src/agents');
       const servicesDir = context.undocumentedDirectories.find(d => d.path === 'src/services');
 
-      // Agents directory should NOT be undocumented (all files covered by targetPaths expansion)
-      assert.strictEqual(agentsDir, undefined, 'src/agents should be fully covered via targetPaths directory expansion');
+      // Agents directory should STILL be undocumented (targetPaths do not expand)
+      assert.ok(agentsDir, 'src/agents should still be undocumented (targetPaths do not expand)');
+      assert.strictEqual(agentsDir.undocumentedRatio, 1, 'src/agents should be 100% undocumented');
 
-      // Services directory SHOULD be undocumented
+      // Services directory should also be undocumented
       assert.ok(servicesDir, 'src/services should be undocumented');
       assert.strictEqual(servicesDir.undocumentedCount, 1);
     });
 
-    it('expands directory targetPaths WITH trailing slash to cover all files', async () => {
+    it('directory targetPaths WITH trailing slash do NOT cover files', async () => {
       const wikiPages: WikiPage[] = [
         {
           ...createMockWikiPage('agents/orchestrator', 'Orchestrator docs'),
-          targetPaths: ['src/agents/'],  // With trailing slash
+          targetPaths: ['src/agents/'],  // With trailing slash - still should NOT expand
           filesAccessed: [],
           filesReferenced: [],
         },
@@ -410,8 +410,10 @@ Main service file documented here.
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
+      // Directory targetPaths should NOT expand to cover files
       const agentsDir = context.undocumentedDirectories.find(d => d.path === 'src/agents');
-      assert.strictEqual(agentsDir, undefined, 'src/agents should be covered via targetPaths directory expansion');
+      assert.ok(agentsDir, 'src/agents should still be undocumented (targetPaths do not expand)');
+      assert.strictEqual(agentsDir.undocumentedRatio, 1, 'src/agents should be 100% undocumented');
     });
   });
 
