@@ -78,6 +78,7 @@ export class MongoProcessingRunRepository implements ProcessingRunRepository {
       totalCostUsd: number;
       wikiPagesCreated: number;
       wikiPagesUpdated: number;
+      duplicatesFiltered?: number;
     }
   ): Promise<void> {
     await this.collection.updateOne(byId(id), { $set: updates });

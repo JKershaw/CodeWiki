@@ -198,8 +198,10 @@ describe('Work Item Deduplication', () => {
 
       const result = await handleSaveWorkItems(createSaveWorkItemsCommand([workItem2]), ctx.repos);
 
-      // Should report 0 items saved (skipped because pending already exists)
-      assert.strictEqual(result.data, 0, 'Should skip saving duplicate pending work item');
+      // Should report 0 items saved and 1 duplicate filtered
+      assert.ok(result.data, 'Should have result data');
+      assert.strictEqual(result.data.saved, 0, 'Should skip saving duplicate pending work item');
+      assert.strictEqual(result.data.duplicatesFiltered, 1, 'Should report 1 duplicate filtered');
 
       // Should still have exactly one work item
       const allWork = await ctx.repos.workQueue.findPending(repoId);
@@ -237,8 +239,10 @@ describe('Work Item Deduplication', () => {
 
       const result = await handleSaveWorkItems(createSaveWorkItemsCommand([workItem2]), ctx.repos);
 
-      // Should report 0 items saved (skipped because claimed already exists)
-      assert.strictEqual(result.data, 0, 'Should skip saving duplicate claimed work item');
+      // Should report 0 items saved and 1 duplicate filtered
+      assert.ok(result.data, 'Should have result data');
+      assert.strictEqual(result.data.saved, 0, 'Should skip saving duplicate claimed work item');
+      assert.strictEqual(result.data.duplicatesFiltered, 1, 'Should report 1 duplicate filtered');
 
       // The existing item should still be claimed, not overwritten
       const existingItem = await ctx.repos.workQueue.findById(workItem1.id);

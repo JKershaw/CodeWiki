@@ -53,6 +53,7 @@ export interface ProcessingRunRepository {
     totalCostUsd: number;
     wikiPagesCreated: number;
     wikiPagesUpdated: number;
+    duplicatesFiltered?: number;
   }): Promise<void>;
 
   /**

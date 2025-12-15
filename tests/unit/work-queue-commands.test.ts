@@ -123,7 +123,9 @@ describe('Work Queue Commands', () => {
       const result = await handleSaveWorkItems(command, repos);
 
       assert.strictEqual(result.success, true);
-      assert.strictEqual(result.data, 2);
+      assert.ok(result.data);
+      assert.strictEqual(result.data.saved, 2);
+      assert.strictEqual(result.data.duplicatesFiltered, 0);
 
       // Verify items were saved
       const saved1 = await repos.workQueue.findById(workItems[0]!.id);
@@ -139,7 +141,9 @@ describe('Work Queue Commands', () => {
       const result = await handleSaveWorkItems(command, repos);
 
       assert.strictEqual(result.success, true);
-      assert.strictEqual(result.data, 0);
+      assert.ok(result.data);
+      assert.strictEqual(result.data.saved, 0);
+      assert.strictEqual(result.data.duplicatesFiltered, 0);
     });
 
     it('has correct command type', () => {

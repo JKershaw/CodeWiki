@@ -225,6 +225,9 @@ export function createProcessingRoutes(deps: Dependencies): Router {
    *                       type: integer
    *                     wikiPagesUpdated:
    *                       type: integer
+   *                     duplicatesFiltered:
+   *                       type: integer
+   *                       description: Number of work items filtered as duplicates (already in progress)
    *                     startedAt:
    *                       type: string
    *                       format: date-time
@@ -318,6 +321,7 @@ export function createProcessingRoutes(deps: Dependencies): Router {
           totalCostUsd: processingRun.totalCostUsd,
           wikiPagesCreated: processingRun.wikiPagesCreated,
           wikiPagesUpdated: processingRun.wikiPagesUpdated,
+          duplicatesFiltered: processingRun.duplicatesFiltered,
           startedAt: processingRun.startedAt,
           completedAt: processingRun.completedAt,
           error: processingRun.error,
