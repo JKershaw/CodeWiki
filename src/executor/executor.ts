@@ -4,7 +4,7 @@ import type { GitService } from '../services/git/git-service.js';
 import type { LLMService } from '../services/llm/llm-service.js';
 import type { AgentContext, WorkTarget } from '../agents/base-agent.js';
 import type { WorkItem } from '../domain/work-item.js';
-import { createWorkItem, generateWorkItemId, isCommitTarget, isPathTarget } from '../domain/work-item.js';
+import { isCommitTarget, isPathTarget } from '../domain/work-item.js';
 import { Orchestrator } from '../agents/orchestrator/orchestrator.js';
 import { getOrCreateActiveWiki } from '../commands/create-wiki.js';
 import { getAgent } from '../agents/registry.js';
@@ -212,56 +212,23 @@ export class Executor {
               return null; // Will retry claiming
             }
 
-            // PRIORITY 1: Process any pending edit requests first
-            // This ensures edits created during the run are processed promptly
-            const pendingEdits = await this.repos.editRequests.countPending(wikiId);
-            if (pendingEdits > 0) {
-              console.log(`  📝 Found ${pendingEdits} pending edit(s), processing first...`);
+            // Edit requests are now processed synchronously after analysis agents complete,
+            // so we don't need to create separate wiki-editor work items here.
+            // See executeWorkItem() for the synchronous wiki-editor execution.
 
-              // Create a wiki-editor work item for tracking
-              const wikiEditorTarget = { type: 'wiki' as const };
-              const wikiEditorWorkItem = createWorkItem({
-                id: generateWorkItemId(repoId, 'wiki-editor', wikiEditorTarget),
-                repoId,
-                agentType: 'wiki-editor',
-                target: wikiEditorTarget,
-              });
-
-              // Save and claim the work item
-              await handleSaveWorkItems(createSaveWorkItemsCommand([wikiEditorWorkItem]), this.repos);
-              wikiEditorWorkItem.status = 'claimed';
-              wikiEditorWorkItem.claimedAt = new Date();
-              await this.repos.workQueue.save(wikiEditorWorkItem);
-
-              // Return it for execution - the pool will execute and then call claimWork again
-              // On the next claimWork, we'll check for more edits and process them too
-              return wikiEditorWorkItem;
-            }
-
-            // PRIORITY 2: Try to claim existing work from the queue
+            // Try to claim existing work from the queue
             const claimResult = await handleClaimWorkItemOne(
               createClaimWorkItemOneCommand(repoId, processedCommits),
               this.repos
             );
             let workItem = claimResult.success ? claimResult.data : null;
 
-            // PRIORITY 3: If no work in queue, generate new work on-demand
+            // If no work in queue, generate new work on-demand
             if (!workItem) {
               // Generate a small batch of work items (on-demand, not pre-filling)
               const newWork = await this.orchestrator.generateWorkList(repoId, wikiId, 10);
               if (newWork.length === 0) {
-                // No orchestrator work - but edits might still arrive from in-flight agents
-                // Wait briefly and check for edits before declaring exhaustion
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                // Check for edits one more time - if found, return null to trigger another
-                // claimWork call which will handle them via Priority 1
-                const finalEditCheck = await this.repos.editRequests.countPending(wikiId);
-                if (finalEditCheck > 0) {
-                  // Edits arrived - don't set workExhausted, let next claimWork handle them
-                  return null;
-                }
-
+                // No more work from orchestrator
                 workExhausted = true;
                 return null;
               }
@@ -383,12 +350,29 @@ export class Executor {
 
         console.log(`\n▶ Pool completed: ${poolResult.completed} successful, ${poolResult.failed} failed`);
 
-        // Check for any edits that arrived during or after the pool ran
+        // Process any remaining edits synchronously (e.g., pre-existing edits from previous runs)
+        // This handles edge cases where edits exist but weren't created by this run's agents
         const postPoolEdits = await this.repos.editRequests.countPending(wikiId);
         if (postPoolEdits > 0) {
-          console.log(`  📝 Found ${postPoolEdits} pending edit(s) after pool, continuing...`);
-          // Don't break - continue the main loop to process these edits
-          continue;
+          console.log(`  📝 Processing ${postPoolEdits} remaining edit(s) synchronously...`);
+          const wikiEditorAgent = getAgent('wiki-editor');
+          if (wikiEditorAgent) {
+            const wikiEditorTarget = { type: 'wiki' as const };
+            const context: AgentContext = {
+              repoId,
+              wikiId,
+              repos: this.repos,
+              llm: this.llm,
+            };
+
+            try {
+              const result = await wikiEditorAgent.run(wikiEditorTarget, context);
+              console.log(`  ✓ wiki-editor processed remaining edits ($${result.costUsd.toFixed(4)})`);
+            } catch (error) {
+              const errorMsg = error instanceof Error ? error.message : String(error);
+              console.warn(`  ⚠️  wiki-editor failed: ${errorMsg}`);
+            }
+          }
         }
 
         // Exit the main loop if work is exhausted
@@ -702,6 +686,70 @@ export class Executor {
 
       if (editRequestsQueued > 0) {
         console.log(`  📝 Queued ${editRequestsQueued} edit request(s) for wiki-editor`);
+
+        // Run wiki-editor synchronously to process the edits immediately
+        // This prevents duplicate task queuing and ensures edits are applied
+        // before the iteration completes
+        const wikiEditorAgent = getAgent('wiki-editor');
+        if (wikiEditorAgent) {
+          console.log(`  📝 Processing edit requests synchronously...`);
+          const wikiEditorTarget = { type: 'wiki' as const };
+
+          // Create agent run for wiki-editor (for tracking)
+          const wikiEditorRunId = uuid();
+          await handleCreateAgentRun(
+            createCreateAgentRunCommand({
+              id: wikiEditorRunId,
+              repoId,
+              wikiId,
+              agentType: 'wiki-editor',
+            }),
+            this.repos
+          );
+
+          try {
+            const wikiEditorResult = await wikiEditorAgent.run(wikiEditorTarget, context);
+
+            // Complete wiki-editor agent run
+            await handleCompleteAgentRun(
+              createCompleteAgentRunCommand(wikiEditorRunId, wikiEditorResult.result, 0, wikiEditorResult.costUsd),
+              this.repos
+            );
+
+            // Apply wiki updates from wiki-editor
+            const updateCount = wikiEditorResult.updates.length;
+            for (const wikiUpdate of wikiEditorResult.updates) {
+              wikiUpdate.agentRunId = wikiEditorRunId;
+              const updateResult = await handleUpdateWikiPage(
+                createUpdateWikiPageCommand(wikiUpdate),
+                this.repos,
+                wikiId
+              );
+
+              if (updateResult.success && updateResult.data) {
+                const createdAt = updateResult.data.createdAt instanceof Date
+                  ? updateResult.data.createdAt
+                  : new Date(updateResult.data.createdAt);
+                const pageAge = Date.now() - createdAt.getTime();
+                if (pageAge < 1000) {
+                  pagesCreated++;
+                } else {
+                  pagesUpdated++;
+                }
+              }
+            }
+
+            console.log(`  ✓ wiki-editor processed ${editRequestsQueued} edit(s), applied ${updateCount} page update(s) ($${wikiEditorResult.costUsd.toFixed(4)})`);
+          } catch (wikiEditorError) {
+            // Log but don't fail the main agent - wiki-editor can be retried
+            const errorMsg = wikiEditorError instanceof Error ? wikiEditorError.message : String(wikiEditorError);
+            console.warn(`  ⚠️  wiki-editor failed: ${errorMsg}`);
+            await handleFailAgentRun(
+              createFailAgentRunCommand(wikiEditorRunId, errorMsg, 0),
+              this.repos
+            );
+          }
+        }
       }
 
       // Mark commit as processed (still direct repo access - could be another command)
