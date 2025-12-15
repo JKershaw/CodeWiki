@@ -338,6 +338,83 @@ Main service file documented here.
     });
   });
 
+  describe('targetPaths directory expansion', () => {
+    it('expands directory targetPaths WITHOUT trailing slash to cover all files under them', async () => {
+      // This test verifies the fix for a bug where directories without trailing slashes
+      // were not expanded because buildCoveredFilesSet added them to the set first,
+      // and the expansion condition `!coveredFiles.has(targetPath)` was always false.
+
+      // Wiki page with targetPaths pointing to a directory WITHOUT trailing slash
+      const wikiPages: WikiPage[] = [
+        {
+          ...createMockWikiPage('agents/orchestrator', 'Orchestrator docs'),
+          targetPaths: ['src/agents'],  // No trailing slash - should still expand
+          filesAccessed: [],
+          filesReferenced: [],
+        },
+      ];
+
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: false,
+      } as Repo, wikiPages);
+
+      const fileTree = [
+        'src/agents/base-agent.ts',
+        'src/agents/code-change-agent.ts',
+        'src/agents/security-agent.ts',
+        'src/services/llm-service.ts',  // Not under src/agents, should be undocumented
+      ];
+
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      // With the fix: src/agents directory expansion should cover all 3 agent files
+      // So only src/services should be undocumented
+      const agentsDir = context.undocumentedDirectories.find(d => d.path === 'src/agents');
+      const servicesDir = context.undocumentedDirectories.find(d => d.path === 'src/services');
+
+      // Agents directory should NOT be undocumented (all files covered by targetPaths expansion)
+      assert.strictEqual(agentsDir, undefined, 'src/agents should be fully covered via targetPaths directory expansion');
+
+      // Services directory SHOULD be undocumented
+      assert.ok(servicesDir, 'src/services should be undocumented');
+      assert.strictEqual(servicesDir.undocumentedCount, 1);
+    });
+
+    it('expands directory targetPaths WITH trailing slash to cover all files', async () => {
+      const wikiPages: WikiPage[] = [
+        {
+          ...createMockWikiPage('agents/orchestrator', 'Orchestrator docs'),
+          targetPaths: ['src/agents/'],  // With trailing slash
+          filesAccessed: [],
+          filesReferenced: [],
+        },
+      ];
+
+      const repos = createMockRepos({
+        id: 'repo-1',
+        isGitHubRepo: false,
+      } as Repo, wikiPages);
+
+      const fileTree = [
+        'src/agents/base-agent.ts',
+        'src/agents/code-change-agent.ts',
+        'src/services/llm-service.ts',
+      ];
+
+      const repoAccessFactory = createMockRepoAccessFactory(fileTree);
+      const gatherer = new ContextGatherer(repos, repoAccessFactory);
+
+      const context = await gatherer.gather('repo-1', 'wiki-1');
+
+      const agentsDir = context.undocumentedDirectories.find(d => d.path === 'src/agents');
+      assert.strictEqual(agentsDir, undefined, 'src/agents should be covered via targetPaths directory expansion');
+    });
+  });
+
   describe('error handling', () => {
     it('handles getFileTree errors gracefully', async () => {
       const repos = createMockRepos({
