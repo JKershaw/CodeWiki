@@ -504,8 +504,8 @@ describe('handleUpdateWikiPage', () => {
     });
   });
 
-  describe('duplicate prevention', () => {
-    it('prevents creating a page with an identical title at a different path', async () => {
+  describe('duplicate prevention via merge', () => {
+    it('merges content when creating a page with identical title at different path', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -531,12 +531,15 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      // Should fail due to duplicate/similar page
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
+      // Should succeed by merging into existing page
+      assert.strictEqual(result.success, true);
+      // Should return the original page (updated with merged content)
+      assert.strictEqual(result.data?.path, 'architecture/test-coverage');
+      // Should not create a new page
+      assert.strictEqual(repos._pages.size, 1);
     });
 
-    it('prevents creating a page with case-insensitive matching title', async () => {
+    it('merges content when creating a page with case-insensitive matching title', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -562,8 +565,10 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
+      // Should succeed by merging into existing page
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.path, 'guides/getting-started');
+      assert.strictEqual(repos._pages.size, 1);
     });
 
     it('allows creating pages with different titles', async () => {
@@ -682,8 +687,8 @@ describe('handleUpdateWikiPage', () => {
     });
   });
 
-  describe('semantic similarity prevention', () => {
-    it('prevents creating a page with a similar title', async () => {
+  describe('semantic similarity merge', () => {
+    it('merges content when creating a page with similar title', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -709,11 +714,13 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      assert.strictEqual(result.success, false, `Expected failure but got success`);
-      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
+      // Should succeed by merging into similar page
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.path, 'services/llm');
+      assert.strictEqual(repos._pages.size, 1);
     });
 
-    it('prevents creating a page with a similar path', async () => {
+    it('merges content when creating a page with similar path', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -727,7 +734,7 @@ describe('handleUpdateWikiPage', () => {
       });
       repos._pages.set(initialPage.id, initialPage);
 
-      // Try to create at "services/llm-service" - similar path (50% overlap with llm and services)
+      // Try to create at "services/llm-service" - similar path
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'services/llm-service',
@@ -739,8 +746,10 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'), `Expected error to include 'similar': ${result.error}`);
+      // Should succeed by merging into similar page
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.path, 'services/llm');
+      assert.strictEqual(repos._pages.size, 1);
     });
 
     it('allows creating pages with truly different topics', async () => {
@@ -770,9 +779,11 @@ describe('handleUpdateWikiPage', () => {
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
       assert.strictEqual(result.success, true);
+      // Should create a new page (different topic)
+      assert.strictEqual(repos._pages.size, 2);
     });
 
-    it('provides helpful error message pointing to existing page', async () => {
+    it('merges into existing page and returns it', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -791,16 +802,18 @@ describe('handleUpdateWikiPage', () => {
         type: 'create',
         path: 'components/llm-wrapper',
         title: 'LLM Service',
-        content: validContent('LLM Service'),
+        content: validContent('LLM Service Wrapper'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
       });
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      assert.strictEqual(result.success, false);
-      // Error should mention the existing page path
-      assert.ok(result.error?.includes('services/llm'), `Error should mention existing path: ${result.error}`);
+      // Should succeed and return the merged page
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.data?.path, 'services/llm');
+      // Content should include merged content
+      assert.ok(result.data?.content.includes('LLM Service Wrapper'));
     });
   });
 
@@ -1061,12 +1074,55 @@ describe('handleUpdateWikiPage', () => {
     });
   });
 
-  describe('similarity rejection with tracking transfer', () => {
-    it('transfers filesAccessed to similar page when create is rejected', async () => {
+  describe('similarity-triggered merge', () => {
+    it('merges content into similar page when create detects similarity', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
       // Create existing page
+      const existingPage = createWikiPage({
+        id: uuid(),
+        wikiId,
+        path: 'services/auth',
+        title: 'Auth Service',
+        content: validContent('Auth Service'),
+      });
+      repos._pages.set(existingPage.id, existingPage);
+      const originalContent = existingPage.content;
+
+      // Try to create similar page with new content
+      const newContent = validContent('Auth Service Handler');
+      const command = createUpdateWikiPageCommand({
+        type: 'create',
+        path: 'components/auth-handler',
+        title: 'Auth Service Handler',  // Similar to "Auth Service"
+        content: newContent,
+        agentRunId: 'agent-1',
+        confidenceDelta: 0.5,
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      // Should succeed (merged into similar page)
+      assert.strictEqual(result.success, true, `Expected success but got error: ${result.error}`);
+
+      // Should return the similar page (updated)
+      assert.strictEqual(result.data?.path, 'services/auth');
+
+      // Content should be merged (original + separator + new)
+      const updatedPage = repos._pages.get(existingPage.id);
+      assert.ok(updatedPage?.content.includes(originalContent.substring(0, 50)), 'Original content should be preserved');
+      assert.ok(updatedPage?.content.includes('Auth Service Handler'), 'New content should be merged');
+
+      // No new page should be created
+      assert.strictEqual(repos._pages.size, 1, 'Should not create a new page');
+    });
+
+    it('accumulates filesAccessed when merging into similar page', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      // Create existing page with filesAccessed
       const existingPage = createWikiPage({
         id: uuid(),
         wikiId,
@@ -1081,7 +1137,7 @@ describe('handleUpdateWikiPage', () => {
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'components/auth-handler',
-        title: 'Auth Service Handler',  // Similar to "Auth Service"
+        title: 'Auth Service Handler',
         content: validContent('Auth Service Handler'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
@@ -1090,22 +1146,21 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      // Page should be rejected due to similarity
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'));
+      // Should succeed
+      assert.strictEqual(result.success, true, `Expected success but got error: ${result.error}`);
 
-      // But tracking data should be transferred to the similar page
-      const updatedExisting = repos._pages.get(existingPage.id);
-      assert.ok(updatedExisting?.filesAccessed.includes('src/auth/login.ts'), 'Original file should be preserved');
-      assert.ok(updatedExisting?.filesAccessed.includes('src/utils/helper.ts'), 'New file should be added');
-      assert.ok(updatedExisting?.filesAccessed.includes('src/config.ts'), 'New file should be added');
+      // filesAccessed should be accumulated
+      const updatedPage = repos._pages.get(existingPage.id);
+      assert.ok(updatedPage?.filesAccessed.includes('src/auth/login.ts'), 'Original file should be preserved');
+      assert.ok(updatedPage?.filesAccessed.includes('src/utils/helper.ts'), 'New file should be added');
+      assert.ok(updatedPage?.filesAccessed.includes('src/config.ts'), 'New file should be added');
     });
 
-    it('transfers targetPaths to similar page when create is rejected', async () => {
+    it('accumulates targetPaths when merging into similar page', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
-      // Create existing page
+      // Create existing page with targetPaths
       const existingPage = createWikiPage({
         id: uuid(),
         wikiId,
@@ -1120,7 +1175,7 @@ describe('handleUpdateWikiPage', () => {
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'components/auth-handler',
-        title: 'Auth Service Handler',  // Similar to "Auth Service"
+        title: 'Auth Service Handler',
         content: validContent('Auth Service Handler'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
@@ -1129,18 +1184,17 @@ describe('handleUpdateWikiPage', () => {
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      // Page should be rejected due to similarity
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'));
+      // Should succeed
+      assert.strictEqual(result.success, true, `Expected success but got error: ${result.error}`);
 
-      // But tracking data should be transferred to the similar page
-      const updatedExisting = repos._pages.get(existingPage.id);
-      assert.ok(updatedExisting?.targetPaths.includes('src/auth/'), 'Original path should be preserved');
-      assert.ok(updatedExisting?.targetPaths.includes('src/handlers/'), 'New path should be added');
-      assert.ok(updatedExisting?.targetPaths.includes('src/utils/'), 'New path should be added');
+      // targetPaths should be accumulated
+      const updatedPage = repos._pages.get(existingPage.id);
+      assert.ok(updatedPage?.targetPaths.includes('src/auth/'), 'Original path should be preserved');
+      assert.ok(updatedPage?.targetPaths.includes('src/handlers/'), 'New path should be added');
+      assert.ok(updatedPage?.targetPaths.includes('src/utils/'), 'New path should be added');
     });
 
-    it('transfers filesAccessed to similar page when merge create is rejected', async () => {
+    it('merges content into similar page when merge-create detects similarity', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -1152,35 +1206,43 @@ describe('handleUpdateWikiPage', () => {
         title: 'Auth Service',
         content: validContent('Auth Service'),
         filesAccessed: ['src/auth/login.ts'],
+        targetPaths: ['src/auth/'],
       });
       repos._pages.set(existingPage.id, existingPage);
 
-      // Try to merge-create similar page with different filesAccessed
+      // Try to merge-create similar page
       const command = createUpdateWikiPageCommand({
         type: 'merge',
         path: 'components/auth-handler',
-        title: 'Auth Service Handler',  // Similar to "Auth Service"
+        title: 'Auth Service Handler',
         content: validContent('Auth Service Handler'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
         skipValidation: true,
-        filesAccessed: ['src/utils/helper.ts', 'src/config.ts'],
+        filesAccessed: ['src/utils/helper.ts'],
+        targetPaths: ['src/handlers/'],
       });
 
       const result = await handleUpdateWikiPage(command, repos, wikiId);
 
-      // Page should be rejected due to similarity
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'));
+      // Should succeed
+      assert.strictEqual(result.success, true, `Expected success but got error: ${result.error}`);
 
-      // But tracking data should be transferred to the similar page
-      const updatedExisting = repos._pages.get(existingPage.id);
-      assert.ok(updatedExisting?.filesAccessed.includes('src/auth/login.ts'), 'Original file should be preserved');
-      assert.ok(updatedExisting?.filesAccessed.includes('src/utils/helper.ts'), 'New file should be added');
-      assert.ok(updatedExisting?.filesAccessed.includes('src/config.ts'), 'New file should be added');
+      // Should return the similar page
+      assert.strictEqual(result.data?.path, 'services/auth');
+
+      // Content should be merged
+      const updatedPage = repos._pages.get(existingPage.id);
+      assert.ok(updatedPage?.content.includes('Auth Service Handler'), 'New content should be merged');
+
+      // Metadata should be accumulated
+      assert.ok(updatedPage?.filesAccessed.includes('src/auth/login.ts'));
+      assert.ok(updatedPage?.filesAccessed.includes('src/utils/helper.ts'));
+      assert.ok(updatedPage?.targetPaths.includes('src/auth/'));
+      assert.ok(updatedPage?.targetPaths.includes('src/handlers/'));
     });
 
-    it('transfers targetPaths to similar page when merge create is rejected', async () => {
+    it('does not create duplicate pages when similarity detected', async () => {
       const repos = createMockRepos();
       const wikiId = uuid();
 
@@ -1191,78 +1253,27 @@ describe('handleUpdateWikiPage', () => {
         path: 'services/auth',
         title: 'Auth Service',
         content: validContent('Auth Service'),
-        targetPaths: ['src/auth/'],
       });
       repos._pages.set(existingPage.id, existingPage);
 
-      // Try to merge-create similar page with different targetPaths
-      const command = createUpdateWikiPageCommand({
-        type: 'merge',
-        path: 'components/auth-handler',
-        title: 'Auth Service Handler',  // Similar to "Auth Service"
-        content: validContent('Auth Service Handler'),
-        agentRunId: 'agent-1',
-        confidenceDelta: 0.5,
-        skipValidation: true,
-        targetPaths: ['src/handlers/', 'src/utils/'],
-      });
-
-      const result = await handleUpdateWikiPage(command, repos, wikiId);
-
-      // Page should be rejected due to similarity
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'));
-
-      // But tracking data should be transferred to the similar page
-      const updatedExisting = repos._pages.get(existingPage.id);
-      assert.ok(updatedExisting?.targetPaths.includes('src/auth/'), 'Original path should be preserved');
-      assert.ok(updatedExisting?.targetPaths.includes('src/handlers/'), 'New path should be added');
-      assert.ok(updatedExisting?.targetPaths.includes('src/utils/'), 'New path should be added');
-    });
-
-    it('does not modify similar page if no tracking data provided', async () => {
-      const repos = createMockRepos();
-      const wikiId = uuid();
-
-      // Create existing page with tracking data
-      const existingPage = createWikiPage({
-        id: uuid(),
-        wikiId,
-        path: 'services/auth',
-        title: 'Auth Service',
-        content: validContent('Auth Service'),
-        filesAccessed: ['src/auth/login.ts'],
-        targetPaths: ['src/auth/'],
-      });
-      const originalUpdatedAt = existingPage.updatedAt;
-      repos._pages.set(existingPage.id, existingPage);
-
-      // Wait a bit to ensure timestamps would differ
-      await new Promise(resolve => setTimeout(resolve, 10));
-
-      // Try to create similar page WITHOUT tracking data
+      // Try to create similar page
       const command = createUpdateWikiPageCommand({
         type: 'create',
         path: 'components/auth-handler',
-        title: 'Auth Service Handler',  // Similar to "Auth Service"
+        title: 'Auth Service Handler',
         content: validContent('Auth Service Handler'),
         agentRunId: 'agent-1',
         confidenceDelta: 0.5,
-        // No filesAccessed or targetPaths
       });
 
-      const result = await handleUpdateWikiPage(command, repos, wikiId);
+      await handleUpdateWikiPage(command, repos, wikiId);
 
-      // Page should be rejected due to similarity
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error?.includes('similar'));
+      // Should still have only one page
+      assert.strictEqual(repos._pages.size, 1);
 
-      // Similar page should NOT be modified (no update needed)
-      const unchangedPage = repos._pages.get(existingPage.id);
-      assert.deepStrictEqual(unchangedPage?.filesAccessed, ['src/auth/login.ts']);
-      assert.deepStrictEqual(unchangedPage?.targetPaths, ['src/auth/']);
-      // updatedAt should remain unchanged
-      assert.strictEqual(unchangedPage?.updatedAt.getTime(), originalUpdatedAt.getTime());
+      // The page should be at the original path
+      const pages = Array.from(repos._pages.values());
+      assert.strictEqual(pages[0]?.path, 'services/auth');
     });
   });
 });
