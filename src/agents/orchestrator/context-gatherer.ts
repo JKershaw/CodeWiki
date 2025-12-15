@@ -423,35 +423,13 @@ export class ContextGatherer {
       }
 
       // Build set of covered files from wiki page tracking data
+      // Note: We only count exact file matches, NOT directory expansion.
+      // Directory expansion was causing coverage to spike to 100% when broad
+      // directories like "src" were explored - the system would mark ALL files
+      // under the directory as "covered" even if the agent only documented a few.
+      // Coverage should reflect what was actually documented (filesAccessed,
+      // filesReferenced), not what was requested (targetPaths directories).
       const coveredFiles = buildCoveredFilesSet(wikiPages);
-
-      // Also expand directory targetPaths to cover all files under them
-      for (const page of wikiPages) {
-        if (page.targetPaths) {
-          for (const targetPath of page.targetPaths) {
-            // If target is a directory, cover all files under it
-            // Handle both with and without trailing slash
-            if (targetPath.endsWith('/')) {
-              // Explicit directory path with trailing slash
-              for (const file of sourceFiles) {
-                if (file.startsWith(targetPath)) {
-                  coveredFiles.add(file);
-                }
-              }
-            } else {
-              // Could be a directory without trailing slash - check if it's a prefix
-              // Note: We check all paths, even if already in coveredFiles,
-              // because buildCoveredFilesSet adds the path as-is without expansion
-              const pathWithSlash = targetPath + '/';
-              for (const file of sourceFiles) {
-                if (file.startsWith(pathWithSlash)) {
-                  coveredFiles.add(file);
-                }
-              }
-            }
-          }
-        }
-      }
 
       // Group files by directory and calculate coverage for each file
       const dirStats = new Map<string, { total: number; undocumented: number }>();

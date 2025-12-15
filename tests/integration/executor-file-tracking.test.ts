@@ -99,7 +99,7 @@ describe('File Coverage Calculation with Tracked Fields', () => {
       );
     });
 
-    it('directory targetPaths contribute to coverage', async () => {
+    it('directory targetPaths do NOT expand to cover all files (prevents coverage spike)', async () => {
       const repoId = 'executor-dir-coverage';
       await createTestRepo(ctx, repoId, {
         'src/services/auth.ts': 'export const login = () => {}',
@@ -109,6 +109,7 @@ describe('File Coverage Calculation with Tracked Fields', () => {
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
       // Create a wiki page that targets a directory
+      // This simulates what happens when codebase-explorer explores a directory
       const page: WikiPage = {
         id: uuid(),
         wikiId: wiki.id,
@@ -119,7 +120,7 @@ describe('File Coverage Calculation with Tracked Fields', () => {
         sourceCommits: [],
         links: [],
         backlinks: [],
-        targetPaths: ['src/services/'],  // Directory path
+        targetPaths: ['src/services/'],  // Directory path - should NOT expand
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -134,22 +135,15 @@ describe('File Coverage Calculation with Tracked Fields', () => {
 
       const summary = await orchestrator.getWorkSummary(repoId, wiki.id);
 
-      // The directory target should cover both files within src/services/
-      // src/services/auth.ts - covered by targetPaths
-      // src/services/api.ts - covered by targetPaths
-      // src/other.ts - not covered
+      // Directory targetPaths should NOT automatically cover all files within
+      // This prevents coverage from spiking to 100% when broad directories are explored
+      // Coverage should only reflect filesAccessed + filesReferenced (actual documentation)
       assert.ok(summary.totalSourceFiles >= 3, 'Should have at least 3 source files');
-      assert.ok(summary.documentedFiles >= 2, 'Directory targetPath should cover 2 files');
-
-      // Coverage should be approximately 66.67% (2/3 files)
-      const expectedCoverage = (2 / 3) * 100;
-      assert.ok(
-        Math.abs(summary.fileDocCoverage - expectedCoverage) < 1,
-        `Coverage should be ~${expectedCoverage.toFixed(1)}%, got ${summary.fileDocCoverage.toFixed(1)}%`
-      );
+      assert.strictEqual(summary.documentedFiles, 0, 'Directory targetPath alone should NOT cover files');
+      assert.strictEqual(summary.fileDocCoverage, 0, 'Coverage should be 0% without actual file documentation');
     });
 
-    it('directory targetPaths without trailing slash contribute to coverage', async () => {
+    it('coverage requires filesAccessed or filesReferenced, not just targetPaths', async () => {
       const repoId = 'executor-dir-no-slash';
       await createTestRepo(ctx, repoId, {
         'src/services/auth.ts': 'export const login = () => {}',
@@ -158,7 +152,7 @@ describe('File Coverage Calculation with Tracked Fields', () => {
       });
       const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-      // Create a wiki page that targets a directory WITHOUT trailing slash
+      // Create a wiki page with targetPath AND actual file tracking
       const page: WikiPage = {
         id: uuid(),
         wikiId: wiki.id,
@@ -169,7 +163,9 @@ describe('File Coverage Calculation with Tracked Fields', () => {
         sourceCommits: [],
         links: [],
         backlinks: [],
-        targetPaths: ['src/services'],  // Directory path WITHOUT trailing slash
+        targetPaths: ['src/services'],  // Work target (informational only)
+        filesAccessed: ['src/services/auth.ts'],  // Actually read this file
+        filesReferenced: ['src/services/api.ts'],  // Documented this file
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -184,10 +180,10 @@ describe('File Coverage Calculation with Tracked Fields', () => {
 
       const summary = await orchestrator.getWorkSummary(repoId, wiki.id);
 
-      // The directory target should cover both files within src/services/
-      // even without the trailing slash
+      // Coverage should be based on actual filesAccessed + filesReferenced
+      // NOT on directory expansion of targetPaths
       assert.ok(summary.totalSourceFiles >= 3, 'Should have at least 3 source files');
-      assert.ok(summary.documentedFiles >= 2, 'Directory targetPath without slash should cover 2 files');
+      assert.strictEqual(summary.documentedFiles, 2, 'Should count filesAccessed + filesReferenced');
 
       // Coverage should be approximately 66.67% (2/3 files)
       const expectedCoverage = (2 / 3) * 100;
