@@ -103,10 +103,11 @@ export class FileWikiPageRepository implements WikiPageRepository {
         page.categoryConfidence = updates.categoryConfidence;
       }
       // Update file coverage - filesAccessed and targetPaths are accumulated
-      if (!page.filesAccessed) {
+      // Ensure filesAccessed is always an array (defensive check for corrupted data)
+      if (!Array.isArray(page.filesAccessed)) {
         page.filesAccessed = [];
       }
-      if (updates.filesAccessed) {
+      if (updates.filesAccessed && Array.isArray(updates.filesAccessed)) {
         for (const file of updates.filesAccessed) {
           if (!page.filesAccessed.includes(file)) {
             page.filesAccessed.push(file);
@@ -117,10 +118,11 @@ export class FileWikiPageRepository implements WikiPageRepository {
       if (updates.filesReferenced !== undefined) {
         page.filesReferenced = updates.filesReferenced;
       }
-      if (!page.targetPaths) {
+      // Ensure targetPaths is always an array (defensive check for corrupted data)
+      if (!Array.isArray(page.targetPaths)) {
         page.targetPaths = [];
       }
-      if (updates.targetPaths) {
+      if (updates.targetPaths && Array.isArray(updates.targetPaths)) {
         for (const path of updates.targetPaths) {
           if (!page.targetPaths.includes(path)) {
             page.targetPaths.push(path);
