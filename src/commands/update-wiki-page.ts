@@ -345,6 +345,42 @@ export async function handleUpdateWikiPage(
       return success(updated!);
     }
 
+    if (update.type === 'track') {
+      // Track files accessed without modifying content
+      // Used when an agent reads files but the wiki page already exists
+      if (!existing) {
+        return failure(`Page not found at path: ${update.path}`);
+      }
+
+      // Only update file tracking fields, not content
+      const trackUpdateParams: {
+        content: string;
+        filesAccessed?: string[];
+        targetPaths?: string[];
+        sourceAgentRunId?: string;
+      } = {
+        content: existing.content, // Keep existing content unchanged
+      };
+      if (update.filesAccessed) {
+        trackUpdateParams.filesAccessed = update.filesAccessed;
+      }
+      if (update.targetPaths) {
+        trackUpdateParams.targetPaths = update.targetPaths;
+      }
+      if (update.agentRunId) {
+        trackUpdateParams.sourceAgentRunId = update.agentRunId;
+      }
+
+      // Only call update if there's something to track
+      if (update.filesAccessed || update.targetPaths) {
+        await repos.wikiPages.updateContent(existing.id, trackUpdateParams);
+      }
+
+      // Return the existing page (no history entry for tracking-only updates)
+      const updated = await repos.wikiPages.findById(existing.id);
+      return success(updated!);
+    }
+
     if (update.type === 'delete') {
       if (!existing) {
         return failure(`Page not found at path: ${update.path}`);

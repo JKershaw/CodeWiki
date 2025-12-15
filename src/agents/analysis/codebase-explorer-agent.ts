@@ -697,9 +697,19 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
     const existingPathsSet = new Set(existingPagePaths.map(p => p.toLowerCase()));
 
     for (const page of analysis.wikiPages) {
-      // Skip if a similar page already exists
+      // If a similar page already exists, create a 'track' update to record
+      // the files accessed without changing content. This ensures coverage
+      // progresses even when exploring directories with existing documentation.
       if (existingPathsSet.has(page.path.toLowerCase())) {
-        console.log(`Skipping wiki page ${page.path} - similar page already exists`);
+        console.log(`Tracking files for existing page ${page.path}`);
+        updates.push({
+          type: 'track',
+          path: page.path,
+          content: '', // Not used for track type
+          agentRunId: '', // Will be set by the executor
+          confidenceDelta: 0, // No confidence change for tracking
+          // filesAccessed and targetPaths will be set by executor from toolMetrics
+        });
         continue;
       }
 

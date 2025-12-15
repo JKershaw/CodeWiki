@@ -1274,4 +1274,132 @@ describe('handleUpdateWikiPage', () => {
       assert.strictEqual(pages[0]?.path, 'services/auth');
     });
   });
+
+  describe('track operation', () => {
+    it('accumulates filesAccessed without modifying content', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page with some files accessed
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal content that should not change.',
+        filesAccessed: ['src/original.ts'],
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Track additional files without changing content
+      const command = createUpdateWikiPageCommand({
+        type: 'track',
+        path: 'test/page',
+        content: '', // Content not used for track type
+        agentRunId: 'agent-1',
+        confidenceDelta: 0, // No confidence change for tracking
+        filesAccessed: ['src/new-file.ts', 'src/another-file.ts'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Content should remain unchanged
+      assert.strictEqual(result.data?.content, '# Test Page\n\nOriginal content that should not change.');
+      // filesAccessed should be accumulated
+      assert.ok(result.data?.filesAccessed.includes('src/original.ts'));
+      assert.ok(result.data?.filesAccessed.includes('src/new-file.ts'));
+      assert.ok(result.data?.filesAccessed.includes('src/another-file.ts'));
+    });
+
+    it('accumulates targetPaths without modifying content', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page with target paths
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Test Page',
+        content: '# Test Page\n\nOriginal content.',
+        targetPaths: ['src/original/'],
+      });
+      repos._pages.set(pageId, initialPage);
+
+      // Track additional target paths
+      const command = createUpdateWikiPageCommand({
+        type: 'track',
+        path: 'test/page',
+        content: '',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0,
+        targetPaths: ['src/new-dir/', 'src/another-dir/'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // targetPaths should be accumulated
+      assert.ok(result.data?.targetPaths.includes('src/original/'));
+      assert.ok(result.data?.targetPaths.includes('src/new-dir/'));
+      assert.ok(result.data?.targetPaths.includes('src/another-dir/'));
+    });
+
+    it('fails if page does not exist', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+
+      const command = createUpdateWikiPageCommand({
+        type: 'track',
+        path: 'non-existent/page',
+        content: '',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0,
+        filesAccessed: ['src/file.ts'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error?.includes('not found'));
+    });
+
+    it('preserves title and confidence when tracking', async () => {
+      const repos = createMockRepos();
+      const wikiId = uuid();
+      const pageId = uuid();
+
+      // Create initial page
+      const initialPage = createWikiPage({
+        id: pageId,
+        wikiId,
+        path: 'test/page',
+        title: 'Original Title',
+        content: '# Original Title\n\nContent.',
+      });
+      // Set specific confidence
+      initialPage.confidence = 0.8;
+      repos._pages.set(pageId, initialPage);
+
+      // Track files
+      const command = createUpdateWikiPageCommand({
+        type: 'track',
+        path: 'test/page',
+        content: '',
+        agentRunId: 'agent-1',
+        confidenceDelta: 0,
+        filesAccessed: ['src/tracked.ts'],
+      });
+
+      const result = await handleUpdateWikiPage(command, repos, wikiId);
+
+      assert.strictEqual(result.success, true);
+      // Title and confidence should be preserved
+      assert.strictEqual(result.data?.title, 'Original Title');
+      assert.strictEqual(result.data?.confidence, 0.8);
+    });
+  });
 });
