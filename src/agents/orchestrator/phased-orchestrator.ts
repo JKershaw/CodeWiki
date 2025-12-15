@@ -1007,7 +1007,15 @@ export class PhasedOrchestrator implements Orchestrator {
   }
 
   /**
-   * Phase 5: Maintenance - Minimal reactive work.
+   * Phase 5: Maintenance - Active maintenance with lighter workload.
+   *
+   * Unlike earlier phases, Maintenance focuses on:
+   * 1. Processing new commits (reactive)
+   * 2. Quality improvements for existing pages
+   * 3. Filling remaining coverage gaps
+   * 4. Consistency checks
+   *
+   * This ensures the wiki continues improving even when coverage is high.
    */
   private async generateMaintenanceWork(
     repoId: string,
@@ -1016,9 +1024,9 @@ export class PhasedOrchestrator implements Orchestrator {
     maxItems: number
   ): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
-    const maintenanceMax = Math.min(3, maxItems); // Cap at 3 items
+    const maintenanceMax = Math.min(5, maxItems); // Allow up to 5 items
 
-    // Process new commits only
+    // 1. Process new commits (highest priority - reactive to changes)
     const recentUnprocessed = context.recentCommits.filter(
       c => c.processedBy.length === 0
     ).slice(0, 2);
@@ -1037,6 +1045,57 @@ export class PhasedOrchestrator implements Orchestrator {
         agentType: 'code-change',
         target: commitTarget,
       }));
+    }
+
+    // 2. Quality improvements for low-confidence pages
+    if (workItems.length < maintenanceMax && context.lowConfidencePages > 0) {
+      const key = 'quality:wiki';
+      if (!existingWorkKeys.has(key)) {
+        existingWorkKeys.add(key);
+        const wikiTarget = { type: 'wiki' as const };
+        workItems.push(createWorkItem({
+          id: generateWorkItemId(repoId, 'quality', wikiTarget),
+          repoId,
+          agentType: 'quality',
+          target: wikiTarget,
+        }));
+      }
+    }
+
+    // 3. Fill remaining coverage gaps (any undocumented directories)
+    if (workItems.length < maintenanceMax && context.undocumentedDirectories.length > 0) {
+      // Target directories with highest undocumented ratio first
+      const sortedDirs = [...context.undocumentedDirectories]
+        .sort((a, b) => b.undocumentedRatio - a.undocumentedRatio);
+
+      for (const dir of sortedDirs.slice(0, 2)) {
+        if (workItems.length >= maintenanceMax) break;
+
+        const key = `codebase-explorer:path:${dir.path}`;
+        if (existingWorkKeys.has(key)) continue;
+        existingWorkKeys.add(key);
+
+        workItems.push(createExplorationWorkItem(
+          dir.path,
+          repoId,
+          context.lowCoverageFiles
+        ));
+      }
+    }
+
+    // 4. Consistency check if no other work and pages need it
+    if (workItems.length < maintenanceMax && context.pagesNeedingRewrite > 0) {
+      const key = 'consistency:wiki';
+      if (!existingWorkKeys.has(key)) {
+        existingWorkKeys.add(key);
+        const wikiTarget = { type: 'wiki' as const };
+        workItems.push(createWorkItem({
+          id: generateWorkItemId(repoId, 'consistency', wikiTarget),
+          repoId,
+          agentType: 'consistency',
+          target: wikiTarget,
+        }));
+      }
     }
 
     return workItems;
