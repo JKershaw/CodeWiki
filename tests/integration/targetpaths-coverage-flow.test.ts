@@ -84,7 +84,7 @@ describe('targetPaths Coverage Flow Integration', () => {
     assert.strictEqual(afterAgentsDir.undocumentedRatio, 1, 'src/agents should still be 100% undocumented');
   });
 
-  it('coverage requires filesAccessed or filesReferenced, not just targetPaths', async () => {
+  it('coverage requires filesReferenced, not just targetPaths', async () => {
     const repoId = 'targetpaths-vs-files-test';
     await createTestRepo(ctx, repoId, {
       'src/a/file1.ts': 'export const a1 = 1;',
@@ -93,17 +93,19 @@ describe('targetPaths Coverage Flow Integration', () => {
     });
     const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-    // Create page with targetPaths AND actual file documentation
+    // Create page with targetPaths AND actual file reference in content
+    // File paths in content are extracted by extractFileReferencesFromContent
+    // Use substantial content (200+ chars) to ensure coverage exceeds LOW_COVERAGE_THRESHOLD (40%)
     const update = {
       type: 'create' as const,
       path: 'overview',
       title: 'Overview',
-      content: '# Overview\n\nProject overview documenting file1.ts.',
+      // Include actual file path in content - extractFileReferencesFromContent will find it
+      content: `# Overview\n\nThis documentation covers \`src/a/file1.ts\`.\n\n${'x'.repeat(200)}`,
       agentRunId: uuid(),
       confidenceDelta: 0.3,
       skipValidation: true,
       targetPaths: ['src/a'],  // Work target (informational only)
-      filesAccessed: ['src/a/file1.ts'],  // Actually read this file
     };
 
     await handleUpdateWikiPage(createUpdateWikiPageCommand(update), ctx.repos, wiki.id);
@@ -113,7 +115,7 @@ describe('targetPaths Coverage Flow Integration', () => {
     const context = await gatherer.gather(repoId, wiki.id);
 
     // src/a should still be in undocumented list but with reduced ratio
-    // because only file1.ts is covered (via filesAccessed), not file2.ts
+    // because only file1.ts is covered (via content reference), not file2.ts
     const aDirAfter = context.undocumentedDirectories.find(d => d.path === 'src/a');
     assert.ok(aDirAfter, 'src/a should still be partially undocumented');
     assert.strictEqual(aDirAfter.undocumentedRatio, 0.5, 'src/a should be 50% undocumented (1 of 2 files covered)');
@@ -124,7 +126,7 @@ describe('targetPaths Coverage Flow Integration', () => {
     assert.strictEqual(bDirAfter.undocumentedRatio, 1, 'src/b should be 100% undocumented');
   });
 
-  it('filesAccessed and filesReferenced accumulate to build coverage', async () => {
+  it('filesReferenced from multiple pages accumulate to build coverage', async () => {
     const repoId = 'files-accumulate-test';
     await createTestRepo(ctx, repoId, {
       'src/domain/repo.ts': 'export interface Repo {}',
@@ -133,30 +135,31 @@ describe('targetPaths Coverage Flow Integration', () => {
     });
     const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-    // Create first page with filesAccessed
+    // Create first page with file reference in content
+    // Use substantial content to ensure coverage exceeds threshold
     await handleUpdateWikiPage(
       createUpdateWikiPageCommand({
         type: 'create',
         path: 'domain/overview',
         title: 'Domain Overview',
-        content: '# Domain\n\nDomain entities.',
+        // Include actual file path in content - extractFileReferencesFromContent will find it
+        content: `# Domain Overview\n\nDocumentation for \`src/domain/repo.ts\`.\n\n${'x'.repeat(200)}`,
         agentRunId: uuid(),
         confidenceDelta: 0.3,
         skipValidation: true,
-        filesAccessed: ['src/domain/repo.ts'],  // Actual file coverage
       }),
       ctx.repos,
       wiki.id
     );
 
-    // Create second page - filesReferenced is extracted from content
-    // The content must actually reference the file path for it to be tracked
+    // Create second page with file reference in content
     await handleUpdateWikiPage(
       createUpdateWikiPageCommand({
         type: 'create',
         path: 'services/overview',
         title: 'Services Overview',
-        content: '# Services\n\nService layer implementation in `src/services/git.ts`.',
+        // Include actual file path in content
+        content: `# Services Overview\n\nDocumentation for \`src/services/git.ts\`.\n\n${'x'.repeat(200)}`,
         agentRunId: uuid(),
         confidenceDelta: 0.3,
         skipValidation: true,

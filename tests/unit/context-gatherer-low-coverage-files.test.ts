@@ -91,20 +91,21 @@ function createMockRepoAccessFactory(fileTree: string[]): UnifiedRepoAccessFacto
 
 describe('ContextGatherer lowCoverageFiles', () => {
   describe('basic functionality', () => {
-    it('returns files not covered by filesAccessed/filesReferenced/targetPaths', async () => {
+    it('returns files not covered by filesReferenced', async () => {
       const fileTree = [
         'src/agents/orchestrator.ts',
         'src/agents/base.ts',
         'src/services/llm.ts',
       ];
 
-      // Wiki pages track orchestrator.ts via filesAccessed (100% coverage)
-      // but base.ts and llm.ts are not tracked (0% coverage)
+      // Wiki pages reference orchestrator.ts via filesReferenced (gets coverage)
+      // but base.ts and llm.ts are not referenced (0% coverage)
+      // Use enough content to give meaningful coverage score
       const wikiPages = [
         {
           path: 'architecture/orchestrator',
-          content: '# Orchestrator\n\nThe orchestrator.ts file coordinates work.',
-          filesAccessed: ['src/agents/orchestrator.ts'],
+          content: 'x'.repeat(200), // 200 chars dedicated to orchestrator
+          filesReferenced: ['src/agents/orchestrator.ts'],
         },
       ];
 
@@ -118,12 +119,12 @@ describe('ContextGatherer lowCoverageFiles', () => {
       assert.ok(context.lowCoverageFiles, 'should have lowCoverageFiles field');
       assert.ok(Array.isArray(context.lowCoverageFiles), 'lowCoverageFiles should be an array');
 
-      // base.ts and llm.ts should be in low coverage (not in filesAccessed)
+      // base.ts and llm.ts should be in low coverage (not referenced)
       const paths = context.lowCoverageFiles.map(f => f.path);
       assert.ok(paths.includes('src/agents/base.ts'), 'should include base.ts');
       assert.ok(paths.includes('src/services/llm.ts'), 'should include llm.ts');
 
-      // orchestrator.ts should NOT be in low coverage (tracked in filesAccessed)
+      // orchestrator.ts should NOT be in low coverage (referenced with enough content)
       assert.ok(!paths.includes('src/agents/orchestrator.ts'), 'should not include orchestrator.ts');
     });
 
@@ -149,19 +150,19 @@ describe('ContextGatherer lowCoverageFiles', () => {
       assert.strictEqual(llmFile.directory, 'src/services');
     });
 
-    it('includes coverage percentage for each file (binary: 0% or 100%)', async () => {
+    it('includes graduated coverage percentages for each file', async () => {
       const fileTree = [
         'src/agents/base.ts',
         'src/agents/covered.ts',
       ];
 
-      // covered.ts is tracked via filesAccessed (100% coverage)
-      // base.ts is not tracked (0% coverage)
+      // covered.ts is referenced with substantial content (high coverage)
+      // base.ts is not referenced (0% coverage)
       const wikiPages = [
         {
           path: 'docs/overview',
-          content: 'Files include base.ts and others.',
-          filesAccessed: ['src/agents/covered.ts'],
+          content: 'x'.repeat(200), // 200 chars dedicated to covered.ts
+          filesReferenced: ['src/agents/covered.ts'],
         },
       ];
 
@@ -174,9 +175,9 @@ describe('ContextGatherer lowCoverageFiles', () => {
       // base.ts should be in lowCoverageFiles with 0% coverage
       const baseFile = context.lowCoverageFiles.find(f => f.path === 'src/agents/base.ts');
       assert.ok(baseFile, 'should find base.ts');
-      assert.strictEqual(baseFile.coverage, 0, 'should have 0% coverage (not tracked)');
+      assert.strictEqual(baseFile.coverage, 0, 'should have 0% coverage (not referenced)');
 
-      // covered.ts should NOT be in lowCoverageFiles (100% coverage)
+      // covered.ts should NOT be in lowCoverageFiles (100% coverage from 200 chars / 1 file)
       const coveredFile = context.lowCoverageFiles.find(f => f.path === 'src/agents/covered.ts');
       assert.ok(!coveredFile, 'covered.ts should not be in lowCoverageFiles');
     });

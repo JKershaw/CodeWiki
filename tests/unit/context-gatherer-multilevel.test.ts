@@ -24,7 +24,7 @@ mock.method(console, 'error', () => {});
 function createMockWikiPage(
   path: string,
   content: string,
-  options?: { confidence?: number; filesAccessed?: string[] }
+  options?: { confidence?: number; filesAccessed?: string[]; filesReferenced?: string[] }
 ): WikiPage {
   return {
     id: `page-${path.replace(/\//g, '-')}`,
@@ -38,7 +38,7 @@ function createMockWikiPage(
     links: [],
     backlinks: [],
     filesAccessed: options?.filesAccessed ?? [],
-    filesReferenced: [],
+    filesReferenced: options?.filesReferenced ?? [],
     targetPaths: [],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -261,17 +261,15 @@ import { strategies } from './strategies';
     });
 
     it('should exclude fully documented directories', async () => {
-      // Create wiki pages that cover all files via filesAccessed
+      // Create wiki pages that cover all files via filesReferenced with substantial content
+      // Each file needs 100+ chars to exceed LOW_COVERAGE_THRESHOLD (40%)
       const wikiPages = [
         createMockWikiPage(
           'services/llm-service',
-          `# LLM Service
-
-Documentation for the LLM service files.
-`,
+          'x'.repeat(400), // 400 chars / 2 files = 200 per file (well above threshold)
           {
-            // Use filesAccessed for coverage (binary: covered or not)
-            filesAccessed: [
+            // Use filesReferenced for graduated coverage scoring
+            filesReferenced: [
               'src/services/llm/llm-service.ts',
               'src/services/llm/mock-llm.ts',
             ],
@@ -294,17 +292,12 @@ Documentation for the LLM service files.
 
       const context = await gatherer.gather('repo-1', 'wiki-1');
 
-      // If files are covered via filesAccessed, directory should not be in undocumented list
-      // or would have 0% undocumented ratio
+      // If files are covered via filesReferenced with enough content,
+      // directory should not be in undocumented list
       const llmDir = context.undocumentedDirectories.find(d => d.path === 'src/services/llm');
 
-      // Either not present (fully documented) or has 0 undocumented ratio
-      if (llmDir) {
-        assert.ok(
-          llmDir.undocumentedRatio < 1,
-          'Well-documented directory should have lower undocumented ratio'
-        );
-      }
+      // Fully documented directories should not appear in the undocumented list
+      assert.strictEqual(llmDir, undefined, 'Fully documented directory should not be in undocumented list');
     });
   });
 });
