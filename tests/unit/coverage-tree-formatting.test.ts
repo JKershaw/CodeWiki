@@ -10,7 +10,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
-  formatCoverageTreeWithFiles,
+  formatCoverageTree,
   createFileNode as createFileNodeImpl,
   createDirectoryNode,
   type FileNode,
@@ -30,13 +30,13 @@ function createDirNode(
   return createDirectoryNode(path, files, children);
 }
 
-describe('formatCoverageTreeWithFiles', () => {
+describe('formatCoverageTree', () => {
   describe('basic formatting', () => {
     it('shows files with LOC and coverage', () => {
       const file = createFileNode('src/app.ts', 200, 30);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -55,7 +55,7 @@ describe('formatCoverageTreeWithFiles', () => {
       ];
       const root = createDirNode('src', files);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         files,
         ['src'],
@@ -72,7 +72,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/uncovered.ts', 500, 10);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -86,7 +86,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/covered.ts', 100, 80);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -106,7 +106,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const outerFile = createFileNode('src/index.ts', 50, 100);
       const root = createDirNode('src', [outerFile], [innerDir]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [innerFile, outerFile],
         ['src', 'src/agents'],
@@ -124,7 +124,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const bDir = createDirNode('src/a', [], [cDir]);
       const root = createDirNode('src', [], [bDir]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [deepFile],
         ['src', 'src/a', 'src/a/b'],
@@ -146,7 +146,7 @@ describe('formatCoverageTreeWithFiles', () => {
       ];
       const root = createDirNode('src', files);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         files,
         ['src'],
@@ -168,7 +168,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/shown.ts', 100, 0);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -184,7 +184,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/a.ts', 100, 0);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -198,7 +198,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/a.ts', 100, 0);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -211,7 +211,7 @@ describe('formatCoverageTreeWithFiles', () => {
 
   describe('edge cases', () => {
     it('handles null tree', () => {
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         null,
         [],
         [],
@@ -224,7 +224,7 @@ describe('formatCoverageTreeWithFiles', () => {
     it('handles empty directory', () => {
       const root = createDirNode('src', [], []);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [],
         ['src'],
@@ -239,7 +239,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/a.ts', 100, 33.33);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -255,7 +255,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/uncovered.ts', 500, 0);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -269,7 +269,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const file = createFileNode('src/covered.ts', 100, 100);
       const root = createDirNode('src', [file]);
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         [file],
         ['src'],
@@ -296,7 +296,7 @@ describe('formatCoverageTreeWithFiles', () => {
       const selectedFiles = [orchestratorFile, contextFile];
       const selectedDirs = ['src', 'src/agents', 'src/agents/orchestrator'];
 
-      const output = formatCoverageTreeWithFiles(
+      const output = formatCoverageTree(
         root,
         selectedFiles,
         selectedDirs,

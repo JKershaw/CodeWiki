@@ -512,10 +512,14 @@ export class ContextGatherer {
 
   /**
    * Build a file-level coverage tree with prioritized output.
+   *
+   * Uses tracked file relationships (filesAccessed, filesReferenced, targetPaths)
+   * for coverage instead of text-based content matching. This ensures coverage
+   * updates correctly when files are documented.
    */
   private async buildFileCoverageTree(
     repoId: string,
-    wikiPages: Array<{ path: string; content: string }>
+    wikiPages: WikiPageWithFileTracking[]
   ): Promise<string | null> {
     if (!this.repoAccessFactory) {
       return null;
@@ -537,7 +541,10 @@ export class ContextGatherer {
         loc: DEFAULT_LOC,
       }));
 
-      return buildPrioritizedCoverageTree(fileData, wikiPages, 100);
+      // Build covered files set from tracked relationships
+      const coveredFilesSet = buildCoveredFilesSet(wikiPages);
+
+      return buildPrioritizedCoverageTree(fileData, coveredFilesSet, 100);
     } catch (error) {
       console.warn(`Failed to build file coverage tree: ${error}`);
       return null;

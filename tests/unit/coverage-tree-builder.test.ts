@@ -1,29 +1,21 @@
 /**
  * Unit tests for building coverage trees with file-level detail.
  *
- * This tests the function that takes raw file data and wiki pages,
+ * This tests the function that takes raw file data and a covered files set,
  * calculates file-level coverage, and builds a hierarchical tree structure.
  *
- * TDD Phase 3: Define tree building behavior through tests before implementation.
+ * Coverage is binary: 100% if in covered set, 0% otherwise.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
-  buildCoverageTreeWithFiles,
+  buildCoverageTree,
   type FileData,
   type DirectoryNode,
 } from '../../src/agents/orchestrator/file-coverage-tree.js';
 
-/**
- * Simplified wiki page for testing coverage calculation.
- */
-interface WikiPage {
-  path: string;
-  content: string;
-}
-
-describe('buildCoverageTreeWithFiles', () => {
+describe('buildCoverageTree', () => {
   describe('flat codebase', () => {
     it('shows all files when all are in one directory', () => {
       const files: FileData[] = [
@@ -31,9 +23,9 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/app.ts', loc: 200 },
         { path: 'src/utils.ts', loc: 150 },
       ];
-      const wikiPages: WikiPage[] = [];
+      const coveredFilesSet = new Set<string>();
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree, 'Tree should not be null');
       assert.strictEqual(tree.name, 'src');
@@ -48,7 +40,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/large.ts', loc: 500 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       const smallFile = tree.files.find(f => f.name === 'small.ts');
@@ -58,16 +50,15 @@ describe('buildCoverageTreeWithFiles', () => {
       assert.strictEqual(largeFile?.loc, 500);
     });
 
-    it('includes coverage % for each file', () => {
+    it('includes coverage % for each file based on tracked coverage', () => {
       const files: FileData[] = [
         { path: 'src/documented.ts', loc: 100 },
         { path: 'src/undocumented.ts', loc: 100 },
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/documented', content: 'The documented.ts file handles...' },
-      ];
+      // Only documented.ts is in the covered set
+      const coveredFilesSet = new Set(['src/documented.ts']);
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
       const documented = tree.files.find(f => f.name === 'documented.ts');
@@ -84,7 +75,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/a/b/c/d/deep.ts', loc: 500 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       // Navigate down the tree
@@ -108,11 +99,10 @@ describe('buildCoverageTreeWithFiles', () => {
       const files: FileData[] = [
         { path: 'src/a/b/deep.ts', loc: 100 },
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/deep', content: 'The deep.ts file does...' },
-      ];
+      // File is covered
+      const coveredFilesSet = new Set(['src/a/b/deep.ts']);
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
       // Coverage should propagate up
@@ -125,7 +115,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/deep/nested/file.ts', loc: 200 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 2);
@@ -136,84 +126,43 @@ describe('buildCoverageTreeWithFiles', () => {
     });
   });
 
-  describe('wiki mention coverage calculation', () => {
-    it('calculates coverage from wiki mentions of filename', () => {
+  describe('tracked coverage calculation', () => {
+    it('marks file as covered when in covered set', () => {
       const files: FileData[] = [
         { path: 'src/orchestrator.ts', loc: 800 },
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'architecture/orchestrator', content: 'The orchestrator.ts handles work scheduling.' },
-      ];
+      const coveredFilesSet = new Set(['src/orchestrator.ts']);
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
       assert.strictEqual(tree.files[0]?.coveragePercent, 100);
     });
 
-    it('calculates coverage from wiki mentions of full path', () => {
-      const files: FileData[] = [
-        { path: 'src/agents/orchestrator/main.ts', loc: 500 },
-      ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/agents', content: 'Located at src/agents/orchestrator/main.ts' },
-      ];
-
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
-
-      assert.ok(tree);
-      // Find the file in the tree
-      const orchestratorDir = tree.children.find(c => c.name === 'agents')
-        ?.children.find(c => c.name === 'orchestrator');
-      // Graduated coverage: single mention = 25%
-      assert.strictEqual(orchestratorDir?.files[0]?.coveragePercent, 25);
-    });
-
-    it('returns 0 coverage when file not mentioned', () => {
+    it('marks file as uncovered when not in covered set', () => {
       const files: FileData[] = [
         { path: 'src/secret.ts', loc: 300 },
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/other', content: 'This page talks about other.ts only' },
-      ];
+      const coveredFilesSet = new Set<string>(); // Empty set
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
       assert.strictEqual(tree.files[0]?.coveragePercent, 0);
     });
 
-    it('handles multiple wiki pages mentioning same file', () => {
+    it('handles partial coverage (some files covered)', () => {
       const files: FileData[] = [
-        { path: 'src/important.ts', loc: 500 },
+        { path: 'src/covered.ts', loc: 100 },
+        { path: 'src/uncovered.ts', loc: 100 },
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/overview', content: 'important.ts is central' },
-        { path: 'docs/details', content: 'More about important.ts' },
-        { path: 'docs/examples', content: 'Using important.ts in practice' },
-      ];
+      const coveredFilesSet = new Set(['src/covered.ts']);
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
-      // Graduated coverage: multiple mentions across pages still counts
-      // Each page has 1 mention, so highest is 25%
-      assert.strictEqual(tree.files[0]?.coveragePercent, 25);
-    });
-
-    it('matches wiki page path to file name', () => {
-      const files: FileData[] = [
-        { path: 'src/user-service.ts', loc: 300 },
-      ];
-      const wikiPages: WikiPage[] = [
-        // Wiki page named after the file (without extension)
-        { path: 'services/user-service', content: 'Handles user operations' },
-      ];
-
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
-
-      assert.ok(tree);
-      assert.strictEqual(tree.files[0]?.coveragePercent, 100);
+      // Directory should have 50% coverage (1 of 2 files covered, equal LOC)
+      assert.strictEqual(tree.coveragePercent, 50);
     });
   });
 
@@ -227,7 +176,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/sub/deep/e.ts', loc: 100 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 5);
@@ -246,7 +195,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/sub/large.ts', loc: 500 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalLoc, 750);
@@ -261,11 +210,9 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/covered.ts', loc: 200 },    // Will be covered
         { path: 'src/uncovered.ts', loc: 800 },  // Will not be covered
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/covered', content: 'About covered.ts' },
-      ];
+      const coveredFilesSet = new Set(['src/covered.ts']);
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
       // 200 LOC at 100% + 800 LOC at 0% = 20% weighted coverage
@@ -275,7 +222,7 @@ describe('buildCoverageTreeWithFiles', () => {
 
   describe('edge cases', () => {
     it('returns null for empty file list', () => {
-      const tree = buildCoverageTreeWithFiles([], []);
+      const tree = buildCoverageTree([], new Set());
       assert.strictEqual(tree, null);
     });
 
@@ -285,7 +232,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'package.json', loc: 50 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       // Should handle gracefully - might create virtual root
       // The exact behavior depends on implementation choice
@@ -297,7 +244,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/only.ts', loc: 100 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 1);
@@ -309,23 +256,22 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/services/index.ts', loc: 100 },
         { path: 'src/models/index.ts', loc: 75 },
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/utils', content: 'src/utils/index.ts exports utilities' },
-      ];
+      // Only utils/index.ts is covered
+      const coveredFilesSet = new Set(['src/utils/index.ts']);
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 3);
 
-      // Only the utils index should be covered (specific path match)
+      // Only the utils index should be covered
       const utilsDir = tree.children.find(c => c.name === 'utils');
       const servicesDir = tree.children.find(c => c.name === 'services');
 
-      // Note: current simple implementation might match all index.ts files
-      // A more sophisticated implementation would require exact path matching
       assert.ok(utilsDir);
       assert.ok(servicesDir);
+      assert.strictEqual(utilsDir.coveragePercent, 100);
+      assert.strictEqual(servicesDir.coveragePercent, 0);
     });
 
     it('handles very deep nesting (10+ levels)', () => {
@@ -333,7 +279,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'a/b/c/d/e/f/g/h/i/j/deep.ts', loc: 100 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 1);
@@ -352,25 +298,23 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'src/utils/helpers.ts', loc: 100 },
         { path: 'src/utils/validators.ts', loc: 80 },
       ];
-      const wikiPages: WikiPage[] = [
-        { path: 'docs/services', content: 'user-service.ts and auth-service.ts handle...' },
-        { path: 'docs/types', content: 'types.ts defines all TypeScript types' },
-      ];
+      // Services directory is covered
+      const coveredFilesSet = new Set([
+        'src/services/user-service.ts',
+        'src/services/auth-service.ts',
+      ]);
 
-      const tree = buildCoverageTreeWithFiles(files, wikiPages);
+      const tree = buildCoverageTree(files, coveredFilesSet);
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 7);
 
-      // Services should have coverage (files are mentioned, but just once each = 25%)
-      // types.ts is not in services dir, so only user-service and auth-service get 25%
+      // Services should have 100% coverage
       const servicesDir = tree.children.find(c => c.name === 'services');
       assert.ok(servicesDir);
-      // With graduated coverage: each file mentioned once = 25%
-      // Weighted average: (200*25 + 150*25) / (200+150) = 8750/350 = 25%
-      assert.strictEqual(servicesDir.coveragePercent, 25);
+      assert.strictEqual(servicesDir.coveragePercent, 100);
 
-      // Utils should have 0 coverage (not mentioned)
+      // Utils should have 0 coverage
       const utilsDir = tree.children.find(c => c.name === 'utils');
       assert.ok(utilsDir);
       assert.strictEqual(utilsDir.coveragePercent, 0);
@@ -384,7 +328,7 @@ describe('buildCoverageTreeWithFiles', () => {
         { path: 'packages/cli/src/commands.ts', loc: 300 },
       ];
 
-      const tree = buildCoverageTreeWithFiles(files, []);
+      const tree = buildCoverageTree(files, new Set());
 
       assert.ok(tree);
       assert.strictEqual(tree.totalFileCount, 4);
