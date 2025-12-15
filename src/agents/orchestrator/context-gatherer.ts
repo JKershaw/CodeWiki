@@ -7,6 +7,8 @@ import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 // Import file-level coverage tree
 import {
   buildPrioritizedCoverageTree,
+  calculateFileCoverage,
+  LOW_COVERAGE_THRESHOLD,
   type FileData,
 } from './file-coverage-tree.js';
 
@@ -427,17 +429,17 @@ export class ContextGatherer {
   }
 
   /**
-   * Calculate which directories have undocumented files, and collect individual low-coverage files.
-   * Uses filesAccessed/filesReferenced/targetPaths tracking instead of text-based mention matching.
+   * Calculate which directories have low-coverage files, and collect individual low-coverage files.
+   * Uses graduated documentation depth scoring instead of binary coverage.
    *
    * This approach ensures:
-   * - Progress is guaranteed (once read, always covered)
-   * - No stall at intermediate coverage levels (25% → 50% gap)
-   * - Coverage aligns with KPI calculation
+   * - Files with partial documentation are prioritized for more work
+   * - Coverage percentages match what the LLM sees in the coverage tree
+   * - Work generation targets files that truly need more documentation
    *
    * Returns both:
    * - directories: Aggregated stats per directory
-   * - files: Individual files not yet covered (coverage = 0%)
+   * - files: Individual files with coverage < LOW_COVERAGE_THRESHOLD
    */
   private async calculateUndocumentedDirectoriesAndFiles(
     repoId: string,
@@ -459,17 +461,18 @@ export class ContextGatherer {
         return { directories: [], files: [] };
       }
 
-      // Build set of covered files from wiki page tracking data
-      // Note: We only count exact file matches, NOT directory expansion.
-      // Directory expansion was causing coverage to spike to 100% when broad
-      // directories like "src" were explored - the system would mark ALL files
-      // under the directory as "covered" even if the agent only documented a few.
-      // Coverage should reflect what was actually documented (filesAccessed,
-      // filesReferenced), not what was requested (targetPaths directories).
-      const coveredFiles = buildCoveredFilesSet(wikiPages);
+      // Build documentation depth scores for graduated coverage
+      // This uses the same scoring as the coverage tree shown to the LLM
+      const documentationScores = buildFileDocumentationScores(wikiPages);
+
+      // Find max score for normalization
+      let maxScore = 0;
+      for (const score of documentationScores.values()) {
+        if (score > maxScore) maxScore = score;
+      }
 
       // Group files by directory and calculate coverage for each file
-      const dirStats = new Map<string, { total: number; undocumented: number }>();
+      const dirStats = new Map<string, { total: number; lowCoverage: number }>();
       const lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }> = [];
 
       for (const filePath of sourceFiles) {
@@ -478,34 +481,33 @@ export class ContextGatherer {
 
         const dirPath = parts.slice(0, -1).join('/');
 
-        // Binary coverage: 100% if covered, 0% if not
-        const isCovered = coveredFiles.has(filePath);
-        const coverage = isCovered ? 100 : 0;
-        const isUndocumented = !isCovered;
+        // Graduated coverage using documentation depth scoring
+        const coverage = calculateFileCoverage(filePath, documentationScores, maxScore);
+        const isLowCoverage = coverage < LOW_COVERAGE_THRESHOLD;
 
         if (!dirStats.has(dirPath)) {
-          dirStats.set(dirPath, { total: 0, undocumented: 0 });
+          dirStats.set(dirPath, { total: 0, lowCoverage: 0 });
         }
 
         const stats = dirStats.get(dirPath)!;
         stats.total++;
-        if (isUndocumented) {
-          stats.undocumented++;
+        if (isLowCoverage) {
+          stats.lowCoverage++;
           // Collect low-coverage files
           lowCoverageFiles.push({ path: filePath, coverage, directory: dirPath });
         }
       }
 
-      // Convert to array and filter to directories with undocumented files
+      // Convert to array and filter to directories with low-coverage files
       const undocumentedDirs: UndocumentedDirectory[] = [];
 
       for (const [path, stats] of dirStats) {
-        if (stats.undocumented > 0) {
+        if (stats.lowCoverage > 0) {
           undocumentedDirs.push({
             path,
             totalFiles: stats.total,
-            undocumentedCount: stats.undocumented,
-            undocumentedRatio: stats.undocumented / stats.total,
+            undocumentedCount: stats.lowCoverage,
+            undocumentedRatio: stats.lowCoverage / stats.total,
           });
         }
       }
