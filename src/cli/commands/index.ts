@@ -9,3 +9,4 @@ export { listCommand } from './list.js';
 export { queryCommand } from './query.js';
 export { askCommand } from './ask.js';
 export { specCommand } from './spec.js';
+export { diagnoseCoverageCommand } from './diagnose-coverage.js';

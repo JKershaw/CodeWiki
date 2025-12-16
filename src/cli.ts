@@ -13,6 +13,7 @@
  *   query <repo-path> "<question>"    - Ask about a codebase
  *   status <repo-id>                  - Show processing status
  *   list                              - List connected repositories
+ *   diagnose-coverage <repo-id>       - Deep coverage analysis for debugging
  */
 
 import 'dotenv/config';
@@ -24,6 +25,7 @@ import {
   queryCommand,
   askCommand,
   specCommand,
+  diagnoseCoverageCommand,
 } from './cli/commands/index.js';
 
 async function main() {
@@ -53,6 +55,9 @@ async function main() {
       break;
     case 'list':
       await listCommand();
+      break;
+    case 'diagnose-coverage':
+      await diagnoseCoverageCommand(args.slice(1));
       break;
     default:
       console.error(`Unknown command: ${command}`);
