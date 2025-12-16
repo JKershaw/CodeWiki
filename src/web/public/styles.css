@@ -837,6 +837,183 @@ nav {
 	opacity: 0.9;
 }
 
+/* Wiki Metadata Panel */
+.meta-section {
+	background: var(--bg-elevated);
+	border-radius: 8px;
+	margin-bottom: 12px;
+	overflow: hidden;
+}
+
+.meta-section-header {
+	display: flex;
+	align-items: center;
+	padding: 12px 16px;
+	cursor: pointer;
+	user-select: none;
+	transition: background 0.2s;
+}
+
+.meta-section-header:hover {
+	background: var(--bg-card);
+}
+
+.meta-section-toggle {
+	font-size: 0.7rem;
+	margin-right: 10px;
+	transition: transform 0.2s;
+	color: var(--text-secondary);
+}
+
+.meta-section.collapsed .meta-section-toggle {
+	transform: rotate(-90deg);
+}
+
+.meta-section-title {
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: var(--text-primary);
+}
+
+.meta-section-count {
+	margin-left: auto;
+	font-size: 0.75rem;
+	color: var(--text-secondary);
+	background: var(--bg-card);
+	padding: 2px 8px;
+	border-radius: 10px;
+}
+
+.meta-section-content {
+	padding: 0 16px 16px;
+	transition: max-height 0.3s, padding 0.3s, opacity 0.2s;
+}
+
+.meta-section.collapsed .meta-section-content {
+	max-height: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+	opacity: 0;
+	overflow: hidden;
+}
+
+.meta-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 16px;
+}
+
+.meta-item {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.meta-item.full-width {
+	grid-column: 1 / -1;
+}
+
+.meta-label {
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: var(--text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.meta-value {
+	font-size: 0.85rem;
+	color: var(--text-primary);
+}
+
+.meta-empty {
+	color: var(--text-secondary);
+	font-style: italic;
+}
+
+.meta-badge {
+	display: inline-block;
+	padding: 2px 10px;
+	border-radius: 12px;
+	font-size: 0.8rem;
+	font-weight: 500;
+	background: var(--accent-growth);
+	color: var(--bg-main);
+}
+
+.meta-badge.synthesis {
+	background: var(--accent-insight);
+}
+
+.meta-confidence {
+	margin-left: 6px;
+	font-size: 0.75rem;
+	color: var(--text-secondary);
+}
+
+.meta-id-list,
+.meta-path-list,
+.meta-link-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.meta-id {
+	font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+	font-size: 0.75rem;
+	padding: 3px 8px;
+	background: var(--bg-card);
+	border-radius: 4px;
+	color: var(--text-secondary);
+}
+
+.meta-path {
+	font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+	font-size: 0.75rem;
+	padding: 3px 8px;
+	background: var(--bg-card);
+	border-radius: 4px;
+	color: var(--text-primary);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.meta-path-list.error .meta-path {
+	background: rgba(239, 68, 68, 0.15);
+	color: #ef4444;
+}
+
+.meta-link {
+	font-size: 0.8rem;
+	padding: 4px 10px;
+	background: var(--bg-card);
+	border-radius: 4px;
+	color: var(--accent-growth);
+	text-decoration: none;
+	transition: background 0.2s, color 0.2s;
+}
+
+.meta-link:hover {
+	background: var(--accent-growth);
+	color: var(--bg-main);
+}
+
+.meta-more {
+	font-size: 0.75rem;
+	color: var(--text-secondary);
+	padding: 3px 8px;
+}
+
+/* Responsive adjustments for metadata panel */
+@media (max-width: 600px) {
+	.meta-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
 /* Agent Pages (Ask & Spec) */
 .agent-container {
 	max-width: 900px;
