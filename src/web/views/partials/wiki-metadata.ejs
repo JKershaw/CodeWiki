@@ -1,0 +1,289 @@
+<%#
+  Metadata panel for wiki pages.
+
+  Expected locals:
+  - page: WikiPage - the wiki page data
+  - repoId: string - repository ID for building links
+  - wikiId: string - wiki ID for query param
+  - escapeHtml: function - HTML escaping utility
+-%>
+<%
+  // Helper functions
+  function formatSynthesisType(type) {
+    const typeLabels = {
+      'project-overview': 'Project Overview',
+      'getting-started': 'Getting Started Guide',
+      'testing-guide': 'Testing Guide',
+      'extension-guide': 'Extension Guide'
+    };
+    return typeLabels[type] || type;
+  }
+
+  function hasNoFileData(p) {
+    return (!p.targetPaths || p.targetPaths.length === 0) &&
+           (!p.filesAccessed || p.filesAccessed.length === 0) &&
+           (!p.filesReferenced || p.filesReferenced.length === 0) &&
+           (!p.brokenReferences || p.brokenReferences.length === 0);
+  }
+
+  function hasNoConnections(p) {
+    return (!p.links || p.links.length === 0) &&
+           (!p.backlinks || p.backlinks.length === 0);
+  }
+
+  function getTotalFileCount(p) {
+    return (p.targetPaths?.length || 0) +
+           (p.filesAccessed?.length || 0) +
+           (p.filesReferenced?.length || 0);
+  }
+%>
+
+<!-- Overview Section -->
+<div class="meta-section">
+  <div class="meta-section-header">
+    <span class="meta-section-toggle">▼</span>
+    <span class="meta-section-title">Overview</span>
+  </div>
+  <div class="meta-section-content">
+    <div class="meta-grid">
+      <div class="meta-item">
+        <span class="meta-label">Confidence</span>
+        <span class="meta-value">
+          <%= Math.round(page.confidence * 100) %>%
+          <div class="confidence-bar">
+            <div class="confidence-fill" style="width: <%= page.confidence * 100 %>%"></div>
+          </div>
+        </span>
+      </div>
+      <% if (page.category) { %>
+      <div class="meta-item">
+        <span class="meta-label">Category</span>
+        <span class="meta-value">
+          <span class="meta-badge"><%= escapeHtml(page.category) %></span>
+          <% if (page.categoryConfidence) { %>
+          <span class="meta-confidence">(<%= Math.round(page.categoryConfidence * 100) %>% confidence)</span>
+          <% } %>
+        </span>
+      </div>
+      <% } %>
+      <% if (page.synthesisType) { %>
+      <div class="meta-item">
+        <span class="meta-label">Page Type</span>
+        <span class="meta-value"><span class="meta-badge synthesis"><%= escapeHtml(formatSynthesisType(page.synthesisType)) %></span></span>
+      </div>
+      <% } %>
+      <div class="meta-item">
+        <span class="meta-label">Created</span>
+        <span class="meta-value"><%= new Date(page.createdAt).toLocaleString() %></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Last Updated</span>
+        <span class="meta-value"><%= new Date(page.updatedAt).toLocaleString() %></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Provenance Section -->
+<div class="meta-section">
+  <div class="meta-section-header">
+    <span class="meta-section-toggle">▼</span>
+    <span class="meta-section-title">Provenance</span>
+    <span class="meta-section-count"><%= page.sourceCommits.length + (page.sourceAgentRunIds?.length || 0) %> sources</span>
+  </div>
+  <div class="meta-section-content">
+    <div class="meta-grid">
+      <div class="meta-item">
+        <span class="meta-label">Source Commits</span>
+        <span class="meta-value">
+          <% if (!page.sourceCommits || page.sourceCommits.length === 0) { %>
+            <span class="meta-empty">None</span>
+          <% } else { %>
+            <div class="meta-id-list">
+              <% page.sourceCommits.slice(0, 5).forEach(function(id) { %>
+                <code class="meta-id" title="<%= escapeHtml(id) %>"><%= escapeHtml(id.substring(0, 12)) %></code>
+              <% }); %>
+              <% if (page.sourceCommits.length > 5) { %>
+                <span class="meta-more">+<%= page.sourceCommits.length - 5 %> more</span>
+              <% } %>
+            </div>
+          <% } %>
+        </span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Agent Runs</span>
+        <span class="meta-value">
+          <% const agentRuns = page.sourceAgentRunIds || []; %>
+          <% if (agentRuns.length === 0) { %>
+            <span class="meta-empty">None</span>
+          <% } else { %>
+            <div class="meta-id-list">
+              <% agentRuns.slice(0, 5).forEach(function(id) { %>
+                <code class="meta-id" title="<%= escapeHtml(id) %>"><%= escapeHtml(id.substring(0, 12)) %></code>
+              <% }); %>
+              <% if (agentRuns.length > 5) { %>
+                <span class="meta-more">+<%= agentRuns.length - 5 %> more</span>
+              <% } %>
+            </div>
+          <% } %>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- File Coverage Section -->
+<div class="meta-section<%= hasNoFileData(page) ? ' collapsed' : '' %>">
+  <div class="meta-section-header">
+    <span class="meta-section-toggle">▼</span>
+    <span class="meta-section-title">File Coverage</span>
+    <span class="meta-section-count"><%= getTotalFileCount(page) %> files</span>
+  </div>
+  <div class="meta-section-content">
+    <div class="meta-grid">
+      <div class="meta-item full-width">
+        <span class="meta-label">Target Paths</span>
+        <span class="meta-value">
+          <% const targetPaths = page.targetPaths || []; %>
+          <% if (targetPaths.length === 0) { %>
+            <span class="meta-empty">None</span>
+          <% } else { %>
+            <div class="meta-path-list">
+              <% targetPaths.slice(0, 8).forEach(function(path) { %>
+                <code class="meta-path" title="<%= escapeHtml(path) %>"><%= escapeHtml(path) %></code>
+              <% }); %>
+              <% if (targetPaths.length > 8) { %>
+                <span class="meta-more">+<%= targetPaths.length - 8 %> more</span>
+              <% } %>
+            </div>
+          <% } %>
+        </span>
+      </div>
+      <div class="meta-item full-width">
+        <span class="meta-label">Files Accessed</span>
+        <span class="meta-value">
+          <% const filesAccessed = page.filesAccessed || []; %>
+          <% if (filesAccessed.length === 0) { %>
+            <span class="meta-empty">None</span>
+          <% } else { %>
+            <div class="meta-path-list">
+              <% filesAccessed.slice(0, 8).forEach(function(path) { %>
+                <code class="meta-path" title="<%= escapeHtml(path) %>"><%= escapeHtml(path) %></code>
+              <% }); %>
+              <% if (filesAccessed.length > 8) { %>
+                <span class="meta-more">+<%= filesAccessed.length - 8 %> more</span>
+              <% } %>
+            </div>
+          <% } %>
+        </span>
+      </div>
+      <div class="meta-item full-width">
+        <span class="meta-label">Files Referenced</span>
+        <span class="meta-value">
+          <% const filesReferenced = page.filesReferenced || []; %>
+          <% if (filesReferenced.length === 0) { %>
+            <span class="meta-empty">None</span>
+          <% } else { %>
+            <div class="meta-path-list">
+              <% filesReferenced.slice(0, 8).forEach(function(path) { %>
+                <code class="meta-path" title="<%= escapeHtml(path) %>"><%= escapeHtml(path) %></code>
+              <% }); %>
+              <% if (filesReferenced.length > 8) { %>
+                <span class="meta-more">+<%= filesReferenced.length - 8 %> more</span>
+              <% } %>
+            </div>
+          <% } %>
+        </span>
+      </div>
+      <% const brokenRefs = page.brokenReferences || []; %>
+      <% if (brokenRefs.length > 0) { %>
+      <div class="meta-item full-width">
+        <span class="meta-label">Broken References</span>
+        <span class="meta-value">
+          <div class="meta-path-list error">
+            <% brokenRefs.slice(0, 8).forEach(function(path) { %>
+              <code class="meta-path" title="<%= escapeHtml(path) %>"><%= escapeHtml(path) %></code>
+            <% }); %>
+            <% if (brokenRefs.length > 8) { %>
+              <span class="meta-more">+<%= brokenRefs.length - 8 %> more</span>
+            <% } %>
+          </div>
+        </span>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<!-- Connections Section -->
+<div class="meta-section<%= hasNoConnections(page) ? ' collapsed' : '' %>">
+  <div class="meta-section-header">
+    <span class="meta-section-toggle">▼</span>
+    <span class="meta-section-title">Connections</span>
+    <span class="meta-section-count"><%= (page.links?.length || 0) + (page.backlinks?.length || 0) %> links</span>
+  </div>
+  <div class="meta-section-content">
+    <div class="meta-grid">
+      <div class="meta-item">
+        <span class="meta-label">Links To</span>
+        <span class="meta-value">
+          <% const links = page.links || []; %>
+          <% if (links.length === 0) { %>
+            <span class="meta-empty">None</span>
+          <% } else { %>
+            <div class="meta-link-list">
+              <% links.slice(0, 10).forEach(function(link) { %>
+                <a href="/wiki/<%= repoId %>/<%= link %><%= wikiId ? '?wikiId=' + wikiId : '' %>" class="meta-link"><%= escapeHtml(link) %></a>
+              <% }); %>
+              <% if (links.length > 10) { %>
+                <span class="meta-more">+<%= links.length - 10 %> more</span>
+              <% } %>
+            </div>
+          <% } %>
+        </span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Linked From</span>
+        <span class="meta-value">
+          <% const backlinks = page.backlinks || []; %>
+          <% if (backlinks.length === 0) { %>
+            <span class="meta-empty">None</span>
+          <% } else { %>
+            <div class="meta-link-list">
+              <% backlinks.slice(0, 10).forEach(function(link) { %>
+                <a href="/wiki/<%= repoId %>/<%= link %><%= wikiId ? '?wikiId=' + wikiId : '' %>" class="meta-link"><%= escapeHtml(link) %></a>
+              <% }); %>
+              <% if (backlinks.length > 10) { %>
+                <span class="meta-more">+<%= backlinks.length - 10 %> more</span>
+              <% } %>
+            </div>
+          <% } %>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Technical IDs Section (collapsed by default) -->
+<div class="meta-section collapsed">
+  <div class="meta-section-header">
+    <span class="meta-section-toggle">▼</span>
+    <span class="meta-section-title">Technical Details</span>
+  </div>
+  <div class="meta-section-content">
+    <div class="meta-grid">
+      <div class="meta-item">
+        <span class="meta-label">Page ID</span>
+        <span class="meta-value"><code class="meta-id"><%= escapeHtml(page.id) %></code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Wiki ID</span>
+        <span class="meta-value"><code class="meta-id"><%= escapeHtml(page.wikiId) %></code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Path</span>
+        <span class="meta-value"><code class="meta-id"><%= escapeHtml(page.path) %></code></span>
+      </div>
+    </div>
+  </div>
+</div>
