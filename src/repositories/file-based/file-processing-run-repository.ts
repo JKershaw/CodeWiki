@@ -105,9 +105,8 @@ export class FileProcessingRunRepository implements ProcessingRunRepository {
 
   async requestStop(id: string): Promise<void> {
     const run = await this.store.get(id);
-    if (!run) {
-      throw new Error(`Processing run not found: ${id}`);
-    }
+    if (!run) return;
+
     await this.store.update(id, {
       status: 'stopping',
       totalIterations: run.completedIterations,

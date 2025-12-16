@@ -90,6 +90,9 @@ export class FileCommitRepository implements CommitRepository {
   async addProcessingRecord(commitId: string, record: AgentProcessingRecord): Promise<void> {
     const commit = await this.store.get(commitId);
     if (commit) {
+      // Remove existing record for this agent type (if any) to prevent duplicates
+      commit.processedBy = commit.processedBy.filter(r => r.agentType !== record.agentType);
+      // Add the new record
       commit.processedBy.push(record);
       await this.store.set(commit);
     }

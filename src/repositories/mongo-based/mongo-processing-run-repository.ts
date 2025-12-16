@@ -25,15 +25,19 @@ export class MongoProcessingRunRepository implements ProcessingRunRepository {
       filter.status = options.status;
     }
 
-    const limit = options?.limit ?? 100;
     const offset = options?.offset ?? 0;
 
-    const docs = await this.collection
+    let cursor = this.collection
       .find(filter)
       .sort({ startedAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
+      .skip(offset);
+
+    // Only apply limit if explicitly provided
+    if (options?.limit !== undefined) {
+      cursor = cursor.limit(options.limit);
+    }
+
+    const docs = await cursor.toArray();
 
     return toEntities<ProcessingRun>(docs);
   }

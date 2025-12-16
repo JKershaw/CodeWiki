@@ -35,14 +35,9 @@ export class MongoFindingsRepository implements FindingsRepository {
       filter.type = options.type;
     }
 
-    let cursor = this.collection.find(filter);
-
-    if (options?.limit) {
-      cursor = cursor.limit(options.limit);
-    }
-
-    const docs = await cursor.toArray();
-    const findings = toEntities<Finding>(docs);
+    // Fetch all matching documents (no limit on cursor)
+    const docs = await this.collection.find(filter).toArray();
+    let findings = toEntities<Finding>(docs);
 
     // Sort by priority (type-based) then by detection time
     findings.sort((a, b) => {
@@ -50,6 +45,11 @@ export class MongoFindingsRepository implements FindingsRepository {
       if (priorityDiff !== 0) return priorityDiff;
       return new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime();
     });
+
+    // Apply limit AFTER sorting to get top N items
+    if (options?.limit) {
+      findings = findings.slice(0, options.limit);
+    }
 
     return findings;
   }
