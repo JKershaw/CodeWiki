@@ -770,13 +770,25 @@ export function formatDate(date: Date): string {
       // Collect all file references from the agent's output
       const { validateFileReferences, formatFileReferenceMetrics, collectAllReferences } =
         await import('./helpers/file-reference-validator.js');
+      const { extractFileReferencesFromContent } =
+        await import('../../src/utils/file-reference-extraction.js');
+
+      // Also extract file references from generated wiki content (like production does)
+      const contentRefs = result.updates.flatMap(u =>
+        u.content ? extractFileReferencesFromContent(u.content) : []
+      );
 
       const allReferences = collectAllReferences(
         result.toolMetrics?.filesRead,
         result.result.findings.flatMap(f => f.relatedPaths),
+        contentRefs,
       );
 
       const metrics = validateFileReferences(allReferences, sourceFileTree);
+
+      // Also report just content-extracted refs separately
+      const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
+      console.log(formatFileReferenceMetrics('Content-extracted refs', contentMetrics));
 
       // Log the metrics
       console.log(formatFileReferenceMetrics('CodebaseExplorerAgent', metrics));
