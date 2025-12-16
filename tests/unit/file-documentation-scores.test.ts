@@ -123,7 +123,8 @@ describe('File Documentation Scores', () => {
 
       const scores = buildFileDocumentationScores(wikiPages);
 
-      assert.strictEqual(scores.get('src/file.ts'), 0);
+      // Empty content pages don't contribute scores - file not in map
+      assert.strictEqual(scores.has('src/file.ts'), false);
     });
   });
 
@@ -337,6 +338,130 @@ describe('File Documentation Scores', () => {
       const coverage = calculateFileCoverage('src/agents/index.ts', scores, 1000);
       // src/agents/index.ts is not under src/agents/orchestrator/
       assert.strictEqual(coverage, 0);
+    });
+  });
+
+  describe('buildFileDocumentationScores with filesAccessed fallback', () => {
+    it('uses filesAccessed when filesReferenced is empty', () => {
+      // This addresses the Phase 2 stall bug: when LLM uses prose fallback,
+      // filesReferenced extraction often fails, but filesAccessed (from tool metrics)
+      // still tracks which files were read.
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'src/agents',
+          content: 'x'.repeat(1000),
+          filesReferenced: [], // No references extracted from content
+          filesAccessed: ['src/agents/base-agent.ts', 'src/agents/registry.ts'], // But these files were read
+          targetPaths: ['src/agents'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should use filesAccessed as fallback
+      assert.strictEqual(scores.get('src/agents/base-agent.ts'), 500);
+      assert.strictEqual(scores.get('src/agents/registry.ts'), 500);
+    });
+
+    it('prefers filesReferenced over filesAccessed when both have content', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/export',
+          content: 'x'.repeat(600),
+          filesReferenced: ['export-wiki.ts'], // Content extracted reference
+          filesAccessed: ['export-wiki.ts', 'audit-prompts.ts', 'generate-and-review.ts'], // Files read
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should use filesReferenced (1 file), not filesAccessed (3 files)
+      // Score = 600 / 1 = 600 for the referenced file
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 600);
+      // filesAccessed-only files should NOT get scores when filesReferenced exists
+      assert.strictEqual(scores.has('scripts/audit-prompts.ts'), false);
+    });
+
+    it('resolves bare filenames in filesAccessed using targetPaths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/overview',
+          content: 'x'.repeat(900),
+          filesReferenced: [],
+          filesAccessed: ['export-wiki.ts', 'audit-prompts.ts', 'generate-and-review.ts'],
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should resolve bare filenames with targetPath
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 300);
+      assert.strictEqual(scores.get('scripts/audit-prompts.ts'), 300);
+      assert.strictEqual(scores.get('scripts/generate-and-review.ts'), 300);
+    });
+
+    it('handles filesAccessed with already qualified paths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'commits/abc123',
+          content: 'x'.repeat(800),
+          filesReferenced: [],
+          filesAccessed: ['src/agents/base.ts', 'tests/unit/base.test.ts'],
+          targetPaths: [], // Commit pages often don't have targetPaths
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Already qualified paths should be kept as-is
+      assert.strictEqual(scores.get('src/agents/base.ts'), 400);
+      assert.strictEqual(scores.get('tests/unit/base.test.ts'), 400);
+    });
+
+    it('does not use filesAccessed fallback when page has no content', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'empty-page',
+          content: '', // Empty content
+          filesReferenced: [],
+          filesAccessed: ['src/file.ts'],
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // No scores should be generated for empty content
+      assert.strictEqual(scores.size, 0);
+    });
+
+    it('accumulates scores from multiple pages using filesAccessed', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'x'.repeat(400),
+          filesReferenced: [],
+          filesAccessed: ['src/shared.ts', 'src/unique1.ts'],
+          targetPaths: ['src'],
+        },
+        {
+          path: 'page2',
+          content: 'x'.repeat(600),
+          filesReferenced: [],
+          filesAccessed: ['src/shared.ts', 'src/unique2.ts'],
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // shared.ts should have accumulated score from both pages
+      // Page 1: 400/2 = 200, Page 2: 600/2 = 300 → Total: 500
+      assert.strictEqual(scores.get('src/shared.ts'), 500);
+      assert.strictEqual(scores.get('src/unique1.ts'), 200);
+      assert.strictEqual(scores.get('src/unique2.ts'), 300);
     });
   });
 });

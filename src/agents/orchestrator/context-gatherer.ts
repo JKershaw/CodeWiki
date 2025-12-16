@@ -189,18 +189,31 @@ export function buildFileDocumentationScores(
   const scores = new Map<string, number>();
 
   for (const page of wikiPages) {
+    // Skip pages with no content
+    if (!page.content || page.content.length === 0) {
+      continue;
+    }
+
     const filesReferenced = page.filesReferenced ?? [];
-    if (filesReferenced.length === 0) {
+    const filesAccessed = page.filesAccessed ?? [];
+
+    // Use filesReferenced if available, otherwise fall back to filesAccessed
+    // This addresses the Phase 2 stall bug: when prose fallback is used,
+    // filesReferenced extraction often fails, but filesAccessed still tracks
+    // which files were actually read by the agent.
+    const filesToScore = filesReferenced.length > 0 ? filesReferenced : filesAccessed;
+
+    if (filesToScore.length === 0) {
       continue;
     }
 
     // Get the target directory for resolving bare filenames
     const targetDir = page.targetPaths?.[0];
 
-    // Score per file = content length / number of files referenced
-    const scorePerFile = page.content.length / filesReferenced.length;
+    // Score per file = content length / number of files
+    const scorePerFile = page.content.length / filesToScore.length;
 
-    for (const file of filesReferenced) {
+    for (const file of filesToScore) {
       // Resolve bare filenames using targetPaths
       const resolvedFile = resolveFilePath(file, targetDir);
       const currentScore = scores.get(resolvedFile) ?? 0;
