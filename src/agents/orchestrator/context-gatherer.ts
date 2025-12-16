@@ -173,6 +173,13 @@ export function buildCoveredFilesSet(
  * - Files mentioned in overview pages get lower scores (diluted by other files)
  * - Two files are unlikely to have exactly the same score
  *
+ * Path Resolution:
+ * - When LLMs generate documentation, they often use bare filenames (e.g., `export-wiki.ts`)
+ *   instead of full paths (e.g., `scripts/export-wiki.ts`).
+ * - If a page has targetPaths (the directory being documented), we use it to resolve
+ *   bare filenames to full paths.
+ * - This ensures coverage calculation matches documented files to source files.
+ *
  * @param wikiPages - Wiki pages with file tracking fields
  * @returns Map of file path to documentation depth score
  */
@@ -187,16 +194,48 @@ export function buildFileDocumentationScores(
       continue;
     }
 
+    // Get the target directory for resolving bare filenames
+    const targetDir = page.targetPaths?.[0];
+
     // Score per file = content length / number of files referenced
     const scorePerFile = page.content.length / filesReferenced.length;
 
     for (const file of filesReferenced) {
-      const currentScore = scores.get(file) ?? 0;
-      scores.set(file, currentScore + scorePerFile);
+      // Resolve bare filenames using targetPaths
+      const resolvedFile = resolveFilePath(file, targetDir);
+      const currentScore = scores.get(resolvedFile) ?? 0;
+      scores.set(resolvedFile, currentScore + scorePerFile);
     }
   }
 
   return scores;
+}
+
+/**
+ * Resolve a file path, prefixing bare filenames with a target directory.
+ *
+ * A bare filename is one that doesn't contain a path separator '/'.
+ * If the file already has a path (contains '/'), it's returned as-is.
+ *
+ * @param file - The file path to resolve
+ * @param targetDir - Optional target directory to use as prefix
+ * @returns Resolved file path
+ */
+function resolveFilePath(file: string, targetDir?: string): string {
+  // If file already has a path separator, it's already qualified
+  if (file.includes('/')) {
+    return file;
+  }
+
+  // If we have a target directory and file is a bare filename, prefix it
+  if (targetDir) {
+    // Remove trailing slash from targetDir if present
+    const cleanTargetDir = targetDir.endsWith('/') ? targetDir.slice(0, -1) : targetDir;
+    return `${cleanTargetDir}/${file}`;
+  }
+
+  // No target directory available, return bare filename as-is
+  return file;
 }
 
 /**

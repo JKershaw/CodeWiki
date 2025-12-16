@@ -167,6 +167,119 @@ describe('File Documentation Scores', () => {
     });
   });
 
+  describe('buildFileDocumentationScores with targetPaths normalization', () => {
+    it('resolves bare filenames using targetPaths prefix', () => {
+      // This test demonstrates the bug: when LLM writes content about files,
+      // it often uses bare filenames like `export-wiki.ts` instead of full paths
+      // like `scripts/export-wiki.ts`. The targetPaths tells us the directory context.
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/export-wiki',
+          content: 'x'.repeat(1000),
+          filesReferenced: ['export-wiki.ts'], // LLM used bare filename
+          targetPaths: ['scripts'], // But we know the target directory
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should resolve 'export-wiki.ts' to 'scripts/export-wiki.ts'
+      // and give it the full score
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 1000);
+      // The bare filename should NOT have a score (it's been resolved)
+      assert.strictEqual(scores.has('export-wiki.ts'), false);
+    });
+
+    it('resolves multiple bare filenames in same directory', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/overview',
+          content: 'x'.repeat(900),
+          filesReferenced: ['audit-prompts.ts', 'export-wiki.ts', 'generate-and-review.ts'],
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Each file should get 900/3 = 300 points under scripts/ prefix
+      assert.strictEqual(scores.get('scripts/audit-prompts.ts'), 300);
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 300);
+      assert.strictEqual(scores.get('scripts/generate-and-review.ts'), 300);
+    });
+
+    it('does not modify already-qualified paths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'docs/services',
+          content: 'x'.repeat(500),
+          filesReferenced: ['src/services/auth.ts'], // Already has path
+          targetPaths: ['src/services'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should keep the original full path
+      assert.strictEqual(scores.get('src/services/auth.ts'), 500);
+      // Should NOT create a duplicate with targetPath prefix
+      assert.strictEqual(scores.has('src/services/src/services/auth.ts'), false);
+    });
+
+    it('handles mixed bare and qualified paths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/docs',
+          content: 'x'.repeat(600),
+          filesReferenced: [
+            'export-wiki.ts', // Bare filename
+            'src/cli.ts', // Already qualified
+          ],
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Bare filename resolved with targetPath
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 300);
+      // Qualified path kept as-is
+      assert.strictEqual(scores.get('src/cli.ts'), 300);
+    });
+
+    it('handles pages without targetPaths (bare filenames kept as-is)', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'overview',
+          content: 'x'.repeat(400),
+          filesReferenced: ['file.ts'], // Bare filename
+          // No targetPaths - can't resolve
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Without targetPaths, bare filename is kept as-is
+      assert.strictEqual(scores.get('file.ts'), 400);
+    });
+
+    it('handles multiple targetPaths by using first one', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'multi-target',
+          content: 'x'.repeat(500),
+          filesReferenced: ['helper.ts'],
+          targetPaths: ['src/utils', 'tests/helpers'], // Multiple targets
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should use first targetPath
+      assert.strictEqual(scores.get('src/utils/helper.ts'), 500);
+    });
+  });
+
   describe('calculateFileCoverage folder inheritance', () => {
     it('inherits coverage from parent folder when file has no direct score', () => {
       // src/agents/ has score 1000, src/agents/orchestrator.ts has no direct score
