@@ -186,10 +186,14 @@ export function buildCoveredFilesSet(
  * - This ensures coverage calculation matches documented files to source files.
  *
  * @param wikiPages - Wiki pages with file tracking fields
+ * @param sourceFileSet - Optional set of valid source file paths. When provided,
+ *   only paths that exist in this set are scored. This filters out directory
+ *   paths and non-existent files definitively.
  * @returns Map of file path to documentation depth score
  */
 export function buildFileDocumentationScores(
-  wikiPages: WikiPageWithFileTracking[]
+  wikiPages: WikiPageWithFileTracking[],
+  sourceFileSet?: Set<string>
 ): Map<string, number> {
   const scores = new Map<string, number>();
 
@@ -202,18 +206,22 @@ export function buildFileDocumentationScores(
     const filesReferenced = page.filesReferenced ?? [];
     const filesAccessed = page.filesAccessed ?? [];
 
-    // Use filesReferenced if available, otherwise fall back to filesAccessed
-    // This addresses the Phase 2 stall bug: when prose fallback is used,
-    // filesReferenced extraction often fails, but filesAccessed still tracks
-    // which files were actually read by the agent.
+    // Combine BOTH filesReferenced AND filesAccessed for coverage scoring.
+    // Previously we used either/or logic which undercounted coverage when a page
+    // had both fields (e.g., cli/commands with 11 filesAccessed but 3 filesReferenced
+    // would only count 3 files).
     //
-    // IMPORTANT: Filter out directory paths (ending with '/') to prevent
-    // the ancestor lookup in calculateFileCoverage from giving ALL files
-    // under a mentioned directory inherited coverage. This was causing
-    // touchedFilesRatio to spike to 96%+ when directories like 'src/'
-    // were mentioned in prose text.
-    const rawFilesToScore = filesReferenced.length > 0 ? filesReferenced : filesAccessed;
-    const filesToScore = rawFilesToScore.filter(f => !f.endsWith('/'));
+    // Pre-filter: Remove obvious directory paths (ending with '/').
+    // The sourceFileSet validation below is the authoritative check, but this
+    // quick filter catches the obvious cases even when sourceFileSet isn't provided.
+    const combinedFiles = new Set<string>();
+    for (const f of filesReferenced) {
+      if (!f.endsWith('/')) combinedFiles.add(f);
+    }
+    for (const f of filesAccessed) {
+      if (!f.endsWith('/')) combinedFiles.add(f);
+    }
+    const filesToScore = Array.from(combinedFiles);
 
     if (filesToScore.length === 0) {
       continue;
@@ -222,12 +230,29 @@ export function buildFileDocumentationScores(
     // Get the target directory for resolving bare filenames
     const targetDir = page.targetPaths?.[0];
 
-    // Score per file = content length / number of files
-    const scorePerFile = page.content.length / filesToScore.length;
-
+    // Resolve all paths first, then filter to valid source files
+    const resolvedFiles: string[] = [];
     for (const file of filesToScore) {
-      // Resolve bare filenames using targetPaths
       const resolvedFile = resolveFilePath(file, targetDir);
+
+      // If sourceFileSet provided, validate the path exists as an actual source file
+      // This definitively filters out directory paths (like 'src/agents') and
+      // non-existent files, regardless of trailing slash
+      if (sourceFileSet && !sourceFileSet.has(resolvedFile)) {
+        continue;
+      }
+
+      resolvedFiles.push(resolvedFile);
+    }
+
+    if (resolvedFiles.length === 0) {
+      continue;
+    }
+
+    // Score per file = content length / number of valid files
+    const scorePerFile = page.content.length / resolvedFiles.length;
+
+    for (const resolvedFile of resolvedFiles) {
       const currentScore = scores.get(resolvedFile) ?? 0;
       scores.set(resolvedFile, currentScore + scorePerFile);
     }
@@ -533,9 +558,12 @@ export class ContextGatherer {
         return { directories: [], files: [], totalSourceFiles: 0, touchedFiles: 0 };
       }
 
+      // Create source file set for validation
+      const sourceFileSet = new Set(sourceFiles);
+
       // Build documentation depth scores for graduated coverage
-      // This uses the same scoring as the coverage tree shown to the LLM
-      const documentationScores = buildFileDocumentationScores(wikiPages);
+      // Pass sourceFileSet to validate paths and filter out directories
+      const documentationScores = buildFileDocumentationScores(wikiPages, sourceFileSet);
 
       // Find max score for normalization
       let maxScore = 0;
@@ -659,6 +687,9 @@ export class ContextGatherer {
         return null;
       }
 
+      // Create source file set for validation
+      const sourceFileSet = new Set(sourceFiles);
+
       // Use estimated LOC (fetching actual content would be expensive)
       const DEFAULT_LOC = 75;
       const fileData: FileData[] = sourceFiles.map(path => ({
@@ -667,7 +698,8 @@ export class ContextGatherer {
       }));
 
       // Build documentation scores for finer-grained coverage
-      const documentationScores = buildFileDocumentationScores(wikiPages);
+      // Pass sourceFileSet to validate paths and filter out directories
+      const documentationScores = buildFileDocumentationScores(wikiPages, sourceFileSet);
 
       return buildPrioritizedCoverageTree(fileData, documentationScores, 100);
     } catch (error) {

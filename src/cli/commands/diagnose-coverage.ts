@@ -96,10 +96,12 @@ export async function diagnoseCoverageCommand(args: string[]): Promise<void> {
     console.log(`   Total filesAccessed entries: ${totalFilesAccessed}`);
     console.log(`   Total filesReferenced entries: ${totalFilesReferenced}`);
 
-    // Build documentation scores
-    console.log(`\n📊 Documentation Scores`);
+    // Build documentation scores (raw, without file tree validation)
+    // This shows what paths are being referenced, including potential directories
+    // that would be filtered out during actual coverage calculation
+    console.log(`\n📊 Documentation Scores (raw, unvalidated)`);
     const documentationScores = buildFileDocumentationScores(wikiPages);
-    console.log(`   Files with scores: ${documentationScores.size}`);
+    console.log(`   Paths with scores: ${documentationScores.size}`);
 
     if (documentationScores.size > 0) {
       const scores = Array.from(documentationScores.entries())

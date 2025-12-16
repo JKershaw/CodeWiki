@@ -363,7 +363,7 @@ describe('File Documentation Scores', () => {
       assert.strictEqual(scores.get('src/agents/registry.ts'), 500);
     });
 
-    it('prefers filesReferenced over filesAccessed when both have content', () => {
+    it('combines both filesReferenced AND filesAccessed for coverage', () => {
       const wikiPages: WikiPageWithFileTracking[] = [
         {
           path: 'scripts/export',
@@ -376,11 +376,12 @@ describe('File Documentation Scores', () => {
 
       const scores = buildFileDocumentationScores(wikiPages);
 
-      // Should use filesReferenced (1 file), not filesAccessed (3 files)
-      // Score = 600 / 1 = 600 for the referenced file
-      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 600);
-      // filesAccessed-only files should NOT get scores when filesReferenced exists
-      assert.strictEqual(scores.has('scripts/audit-prompts.ts'), false);
+      // Should use BOTH filesReferenced AND filesAccessed (3 unique files)
+      // export-wiki.ts appears in both but should only be counted once
+      // Score = 600 / 3 = 200 for each file
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 200);
+      assert.strictEqual(scores.get('scripts/audit-prompts.ts'), 200);
+      assert.strictEqual(scores.get('scripts/generate-and-review.ts'), 200);
     });
 
     it('resolves bare filenames in filesAccessed using targetPaths', () => {
@@ -513,6 +514,68 @@ describe('File Documentation Scores', () => {
       // Only actual file should have score
       assert.strictEqual(scores.size, 1);
       assert.ok(scores.get('src/utils.ts')! > 0, 'File should have a score');
+    });
+
+    it('validates paths against sourceFileSet when provided', () => {
+      // When sourceFileSet is provided, only paths that exist in the set are scored.
+      // This definitively filters out directories (even without trailing slash)
+      // and non-existent files.
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'Documentation mentioning directories and files.',
+          filesReferenced: [
+            'src/agents',           // Directory without trailing slash - should be filtered
+            'src/agents/foo.ts',    // Valid file
+            'src/agents/bar.ts',    // Valid file
+            'src/nonexistent.ts',   // Non-existent file - should be filtered
+          ],
+          filesAccessed: [],
+          targetPaths: ['src/agents'],
+        },
+      ];
+
+      // Simulate the source file set (what getFileTree would return)
+      const sourceFileSet = new Set([
+        'src/agents/foo.ts',
+        'src/agents/bar.ts',
+        'src/agents/baz.ts',  // Exists but not referenced
+        'src/other.ts',
+      ]);
+
+      const scores = buildFileDocumentationScores(wikiPages, sourceFileSet);
+
+      // Only the two valid files should be scored
+      assert.strictEqual(scores.size, 2, 'Only valid source files should be scored');
+      assert.ok(scores.get('src/agents/foo.ts')! > 0, 'Valid file foo.ts should have a score');
+      assert.ok(scores.get('src/agents/bar.ts')! > 0, 'Valid file bar.ts should have a score');
+
+      // Directory and non-existent file should NOT be scored
+      assert.strictEqual(scores.get('src/agents'), undefined, 'Directory without slash should not be scored');
+      assert.strictEqual(scores.get('src/nonexistent.ts'), undefined, 'Non-existent file should not be scored');
+    });
+
+    it('without sourceFileSet, directories without trailing slash may be scored (pre-filter only)', () => {
+      // Without sourceFileSet, the only filter is the trailing '/' check.
+      // Directories without trailing slash will be scored (but this is fine for
+      // diagnostic purposes - the actual coverage calculation always uses sourceFileSet).
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'The src/agents directory.',
+          filesReferenced: ['src/agents', 'src/agents/foo.ts'], // Dir without slash
+          filesAccessed: [],
+          targetPaths: ['src'],
+        },
+      ];
+
+      // No sourceFileSet - only trailing '/' filter applies
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Both will be scored because 'src/agents' doesn't end with '/'
+      assert.strictEqual(scores.size, 2, 'Without sourceFileSet, dir without slash is scored');
+      assert.ok(scores.get('src/agents')! > 0, 'Dir without trailing slash is scored (pre-filter only)');
+      assert.ok(scores.get('src/agents/foo.ts')! > 0, 'File is scored');
     });
   });
 });

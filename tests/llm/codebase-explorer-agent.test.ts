@@ -719,4 +719,451 @@ export class PaymentService {
       console.log(`Source reading test passed. Files read: ${filesRead}`);
     });
   });
+
+  describe('File Reference Accuracy', () => {
+    it('measures accuracy of file references against actual file tree', async () => {
+      const repoId = 'llm-explorer-ref-accuracy';
+
+      // Create a realistic directory structure
+      const files: Record<string, string> = {
+        'README.md': '# Reference Accuracy Test',
+        'src/services/user-service.ts': `
+export class UserService {
+  async findUser(id: string): Promise<User | null> {
+    return null;
+  }
+}`,
+        'src/services/auth-service.ts': `
+export class AuthService {
+  async login(email: string, password: string): Promise<string> {
+    return 'token';
+  }
+}`,
+        'src/services/index.ts': `
+export { UserService } from './user-service.js';
+export { AuthService } from './auth-service.js';
+`,
+        'src/models/user.ts': `
+export interface User {
+  id: string;
+  email: string;
+}`,
+        'src/utils/helpers.ts': `
+export function formatDate(date: Date): string {
+  return date.toISOString();
+}`,
+      };
+
+      await createTestRepo(ctx, repoId, files);
+
+      // Build the source file tree from known files
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(
+        { type: 'path', path: 'src/services' },
+        agentCtx
+      );
+
+      // Collect all file references from the agent's output
+      const { validateFileReferences, formatFileReferenceMetrics, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+      const { extractFileReferencesFromContent } =
+        await import('../../src/utils/file-reference-extraction.js');
+
+      // Also extract file references from generated wiki content (like production does)
+      // Pass targetPath to resolve bare filenames (this is the fix we're testing!)
+      const targetPath = 'src/services';
+      const contentRefs = result.updates.flatMap(u =>
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
+      );
+
+      const allReferences = collectAllReferences(
+        result.toolMetrics?.filesRead,
+        result.result.findings.flatMap(f => f.relatedPaths),
+        contentRefs,
+      );
+
+      const metrics = validateFileReferences(allReferences, sourceFileTree);
+
+      // Also report just content-extracted refs separately
+      const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
+      console.log(formatFileReferenceMetrics('Content-extracted refs (with targetPath resolution)', contentMetrics));
+
+      // Log the metrics
+      console.log(formatFileReferenceMetrics('CodebaseExplorerAgent', metrics));
+
+      // Store metrics for trend tracking
+      logTestResult('File reference accuracy', {
+        passed: metrics.accuracyRate >= 0.7,
+        score: Math.round(metrics.accuracyRate * 10),
+        reasoning: `${metrics.validReferences}/${metrics.totalReferences} references valid (${(metrics.accuracyRate * 100).toFixed(1)}%)`,
+        improvements: metrics.brokenReferences.length > 0
+          ? [`Fix broken references: ${metrics.brokenReferences.slice(0, 5).join(', ')}`]
+          : [],
+      });
+
+      // Soft assertion - log but don't fail below 70% (we're establishing baseline)
+      if (metrics.accuracyRate < 0.7) {
+        console.warn(`⚠️ File reference accuracy ${(metrics.accuracyRate * 100).toFixed(1)}% is below 70% threshold`);
+      }
+
+      // Hard assertion - must have some valid references
+      assert.ok(metrics.validReferences > 0 || metrics.totalReferences === 0,
+        'Should have at least some valid file references');
+    });
+
+    it('tracks reference accuracy across multiple directories', async () => {
+      const repoId = 'llm-explorer-multi-dir-accuracy';
+
+      const files: Record<string, string> = {
+        'README.md': '# Multi-Directory Test',
+        'src/api/routes.ts': `export const routes = [];`,
+        'src/api/middleware.ts': `export const auth = () => {};`,
+        'src/db/connection.ts': `export const connect = async () => {};`,
+        'src/db/models.ts': `export interface Model {}`,
+        'tests/api.test.ts': `describe('api', () => {});`,
+      };
+
+      await createTestRepo(ctx, repoId, files);
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Test multiple paths
+      const paths = ['src/api', 'src/db'];
+      let totalValid = 0;
+      let totalRefs = 0;
+      const allBroken: string[] = [];
+
+      const { validateFileReferences, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+
+      for (const path of paths) {
+        const result = await agent.run({ type: 'path', path }, agentCtx);
+
+        const refs = collectAllReferences(
+          result.toolMetrics?.filesRead,
+          result.result.findings.flatMap(f => f.relatedPaths),
+        );
+
+        const metrics = validateFileReferences(refs, sourceFileTree);
+        totalValid += metrics.validReferences;
+        totalRefs += metrics.totalReferences;
+        allBroken.push(...metrics.brokenReferences);
+      }
+
+      const overallAccuracy = totalRefs > 0 ? totalValid / totalRefs : 1;
+
+      console.log(`📊 Multi-directory accuracy: ${(overallAccuracy * 100).toFixed(1)}%`);
+      console.log(`   Total refs: ${totalRefs}, Valid: ${totalValid}, Broken: ${allBroken.length}`);
+
+      if (allBroken.length > 0) {
+        console.log(`   Broken: ${allBroken.slice(0, 5).join(', ')}${allBroken.length > 5 ? '...' : ''}`);
+      }
+
+      logTestResult('Multi-directory reference accuracy', {
+        passed: overallAccuracy >= 0.7,
+        score: Math.round(overallAccuracy * 10),
+        reasoning: `${totalValid}/${totalRefs} references valid across ${paths.length} directories`,
+        improvements: allBroken.length > 0
+          ? [`Fix broken references: ${[...new Set(allBroken)].slice(0, 3).join(', ')}`]
+          : [],
+      });
+    });
+
+    it('measures accuracy with deeper nested directory structure', async () => {
+      const repoId = 'llm-explorer-nested-accuracy';
+
+      // Create a more realistic nested structure like real codebases
+      const files: Record<string, string> = {
+        'README.md': '# Nested Structure Test',
+        'src/index.ts': `export * from './services';`,
+        'src/services/index.ts': `export { UserService } from './user/user-service';`,
+        'src/services/user/user-service.ts': `
+export class UserService {
+  async getUser(id: string) { return { id }; }
+}`,
+        'src/services/user/user-repository.ts': `
+export class UserRepository {
+  async findById(id: string) { return null; }
+}`,
+        'src/services/auth/auth-service.ts': `
+export class AuthService {
+  async authenticate(token: string) { return true; }
+}`,
+        'src/services/auth/token-validator.ts': `
+export function validateToken(token: string) { return true; }`,
+        'src/utils/logger.ts': `export const logger = console;`,
+        'src/utils/config.ts': `export const config = {};`,
+      };
+
+      await createTestRepo(ctx, repoId, files);
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(
+        { type: 'path', path: 'src/services' },
+        agentCtx
+      );
+
+      const { validateFileReferences, formatFileReferenceMetrics, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+      const { extractFileReferencesFromContent } =
+        await import('../../src/utils/file-reference-extraction.js');
+
+      const targetPath = 'src/services';
+      const contentRefs = result.updates.flatMap(u =>
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
+      );
+
+      const allReferences = collectAllReferences(
+        result.toolMetrics?.filesRead,
+        result.result.findings.flatMap(f => f.relatedPaths),
+        contentRefs,
+      );
+
+      const metrics = validateFileReferences(allReferences, sourceFileTree);
+      const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
+
+      console.log(formatFileReferenceMetrics('Nested structure - Content refs (with resolution)', contentMetrics));
+      console.log(formatFileReferenceMetrics('Nested structure - All refs', metrics));
+
+      logTestResult('Nested directory reference accuracy', {
+        passed: metrics.accuracyRate >= 0.5,
+        score: Math.round(metrics.accuracyRate * 10),
+        reasoning: `${metrics.validReferences}/${metrics.totalReferences} refs valid. Content-only: ${contentMetrics.validReferences}/${contentMetrics.totalReferences}`,
+        improvements: metrics.brokenReferences.length > 0
+          ? [`Broken: ${metrics.brokenReferences.slice(0, 5).join(', ')}`]
+          : [],
+      });
+    });
+
+    it('measures accuracy with TypeScript import-style references', async () => {
+      const repoId = 'llm-explorer-ts-imports';
+
+      // Files that commonly get referenced via imports (with .js extension issues)
+      const files: Record<string, string> = {
+        'README.md': '# Import Style Test',
+        'src/index.ts': `
+import { Database } from './database/index.js';
+import { cache } from './cache/redis-cache.js';
+export { Database, cache };`,
+        'src/database/index.ts': `export { Database } from './database.js';`,
+        'src/database/database.ts': `
+export class Database {
+  async connect() { return true; }
+  async query(sql: string) { return []; }
+}`,
+        'src/database/migrations.ts': `export const migrations = [];`,
+        'src/cache/redis-cache.ts': `
+export const cache = {
+  get: async (key: string) => null,
+  set: async (key: string, value: unknown) => {},
+};`,
+        'src/cache/memory-cache.ts': `export const memoryCache = new Map();`,
+      };
+
+      await createTestRepo(ctx, repoId, files);
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(
+        { type: 'path', path: 'src/database' },
+        agentCtx
+      );
+
+      const { validateFileReferences, formatFileReferenceMetrics, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+      const { extractFileReferencesFromContent } =
+        await import('../../src/utils/file-reference-extraction.js');
+
+      const targetPath = 'src/database';
+      const contentRefs = result.updates.flatMap(u =>
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
+      );
+
+      const allReferences = collectAllReferences(
+        result.toolMetrics?.filesRead,
+        result.result.findings.flatMap(f => f.relatedPaths),
+        contentRefs,
+      );
+
+      const metrics = validateFileReferences(allReferences, sourceFileTree);
+      const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
+
+      // Check specifically for .js vs .ts confusion
+      const jsRefs = metrics.brokenReferences.filter(r => r.endsWith('.js'));
+      if (jsRefs.length > 0) {
+        console.log(`⚠️ Found ${jsRefs.length} .js references (should be .ts): ${jsRefs.join(', ')}`);
+      }
+
+      console.log(formatFileReferenceMetrics('TS imports - Content refs', contentMetrics));
+      console.log(formatFileReferenceMetrics('TS imports - All refs', metrics));
+
+      logTestResult('TypeScript import reference accuracy', {
+        passed: metrics.accuracyRate >= 0.5,
+        score: Math.round(metrics.accuracyRate * 10),
+        reasoning: `${metrics.validReferences}/${metrics.totalReferences} refs valid. .js errors: ${jsRefs.length}`,
+        improvements: jsRefs.length > 0
+          ? [`Fix .js→.ts: ${jsRefs.slice(0, 3).join(', ')}`]
+          : [],
+      });
+    });
+
+    it('measures accuracy with larger file count', async () => {
+      const repoId = 'llm-explorer-large-dir';
+
+      // Create a directory with many files (closer to real-world)
+      const files: Record<string, string> = {
+        'README.md': '# Large Directory Test',
+      };
+
+      // Generate 15 handler files
+      for (let i = 1; i <= 15; i++) {
+        files[`src/handlers/handler-${i}.ts`] = `
+export class Handler${i} {
+  async handle(req: Request) {
+    return { handler: ${i} };
+  }
+}`;
+      }
+      files['src/handlers/index.ts'] = `
+${Array.from({ length: 15 }, (_, i) => `export { Handler${i + 1} } from './handler-${i + 1}.js';`).join('\n')}
+`;
+
+      await createTestRepo(ctx, repoId, files);
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(
+        { type: 'path', path: 'src/handlers' },
+        agentCtx
+      );
+
+      const { validateFileReferences, formatFileReferenceMetrics, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+      const { extractFileReferencesFromContent } =
+        await import('../../src/utils/file-reference-extraction.js');
+
+      const targetPath = 'src/handlers';
+      const contentRefs = result.updates.flatMap(u =>
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
+      );
+
+      const allReferences = collectAllReferences(
+        result.toolMetrics?.filesRead,
+        result.result.findings.flatMap(f => f.relatedPaths),
+        contentRefs,
+      );
+
+      const metrics = validateFileReferences(allReferences, sourceFileTree);
+      const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
+
+      console.log(formatFileReferenceMetrics('Large dir (16 files) - Content refs (with resolution)', contentMetrics));
+      console.log(formatFileReferenceMetrics('Large dir (16 files) - All refs', metrics));
+
+      // Categorize broken references
+      const bareNames = metrics.brokenReferences.filter(r => !r.includes('/'));
+      const wrongExt = metrics.brokenReferences.filter(r => r.endsWith('.js'));
+
+      console.log(`   Bare filenames: ${bareNames.length}, Wrong extension: ${wrongExt.length}`);
+
+      logTestResult('Large directory reference accuracy', {
+        passed: metrics.accuracyRate >= 0.5,
+        score: Math.round(metrics.accuracyRate * 10),
+        reasoning: `${metrics.validReferences}/${metrics.totalReferences} refs valid. Bare names: ${bareNames.length}`,
+        improvements: metrics.brokenReferences.length > 0
+          ? [`Broken: ${metrics.brokenReferences.slice(0, 5).join(', ')}`]
+          : [],
+      });
+    });
+
+    it('categorizes broken reference types for analysis', async () => {
+      const repoId = 'llm-explorer-categorize-broken';
+
+      const files: Record<string, string> = {
+        'README.md': '# Categorization Test',
+        'src/core/engine.ts': `export class Engine { start() {} }`,
+        'src/core/config.ts': `export const config = { debug: false };`,
+        'src/core/types.ts': `export interface Options { verbose: boolean; }`,
+        'src/plugins/loader.ts': `export function loadPlugins() { return []; }`,
+        'src/plugins/registry.ts': `export const registry = new Map();`,
+      };
+
+      await createTestRepo(ctx, repoId, files);
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Run on multiple paths to get more data
+      const paths = ['src/core', 'src/plugins'];
+      const allContentRefs: string[] = [];
+      const allToolRefs: string[] = [];
+
+      const { validateFileReferences, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+      const { extractFileReferencesFromContent } =
+        await import('../../src/utils/file-reference-extraction.js');
+
+      for (const path of paths) {
+        const result = await agent.run({ type: 'path', path }, agentCtx);
+
+        // Pass the current path as targetPath for resolution
+        const contentRefs = result.updates.flatMap(u =>
+          u.content ? extractFileReferencesFromContent(u.content, path) : []
+        );
+        allContentRefs.push(...contentRefs);
+        allToolRefs.push(...(result.toolMetrics?.filesRead ?? []));
+      }
+
+      const contentMetrics = validateFileReferences(allContentRefs, sourceFileTree);
+      const toolMetrics = validateFileReferences(allToolRefs, sourceFileTree);
+
+      // Categorize broken references
+      const categories = {
+        bareFilenames: contentMetrics.brokenReferences.filter(r => !r.includes('/')),
+        wrongExtension: contentMetrics.brokenReferences.filter(r => r.endsWith('.js')),
+        directories: contentMetrics.brokenReferences.filter(r => r.endsWith('/')),
+        hallucinated: contentMetrics.brokenReferences.filter(r =>
+          r.includes('/') && !r.endsWith('/') && !r.endsWith('.js')
+        ),
+      };
+
+      console.log(`\n📊 Broken Reference Analysis (Content-extracted)`);
+      console.log(`   Total content refs: ${allContentRefs.length}`);
+      console.log(`   Valid: ${contentMetrics.validReferences}`);
+      console.log(`   Broken: ${contentMetrics.brokenReferences.length}`);
+      console.log(`   Accuracy: ${(contentMetrics.accuracyRate * 100).toFixed(1)}%`);
+      console.log(`\n   Breakdown by category:`);
+      console.log(`   - Bare filenames: ${categories.bareFilenames.length} (${categories.bareFilenames.slice(0, 3).join(', ')})`);
+      console.log(`   - Wrong extension (.js): ${categories.wrongExtension.length}`);
+      console.log(`   - Directory paths: ${categories.directories.length}`);
+      console.log(`   - Hallucinated paths: ${categories.hallucinated.length}`);
+
+      console.log(`\n📊 Tool Metrics (filesRead)`);
+      console.log(`   Total: ${allToolRefs.length}, Valid: ${toolMetrics.validReferences}, Broken: ${toolMetrics.brokenReferences.length}`);
+
+      logTestResult('Broken reference categorization', {
+        passed: true, // Always pass - this is for data collection
+        score: Math.round(contentMetrics.accuracyRate * 10),
+        reasoning: `Content: ${contentMetrics.validReferences}/${allContentRefs.length} valid. Bare: ${categories.bareFilenames.length}, .js: ${categories.wrongExtension.length}`,
+        improvements: [
+          `Bare filenames: ${categories.bareFilenames.length}`,
+          `Wrong extension: ${categories.wrongExtension.length}`,
+          `Hallucinated: ${categories.hallucinated.length}`,
+        ],
+      });
+    });
+  });
 });
