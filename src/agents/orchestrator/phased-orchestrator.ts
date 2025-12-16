@@ -18,6 +18,7 @@ import { createOrchestratorRun } from '../../domain/orchestrator-run.js';
 import type { LLMService } from '../../services/llm/llm-service.js';
 import type { UnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
 import { ContextGatherer, type OrchestratorContext, type UndocumentedDirectory } from './context-gatherer.js';
+import { calculateFileCoverage } from './file-coverage-tree.js';
 import type { Orchestrator, OrchestratorConfig, WorkSummary } from './orchestrator.js';
 import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 
@@ -1401,8 +1402,9 @@ export class PhasedOrchestrator implements Orchestrator {
         : 0;
 
     // Calculate file documentation coverage using tracked file relationships
-    // Wiki pages now track: filesAccessed (read by agents), filesReferenced (mentioned in content),
-    // and targetPaths (work item targets). This is more accurate than searching content for file names.
+    // Counts files that appear in filesAccessed OR filesReferenced (or both).
+    // Uses calculateFileCoverage for ancestor inheritance (files inherit coverage
+    // from documented parent directories).
     let fileDocCoverage = 0;
     let totalSourceFiles = 0;
     let documentedFiles = 0;
@@ -1412,42 +1414,44 @@ export class PhasedOrchestrator implements Orchestrator {
         const repoAccess = await this.repoAccessFactory.create(repoId);
         const allFiles = await repoAccess.getFileTree();
         const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
-        const sourceFileSet = new Set(sourceFiles);
 
         if (sourceFiles.length > 0) {
-          // Collect all files covered by wiki pages from tracked relationships
-          const coveredFiles = new Set<string>();
-
-          // Helper to add exact file match only (for filesAccessed, filesReferenced)
-          // Directory paths in content mentions should NOT count as covering all files
-          const addExactFile = (path: string) => {
-            if (sourceFileSet.has(path)) {
-              coveredFiles.add(path);
-            }
-          };
-
+          // Build a combined set of all documented files from both filesAccessed AND filesReferenced
+          // Note: buildFileDocumentationScores uses either/or for scoring depth, but for coverage
+          // we want to count files touched in ANY way.
+          const documentedFileSet = new Set<string>();
           for (const page of wikiPages) {
-            // Files read by agents when building this page (exact matches only)
+            // Add all files accessed (read by agents)
             for (const file of page.filesAccessed ?? []) {
-              addExactFile(file);
+              if (!file.endsWith('/')) { // Skip directory paths
+                documentedFileSet.add(file);
+              }
             }
-            // Files mentioned in the page content (exact matches only)
-            // Directory mentions in prose/tree views should NOT count as covering all files
+            // Add all files referenced (mentioned in content)
             for (const file of page.filesReferenced ?? []) {
-              addExactFile(file);
+              if (!file.endsWith('/')) { // Skip directory paths
+                documentedFileSet.add(file);
+              }
             }
-            // Target paths from work items - exact file matches only
-            // Directory expansion was causing coverage to spike to 100% when broad
-            // directories like "src" were explored - the system would mark ALL files
-            // under the directory as "covered" even if the agent only documented a few.
-            // Coverage should reflect what was actually documented, not what was requested.
-            for (const path of page.targetPaths ?? []) {
-              addExactFile(path);
+          }
+
+          // Build scores map for ancestor inheritance lookup
+          const documentationScores = new Map<string, number>();
+          for (const file of documentedFileSet) {
+            documentationScores.set(file, 1); // Binary: documented or not
+          }
+
+          // Count files with any coverage (direct or inherited from parent directories)
+          let coveredCount = 0;
+          for (const filePath of sourceFiles) {
+            const coverage = calculateFileCoverage(filePath, documentationScores, 1);
+            if (coverage > 0) {
+              coveredCount++;
             }
           }
 
           totalSourceFiles = sourceFiles.length;
-          documentedFiles = coveredFiles.size;
+          documentedFiles = coveredCount;
           fileDocCoverage = (documentedFiles / totalSourceFiles) * 100;
         }
       } catch (error) {
