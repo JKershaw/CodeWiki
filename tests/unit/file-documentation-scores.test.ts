@@ -363,7 +363,7 @@ describe('File Documentation Scores', () => {
       assert.strictEqual(scores.get('src/agents/registry.ts'), 500);
     });
 
-    it('prefers filesReferenced over filesAccessed when both have content', () => {
+    it('combines both filesReferenced AND filesAccessed for coverage', () => {
       const wikiPages: WikiPageWithFileTracking[] = [
         {
           path: 'scripts/export',
@@ -376,11 +376,12 @@ describe('File Documentation Scores', () => {
 
       const scores = buildFileDocumentationScores(wikiPages);
 
-      // Should use filesReferenced (1 file), not filesAccessed (3 files)
-      // Score = 600 / 1 = 600 for the referenced file
-      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 600);
-      // filesAccessed-only files should NOT get scores when filesReferenced exists
-      assert.strictEqual(scores.has('scripts/audit-prompts.ts'), false);
+      // Should use BOTH filesReferenced AND filesAccessed (3 unique files)
+      // export-wiki.ts appears in both but should only be counted once
+      // Score = 600 / 3 = 200 for each file
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 200);
+      assert.strictEqual(scores.get('scripts/audit-prompts.ts'), 200);
+      assert.strictEqual(scores.get('scripts/generate-and-review.ts'), 200);
     });
 
     it('resolves bare filenames in filesAccessed using targetPaths', () => {

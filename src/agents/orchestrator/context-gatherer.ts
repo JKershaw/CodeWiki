@@ -206,16 +206,22 @@ export function buildFileDocumentationScores(
     const filesReferenced = page.filesReferenced ?? [];
     const filesAccessed = page.filesAccessed ?? [];
 
-    // Use filesReferenced if available, otherwise fall back to filesAccessed
-    // This addresses the Phase 2 stall bug: when prose fallback is used,
-    // filesReferenced extraction often fails, but filesAccessed still tracks
-    // which files were actually read by the agent.
+    // Combine BOTH filesReferenced AND filesAccessed for coverage scoring.
+    // Previously we used either/or logic which undercounted coverage when a page
+    // had both fields (e.g., cli/commands with 11 filesAccessed but 3 filesReferenced
+    // would only count 3 files).
     //
     // Pre-filter: Remove obvious directory paths (ending with '/').
     // The sourceFileSet validation below is the authoritative check, but this
     // quick filter catches the obvious cases even when sourceFileSet isn't provided.
-    const rawFilesToScore = filesReferenced.length > 0 ? filesReferenced : filesAccessed;
-    const filesToScore = rawFilesToScore.filter(f => !f.endsWith('/'));
+    const combinedFiles = new Set<string>();
+    for (const f of filesReferenced) {
+      if (!f.endsWith('/')) combinedFiles.add(f);
+    }
+    for (const f of filesAccessed) {
+      if (!f.endsWith('/')) combinedFiles.add(f);
+    }
+    const filesToScore = Array.from(combinedFiles);
 
     if (filesToScore.length === 0) {
       continue;
