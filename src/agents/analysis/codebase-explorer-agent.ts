@@ -14,7 +14,9 @@ import {
   parseListItemsWithFallback,
   parseConfidence,
   extractProseContent,
+  getParseStats,
   type ItemPattern,
+  type ParseStats,
 } from '../parsing/index.js';
 import { extractLinksFromContent } from '../../utils/link-extraction.js';
 
@@ -126,7 +128,7 @@ export class CodebaseExplorerAgent implements Agent {
       // All paths are verified since we pre-fetched them
       const verifiedPaths = new Set(keyFiles);
       dirListing.files.forEach(f => verifiedPaths.add(f));
-      const validatedFindings = validateFindingPaths(analysis.findings, verifiedPaths);
+      const { findings: validatedFindings, removedPaths } = validateFindingPaths(analysis.findings, verifiedPaths);
 
       // Generate wiki updates
       const updates = this.generateUpdates(targetPath, analysis, existingPagePaths);
@@ -157,6 +159,8 @@ export class CodebaseExplorerAgent implements Agent {
         updates,
         costUsd: completion.costUsd,
         toolMetrics: { toolCallCount: 0, toolsUsed: {}, filesRead: filesRead }, // No tool calls in pre-fetch mode
+        parseStats: analysis.parseStats,
+        removedPaths,
       };
     } catch (error) {
       console.warn(`[codebase-explorer] Pre-fetch failed: ${error}, falling back to tools`);
@@ -203,7 +207,7 @@ export class CodebaseExplorerAgent implements Agent {
     const verifiedPaths = extractVerifiedPaths(completion.toolCalls);
 
     // Validate and filter paths in findings
-    const validatedFindings = validateFindingPaths(analysis.findings, verifiedPaths);
+    const { findings: validatedFindings, removedPaths } = validateFindingPaths(analysis.findings, verifiedPaths);
 
     // Generate wiki updates
     const updates = this.generateUpdates(targetPath, analysis, existingPagePaths);
@@ -240,6 +244,8 @@ export class CodebaseExplorerAgent implements Agent {
       updates,
       costUsd: completion.costUsd,
       toolMetrics: extractToolMetrics(completion),
+      parseStats: analysis.parseStats,
+      removedPaths,
     };
   }
 
@@ -618,6 +624,7 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       const mdMatch = response.match(/##\s*SUMMARY\s*\n([\s\S]*?)(?=##\s*FINDINGS|##\s*WIKI|FINDINGS:|WIKI_PAGES:|CONFIDENCE:|$)/i);
       if (mdMatch && mdMatch[1]) {
         summary = mdMatch[1].trim();
+        ctx.fallbacksUsed.push('SUMMARY:markdown_h2_manual');
       }
     }
 
@@ -631,6 +638,7 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       if (proseContent) {
         console.log('[codebase-explorer] Using prose fallback for summary');
         summary = proseContent;
+        ctx.fallbacksUsed.push('SUMMARY:prose_fallback');
       }
     }
     summary = summary ?? '';
@@ -664,6 +672,9 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
         /##\s*FINDINGS\s*\n([\s\S]*?)(?=##\s*WIKI|WIKI_PAGES:|CONFIDENCE:|$)/i,
         findingPatterns
       );
+      if (findings.length > 0) {
+        ctx.fallbacksUsed.push('FINDINGS:markdown_h2_manual');
+      }
     }
 
     // Parse wiki pages - uses === path: X | title: Y === format
@@ -675,6 +686,7 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       const mdPagesMatch = response.match(/##\s*WIKI_PAGES\s*\n([\s\S]*?)(?=CONFIDENCE:|$)/i);
       if (mdPagesMatch && mdPagesMatch[1]) {
         pagesSection = mdPagesMatch[1].trim();
+        ctx.fallbacksUsed.push('WIKI_PAGES:markdown_h2_manual');
       }
     }
     if (pagesSection) {
@@ -706,17 +718,22 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
           title: pathToTitle(pagePath),
           content: proseContent,
         });
+        ctx.fallbacksUsed.push('WIKI_PAGES:prose_fallback');
       }
     }
 
     // Parse confidence
     const confidence = parseConfidence(ctx, { defaultValue: 0.7 });
 
+    // Get parse stats for monitoring
+    const parseStats = getParseStats(ctx);
+
     return {
       summary,
       findings,
       wikiPages,
       confidence,
+      parseStats,
     };
   }
 
@@ -785,6 +802,7 @@ interface ParsedAnalysis {
     content: string;
   }>;
   confidence: number;
+  parseStats: ParseStats;
 }
 
 /**
@@ -850,10 +868,25 @@ function extractVerifiedPaths(
 }
 
 /**
+ * Result of path validation including both validated findings and removed paths.
+ */
+interface PathValidationResult {
+  findings: Array<{
+    type: string;
+    importance: 'low' | 'medium' | 'high';
+    description: string;
+    paths: string[];
+  }>;
+  removedPaths: string[];
+}
+
+/**
  * Validate paths in findings against verified paths from tool calls.
  *
  * This prevents hallucinated file paths from entering the wiki data.
  * Paths that weren't verified via tool calls are removed with a warning.
+ *
+ * @returns Object containing validated findings and list of removed paths for tracking.
  */
 function validateFindingPaths(
   findings: Array<{
@@ -863,13 +896,10 @@ function validateFindingPaths(
     paths: string[];
   }>,
   verifiedPaths: Set<string>
-): Array<{
-  type: string;
-  importance: 'low' | 'medium' | 'high';
-  description: string;
-  paths: string[];
-}> {
-  return findings.map(finding => {
+): PathValidationResult {
+  const removedPaths: string[] = [];
+
+  const validatedFindings = findings.map(finding => {
     const validatedPaths = finding.paths.filter(path => {
       // Normalize path for comparison
       const normalizedPath = path.replace(/^\/+/, '').replace(/\/+$/, '');
@@ -891,6 +921,7 @@ function validateFindingPaths(
         `[codebase-explorer] Removing unverified path from finding: ${path} ` +
         `(verified ${verifiedPaths.size} paths via tools)`
       );
+      removedPaths.push(path);
       return false;
     });
 
@@ -899,6 +930,8 @@ function validateFindingPaths(
       paths: validatedPaths,
     };
   });
+
+  return { findings: validatedFindings, removedPaths };
 }
 
 const SYSTEM_PROMPT = `You are a documentation agent. Read actual source code with tools, then write documentation based on what you read.

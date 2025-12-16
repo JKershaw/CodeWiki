@@ -5,6 +5,7 @@ import type { Repositories } from '../repositories/index.js';
 import type { UnifiedRepoAccess } from '../services/repository/unified-repo-access.js';
 import type { WorkTarget, CommitTarget, PathTarget, WikiTarget } from '../domain/work-target.js';
 import { isCommitTarget, isPathTarget, isWikiTarget } from '../domain/work-target.js';
+import type { ParseStats } from './parsing/index.js';
 
 // Re-export WorkTarget types for agent convenience
 export type { WorkTarget, CommitTarget, PathTarget, WikiTarget };
@@ -45,6 +46,10 @@ export interface AgentRunResult {
   costUsd: number;
   /** Tool usage metrics (optional, for enforcement validation) */
   toolMetrics?: ToolMetrics;
+  /** Parse statistics for monitoring fallback usage (optional) */
+  parseStats?: ParseStats;
+  /** Paths that were removed during validation (optional, for tracking silent data loss) */
+  removedPaths?: string[];
 }
 
 /**

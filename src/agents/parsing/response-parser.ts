@@ -44,6 +44,8 @@ export interface ParseContext {
   failures: ParseFailure[];
   /** Track which sections were successfully parsed */
   successfulSections: string[];
+  /** Track which fallbacks were used (e.g., 'SUMMARY:markdown_h2', 'CONFIDENCE:default') */
+  fallbacksUsed: string[];
 }
 
 /**
@@ -78,6 +80,7 @@ export function createParseContext(agentType: string, response: string): ParseCo
     response,
     failures: [],
     successfulSections: [],
+    fallbacksUsed: [],
   };
 }
 
@@ -138,6 +141,7 @@ export function parseSection(
 
   // Return default value for optional sections, null for required
   if (!required && defaultValue !== undefined) {
+    ctx.fallbacksUsed.push(`${sectionName}:default`);
     return defaultValue;
   }
 
@@ -217,6 +221,7 @@ export function parseSectionFlexible(
     const value = h2Match[1].trim();
     if (value.length >= minLength) {
       ctx.successfulSections.push(sectionName);
+      ctx.fallbacksUsed.push(`${sectionName}:markdown_h2`);
       return value;
     }
   }
@@ -232,6 +237,7 @@ export function parseSectionFlexible(
     const value = h3Match[1].trim();
     if (value.length >= minLength) {
       ctx.successfulSections.push(sectionName);
+      ctx.fallbacksUsed.push(`${sectionName}:markdown_h3`);
       return value;
     }
   }
@@ -367,6 +373,7 @@ export function parseConfidence(
     console.warn(`[${ctx.agentType}] Using default confidence ${defaultValue}`, {
       responsePreview: failure.responsePreview,
     });
+    ctx.fallbacksUsed.push('CONFIDENCE:default');
   }
 
   return defaultValue;
@@ -413,6 +420,7 @@ export function getParseStats(ctx: ParseContext): ParseStats {
     failedSections: ctx.failures.length,
     requiredFailures: ctx.failures.filter(f => f.required).length,
     optionalFailures: ctx.failures.filter(f => !f.required).length,
+    fallbacksUsed: ctx.fallbacksUsed,
     sections: {
       successful: ctx.successfulSections,
       failed: ctx.failures.map(f => f.section),
@@ -426,6 +434,8 @@ export interface ParseStats {
   failedSections: number;
   requiredFailures: number;
   optionalFailures: number;
+  /** List of fallbacks used (e.g., 'SUMMARY:markdown_h2', 'CONFIDENCE:default') */
+  fallbacksUsed: string[];
   sections: {
     successful: string[];
     failed: string[];
@@ -549,6 +559,10 @@ export function parseChoice<T extends string>(
       responsePreview: failure.responsePreview,
     }
   );
+
+  if (defaultValue !== undefined) {
+    ctx.fallbacksUsed.push(`${sectionName}:default`);
+  }
 
   return defaultValue ?? null;
 }
