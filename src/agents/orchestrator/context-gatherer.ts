@@ -94,6 +94,11 @@ export interface OrchestratorContext {
   // Sorted by coverage ascending (0% first), then by path length
   lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }>;
 
+  // File touch tracking for Phase 2 transition
+  // A file is "touched" if it has any documentation score > 0
+  totalSourceFiles: number;
+  touchedFiles: number;
+
   // File-level coverage tree - prioritized view with individual files
   fileCoverageTree: string | null;
 
@@ -428,9 +433,13 @@ export class ContextGatherer {
     const hasTestingGuide = wikiPages.some(p => p.synthesisType === 'testing-guide');
     const hasExtensionGuide = wikiPages.some(p => p.synthesisType === 'extension-guide');
 
-    // Calculate undocumented directories and low-coverage files using file-level coverage
-    const { directories: undocumentedDirectories, files: lowCoverageFiles } =
-      await this.calculateUndocumentedDirectoriesAndFiles(repoId, wikiPages);
+    // Calculate undocumented directories, low-coverage files, and touched file stats
+    const {
+      directories: undocumentedDirectories,
+      files: lowCoverageFiles,
+      totalSourceFiles,
+      touchedFiles,
+    } = await this.calculateUndocumentedDirectoriesAndFiles(repoId, wikiPages);
 
     // Build file-level coverage tree
     const fileCoverageTree = await this.buildFileCoverageTree(repoId, wikiPages);
@@ -474,6 +483,8 @@ export class ContextGatherer {
       hasExtensionGuide,
       undocumentedDirectories,
       lowCoverageFiles,
+      totalSourceFiles,
+      touchedFiles,
       fileCoverageTree,
       projectOverviewContent,
       pendingEditRequests,
@@ -499,9 +510,11 @@ export class ContextGatherer {
   ): Promise<{
     directories: UndocumentedDirectory[];
     files: Array<{ path: string; coverage: number; directory: string }>;
+    totalSourceFiles: number;
+    touchedFiles: number;
   }> {
     if (!this.repoAccessFactory) {
-      return { directories: [], files: [] };
+      return { directories: [], files: [], totalSourceFiles: 0, touchedFiles: 0 };
     }
 
     try {
@@ -510,7 +523,7 @@ export class ContextGatherer {
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
-        return { directories: [], files: [] };
+        return { directories: [], files: [], totalSourceFiles: 0, touchedFiles: 0 };
       }
 
       // Build documentation depth scores for graduated coverage
@@ -527,6 +540,10 @@ export class ContextGatherer {
       const dirStats = new Map<string, { total: number; lowCoverage: number }>();
       const lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }> = [];
 
+      // Track touched files for Phase 2 transition
+      // A file is "touched" if it has any documentation score > 0
+      let touchedFilesCount = 0;
+
       for (const filePath of sourceFiles) {
         const parts = filePath.split('/');
         if (parts.length < 2) continue;
@@ -536,6 +553,11 @@ export class ContextGatherer {
         // Graduated coverage using documentation depth scoring
         const coverage = calculateFileCoverage(filePath, documentationScores, maxScore);
         const isLowCoverage = coverage < LOW_COVERAGE_THRESHOLD;
+        const isTouched = coverage > 0;
+
+        if (isTouched) {
+          touchedFilesCount++;
+        }
 
         if (!dirStats.has(dirPath)) {
           dirStats.set(dirPath, { total: 0, lowCoverage: 0 });
@@ -575,10 +597,15 @@ export class ContextGatherer {
         return a.path.length - b.path.length;
       });
 
-      return { directories: sortedDirs, files: lowCoverageFiles };
+      return {
+        directories: sortedDirs,
+        files: lowCoverageFiles,
+        totalSourceFiles: sourceFiles.length,
+        touchedFiles: touchedFilesCount,
+      };
     } catch (error) {
       console.warn(`Failed to calculate undocumented directories: ${error}`);
-      return { directories: [], files: [] };
+      return { directories: [], files: [], totalSourceFiles: 0, touchedFiles: 0 };
     }
   }
 

@@ -167,10 +167,22 @@ export async function diagnoseCoverageCommand(args: string[]): Promise<void> {
       ? wikiPages.reduce((sum, p) => sum + p.confidence, 0) / wikiPages.length
       : 0;
 
+    // Calculate touched files ratio from low coverage files
+    // Files with coverage > 0 are considered touched
+    const touchedCount = context.lowCoverageFiles.filter(f => f.coverage > 0).length;
+    // Total source files approximation: all files in directories with stats
+    const totalSourceFiles = sortedDirs.reduce((sum, d) => sum + d.totalFiles, 0);
+    // Files not in lowCoverageFiles are either high coverage (touched) or not counted
+    // Low coverage files with coverage > 0 are touched, files not in low coverage are touched (they passed threshold)
+    const filesWithHighCoverage = totalSourceFiles - context.lowCoverageFiles.length;
+    const estimatedTouched = touchedCount + filesWithHighCoverage;
+    const touchedFilesRatio = totalSourceFiles > 0 ? estimatedTouched / totalSourceFiles : 0;
+
     const phaseCtx = {
       pages: wikiPages.length,
       directoriesWithAnyCoverage: dirsWithCoverage,
       lowestDirectoryCoverage: lowestCoverage,
+      touchedFilesRatio,
       avgConfidence,
       hasProjectOverview: wikiPages.some(p => p.synthesisType === 'project-overview'),
       hasGettingStarted: wikiPages.some(p => p.synthesisType === 'getting-started'),
@@ -187,7 +199,7 @@ export async function diagnoseCoverageCommand(args: string[]): Promise<void> {
     console.log(`\n   Decision factors:`);
     console.log(`     pages: ${phaseCtx.pages} (need >=10 for Phase 1→2, >=25 for Phase 2→3)`);
     console.log(`     dirsWithAnyCoverage: ${phaseCtx.directoriesWithAnyCoverage} (need >=3 for Phase 1→2)`);
-    console.log(`     lowestDirCoverage: ${phaseCtx.lowestDirectoryCoverage.toFixed(1)}% (need >=30% for Phase 2→3)`);
+    console.log(`     touchedFilesRatio: ${(phaseCtx.touchedFilesRatio * 100).toFixed(1)}% (need >=90% for Phase 2→3)`);
     console.log(`     avgConfidence: ${(phaseCtx.avgConfidence * 100).toFixed(1)}% (need >=65% for Phase 3→4)`);
 
     // Phase 2 specific: show prioritized directories

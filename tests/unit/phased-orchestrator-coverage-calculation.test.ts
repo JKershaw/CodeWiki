@@ -44,14 +44,15 @@ describe('PhasedOrchestrator Coverage Calculation', () => {
       assert.strictEqual(lowestCoverage, 0, 'Lowest coverage should include 0% directories');
     });
 
-    it('should keep Phase 2 when any directory has 0% coverage', () => {
-      // Even if some directories are well-documented, if ANY directory
-      // has 0% coverage, we should stay in Phase 2 (Breadth)
+    it('should keep Phase 2 when touchedFilesRatio is low', () => {
+      // Phase 2 exit now uses touchedFilesRatio instead of lowestDirectoryCoverage
+      // We stay in Phase 2 if not enough files have been touched
 
       const ctx: PhaseContext = {
         pages: 30,
         directoriesWithAnyCoverage: 5,
         lowestDirectoryCoverage: 0, // One directory is fully undocumented
+        touchedFilesRatio: 0.5, // Only 50% of files touched - stay in Phase 2
         avgConfidence: 0.7,
         hasProjectOverview: true,
         hasGettingStarted: true,
@@ -61,15 +62,16 @@ describe('PhasedOrchestrator Coverage Calculation', () => {
         openFindings: 2,
       };
 
-      // Should be in Phase 2 because lowestDirectoryCoverage < 30
+      // Should be in Phase 2 because touchedFilesRatio < 90%
       assert.strictEqual(detectPhase(ctx), Phase.Breadth);
     });
 
-    it('should progress to Phase 3 only when ALL directories have >= 30% coverage', () => {
+    it('should progress to Phase 3 when touchedFilesRatio >= 90%', () => {
       const ctx: PhaseContext = {
         pages: 30,
         directoriesWithAnyCoverage: 5,
         lowestDirectoryCoverage: 35, // All directories have at least 35% coverage
+        touchedFilesRatio: 0.92, // 92% of files touched - exit Phase 2
         avgConfidence: 0.6, // Below 65%, so Phase 3
         hasProjectOverview: true,
         hasGettingStarted: false,
@@ -79,7 +81,7 @@ describe('PhasedOrchestrator Coverage Calculation', () => {
         openFindings: 3,
       };
 
-      // Should be in Phase 3 (not Phase 2) because all dirs >= 30%
+      // Should be in Phase 3 (not Phase 2) because touchedFilesRatio >= 90%
       assert.strictEqual(detectPhase(ctx), Phase.DepthAndGuides);
     });
 
@@ -123,17 +125,9 @@ describe('PhasedOrchestrator Coverage Calculation', () => {
   });
 
   describe('Phase 2 exit conditions regression tests', () => {
-    it('should NOT exit Phase 2 when hidden directories have 0% coverage', () => {
-      // This is the main regression test for the bug:
-      // If lowestDirectoryCoverage calculation excludes ratio=1.0 dirs,
-      // it might show lowestCoverage >= 30% when there are actually
-      // directories at 0% coverage.
-
-      // Simulated scenario:
-      // - 3 directories documented at 40% coverage
-      // - 2 directories completely undocumented (0% coverage)
-      // Bug: lowestCoverage = 40% (exits Phase 2)
-      // Correct: lowestCoverage = 0% (stays in Phase 2)
+    it('should NOT exit Phase 2 when touchedFilesRatio is low', () => {
+      // Phase 2 exit is now based on touchedFilesRatio, not lowestDirectoryCoverage
+      // We still calculate lowestDirectoryCoverage for debugging purposes
 
       const undocumentedDirectories: UndocumentedDirectory[] = [
         // Partially documented
@@ -151,11 +145,12 @@ describe('PhasedOrchestrator Coverage Calculation', () => {
       // The calculation should include 0% directories
       assert.strictEqual(lowestCoverage, 0, 'Calculation should include 0% directories, not just partial ones');
 
-      // The PhaseContext with this correct lowestCoverage should stay in Phase 2
+      // The PhaseContext with low touchedFilesRatio should stay in Phase 2
       const ctx: PhaseContext = {
         pages: 30,
         directoriesWithAnyCoverage: 3,
-        lowestDirectoryCoverage: lowestCoverage, // Should be 0, not 40
+        lowestDirectoryCoverage: lowestCoverage,
+        touchedFilesRatio: 0.6, // Only 60% of files touched - stay in Phase 2
         avgConfidence: 0.7,
         hasProjectOverview: true,
         hasGettingStarted: true,
@@ -168,7 +163,7 @@ describe('PhasedOrchestrator Coverage Calculation', () => {
       assert.strictEqual(
         detectPhase(ctx),
         Phase.Breadth,
-        'Should stay in Phase 2 when ANY directory is at 0% coverage'
+        'Should stay in Phase 2 when touchedFilesRatio < 90%'
       );
     });
 

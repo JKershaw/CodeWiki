@@ -103,6 +103,8 @@ export interface PhaseContext {
   pages: number;
   directoriesWithAnyCoverage: number;
   lowestDirectoryCoverage: number;
+  /** Ratio of source files that have been touched (have any documentation score > 0) */
+  touchedFilesRatio: number;
   avgConfidence: number;
   hasProjectOverview: boolean;
   hasGettingStarted: boolean;
@@ -111,6 +113,9 @@ export interface PhaseContext {
   lowConfidenceRatio: number;
   openFindings: number;
 }
+
+/** Minimum ratio of files that must be touched to exit Phase 2 */
+export const TOUCHED_FILES_THRESHOLD = 0.90;
 
 /**
  * Detect current phase based on wiki state.
@@ -126,8 +131,11 @@ export function detectPhase(ctx: PhaseContext): Phase {
     return Phase.Skeleton;
   }
 
-  // Phase 2: Any directory below 30% or pages < 25
-  if (ctx.lowestDirectoryCoverage < 30 || ctx.pages < 25) {
+  // Phase 2: Not enough files touched OR not enough pages
+  // We use touchedFilesRatio instead of lowestDirectoryCoverage to avoid
+  // the "moving target" problem where score-based percentages shift as maxScore grows.
+  // A file is "touched" if it has any documentation score > 0.
+  if (ctx.touchedFilesRatio < TOUCHED_FILES_THRESHOLD || ctx.pages < 25) {
     return Phase.Breadth;
   }
 
@@ -360,6 +368,7 @@ export class PhasedOrchestrator implements Orchestrator {
       debugLog(`pages: ${phaseCtx.pages}`);
       debugLog(`directoriesWithAnyCoverage: ${phaseCtx.directoriesWithAnyCoverage}`);
       debugLog(`lowestDirectoryCoverage: ${phaseCtx.lowestDirectoryCoverage.toFixed(1)}%`);
+      debugLog(`touchedFilesRatio: ${(phaseCtx.touchedFilesRatio * 100).toFixed(1)}% (${context.touchedFiles}/${context.totalSourceFiles} files)`);
       debugLog(`avgConfidence: ${(phaseCtx.avgConfidence * 100).toFixed(1)}%`);
       debugLog(`lowConfidenceRatio: ${(phaseCtx.lowConfidenceRatio * 100).toFixed(1)}%`);
       debugLog(`openFindings: ${phaseCtx.openFindings}`);
@@ -370,8 +379,8 @@ export class PhasedOrchestrator implements Orchestrator {
         debugLog(`→ Phase 0 (Reconnaissance): pages === 0`);
       } else if (phaseCtx.pages < 10 || phaseCtx.directoriesWithAnyCoverage < 3) {
         debugLog(`→ Phase 1 (Skeleton): pages=${phaseCtx.pages} < 10 OR dirs=${phaseCtx.directoriesWithAnyCoverage} < 3`);
-      } else if (phaseCtx.lowestDirectoryCoverage < 30 || phaseCtx.pages < 25) {
-        debugLog(`→ Phase 2 (Breadth): lowestDirCoverage=${phaseCtx.lowestDirectoryCoverage.toFixed(1)}% < 30% OR pages=${phaseCtx.pages} < 25`);
+      } else if (phaseCtx.touchedFilesRatio < TOUCHED_FILES_THRESHOLD || phaseCtx.pages < 25) {
+        debugLog(`→ Phase 2 (Breadth): touchedFilesRatio=${(phaseCtx.touchedFilesRatio * 100).toFixed(1)}% < ${(TOUCHED_FILES_THRESHOLD * 100).toFixed(0)}% OR pages=${phaseCtx.pages} < 25`);
       } else {
         debugLog(`→ Phase ${phase} based on key pages / confidence`);
       }
@@ -466,7 +475,7 @@ export class PhasedOrchestrator implements Orchestrator {
 
     // Add phase-specific metrics
     if (phase === Phase.Breadth || phase === Phase.Skeleton) {
-      metrics.push(`lowest dir coverage: ${phaseCtx.lowestDirectoryCoverage.toFixed(0)}%`);
+      metrics.push(`touched files: ${(phaseCtx.touchedFilesRatio * 100).toFixed(0)}%`);
     }
     if (phase === Phase.DepthAndGuides) {
       const missing = [];
@@ -647,10 +656,17 @@ export class PhasedOrchestrator implements Orchestrator {
       ? context.lowConfidencePages / context.wikiPages
       : 0;
 
+    // Calculate touched files ratio for Phase 2 transition
+    // A file is "touched" if it has any documentation score > 0
+    const touchedFilesRatio = context.totalSourceFiles > 0
+      ? context.touchedFiles / context.totalSourceFiles
+      : 0;
+
     return {
       pages: context.wikiPages,
       directoriesWithAnyCoverage: dirsWithCoverage,
       lowestDirectoryCoverage: lowestCoverage,
+      touchedFilesRatio,
       avgConfidence: context.avgConfidence,
       hasProjectOverview: context.hasProjectOverview,
       hasGettingStarted: context.hasGettingStarted,
