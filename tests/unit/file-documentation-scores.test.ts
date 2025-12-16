@@ -166,4 +166,64 @@ describe('File Documentation Scores', () => {
       assert.strictEqual(calculateFileCoverage('src/file.ts', scores, 100), 100);
     });
   });
+
+  describe('calculateFileCoverage folder inheritance', () => {
+    it('inherits coverage from parent folder when file has no direct score', () => {
+      // src/agents/ has score 1000, src/agents/orchestrator.ts has no direct score
+      const scores = new Map<string, number>([['src/agents/', 1000]]);
+      const coverage = calculateFileCoverage('src/agents/orchestrator.ts', scores, 1000);
+      // Should inherit from src/agents/ with dampening (70%)
+      assert.strictEqual(coverage, 70);
+    });
+
+    it('prefers exact file match over parent folder', () => {
+      const scores = new Map<string, number>([
+        ['src/agents/', 500],
+        ['src/agents/orchestrator.ts', 1000],
+      ]);
+      const coverage = calculateFileCoverage('src/agents/orchestrator.ts', scores, 1000);
+      // Should use exact match (100%), not folder
+      assert.strictEqual(coverage, 100);
+    });
+
+    it('prefers closest ancestor (most specific folder)', () => {
+      const scores = new Map<string, number>([
+        ['src/', 200],
+        ['src/agents/', 800],
+      ]);
+      const coverage = calculateFileCoverage('src/agents/orchestrator.ts', scores, 1000);
+      // Should inherit from src/agents/ (closest), not src/
+      // 800 * 0.7 / 1000 * 100 = 56%
+      assert.strictEqual(coverage, 56);
+    });
+
+    it('handles folder paths without trailing slash', () => {
+      const scores = new Map<string, number>([['src/agents', 1000]]);
+      const coverage = calculateFileCoverage('src/agents/orchestrator.ts', scores, 1000);
+      // Should work with or without trailing slash
+      assert.strictEqual(coverage, 70);
+    });
+
+    it('returns 0 for files with no ancestor scores', () => {
+      const scores = new Map<string, number>([['src/services/', 1000]]);
+      const coverage = calculateFileCoverage('src/agents/orchestrator.ts', scores, 1000);
+      // No ancestor of src/agents/orchestrator.ts has a score
+      assert.strictEqual(coverage, 0);
+    });
+
+    it('inherits from deeply nested folder path', () => {
+      const scores = new Map<string, number>([['src/agents/orchestrator/', 1000]]);
+      const coverage = calculateFileCoverage('src/agents/orchestrator/strategies.ts', scores, 1000);
+      // Should inherit from immediate parent
+      assert.strictEqual(coverage, 70);
+    });
+
+    it('does not inherit from child folders', () => {
+      // Child folder has score but parent file should not inherit
+      const scores = new Map<string, number>([['src/agents/orchestrator/', 1000]]);
+      const coverage = calculateFileCoverage('src/agents/index.ts', scores, 1000);
+      // src/agents/index.ts is not under src/agents/orchestrator/
+      assert.strictEqual(coverage, 0);
+    });
+  });
 });

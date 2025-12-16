@@ -99,6 +99,9 @@ export const LOW_COVERAGE_THRESHOLD = 40;
 /** Default line budget for coverage tree output */
 export const DEFAULT_LINE_BUDGET = 100;
 
+/** Dampening factor for coverage inherited from folder scores (0.7 = 70%) */
+export const FOLDER_INHERITANCE_DAMPENING = 0.7;
+
 // ============================================================================
 // Priority Scoring
 // ============================================================================
@@ -219,6 +222,10 @@ export function calculatePriorityScoreWithEntryPoint(
  * This provides finer granularity than binary coverage - files with more
  * documentation get higher coverage percentages.
  *
+ * If a file has no direct score, it can inherit coverage from a parent
+ * folder that was documented. The closest ancestor folder wins, and
+ * inherited coverage is dampened by FOLDER_INHERITANCE_DAMPENING.
+ *
  * Formula: coverage% = min(100, score / max(maxScore, 100) * 100)
  *
  * @param filePath - Full path to the file
@@ -231,14 +238,36 @@ export function calculateFileCoverage(
   documentationScores: Map<string, number>,
   maxScore: number
 ): number {
-  const score = documentationScores.get(filePath) ?? 0;
-  if (score === 0) return 0;
+  // Try exact file match first
+  const exactScore = documentationScores.get(filePath);
+  if (exactScore !== undefined && exactScore > 0) {
+    return normalizeScore(exactScore, maxScore);
+  }
 
-  // Normalize: use max(maxScore, 100) as the denominator
+  // Try ancestor directories (closest first, so reverse)
+  const ancestors = getAncestors(filePath).reverse();
+  for (const ancestor of ancestors) {
+    // Check both with and without trailing slash
+    const scoreWithSlash = documentationScores.get(ancestor + '/');
+    const scoreWithoutSlash = documentationScores.get(ancestor);
+    const ancestorScore = scoreWithSlash ?? scoreWithoutSlash;
+
+    if (ancestorScore !== undefined && ancestorScore > 0) {
+      // Apply dampening for inherited coverage
+      const dampenedScore = ancestorScore * FOLDER_INHERITANCE_DAMPENING;
+      return normalizeScore(dampenedScore, maxScore);
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Normalize a score to a coverage percentage.
+ */
+function normalizeScore(score: number, maxScore: number): number {
   const normalizer = Math.max(maxScore, 100);
   const coverage = (score / normalizer) * 100;
-
-  // Cap at 100%
   return Math.min(100, Math.round(coverage));
 }
 
