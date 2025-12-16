@@ -24,15 +24,19 @@ export class MongoCommitRepository implements CommitRepository {
     repoId: string,
     options?: { limit?: number; offset?: number }
   ): Promise<Commit[]> {
-    const limit = options?.limit ?? 100;
     const offset = options?.offset ?? 0;
 
-    const docs = await this.collection
+    let cursor = this.collection
       .find({ repoId })
       .sort({ committedAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
+      .skip(offset);
+
+    // Only apply limit if explicitly provided
+    if (options?.limit !== undefined) {
+      cursor = cursor.limit(options.limit);
+    }
+
+    const docs = await cursor.toArray();
 
     return toEntities<Commit>(docs);
   }

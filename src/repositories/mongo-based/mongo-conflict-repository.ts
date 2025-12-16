@@ -90,7 +90,7 @@ export class MongoConflictRepository implements ConflictRepository {
       byId(id),
       {
         $set: {
-          status: 'manual',
+          status: resolution.method === 'manual' ? 'manual' : 'auto-resolved',
           resolution,
           resolvedAt: new Date(),
         },

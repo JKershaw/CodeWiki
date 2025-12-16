@@ -396,4 +396,133 @@ describe('FindingsRepository', () => {
       assert.strictEqual(wiki2Results.length, 1);
     });
   });
+
+  describe('sorting and limiting', () => {
+    it('sorts by priority (highest first) then by detectedAt (newest first)', async () => {
+      // Create findings with different priorities and timestamps
+      // Priority order: contradiction=100, broken_link=90, terminology=50, low_quality=20
+      const now = Date.now();
+
+      const lowQuality1 = createFinding({
+        id: uuid(),
+        wikiId: 'wiki-1',
+        repoId: 'repo-1',
+        sourceAgentRunId: 'run-1',
+        type: 'low_quality',
+        description: 'Low quality 1',
+        affectedPaths: ['path/a'],
+        severity: 'low',
+      });
+      lowQuality1.detectedAt = new Date(now - 4000); // 4 seconds ago
+
+      const terminology1 = createFinding({
+        id: uuid(),
+        wikiId: 'wiki-1',
+        repoId: 'repo-1',
+        sourceAgentRunId: 'run-1',
+        type: 'terminology',
+        description: 'Terminology 1',
+        affectedPaths: ['path/b'],
+        severity: 'medium',
+      });
+      terminology1.detectedAt = new Date(now - 3000); // 3 seconds ago
+
+      const brokenLink1 = createFinding({
+        id: uuid(),
+        wikiId: 'wiki-1',
+        repoId: 'repo-1',
+        sourceAgentRunId: 'run-1',
+        type: 'broken_link',
+        description: 'Broken link 1',
+        affectedPaths: ['path/c'],
+        severity: 'high',
+      });
+      brokenLink1.detectedAt = new Date(now - 2000); // 2 seconds ago
+
+      const contradiction1 = createFinding({
+        id: uuid(),
+        wikiId: 'wiki-1',
+        repoId: 'repo-1',
+        sourceAgentRunId: 'run-1',
+        type: 'contradiction',
+        description: 'Contradiction 1',
+        affectedPaths: ['path/d'],
+        severity: 'high',
+      });
+      contradiction1.detectedAt = new Date(now - 1000); // 1 second ago
+
+      // Add a second broken_link with older timestamp to test secondary sort
+      const brokenLink2 = createFinding({
+        id: uuid(),
+        wikiId: 'wiki-1',
+        repoId: 'repo-1',
+        sourceAgentRunId: 'run-1',
+        type: 'broken_link',
+        description: 'Broken link 2',
+        affectedPaths: ['path/e'],
+        severity: 'high',
+      });
+      brokenLink2.detectedAt = new Date(now - 5000); // 5 seconds ago (older)
+
+      await repo.saveMany([lowQuality1, terminology1, brokenLink1, contradiction1, brokenLink2]);
+
+      const results = await repo.findByWiki('wiki-1');
+
+      // Verify sort order
+      assert.strictEqual(results.length, 5);
+      assert.strictEqual(results[0]!.type, 'contradiction', 'First should be contradiction (priority 100)');
+      assert.strictEqual(results[1]!.type, 'broken_link', 'Second should be broken_link (priority 90)');
+      assert.strictEqual(results[1]!.description, 'Broken link 1', 'Newer broken_link should come first');
+      assert.strictEqual(results[2]!.type, 'broken_link', 'Third should be older broken_link');
+      assert.strictEqual(results[2]!.description, 'Broken link 2', 'Older broken_link should come second');
+      assert.strictEqual(results[3]!.type, 'terminology', 'Fourth should be terminology (priority 50)');
+      assert.strictEqual(results[4]!.type, 'low_quality', 'Fifth should be low_quality (priority 20)');
+    });
+
+    it('applies limit AFTER sorting to return top N items', async () => {
+      // Create findings with clear priority order
+      const now = Date.now();
+
+      const findings = [
+        { type: 'contradiction' as FindingType, priority: 100, time: now - 1000 },
+        { type: 'inaccurate' as FindingType, priority: 95, time: now - 2000 },
+        { type: 'broken_link' as FindingType, priority: 90, time: now - 3000 },
+        { type: 'duplicate_title' as FindingType, priority: 80, time: now - 4000 },
+        { type: 'similar_content' as FindingType, priority: 60, time: now - 5000 },
+        { type: 'terminology' as FindingType, priority: 50, time: now - 6000 },
+      ];
+
+      const createdFindings = findings.map((f, i) => {
+        const finding = createFinding({
+          id: uuid(),
+          wikiId: 'wiki-1',
+          repoId: 'repo-1',
+          sourceAgentRunId: 'run-1',
+          type: f.type,
+          description: `Finding ${i}`,
+          affectedPaths: [`path/${i}`],
+          severity: 'medium',
+        });
+        finding.detectedAt = new Date(f.time);
+        return finding;
+      });
+
+      await repo.saveMany(createdFindings);
+
+      // Request top 3 items
+      const results = await repo.findByWiki('wiki-1', { limit: 3 });
+
+      // Should return the TOP 3 after sorting (highest priority first)
+      assert.strictEqual(results.length, 3, 'Should return exactly 3 items');
+      assert.strictEqual(results[0]!.type, 'contradiction', 'First should be contradiction (priority 100)');
+      assert.strictEqual(results[1]!.type, 'inaccurate', 'Second should be inaccurate (priority 95)');
+      assert.strictEqual(results[2]!.type, 'broken_link', 'Third should be broken_link (priority 90)');
+
+      // These should NOT be in the results (they have lower priority)
+      const types = results.map(r => r.type);
+      assert.ok(!types.includes('duplicate_title'), 'Should not include duplicate_title (priority 80)');
+      assert.ok(!types.includes('similar_content'), 'Should not include similar_content (priority 60)');
+      assert.ok(!types.includes('terminology'), 'Should not include terminology (priority 50)');
+    });
+  });
 });

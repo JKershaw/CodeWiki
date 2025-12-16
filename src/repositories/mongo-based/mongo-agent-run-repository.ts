@@ -5,6 +5,7 @@ import type {
   AgentType,
   AgentRunStatus,
   AgentResult,
+  ToolMetrics,
 } from '../../domain/agent-run.js';
 import { toEntity, toEntities, toDocument, byId } from './mongo-utils.js';
 
@@ -38,15 +39,19 @@ export class MongoAgentRunRepository implements AgentRunRepository {
       filter.status = options.status;
     }
 
-    const limit = options?.limit ?? 100;
     const offset = options?.offset ?? 0;
 
-    const docs = await this.collection
+    let cursor = this.collection
       .find(filter)
       .sort({ startedAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
+      .skip(offset);
+
+    // Only apply limit if explicitly provided
+    if (options?.limit !== undefined) {
+      cursor = cursor.limit(options.limit);
+    }
+
+    const docs = await cursor.toArray();
 
     return toEntities<AgentRun>(docs);
   }
@@ -135,18 +140,23 @@ export class MongoAgentRunRepository implements AgentRunRepository {
     id: string,
     result: AgentResult,
     durationMs: number,
-    costUsd: number
+    costUsd: number,
+    toolMetrics?: ToolMetrics
   ): Promise<void> {
+    const updates: Partial<AgentRun> = {
+      status: 'completed',
+      result,
+      durationMs,
+      costUsd,
+      completedAt: new Date(),
+    };
+    if (toolMetrics) {
+      updates.toolMetrics = toolMetrics;
+    }
     await this.collection.updateOne(
       byId(id),
       {
-        $set: {
-          status: 'completed',
-          result,
-          durationMs,
-          costUsd,
-          completedAt: new Date(),
-        },
+        $set: updates,
       }
     );
   }
