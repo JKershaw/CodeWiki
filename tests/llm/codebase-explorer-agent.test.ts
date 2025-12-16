@@ -719,4 +719,146 @@ export class PaymentService {
       console.log(`Source reading test passed. Files read: ${filesRead}`);
     });
   });
+
+  describe('File Reference Accuracy', () => {
+    it('measures accuracy of file references against actual file tree', async () => {
+      const repoId = 'llm-explorer-ref-accuracy';
+
+      // Create a realistic directory structure
+      const files: Record<string, string> = {
+        'README.md': '# Reference Accuracy Test',
+        'src/services/user-service.ts': `
+export class UserService {
+  async findUser(id: string): Promise<User | null> {
+    return null;
+  }
+}`,
+        'src/services/auth-service.ts': `
+export class AuthService {
+  async login(email: string, password: string): Promise<string> {
+    return 'token';
+  }
+}`,
+        'src/services/index.ts': `
+export { UserService } from './user-service.js';
+export { AuthService } from './auth-service.js';
+`,
+        'src/models/user.ts': `
+export interface User {
+  id: string;
+  email: string;
+}`,
+        'src/utils/helpers.ts': `
+export function formatDate(date: Date): string {
+  return date.toISOString();
+}`,
+      };
+
+      await createTestRepo(ctx, repoId, files);
+
+      // Build the source file tree from known files
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(
+        { type: 'path', path: 'src/services' },
+        agentCtx
+      );
+
+      // Collect all file references from the agent's output
+      const { validateFileReferences, formatFileReferenceMetrics, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+
+      const allReferences = collectAllReferences(
+        result.toolMetrics?.filesRead,
+        result.result.findings.flatMap(f => f.relatedPaths),
+      );
+
+      const metrics = validateFileReferences(allReferences, sourceFileTree);
+
+      // Log the metrics
+      console.log(formatFileReferenceMetrics('CodebaseExplorerAgent', metrics));
+
+      // Store metrics for trend tracking
+      logTestResult('File reference accuracy', {
+        passed: metrics.accuracyRate >= 0.7,
+        score: Math.round(metrics.accuracyRate * 10),
+        reasoning: `${metrics.validReferences}/${metrics.totalReferences} references valid (${(metrics.accuracyRate * 100).toFixed(1)}%)`,
+        improvements: metrics.brokenReferences.length > 0
+          ? [`Fix broken references: ${metrics.brokenReferences.slice(0, 5).join(', ')}`]
+          : [],
+      });
+
+      // Soft assertion - log but don't fail below 70% (we're establishing baseline)
+      if (metrics.accuracyRate < 0.7) {
+        console.warn(`⚠️ File reference accuracy ${(metrics.accuracyRate * 100).toFixed(1)}% is below 70% threshold`);
+      }
+
+      // Hard assertion - must have some valid references
+      assert.ok(metrics.validReferences > 0 || metrics.totalReferences === 0,
+        'Should have at least some valid file references');
+    });
+
+    it('tracks reference accuracy across multiple directories', async () => {
+      const repoId = 'llm-explorer-multi-dir-accuracy';
+
+      const files: Record<string, string> = {
+        'README.md': '# Multi-Directory Test',
+        'src/api/routes.ts': `export const routes = [];`,
+        'src/api/middleware.ts': `export const auth = () => {};`,
+        'src/db/connection.ts': `export const connect = async () => {};`,
+        'src/db/models.ts': `export interface Model {}`,
+        'tests/api.test.ts': `describe('api', () => {});`,
+      };
+
+      await createTestRepo(ctx, repoId, files);
+      const sourceFileTree = new Set(Object.keys(files));
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      // Test multiple paths
+      const paths = ['src/api', 'src/db'];
+      let totalValid = 0;
+      let totalRefs = 0;
+      const allBroken: string[] = [];
+
+      const { validateFileReferences, collectAllReferences } =
+        await import('./helpers/file-reference-validator.js');
+
+      for (const path of paths) {
+        const result = await agent.run({ type: 'path', path }, agentCtx);
+
+        const refs = collectAllReferences(
+          result.toolMetrics?.filesRead,
+          result.result.findings.flatMap(f => f.relatedPaths),
+        );
+
+        const metrics = validateFileReferences(refs, sourceFileTree);
+        totalValid += metrics.validReferences;
+        totalRefs += metrics.totalReferences;
+        allBroken.push(...metrics.brokenReferences);
+      }
+
+      const overallAccuracy = totalRefs > 0 ? totalValid / totalRefs : 1;
+
+      console.log(`📊 Multi-directory accuracy: ${(overallAccuracy * 100).toFixed(1)}%`);
+      console.log(`   Total refs: ${totalRefs}, Valid: ${totalValid}, Broken: ${allBroken.length}`);
+
+      if (allBroken.length > 0) {
+        console.log(`   Broken: ${allBroken.slice(0, 5).join(', ')}${allBroken.length > 5 ? '...' : ''}`);
+      }
+
+      logTestResult('Multi-directory reference accuracy', {
+        passed: overallAccuracy >= 0.7,
+        score: Math.round(overallAccuracy * 10),
+        reasoning: `${totalValid}/${totalRefs} references valid across ${paths.length} directories`,
+        improvements: allBroken.length > 0
+          ? [`Fix broken references: ${[...new Set(allBroken)].slice(0, 3).join(', ')}`]
+          : [],
+      });
+    });
+  });
 });

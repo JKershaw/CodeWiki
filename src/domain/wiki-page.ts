@@ -35,6 +35,8 @@ export interface WikiPage {
   filesAccessed: string[];
   /** Files/folders that are mentioned in the page content */
   filesReferenced: string[];
+  /** File references that failed validation against the source tree */
+  brokenReferences: string[];
   /** Files/folders that agents were asked to analyze for this page (from work targets) */
   targetPaths: string[];
   /**
@@ -94,6 +96,7 @@ export function createWikiPage(params: {
   sourceAgentRunId?: string;
   filesAccessed?: string[];
   filesReferenced?: string[];
+  brokenReferences?: string[];
   targetPaths?: string[];
   synthesisType?: SynthesisType;
 }): WikiPage {
@@ -110,6 +113,7 @@ export function createWikiPage(params: {
     backlinks: [],
     filesAccessed: params.filesAccessed ?? [],
     filesReferenced: params.filesReferenced ?? [],
+    brokenReferences: params.brokenReferences ?? [],
     targetPaths: params.targetPaths ?? [],
     createdAt: new Date(),
     updatedAt: new Date(),
