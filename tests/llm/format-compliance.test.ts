@@ -118,19 +118,13 @@ export class Calculator {
           : [],
       });
 
-      // Strict assertion - will fail if ANY fallbacks were used
-      // This is expected to fail initially! We're establishing baseline.
-      try {
-        assertNoFallbacks(result.parseStats);
-      } catch (error) {
-        // Log but don't fail the test initially - we're establishing baseline
-        console.warn(`\n⚠️  STRICT MODE FAILURE (expected initially):`);
-        console.warn(`   ${error instanceof Error ? error.message : String(error)}`);
+      // Strict assertion - WILL FAIL if ANY fallbacks were used
+      // This is intentional - we want to catch degradation
+      assertNoFallbacks(result.parseStats);
 
-        // Re-throw to actually fail the test (remove this line to make it soft)
-        // For now, we'll make it a soft assertion to establish baseline
-        // throw error;
-      }
+      // Also fail if paths were removed (silent data loss)
+      assert.strictEqual(result.removedPaths?.length ?? 0, 0,
+        `Paths were silently removed: ${result.removedPaths?.join(', ')}`);
     });
 
     it('parses SUMMARY section with colon format', async () => {
@@ -193,9 +187,9 @@ export class Logger {
         improvements: summaryFallbacks.map(f => `Fix prompt to avoid ${f}`),
       });
 
-      // Soft assertion - verify SUMMARY was parsed somehow
-      assert.ok(result.result.summary && result.result.summary.length > 0,
-        'SUMMARY should be parsed (even with fallbacks)');
+      // Hard assertion - SUMMARY must use colon format, not fallback
+      assert.strictEqual(summaryFallbacks.length, 0,
+        `SUMMARY used fallback instead of colon format: ${summaryFallbacks.join(', ')}`);
     });
 
     it('parses CONFIDENCE section explicitly (not default)', async () => {
@@ -247,9 +241,9 @@ export function sanitize(input: string): string {
           : [],
       });
 
-      // Soft assertion - confidence should be in valid range
-      assert.ok(result.result.confidence >= 0 && result.result.confidence <= 1,
-        'Confidence should be between 0 and 1');
+      // Hard assertion - CONFIDENCE must be explicitly provided, not default
+      assert.strictEqual(usedDefault, false,
+        `CONFIDENCE used default value instead of explicit: ${result.result.confidence}`);
     });
 
     it('parses WIKI_PAGES with === delimiters', async () => {
@@ -308,9 +302,9 @@ export function format(text: string, options: FormatOptions): string {
           : [],
       });
 
-      // Soft assertion - should generate at least one wiki page
-      assert.ok(result.updates.length >= 0,
-        'Should generate wiki pages (0 is acceptable if parsing failed)');
+      // Hard assertion - WIKI_PAGES must use === delimiters, not fallback
+      assert.strictEqual(wikiPagesFallbacks.length, 0,
+        `WIKI_PAGES used fallback instead of === delimiters: ${wikiPagesFallbacks.join(', ')}`);
     });
 
     it('parses all required sections successfully', async () => {
@@ -374,13 +368,76 @@ export async function handleRequest(req: Request): Promise<Response> {
         improvements: missingRequired.map(s => `Ensure ${s} section is parseable`),
       });
 
-      // Soft assertion - try the actual assertion but catch for baseline
-      try {
-        assertParseSuccess(result.parseStats, requiredSections);
-      } catch (error) {
-        console.warn(`\n⚠️  Required sections assertion failed:`);
-        console.warn(`   ${error instanceof Error ? error.message : String(error)}`);
+      // Hard assertion - all required sections must parse successfully
+      assertParseSuccess(result.parseStats, requiredSections);
+
+      // Also assert no fallbacks were used
+      assertNoFallbacks(result.parseStats);
+    });
+
+    it('does not silently remove paths from findings', async () => {
+      const repoId = 'format-path-removal-test';
+
+      await createTestRepo(ctx, repoId, {
+        'README.md': '# Path Removal Test',
+        'src/models/user.ts': `
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export class UserModel {
+  constructor(public data: User) {}
+
+  validate(): boolean {
+    return this.data.email.includes('@');
+  }
+}
+`,
+        'src/models/product.ts': `
+export interface Product {
+  id: string;
+  name: string;
+  price: number;
+}
+`,
+        'src/models/index.ts': `
+export * from './user.js';
+export * from './product.js';
+`,
+      });
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      const result = await agent.run(
+        { type: 'path', path: 'src/models' },
+        agentCtx
+      );
+
+      const removedCount = result.removedPaths?.length ?? 0;
+
+      console.log(`\nPath removal check:`);
+      console.log(`  Paths removed: ${removedCount}`);
+      if (removedCount > 0) {
+        console.log(`  Removed: ${result.removedPaths?.join(', ')}`);
       }
+
+      logTestResult('Path removal', {
+        passed: removedCount === 0,
+        score: removedCount === 0 ? 10 : Math.max(0, 10 - removedCount * 2),
+        reasoning: removedCount === 0
+          ? 'No paths silently removed from findings'
+          : `${removedCount} paths silently removed: ${result.removedPaths?.join(', ')}`,
+        improvements: removedCount > 0
+          ? ['LLM should only reference files it has actually read via tools']
+          : [],
+      });
+
+      // Hard assertion - no paths should be silently removed
+      assert.strictEqual(removedCount, 0,
+        `Paths were silently removed from findings: ${result.removedPaths?.join(', ')}`);
     });
   });
 
