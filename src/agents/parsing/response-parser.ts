@@ -164,22 +164,30 @@ export interface FlexibleParseOptions extends ParseOptions {
    * Default: 10
    */
   minLength?: number;
+  /**
+   * Whether to count markdown formats as fallbacks.
+   * When false (default), markdown formats (## HEADING) are treated as
+   * acceptable alternatives and don't trigger fallback tracking.
+   * When true, markdown formats are tracked as fallbacks for strict compliance checking.
+   */
+  trackMarkdownAsFallback?: boolean;
 }
 
 /**
- * Parse a section with automatic fallback to markdown heading formats.
+ * Parse a section with automatic support for markdown heading formats.
  *
  * Tries patterns in this order:
  * 1. Original pattern (e.g., SUMMARY: content)
  * 2. Markdown ## heading (e.g., ## SUMMARY\ncontent)
  * 3. Markdown ### heading (e.g., ### SUMMARY\ncontent)
  *
- * This handles common LLM output variations while keeping prompts simple.
+ * By default, markdown formats are treated as acceptable alternatives
+ * (not fallbacks), since many LLMs naturally prefer markdown format.
  *
  * @param ctx - The parsing context
  * @param sectionName - Human-readable name of the section (e.g., 'SUMMARY', 'FINDINGS')
  * @param primaryPattern - Primary regex pattern with a capture group
- * @param options - Parsing options including terminators for markdown fallback
+ * @param options - Parsing options including terminators for markdown support
  * @returns The parsed value or null if all patterns failed
  */
 export function parseSectionFlexible(
@@ -192,7 +200,8 @@ export function parseSectionFlexible(
     required = false,
     defaultValue,
     minLength = 10,
-    terminators = ['CONFIDENCE', 'FINDINGS', 'SUMMARY', 'WIKI_PAGES', 'WIKI_UPDATES', 'TODO_ITEMS', 'REMEDIATION', 'HOTSPOTS']
+    terminators = ['CONFIDENCE', 'FINDINGS', 'SUMMARY', 'WIKI_PAGES', 'WIKI_UPDATES', 'TODO_ITEMS', 'REMEDIATION', 'HOTSPOTS'],
+    trackMarkdownAsFallback = false,
   } = options;
 
   // Try primary pattern first
@@ -205,7 +214,7 @@ export function parseSectionFlexible(
     }
   }
 
-  // Build terminator pattern for markdown fallback
+  // Build terminator pattern for markdown support
   // Match next ## or ### heading, or SECTION: format, or end of string
   const terminatorPattern = terminators
     .map(t => `##\\s*${t}|${t}:`)
@@ -221,7 +230,10 @@ export function parseSectionFlexible(
     const value = h2Match[1].trim();
     if (value.length >= minLength) {
       ctx.successfulSections.push(sectionName);
-      ctx.fallbacksUsed.push(`${sectionName}:markdown_h2`);
+      // Only track as fallback if explicitly requested
+      if (trackMarkdownAsFallback) {
+        ctx.fallbacksUsed.push(`${sectionName}:markdown_h2`);
+      }
       return value;
     }
   }
@@ -237,7 +249,10 @@ export function parseSectionFlexible(
     const value = h3Match[1].trim();
     if (value.length >= minLength) {
       ctx.successfulSections.push(sectionName);
-      ctx.fallbacksUsed.push(`${sectionName}:markdown_h3`);
+      // Only track as fallback if explicitly requested
+      if (trackMarkdownAsFallback) {
+        ctx.fallbacksUsed.push(`${sectionName}:markdown_h3`);
+      }
       return value;
     }
   }
@@ -334,6 +349,11 @@ export function parseSectionItems<T>(
 /**
  * Parse the CONFIDENCE section, common to most agents.
  *
+ * Tries multiple formats:
+ * 1. CONFIDENCE: 0.85
+ * 2. ## CONFIDENCE\n0.85
+ * 3. ### Confidence\n0.85 (or similar prose variations)
+ *
  * @param ctx - The parsing context
  * @param options - Parsing options (default: optional with 0.7 default)
  * @returns The confidence value (0-1)
@@ -344,10 +364,41 @@ export function parseConfidence(
 ): number {
   const { required = false, defaultValue = 0.7 } = options;
 
-  const match = ctx.response.match(/CONFIDENCE:\s*([\d.]+)/i);
+  // Try colon format first: CONFIDENCE: 0.85
+  const colonMatch = ctx.response.match(/CONFIDENCE:\s*([\d.]+)/i);
+  if (colonMatch && colonMatch[1]) {
+    const value = parseFloat(colonMatch[1]);
+    if (!isNaN(value) && value >= 0 && value <= 1) {
+      ctx.successfulSections.push('CONFIDENCE');
+      return value;
+    }
+  }
 
-  if (match && match[1]) {
-    const value = parseFloat(match[1]);
+  // Try markdown ## heading format: ## CONFIDENCE\n0.85
+  const h2Match = ctx.response.match(/##\s*CONFIDENCE\s*\n+\s*([\d.]+)/i);
+  if (h2Match && h2Match[1]) {
+    const value = parseFloat(h2Match[1]);
+    if (!isNaN(value) && value >= 0 && value <= 1) {
+      ctx.successfulSections.push('CONFIDENCE');
+      return value;
+    }
+  }
+
+  // Try ### heading format: ### Confidence\n0.85
+  const h3Match = ctx.response.match(/###\s*CONFIDENCE\s*\n+\s*([\d.]+)/i);
+  if (h3Match && h3Match[1]) {
+    const value = parseFloat(h3Match[1]);
+    if (!isNaN(value) && value >= 0 && value <= 1) {
+      ctx.successfulSections.push('CONFIDENCE');
+      return value;
+    }
+  }
+
+  // Try extracting any decimal number after "confidence" keyword on same or next line
+  // This handles: "Confidence: 0.85", "Confidence\n0.85", "confidence is 0.85"
+  const flexibleMatch = ctx.response.match(/confidence[:\s]+(?:is\s+)?([\d.]+)/i);
+  if (flexibleMatch && flexibleMatch[1]) {
+    const value = parseFloat(flexibleMatch[1]);
     if (!isNaN(value) && value >= 0 && value <= 1) {
       ctx.successfulSections.push('CONFIDENCE');
       return value;

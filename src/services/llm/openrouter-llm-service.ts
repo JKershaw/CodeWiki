@@ -159,6 +159,92 @@ export function isValidToolCall(tc: unknown): tc is { id: string; function: { na
 }
 
 /**
+ * Find and parse JSON objects in text content.
+ * Uses balanced brace matching to extract complete JSON objects,
+ * then validates them with JSON.parse.
+ * Exported for testing.
+ */
+export function findJsonObjects(content: string): Array<{
+  json: Record<string, unknown>;
+  fullMatch: string;
+  startIndex: number;
+}> {
+  const results: Array<{
+    json: Record<string, unknown>;
+    fullMatch: string;
+    startIndex: number;
+  }> = [];
+
+  let i = 0;
+  while (i < content.length) {
+    // Find the next '{'
+    const startIndex = content.indexOf('{', i);
+    if (startIndex === -1) break;
+
+    // Find the matching closing brace
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+    let endIndex = -1;
+
+    for (let j = startIndex; j < content.length; j++) {
+      const char = content[j];
+
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+
+      if (char === '\\' && inString) {
+        escapeNext = true;
+        continue;
+      }
+
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{') {
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            endIndex = j;
+            break;
+          }
+        }
+      }
+    }
+
+    if (endIndex === -1) {
+      // No matching brace found, move past this '{'
+      i = startIndex + 1;
+      continue;
+    }
+
+    const jsonString = content.slice(startIndex, endIndex + 1);
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        results.push({
+          json: parsed as Record<string, unknown>,
+          fullMatch: jsonString,
+          startIndex,
+        });
+      }
+    } catch {
+      // Not valid JSON, continue
+    }
+
+    i = endIndex + 1;
+  }
+
+  return results;
+}
+
+/**
  * Attempt to extract a tool call from text content.
  * Some models output tool calls as JSON text instead of using the tool_calls API.
  * Other models (like llama) output function-call syntax like: tool_name(param: "value")
@@ -172,30 +258,24 @@ export function extractToolCallFromText(content: string, toolNames: string[]): {
 } | null {
   if (!content || toolNames.length === 0) return null;
 
-  // Try to find JSON object in the content that looks like a tool call
-  // Pattern: {"type": "function", "name": "tool_name", "parameters": {...}}
-  // Or simpler: {"name": "tool_name", "parameters": {...}}
-  const jsonPattern = /\{[^{}]*"(?:type"\s*:\s*"function"\s*,\s*)?"name"\s*:\s*"([^"]+)"[^{}]*"parameters"\s*:\s*(\{[^{}]*\})[^{}]*\}/;
-  const jsonMatch = content.match(jsonPattern);
+  // Try to find and parse JSON objects that look like tool calls
+  // Models often output: {"name": "tool_name", "parameters": {...}}
+  // Or with type: {"type": "function", "name": "tool_name", "parameters": {...}}
+  const jsonObjects = findJsonObjects(content);
 
-  if (jsonMatch) {
-    const toolName = jsonMatch[1];
-    const paramsJson = jsonMatch[2];
+  for (const { json, fullMatch } of jsonObjects) {
+    // Check if this looks like a tool call
+    const name = json['name'] as string | undefined;
+    const params = json['parameters'] as Record<string, unknown> | undefined;
 
-    // Verify this is a known tool
-    if (toolName && paramsJson && toolNames.includes(toolName)) {
-      try {
-        const params = JSON.parse(paramsJson);
-        const remainingContent = content.replace(jsonMatch[0], '').trim();
-        console.log(`[LLM] Extracted text-based tool call: ${toolName}`);
-        return {
-          name: toolName,
-          input: typeof params === 'object' && params !== null ? params : {},
-          remainingContent,
-        };
-      } catch {
-        // JSON parse failed, try next pattern
-      }
+    if (name && toolNames.includes(name)) {
+      const remainingContent = content.replace(fullMatch, '').trim();
+      console.log(`[LLM] Extracted text-based tool call: ${name}`);
+      return {
+        name,
+        input: params && typeof params === 'object' ? params : {},
+        remainingContent,
+      };
     }
   }
 

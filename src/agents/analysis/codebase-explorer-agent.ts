@@ -10,8 +10,7 @@ import { createCodebaseToolExecutor, formatFetchedFilesForContext, type FetchedF
 import { sortByPathRelevance } from '../../utils/path-relevance.js';
 import {
   createParseContext,
-  parseSection,
-  parseListItemsWithFallback,
+  parseSectionFlexible,
   parseConfidence,
   extractProseContent,
   getParseStats,
@@ -617,16 +616,10 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
   private parseResponse(response: string, targetPath?: string): ParsedAnalysis {
     const ctx = createParseContext('codebase-explorer', response);
 
-    // Parse summary - try colon format first, then markdown heading format
-    let summary = parseSection(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|##|$)/i);
-    if (!summary || summary.length < 20) {
-      // Fallback: try markdown heading format (## SUMMARY)
-      const mdMatch = response.match(/##\s*SUMMARY\s*\n([\s\S]*?)(?=##\s*FINDINGS|##\s*WIKI|FINDINGS:|WIKI_PAGES:|CONFIDENCE:|$)/i);
-      if (mdMatch && mdMatch[1]) {
-        summary = mdMatch[1].trim();
-        ctx.fallbacksUsed.push('SUMMARY:markdown_h2_manual');
-      }
-    }
+    // Parse summary - accepts both SUMMARY: and ## SUMMARY formats
+    let summary = parseSectionFlexible(ctx, 'SUMMARY', /SUMMARY:\s*([\s\S]*?)(?=FINDINGS:|##|$)/i, {
+      minLength: 20,
+    });
 
     // Last resort: extract prose content when LLM ignores format entirely
     if (!summary || summary.length < 20) {
@@ -646,7 +639,7 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
     // Parse findings - pipe-separated format
     const findingPatterns: ItemPattern<ParsedAnalysis['findings'][0]>[] = [
       {
-        // New format: - type: X | importance: Y | description: Z | paths: A, B
+        // Pipe-separated format: - type: X | importance: Y | description: Z | paths: A, B
         pattern: /^-\s*type:\s*([^|]+)\s*\|\s*importance:\s*(\w+)\s*\|\s*description:\s*([^|]+?)(?:\s*\|\s*paths:\s*(.+))?$/i,
         mapper: (m) => ({
           type: m[1]!.trim(),
@@ -657,39 +650,40 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       },
     ];
 
-    // Try colon format first, then markdown heading format
-    let findings = parseListItemsWithFallback(
+    // Try to get FINDINGS section with flexible format (accepts markdown headings)
+    const findingsSection = parseSectionFlexible(
       ctx,
       'FINDINGS',
       /FINDINGS:\s*([\s\S]*?)(?=WIKI_PAGES:|CONFIDENCE:|##|$)/i,
-      findingPatterns
+      { minLength: 5 }
     );
-    if (findings.length === 0) {
-      // Fallback: try markdown heading format
-      findings = parseListItemsWithFallback(
-        ctx,
-        'FINDINGS (markdown)',
-        /##\s*FINDINGS\s*\n([\s\S]*?)(?=##\s*WIKI|WIKI_PAGES:|CONFIDENCE:|$)/i,
-        findingPatterns
-      );
-      if (findings.length > 0) {
-        ctx.fallbacksUsed.push('FINDINGS:markdown_h2_manual');
+
+    const findings: ParsedAnalysis['findings'] = [];
+    if (findingsSection) {
+      // Parse items using patterns
+      const lines = findingsSection.split('\n').filter(l => l.trim().startsWith('-'));
+      for (const line of lines) {
+        for (const { pattern, mapper } of findingPatterns) {
+          const match = line.match(pattern);
+          if (match) {
+            const item = mapper(match);
+            if (item) {
+              findings.push(item);
+              break;
+            }
+          }
+        }
       }
     }
 
-    // Parse wiki pages - uses === path: X | title: Y === format
+    // Parse wiki pages - accepts both WIKI_PAGES: and ## WIKI_PAGES formats
     const wikiPages: ParsedAnalysis['wikiPages'] = [];
-    // Try colon format first
-    let pagesSection = parseSection(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i);
-    if (!pagesSection || pagesSection.length < 20) {
-      // Fallback: try markdown heading format
-      const mdPagesMatch = response.match(/##\s*WIKI_PAGES\s*\n([\s\S]*?)(?=CONFIDENCE:|$)/i);
-      if (mdPagesMatch && mdPagesMatch[1]) {
-        pagesSection = mdPagesMatch[1].trim();
-        ctx.fallbacksUsed.push('WIKI_PAGES:markdown_h2_manual');
-      }
-    }
+    const pagesSection = parseSectionFlexible(ctx, 'WIKI_PAGES', /WIKI_PAGES:\s*([\s\S]*?)(?=CONFIDENCE:|$)/i, {
+      minLength: 20,
+    });
+
     if (pagesSection) {
+      // Try === path: X | title: Y === format
       const pageMatches = pagesSection.matchAll(/===\s*path:\s*([^|=]+)\s*(?:\|\s*title:\s*([^=]+))?\s*===\s*([\s\S]*?)===\s*END\s*===/gi);
 
       for (const match of pageMatches) {
@@ -700,6 +694,18 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
         if (path && content) {
           wikiPages.push({ path, title, content });
         }
+      }
+
+      // If no pages found with === format, try to extract markdown content as a single page
+      if (wikiPages.length === 0 && pagesSection.length > 100 && targetPath) {
+        // The LLM wrote content but didn't use our delimiter format
+        // Accept it as a wiki page anyway
+        const pagePath = targetPath.replace(/^\/+/, '').replace(/\/+$/, '') || 'overview';
+        wikiPages.push({
+          path: pagePath,
+          title: pathToTitle(pagePath),
+          content: pagesSection,
+        });
       }
     }
 
@@ -886,6 +892,11 @@ interface PathValidationResult {
  * This prevents hallucinated file paths from entering the wiki data.
  * Paths that weren't verified via tool calls are removed with a warning.
  *
+ * The validation is lenient:
+ * - Bare filenames (e.g., "calculator.ts") match "src/calculator.ts"
+ * - Partial paths (e.g., "domain/user.ts") match "src/domain/user.ts"
+ * - This handles the common case where LLMs output shortened paths
+ *
  * @returns Object containing validated findings and list of removed paths for tracking.
  */
 function validateFindingPaths(
@@ -900,19 +911,30 @@ function validateFindingPaths(
   const removedPaths: string[] = [];
 
   const validatedFindings = findings.map(finding => {
-    const validatedPaths = finding.paths.filter(path => {
+    const validatedPaths = finding.paths.map(path => {
       // Normalize path for comparison
       const normalizedPath = path.replace(/^\/+/, '').replace(/\/+$/, '');
 
-      // Check if this exact path or a parent was verified
+      // Check if this exact path was verified
       if (verifiedPaths.has(normalizedPath)) {
-        return true;
+        return normalizedPath;
       }
 
       // Check if any verified path starts with this path (for directories)
       for (const verified of verifiedPaths) {
         if (verified.startsWith(normalizedPath + '/') || normalizedPath.startsWith(verified + '/')) {
-          return true;
+          return normalizedPath;
+        }
+      }
+
+      // Try to match partial paths to verified full paths
+      // e.g., "domain/user.ts" should match "src/domain/user.ts"
+      // e.g., "calculator.ts" should match "src/calculator.ts"
+      for (const verified of verifiedPaths) {
+        // Check if verified path ends with the normalized path
+        if (verified.endsWith('/' + normalizedPath) || verified === normalizedPath) {
+          // Found a match - upgrade to full path
+          return verified;
         }
       }
 
@@ -922,8 +944,8 @@ function validateFindingPaths(
         `(verified ${verifiedPaths.size} paths via tools)`
       );
       removedPaths.push(path);
-      return false;
-    });
+      return null;
+    }).filter((path): path is string => path !== null);
 
     return {
       ...finding,
