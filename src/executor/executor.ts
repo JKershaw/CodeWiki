@@ -593,12 +593,12 @@ export class Executor {
 
     try {
       // Build the work target for the agent
-      // Note: Commit targets use internal IDs (UUIDs), not Git SHAs
+      // For commit targets: use internal IDs (UUIDs), not Git SHAs
+      // For path targets: preserve the original target including priorityFiles
+      // For wiki targets: use as-is
       const agentTarget: WorkTarget = internalCommitId
         ? { type: 'commit', commitId: internalCommitId }
-        : targetPath
-          ? { type: 'path', path: targetPath }
-          : { type: 'wiki' };
+        : workItem.target;  // Preserve original target (includes priorityFiles for path targets)
 
       // Verify agent can handle this target type
       if (!agent.canHandle(agentTarget)) {

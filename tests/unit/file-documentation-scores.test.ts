@@ -123,7 +123,8 @@ describe('File Documentation Scores', () => {
 
       const scores = buildFileDocumentationScores(wikiPages);
 
-      assert.strictEqual(scores.get('src/file.ts'), 0);
+      // Empty content pages don't contribute scores - file not in map
+      assert.strictEqual(scores.has('src/file.ts'), false);
     });
   });
 
@@ -164,6 +165,119 @@ describe('File Documentation Scores', () => {
 
       // 200/100 * 100 = 200, but cap at 100
       assert.strictEqual(calculateFileCoverage('src/file.ts', scores, 100), 100);
+    });
+  });
+
+  describe('buildFileDocumentationScores with targetPaths normalization', () => {
+    it('resolves bare filenames using targetPaths prefix', () => {
+      // This test demonstrates the bug: when LLM writes content about files,
+      // it often uses bare filenames like `export-wiki.ts` instead of full paths
+      // like `scripts/export-wiki.ts`. The targetPaths tells us the directory context.
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/export-wiki',
+          content: 'x'.repeat(1000),
+          filesReferenced: ['export-wiki.ts'], // LLM used bare filename
+          targetPaths: ['scripts'], // But we know the target directory
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should resolve 'export-wiki.ts' to 'scripts/export-wiki.ts'
+      // and give it the full score
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 1000);
+      // The bare filename should NOT have a score (it's been resolved)
+      assert.strictEqual(scores.has('export-wiki.ts'), false);
+    });
+
+    it('resolves multiple bare filenames in same directory', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/overview',
+          content: 'x'.repeat(900),
+          filesReferenced: ['audit-prompts.ts', 'export-wiki.ts', 'generate-and-review.ts'],
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Each file should get 900/3 = 300 points under scripts/ prefix
+      assert.strictEqual(scores.get('scripts/audit-prompts.ts'), 300);
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 300);
+      assert.strictEqual(scores.get('scripts/generate-and-review.ts'), 300);
+    });
+
+    it('does not modify already-qualified paths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'docs/services',
+          content: 'x'.repeat(500),
+          filesReferenced: ['src/services/auth.ts'], // Already has path
+          targetPaths: ['src/services'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should keep the original full path
+      assert.strictEqual(scores.get('src/services/auth.ts'), 500);
+      // Should NOT create a duplicate with targetPath prefix
+      assert.strictEqual(scores.has('src/services/src/services/auth.ts'), false);
+    });
+
+    it('handles mixed bare and qualified paths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/docs',
+          content: 'x'.repeat(600),
+          filesReferenced: [
+            'export-wiki.ts', // Bare filename
+            'src/cli.ts', // Already qualified
+          ],
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Bare filename resolved with targetPath
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 300);
+      // Qualified path kept as-is
+      assert.strictEqual(scores.get('src/cli.ts'), 300);
+    });
+
+    it('handles pages without targetPaths (bare filenames kept as-is)', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'overview',
+          content: 'x'.repeat(400),
+          filesReferenced: ['file.ts'], // Bare filename
+          // No targetPaths - can't resolve
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Without targetPaths, bare filename is kept as-is
+      assert.strictEqual(scores.get('file.ts'), 400);
+    });
+
+    it('handles multiple targetPaths by using first one', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'multi-target',
+          content: 'x'.repeat(500),
+          filesReferenced: ['helper.ts'],
+          targetPaths: ['src/utils', 'tests/helpers'], // Multiple targets
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should use first targetPath
+      assert.strictEqual(scores.get('src/utils/helper.ts'), 500);
     });
   });
 
@@ -224,6 +338,181 @@ describe('File Documentation Scores', () => {
       const coverage = calculateFileCoverage('src/agents/index.ts', scores, 1000);
       // src/agents/index.ts is not under src/agents/orchestrator/
       assert.strictEqual(coverage, 0);
+    });
+  });
+
+  describe('buildFileDocumentationScores with filesAccessed fallback', () => {
+    it('uses filesAccessed when filesReferenced is empty', () => {
+      // This addresses the Phase 2 stall bug: when LLM uses prose fallback,
+      // filesReferenced extraction often fails, but filesAccessed (from tool metrics)
+      // still tracks which files were read.
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'src/agents',
+          content: 'x'.repeat(1000),
+          filesReferenced: [], // No references extracted from content
+          filesAccessed: ['src/agents/base-agent.ts', 'src/agents/registry.ts'], // But these files were read
+          targetPaths: ['src/agents'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should use filesAccessed as fallback
+      assert.strictEqual(scores.get('src/agents/base-agent.ts'), 500);
+      assert.strictEqual(scores.get('src/agents/registry.ts'), 500);
+    });
+
+    it('prefers filesReferenced over filesAccessed when both have content', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/export',
+          content: 'x'.repeat(600),
+          filesReferenced: ['export-wiki.ts'], // Content extracted reference
+          filesAccessed: ['export-wiki.ts', 'audit-prompts.ts', 'generate-and-review.ts'], // Files read
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should use filesReferenced (1 file), not filesAccessed (3 files)
+      // Score = 600 / 1 = 600 for the referenced file
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 600);
+      // filesAccessed-only files should NOT get scores when filesReferenced exists
+      assert.strictEqual(scores.has('scripts/audit-prompts.ts'), false);
+    });
+
+    it('resolves bare filenames in filesAccessed using targetPaths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'scripts/overview',
+          content: 'x'.repeat(900),
+          filesReferenced: [],
+          filesAccessed: ['export-wiki.ts', 'audit-prompts.ts', 'generate-and-review.ts'],
+          targetPaths: ['scripts'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Should resolve bare filenames with targetPath
+      assert.strictEqual(scores.get('scripts/export-wiki.ts'), 300);
+      assert.strictEqual(scores.get('scripts/audit-prompts.ts'), 300);
+      assert.strictEqual(scores.get('scripts/generate-and-review.ts'), 300);
+    });
+
+    it('handles filesAccessed with already qualified paths', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'commits/abc123',
+          content: 'x'.repeat(800),
+          filesReferenced: [],
+          filesAccessed: ['src/agents/base.ts', 'tests/unit/base.test.ts'],
+          targetPaths: [], // Commit pages often don't have targetPaths
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Already qualified paths should be kept as-is
+      assert.strictEqual(scores.get('src/agents/base.ts'), 400);
+      assert.strictEqual(scores.get('tests/unit/base.test.ts'), 400);
+    });
+
+    it('does not use filesAccessed fallback when page has no content', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'empty-page',
+          content: '', // Empty content
+          filesReferenced: [],
+          filesAccessed: ['src/file.ts'],
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // No scores should be generated for empty content
+      assert.strictEqual(scores.size, 0);
+    });
+
+    it('accumulates scores from multiple pages using filesAccessed', () => {
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'x'.repeat(400),
+          filesReferenced: [],
+          filesAccessed: ['src/shared.ts', 'src/unique1.ts'],
+          targetPaths: ['src'],
+        },
+        {
+          path: 'page2',
+          content: 'x'.repeat(600),
+          filesReferenced: [],
+          filesAccessed: ['src/shared.ts', 'src/unique2.ts'],
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // shared.ts should have accumulated score from both pages
+      // Page 1: 400/2 = 200, Page 2: 600/2 = 300 → Total: 500
+      assert.strictEqual(scores.get('src/shared.ts'), 500);
+      assert.strictEqual(scores.get('src/unique1.ts'), 200);
+      assert.strictEqual(scores.get('src/unique2.ts'), 300);
+    });
+
+    it('filters out directory paths from filesReferenced to prevent ancestor inheritance', () => {
+      // This test ensures directory paths (ending with '/') are filtered out.
+      // Without this fix, a directory like 'src/' in filesReferenced would cause
+      // ALL files under src/ to inherit coverage via calculateFileCoverage's
+      // ancestor lookup, resulting in 96%+ touchedFilesRatio with just a few pages.
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'The src/ directory contains the main code.',
+          filesReferenced: ['src/', 'src/agents/', 'src/index.ts'], // Mix of dirs and files
+          filesAccessed: [],
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Directory paths should NOT be in the scores map
+      assert.strictEqual(scores.get('src/'), undefined, 'Directory path src/ should not be scored');
+      assert.strictEqual(scores.get('src/agents/'), undefined, 'Directory path src/agents/ should not be scored');
+
+      // Only the actual file should have a score
+      assert.ok(scores.get('src/index.ts')! > 0, 'File src/index.ts should have a score');
+
+      // Only 1 file (src/index.ts) should be scored, getting full content score
+      assert.strictEqual(scores.size, 1, 'Only actual files should be scored');
+    });
+
+    it('falls back to filesAccessed but still filters directories', () => {
+      // When filesReferenced is empty, filesAccessed is used. Ensure directories
+      // are filtered there too (though unlikely, for defensive coding).
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'Documentation for this directory.',
+          filesReferenced: [], // Empty - will fall back to filesAccessed
+          filesAccessed: ['src/', 'src/utils.ts'], // Mix
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Directory path should NOT be scored
+      assert.strictEqual(scores.get('src/'), undefined, 'Directory path should not be scored');
+
+      // Only actual file should have score
+      assert.strictEqual(scores.size, 1);
+      assert.ok(scores.get('src/utils.ts')! > 0, 'File should have a score');
     });
   });
 });

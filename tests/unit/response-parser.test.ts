@@ -20,6 +20,7 @@ import {
   parseBlocks,
   mapSeverity,
   mapPriority,
+  extractProseContent,
 } from '../../src/agents/parsing/index.js';
 
 describe('Response Parser', () => {
@@ -1260,5 +1261,267 @@ adding_debt
     assert.ok(summary);
     assert.ok(summary.includes('repository pattern'));
     assert.ok(!summary.includes('DEBT_TREND'));
+  });
+});
+
+describe('extractProseContent - fallback for unstructured responses', () => {
+  it('should extract first paragraphs when response has no section markers', () => {
+    const response = `The \`analysis\` directory contains several agent implementations, including:
+
+* \`code-change-agent.ts\` - Analyzes code changes from commits
+* \`codebase-explorer-agent.ts\` - Explores and documents undocumented directories
+* \`dependency-agent.ts\` - Tracks dependency changes
+
+These agents work together to build comprehensive documentation.`;
+
+    const result = extractProseContent(response, { maxParagraphs: 2 });
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('analysis'), 'Should include first paragraph');
+    assert.ok(result.includes('code-change-agent.ts'), 'Should include list content');
+  });
+
+  it('should return null for very short responses', () => {
+    const response = `Short.`;
+
+    const result = extractProseContent(response, { minLength: 50 });
+
+    assert.strictEqual(result, null, 'Should return null for short content');
+  });
+
+  it('should stop at section-like markers', () => {
+    const response = `This is the introductory content.
+
+FINDINGS:
+- Some finding here
+
+More content after findings.`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('introductory content'), 'Should include intro');
+    assert.ok(!result.includes('FINDINGS'), 'Should stop at section marker');
+    assert.ok(!result.includes('Some finding'), 'Should not include findings content');
+  });
+
+  it('should exclude code blocks from prose extraction', () => {
+    const response = `Here is an overview.
+
+\`\`\`typescript
+const x = 1;
+\`\`\`
+
+And here is more explanation.`;
+
+    const result = extractProseContent(response, { excludeCodeBlocks: true });
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('overview'), 'Should include text');
+    assert.ok(!result.includes('const x'), 'Should exclude code block');
+    assert.ok(result.includes('more explanation'), 'Should include text after code block');
+  });
+
+  it('should handle response that looks like markdown wiki content', () => {
+    const response = `# Authentication Module
+
+The authentication module provides secure user authentication.
+
+## Features
+
+- JWT-based tokens
+- Refresh token rotation
+- Session management
+
+## Usage
+
+\`\`\`typescript
+const token = await auth.login(user, password);
+\`\`\``;
+
+    const result = extractProseContent(response, { maxParagraphs: 3 });
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('authentication module'), 'Should include main content');
+  });
+
+  // Real LLM output variations observed in production
+  it('should handle Llama-style bullet point response', () => {
+    const response = `I will document the directory based on my exploration.
+
+The src/agents directory contains the following key components:
+
+* **CodeChangeAgent** - Analyzes code changes from git commits
+* **SecurityAgent** - Performs security audits on code
+* **PatternAgent** - Identifies design patterns
+
+Each agent implements the BaseAgent interface and follows a consistent structure.`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('CodeChangeAgent'), 'Should include bullet content');
+    assert.ok(result.includes('key components'), 'Should include intro text');
+  });
+
+  it('should handle response with thinking/reasoning prefix', () => {
+    const response = `Let me analyze the directory structure.
+
+First, I'll examine the main files...
+
+The orchestrator module coordinates work between multiple agents. It implements a phased approach:
+
+1. Bootstrap phase - Initial setup
+2. Skeleton phase - Core structure
+3. Breadth phase - Wide coverage
+
+This design allows for incremental documentation.`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    // Should include the substantive content
+    assert.ok(result.includes('orchestrator module'), 'Should include main content');
+  });
+
+  it('should handle response starting with "## Step" thinking', () => {
+    const response = `## Step 1: Explore the Directory
+
+First, I will list the contents of the directory to understand its structure.
+
+## Step 2: Document Findings
+
+The directory contains several TypeScript files implementing a repository pattern.
+
+## Summary
+
+This module provides data access abstractions.`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    // Should get content even with step-by-step format
+    assert.ok(result.length > 50, 'Should extract substantial content');
+  });
+
+  it('should handle response with mermaid diagrams', () => {
+    const response = `Here is the architecture overview:
+
+\`\`\`mermaid
+graph LR
+    A[Agent] --> B[Executor]
+    B --> C[Repository]
+\`\`\`
+
+The system uses a multi-agent architecture where each agent processes specific types of work.`;
+
+    const result = extractProseContent(response, { excludeCodeBlocks: true });
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('architecture overview'), 'Should include text before diagram');
+    assert.ok(result.includes('multi-agent'), 'Should include text after diagram');
+    assert.ok(!result.includes('graph LR'), 'Should exclude mermaid code');
+  });
+
+  it('should handle Chinese/multilingual responses', () => {
+    const response = `This module implements authentication functionality.
+
+认证模块提供用户身份验证功能。
+
+The main features include:
+- JWT token generation
+- Password hashing
+- Session management`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('authentication'), 'Should include English content');
+    // Should handle non-ASCII gracefully
+    assert.ok(result.length > 50, 'Should extract substantial content');
+  });
+
+  it('should handle response with inline code but no blocks', () => {
+    const response = `The \`UserService\` class handles user operations. It uses \`bcrypt\` for password hashing and \`jsonwebtoken\` for JWT generation.
+
+Key methods:
+- \`authenticate(email, password)\` - Validates credentials
+- \`createToken(user)\` - Generates JWT
+- \`refreshToken(token)\` - Refreshes expired tokens`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('UserService'), 'Should preserve inline code');
+    assert.ok(result.includes('bcrypt'), 'Should preserve inline code references');
+  });
+
+  it('should handle response with leading whitespace/newlines', () => {
+    const response = `
+
+
+The codebase implements a clean architecture with separation of concerns.
+
+Domain entities are defined in the domain/ directory.`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('clean architecture'), 'Should extract trimmed content');
+  });
+
+  it('should handle empty or whitespace-only response', () => {
+    const response = `
+
+    `;
+
+    const result = extractProseContent(response);
+
+    assert.strictEqual(result, null, 'Should return null for empty content');
+  });
+
+  it('should handle response that is just a numbered list', () => {
+    const response = `1. The module uses dependency injection
+2. All services implement interfaces
+3. Repository pattern for data access
+4. Event-driven communication between modules`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract numbered list');
+    assert.ok(result.includes('dependency injection'), 'Should include list content');
+  });
+
+  it('should handle response with XML-style tags', () => {
+    const response = `<summary>
+The authentication module provides secure login functionality.
+</summary>
+
+<details>
+Implementation uses JWT tokens with refresh rotation.
+</details>`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    // Should get content inside tags
+    assert.ok(result.includes('authentication'), 'Should include tag content');
+  });
+
+  it('should handle response with table-like content', () => {
+    const response = `Module overview:
+
+| Component | Purpose |
+|-----------|---------|
+| Agent | Process work items |
+| Executor | Run agents |
+| Repository | Store data |
+
+The table above shows the main components.`;
+
+    const result = extractProseContent(response);
+
+    assert.ok(result, 'Should extract content');
+    assert.ok(result.includes('Module overview'), 'Should include text content');
   });
 });

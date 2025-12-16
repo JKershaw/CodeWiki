@@ -94,6 +94,11 @@ export interface OrchestratorContext {
   // Sorted by coverage ascending (0% first), then by path length
   lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }>;
 
+  // File touch tracking for Phase 2 transition
+  // A file is "touched" if it has any documentation score > 0
+  totalSourceFiles: number;
+  touchedFiles: number;
+
   // File-level coverage tree - prioritized view with individual files
   fileCoverageTree: string | null;
 
@@ -173,6 +178,13 @@ export function buildCoveredFilesSet(
  * - Files mentioned in overview pages get lower scores (diluted by other files)
  * - Two files are unlikely to have exactly the same score
  *
+ * Path Resolution:
+ * - When LLMs generate documentation, they often use bare filenames (e.g., `export-wiki.ts`)
+ *   instead of full paths (e.g., `scripts/export-wiki.ts`).
+ * - If a page has targetPaths (the directory being documented), we use it to resolve
+ *   bare filenames to full paths.
+ * - This ensures coverage calculation matches documented files to source files.
+ *
  * @param wikiPages - Wiki pages with file tracking fields
  * @returns Map of file path to documentation depth score
  */
@@ -182,21 +194,73 @@ export function buildFileDocumentationScores(
   const scores = new Map<string, number>();
 
   for (const page of wikiPages) {
-    const filesReferenced = page.filesReferenced ?? [];
-    if (filesReferenced.length === 0) {
+    // Skip pages with no content
+    if (!page.content || page.content.length === 0) {
       continue;
     }
 
-    // Score per file = content length / number of files referenced
-    const scorePerFile = page.content.length / filesReferenced.length;
+    const filesReferenced = page.filesReferenced ?? [];
+    const filesAccessed = page.filesAccessed ?? [];
 
-    for (const file of filesReferenced) {
-      const currentScore = scores.get(file) ?? 0;
-      scores.set(file, currentScore + scorePerFile);
+    // Use filesReferenced if available, otherwise fall back to filesAccessed
+    // This addresses the Phase 2 stall bug: when prose fallback is used,
+    // filesReferenced extraction often fails, but filesAccessed still tracks
+    // which files were actually read by the agent.
+    //
+    // IMPORTANT: Filter out directory paths (ending with '/') to prevent
+    // the ancestor lookup in calculateFileCoverage from giving ALL files
+    // under a mentioned directory inherited coverage. This was causing
+    // touchedFilesRatio to spike to 96%+ when directories like 'src/'
+    // were mentioned in prose text.
+    const rawFilesToScore = filesReferenced.length > 0 ? filesReferenced : filesAccessed;
+    const filesToScore = rawFilesToScore.filter(f => !f.endsWith('/'));
+
+    if (filesToScore.length === 0) {
+      continue;
+    }
+
+    // Get the target directory for resolving bare filenames
+    const targetDir = page.targetPaths?.[0];
+
+    // Score per file = content length / number of files
+    const scorePerFile = page.content.length / filesToScore.length;
+
+    for (const file of filesToScore) {
+      // Resolve bare filenames using targetPaths
+      const resolvedFile = resolveFilePath(file, targetDir);
+      const currentScore = scores.get(resolvedFile) ?? 0;
+      scores.set(resolvedFile, currentScore + scorePerFile);
     }
   }
 
   return scores;
+}
+
+/**
+ * Resolve a file path, prefixing bare filenames with a target directory.
+ *
+ * A bare filename is one that doesn't contain a path separator '/'.
+ * If the file already has a path (contains '/'), it's returned as-is.
+ *
+ * @param file - The file path to resolve
+ * @param targetDir - Optional target directory to use as prefix
+ * @returns Resolved file path
+ */
+function resolveFilePath(file: string, targetDir?: string): string {
+  // If file already has a path separator, it's already qualified
+  if (file.includes('/')) {
+    return file;
+  }
+
+  // If we have a target directory and file is a bare filename, prefix it
+  if (targetDir) {
+    // Remove trailing slash from targetDir if present
+    const cleanTargetDir = targetDir.endsWith('/') ? targetDir.slice(0, -1) : targetDir;
+    return `${cleanTargetDir}/${file}`;
+  }
+
+  // No target directory available, return bare filename as-is
+  return file;
 }
 
 /**
@@ -376,9 +440,13 @@ export class ContextGatherer {
     const hasTestingGuide = wikiPages.some(p => p.synthesisType === 'testing-guide');
     const hasExtensionGuide = wikiPages.some(p => p.synthesisType === 'extension-guide');
 
-    // Calculate undocumented directories and low-coverage files using file-level coverage
-    const { directories: undocumentedDirectories, files: lowCoverageFiles } =
-      await this.calculateUndocumentedDirectoriesAndFiles(repoId, wikiPages);
+    // Calculate undocumented directories, low-coverage files, and touched file stats
+    const {
+      directories: undocumentedDirectories,
+      files: lowCoverageFiles,
+      totalSourceFiles,
+      touchedFiles,
+    } = await this.calculateUndocumentedDirectoriesAndFiles(repoId, wikiPages);
 
     // Build file-level coverage tree
     const fileCoverageTree = await this.buildFileCoverageTree(repoId, wikiPages);
@@ -422,6 +490,8 @@ export class ContextGatherer {
       hasExtensionGuide,
       undocumentedDirectories,
       lowCoverageFiles,
+      totalSourceFiles,
+      touchedFiles,
       fileCoverageTree,
       projectOverviewContent,
       pendingEditRequests,
@@ -447,9 +517,11 @@ export class ContextGatherer {
   ): Promise<{
     directories: UndocumentedDirectory[];
     files: Array<{ path: string; coverage: number; directory: string }>;
+    totalSourceFiles: number;
+    touchedFiles: number;
   }> {
     if (!this.repoAccessFactory) {
-      return { directories: [], files: [] };
+      return { directories: [], files: [], totalSourceFiles: 0, touchedFiles: 0 };
     }
 
     try {
@@ -458,7 +530,7 @@ export class ContextGatherer {
       const sourceFiles = allFiles.filter(f => this.isSourceFile(f));
 
       if (sourceFiles.length === 0) {
-        return { directories: [], files: [] };
+        return { directories: [], files: [], totalSourceFiles: 0, touchedFiles: 0 };
       }
 
       // Build documentation depth scores for graduated coverage
@@ -475,6 +547,10 @@ export class ContextGatherer {
       const dirStats = new Map<string, { total: number; lowCoverage: number }>();
       const lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }> = [];
 
+      // Track touched files for Phase 2 transition
+      // A file is "touched" if it has any documentation score > 0
+      let touchedFilesCount = 0;
+
       for (const filePath of sourceFiles) {
         const parts = filePath.split('/');
         if (parts.length < 2) continue;
@@ -484,6 +560,11 @@ export class ContextGatherer {
         // Graduated coverage using documentation depth scoring
         const coverage = calculateFileCoverage(filePath, documentationScores, maxScore);
         const isLowCoverage = coverage < LOW_COVERAGE_THRESHOLD;
+        const isTouched = coverage > 0;
+
+        if (isTouched) {
+          touchedFilesCount++;
+        }
 
         if (!dirStats.has(dirPath)) {
           dirStats.set(dirPath, { total: 0, lowCoverage: 0 });
@@ -523,10 +604,15 @@ export class ContextGatherer {
         return a.path.length - b.path.length;
       });
 
-      return { directories: sortedDirs, files: lowCoverageFiles };
+      return {
+        directories: sortedDirs,
+        files: lowCoverageFiles,
+        totalSourceFiles: sourceFiles.length,
+        touchedFiles: touchedFilesCount,
+      };
     } catch (error) {
       console.warn(`Failed to calculate undocumented directories: ${error}`);
-      return { directories: [], files: [] };
+      return { directories: [], files: [], totalSourceFiles: 0, touchedFiles: 0 };
     }
   }
 

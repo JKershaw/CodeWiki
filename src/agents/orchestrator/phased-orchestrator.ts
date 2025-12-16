@@ -21,6 +21,45 @@ import { ContextGatherer, type OrchestratorContext, type UndocumentedDirectory }
 import type { Orchestrator, OrchestratorConfig, WorkSummary } from './orchestrator.js';
 import { ANALYSIS_AGENTS, type AgentType } from '../../agents/registry.js';
 
+// ============================================================================
+// Debug Infrastructure
+// ============================================================================
+
+/**
+ * Check if orchestrator debug mode is enabled.
+ * Set ORCHESTRATOR_DEBUG=1 to enable detailed logging.
+ */
+export function isDebugEnabled(): boolean {
+  return process.env.ORCHESTRATOR_DEBUG === '1' || process.env.ORCHESTRATOR_DEBUG === 'true';
+}
+
+/**
+ * Log debug information if debug mode is enabled.
+ */
+function debugLog(message: string): void {
+  if (isDebugEnabled()) {
+    console.log(`[DEBUG ORCHESTRATOR] ${message}`);
+  }
+}
+
+/**
+ * Log debug section header.
+ */
+function debugSection(title: string): void {
+  if (isDebugEnabled()) {
+    console.log(`\n[DEBUG ORCHESTRATOR] ═══ ${title} ═══`);
+  }
+}
+
+/**
+ * Format directory coverage for debug output.
+ */
+function formatDirectoryCoverage(dir: UndocumentedDirectory): string {
+  const coveragePct = ((1 - dir.undocumentedRatio) * 100).toFixed(1);
+  const undocPct = (dir.undocumentedRatio * 100).toFixed(1);
+  return `${dir.path}: ${undocPct}% undocumented (${dir.undocumentedCount}/${dir.totalFiles} files) → ${coveragePct}% coverage`;
+}
+
 // Import CQRS queries
 import {
   createListWikiPagesQuery,
@@ -64,6 +103,8 @@ export interface PhaseContext {
   pages: number;
   directoriesWithAnyCoverage: number;
   lowestDirectoryCoverage: number;
+  /** Ratio of source files that have been touched (have any documentation score > 0) */
+  touchedFilesRatio: number;
   avgConfidence: number;
   hasProjectOverview: boolean;
   hasGettingStarted: boolean;
@@ -72,6 +113,9 @@ export interface PhaseContext {
   lowConfidenceRatio: number;
   openFindings: number;
 }
+
+/** Minimum ratio of files that must be touched to exit Phase 2 */
+export const TOUCHED_FILES_THRESHOLD = 0.90;
 
 /**
  * Detect current phase based on wiki state.
@@ -87,8 +131,11 @@ export function detectPhase(ctx: PhaseContext): Phase {
     return Phase.Skeleton;
   }
 
-  // Phase 2: Any directory below 30% or pages < 25
-  if (ctx.lowestDirectoryCoverage < 30 || ctx.pages < 25) {
+  // Phase 2: Not enough files touched OR not enough pages
+  // We use touchedFilesRatio instead of lowestDirectoryCoverage to avoid
+  // the "moving target" problem where score-based percentages shift as maxScore grows.
+  // A file is "touched" if it has any documentation score > 0.
+  if (ctx.touchedFilesRatio < TOUCHED_FILES_THRESHOLD || ctx.pages < 25) {
     return Phase.Breadth;
   }
 
@@ -315,6 +362,51 @@ export class PhasedOrchestrator implements Orchestrator {
 
     console.log(`📊 Phase: ${Phase[phase]} (pages=${phaseCtx.pages}, dirs=${phaseCtx.directoriesWithAnyCoverage}, conf=${(phaseCtx.avgConfidence * 100).toFixed(0)}%)`);
 
+    // Debug output for phase context and coverage
+    if (isDebugEnabled()) {
+      debugSection('Phase Context');
+      debugLog(`pages: ${phaseCtx.pages}`);
+      debugLog(`directoriesWithAnyCoverage: ${phaseCtx.directoriesWithAnyCoverage}`);
+      debugLog(`lowestDirectoryCoverage: ${phaseCtx.lowestDirectoryCoverage.toFixed(1)}%`);
+      debugLog(`touchedFilesRatio: ${(phaseCtx.touchedFilesRatio * 100).toFixed(1)}% (${context.touchedFiles}/${context.totalSourceFiles} files)`);
+      debugLog(`avgConfidence: ${(phaseCtx.avgConfidence * 100).toFixed(1)}%`);
+      debugLog(`lowConfidenceRatio: ${(phaseCtx.lowConfidenceRatio * 100).toFixed(1)}%`);
+      debugLog(`openFindings: ${phaseCtx.openFindings}`);
+      debugLog(`Key pages: overview=${phaseCtx.hasProjectOverview}, getting-started=${phaseCtx.hasGettingStarted}, testing=${phaseCtx.hasTestingGuide}, extension=${phaseCtx.hasExtensionGuide}`);
+
+      debugSection('Phase Detection Logic');
+      if (phaseCtx.pages === 0) {
+        debugLog(`→ Phase 0 (Reconnaissance): pages === 0`);
+      } else if (phaseCtx.pages < 10 || phaseCtx.directoriesWithAnyCoverage < 3) {
+        debugLog(`→ Phase 1 (Skeleton): pages=${phaseCtx.pages} < 10 OR dirs=${phaseCtx.directoriesWithAnyCoverage} < 3`);
+      } else if (phaseCtx.touchedFilesRatio < TOUCHED_FILES_THRESHOLD || phaseCtx.pages < 25) {
+        debugLog(`→ Phase 2 (Breadth): touchedFilesRatio=${(phaseCtx.touchedFilesRatio * 100).toFixed(1)}% < ${(TOUCHED_FILES_THRESHOLD * 100).toFixed(0)}% OR pages=${phaseCtx.pages} < 25`);
+      } else {
+        debugLog(`→ Phase ${phase} based on key pages / confidence`);
+      }
+
+      debugSection(`Undocumented Directories (${context.undocumentedDirectories.length} total)`);
+      const topDirs = context.undocumentedDirectories.slice(0, 15);
+      for (const dir of topDirs) {
+        debugLog(formatDirectoryCoverage(dir));
+      }
+      if (context.undocumentedDirectories.length > 15) {
+        debugLog(`... and ${context.undocumentedDirectories.length - 15} more directories`);
+      }
+
+      debugSection(`Low Coverage Files (${context.lowCoverageFiles.length} total)`);
+      const topFiles = context.lowCoverageFiles.slice(0, 20);
+      for (const file of topFiles) {
+        debugLog(`${file.coverage.toFixed(0)}% ${file.path}`);
+      }
+      if (context.lowCoverageFiles.length > 20) {
+        debugLog(`... and ${context.lowCoverageFiles.length - 20} more files`);
+      }
+
+      debugSection('Existing Work Keys (pending)');
+      debugLog(`${existingWorkKeys.size} work items already pending`);
+    }
+
     // Generate work based on phase
     const workItems = await this.generatePhaseWork(
       phase,
@@ -324,6 +416,30 @@ export class PhasedOrchestrator implements Orchestrator {
       existingWorkKeys,
       remainingSlots
     );
+
+    // Debug: Final work item summary
+    if (isDebugEnabled()) {
+      debugSection('Generated Work Items');
+      if (workItems.length === 0) {
+        debugLog('No work items generated');
+      } else {
+        for (let i = 0; i < workItems.length; i++) {
+          const item = workItems[i]!;
+          let targetDesc = '';
+          if (item.target.type === 'path') {
+            const pathTarget = item.target as { path: string; priorityFiles?: string[] };
+            const fileCount = pathTarget.priorityFiles?.length ?? 0;
+            targetDesc = `path:${pathTarget.path}` + (fileCount > 0 ? ` (${fileCount} priority files)` : '');
+          } else if (item.target.type === 'commit') {
+            targetDesc = `commit:${(item.target as { commitId: string }).commitId.slice(0, 8)}`;
+          } else {
+            targetDesc = 'wiki';
+          }
+          debugLog(`  ${i + 1}. ${item.agentType} → ${targetDesc}`);
+        }
+      }
+      debugLog(`\nTotal: ${workItems.length} work items`);
+    }
 
     // Record orchestrator decision
     if (workItems.length > 0) {
@@ -359,7 +475,7 @@ export class PhasedOrchestrator implements Orchestrator {
 
     // Add phase-specific metrics
     if (phase === Phase.Breadth || phase === Phase.Skeleton) {
-      metrics.push(`lowest dir coverage: ${phaseCtx.lowestDirectoryCoverage.toFixed(0)}%`);
+      metrics.push(`touched files: ${(phaseCtx.touchedFilesRatio * 100).toFixed(0)}%`);
     }
     if (phase === Phase.DepthAndGuides) {
       const missing = [];
@@ -540,10 +656,17 @@ export class PhasedOrchestrator implements Orchestrator {
       ? context.lowConfidencePages / context.wikiPages
       : 0;
 
+    // Calculate touched files ratio for Phase 2 transition
+    // A file is "touched" if it has any documentation score > 0
+    const touchedFilesRatio = context.totalSourceFiles > 0
+      ? context.touchedFiles / context.totalSourceFiles
+      : 0;
+
     return {
       pages: context.wikiPages,
       directoriesWithAnyCoverage: dirsWithCoverage,
       lowestDirectoryCoverage: lowestCoverage,
+      touchedFilesRatio,
       avgConfidence: context.avgConfidence,
       hasProjectOverview: context.hasProjectOverview,
       hasGettingStarted: context.hasGettingStarted,
@@ -733,24 +856,73 @@ export class PhasedOrchestrator implements Orchestrator {
 
     // Prioritize in-progress directories, limit to MAX_FOCUS_DIRECTORIES
     // This ensures we complete directories to threshold before starting new ones
-    const prioritizedDirs = prioritizeDirectoriesForPhase(
+    const allPrioritized = prioritizeDirectoriesForPhase(
       context.undocumentedDirectories,
       phaseThreshold
-    ).slice(0, MAX_FOCUS_DIRECTORIES);
+    );
+    const prioritizedDirs = allPrioritized.slice(0, MAX_FOCUS_DIRECTORIES);
+
+    // Debug: Show prioritization results
+    if (isDebugEnabled()) {
+      debugSection('Phase 2 (Breadth) Directory Prioritization');
+      debugLog(`Phase threshold: ${((1 - phaseThreshold) * 100).toFixed(0)}% coverage (undocRatio <= ${phaseThreshold})`);
+      debugLog(`Total directories needing work: ${allPrioritized.length}`);
+
+      // Show in-progress vs not-started
+      const inProgress = allPrioritized.filter(d => d.undocumentedRatio < 1.0);
+      const notStarted = allPrioritized.filter(d => d.undocumentedRatio === 1.0);
+      debugLog(`In-progress (some coverage): ${inProgress.length}`);
+      debugLog(`Not started (0% coverage): ${notStarted.length}`);
+
+      debugLog(`\nSelected directories (max ${MAX_FOCUS_DIRECTORIES}):`);
+      for (let i = 0; i < prioritizedDirs.length; i++) {
+        const dir = prioritizedDirs[i]!;
+        const status = dir.undocumentedRatio < 1.0 ? 'IN-PROGRESS' : 'NOT-STARTED';
+        const coveragePct = ((1 - dir.undocumentedRatio) * 100).toFixed(1);
+        debugLog(`  ${i + 1}. [${status}] ${dir.path} → ${coveragePct}% coverage`);
+
+        // Show priority files for this directory
+        const dirFiles = context.lowCoverageFiles
+          .filter(f => f.directory === dir.path)
+          .slice(0, 5);
+        if (dirFiles.length > 0) {
+          for (const file of dirFiles) {
+            debugLog(`       └─ ${file.coverage.toFixed(0)}% ${file.path.split('/').pop()}`);
+          }
+          const remaining = context.lowCoverageFiles.filter(f => f.directory === dir.path).length - 5;
+          if (remaining > 0) {
+            debugLog(`       └─ ... and ${remaining} more files`);
+          }
+        }
+      }
+    }
 
     for (const dir of prioritizedDirs) {
       if (workItems.length >= maxItems - 2) break; // Reserve slots for quality work
 
       const key = `codebase-explorer:path:${dir.path}`;
-      if (existingWorkKeys.has(key)) continue;
+      if (existingWorkKeys.has(key)) {
+        if (isDebugEnabled()) {
+          debugLog(`SKIPPED (already pending): ${key}`);
+        }
+        continue;
+      }
       existingWorkKeys.add(key);
 
       // Use helper that includes priorityFiles for coverage-aware exploration
-      workItems.push(createExplorationWorkItem(
+      const workItem = createExplorationWorkItem(
         dir.path,
         repoId,
         context.lowCoverageFiles
-      ));
+      );
+      workItems.push(workItem);
+
+      if (isDebugEnabled()) {
+        const priorityFiles = workItem.target.type === 'path' && 'priorityFiles' in workItem.target
+          ? (workItem.target as { priorityFiles?: string[] }).priorityFiles ?? []
+          : [];
+        debugLog(`CREATED: codebase-explorer → ${dir.path} (${priorityFiles.length} priority files)`);
+      }
     }
 
     // 20% commits
