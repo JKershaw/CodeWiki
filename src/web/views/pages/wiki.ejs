@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CodeWiki - Wiki</title>
+  <title>CodeWiki - Wiki<%= page ? ': ' + page.title : '' %></title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -15,24 +15,51 @@
       <!-- Wiki View -->
       <section id="wiki-view" class="view active">
         <div class="section-header">
-          <h2>Wiki: <span id="wiki-repo-name"></span></h2>
+          <h2>Wiki: <span id="wiki-repo-name"><%= repo ? escapeHtml(repo.fullName) : '' %></span></h2>
           <div class="header-actions">
             <select id="wiki-selector" class="wiki-selector">
-              <option value="">Loading wikis...</option>
+              <% if (wikis.length === 0) { %>
+                <option value="">No wikis available</option>
+              <% } else { %>
+                <% wikis.forEach(function(wiki) { %>
+                  <option value="<%= wiki.id %>" <%= currentWiki && currentWiki.id === wiki.id ? 'selected' : '' %>>
+                    <%= escapeHtml(wiki.name) %><%= wiki.isActive ? ' (active)' : '' %>
+                  </option>
+                <% }); %>
+              <% } %>
             </select>
-            <button id="delete-wiki-btn" class="btn danger small" title="Delete this wiki">Delete Wiki</button>
+            <button id="delete-wiki-btn" class="btn danger small" title="Delete this wiki"<%= !currentWiki ? ' disabled' : '' %>>Delete Wiki</button>
             <a href="/" class="btn secondary">Back to Repos</a>
           </div>
         </div>
 
+        <% if (typeof error !== 'undefined' && error) { %>
+          <div class="error-message"><%= escapeHtml(error) %></div>
+        <% } %>
+
         <div class="wiki-layout">
           <aside id="wiki-sidebar">
             <h3>Pages</h3>
-            <div id="wiki-categories"></div>
+            <div id="wiki-categories">
+              <% if (tree.length === 0) { %>
+                <p class="placeholder">No pages yet</p>
+              <% } else { %>
+                <div class="wiki-tree">
+                  <%- include('../partials/wiki-tree-node', { nodes: tree, repoId: repoId, wikiId: currentWiki ? currentWiki.id : null, currentPath: currentPath, escapeHtml: escapeHtml }) %>
+                </div>
+              <% } %>
+            </div>
           </aside>
 
           <article id="wiki-content">
-            <p class="placeholder">Select a page from the sidebar</p>
+            <% if (page) { %>
+              <div class="wiki-body"><%- pageHtml %></div>
+              <div class="wiki-meta">
+                <%- include('../partials/wiki-metadata', { page: page, repoId: repoId, wikiId: currentWiki ? currentWiki.id : null, escapeHtml: escapeHtml }) %>
+              </div>
+            <% } else { %>
+              <p class="placeholder">Select a page from the sidebar</p>
+            <% } %>
           </article>
         </div>
       </section>
@@ -45,6 +72,8 @@
   <%- include('../partials/scripts') %>
   <script>
     window.currentRepoId = '<%= repoId %>';
+    window.currentWikiId = '<%= currentWiki ? currentWiki.id : '' %>';
+    window.currentPath = <%= currentPath ? "'" + currentPath + "'" : 'null' %>;
   </script>
 </body>
 </html>

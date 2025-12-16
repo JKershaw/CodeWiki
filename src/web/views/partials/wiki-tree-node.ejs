@@ -1,0 +1,39 @@
+<%#
+  Recursive partial for rendering wiki tree nodes.
+
+  Expected locals:
+  - nodes: WikiTreeNode[] - array of tree nodes to render
+  - repoId: string - repository ID for building links
+  - wikiId: string - wiki ID for query param
+  - currentPath: string|null - path of currently selected page
+  - escapeHtml: function - HTML escaping utility
+-%>
+<% nodes.forEach(function(node) { %>
+  <%
+    const hasChildren = node.children && node.children.length > 0;
+    const hasPage = !!node.page;
+    const isActive = currentPath === node.path;
+    const isAncestor = currentPath && currentPath.startsWith(node.path + '/');
+    const isExpanded = isAncestor || isActive;
+    const displayName = hasPage ? node.page.title : node.name;
+    const href = '/wiki/' + repoId + '/' + node.path + (wikiId ? '?wikiId=' + wikiId : '');
+  %>
+  <div class="tree-node" data-path="<%= escapeHtml(node.path) %>">
+    <div class="tree-node-header<%= isActive ? ' active' : '' %>"
+         data-path="<%= escapeHtml(node.path) %>"
+         data-has-page="<%= hasPage %>"
+         data-has-children="<%= hasChildren %>">
+      <span class="tree-toggle <%= hasChildren ? (isExpanded ? 'expanded' : '') : 'hidden' %>">&#9654;</span>
+      <% if (hasPage) { %>
+        <a href="<%= href %>" class="tree-node-name has-page"><%= escapeHtml(displayName) %></a>
+      <% } else { %>
+        <span class="tree-node-name no-page"><%= escapeHtml(displayName) %></span>
+      <% } %>
+    </div>
+    <% if (hasChildren) { %>
+      <div class="tree-children<%= isExpanded ? ' expanded' : '' %>" data-path="<%= escapeHtml(node.path) %>">
+        <%- include('wiki-tree-node', { nodes: node.children, repoId: repoId, wikiId: wikiId, currentPath: currentPath, escapeHtml: escapeHtml }) %>
+      </div>
+    <% } %>
+  </div>
+<% }); %>

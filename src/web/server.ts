@@ -256,7 +256,7 @@ export async function startServer(port = PORT) {
   resumeIncompleteAutoBenchmarks(repos, git, createLLM, repoServiceFactory);
 
   // Page routes (multi-page application)
-  app.use(createPageRoutes());
+  app.use(createPageRoutes({ repos }));
 
   const server = app.listen(port, () => {
     console.log(`CodeWiki web server running at http://localhost:${port}`);

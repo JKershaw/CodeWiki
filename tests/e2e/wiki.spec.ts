@@ -66,27 +66,29 @@ test.describe('Wiki Browser', () => {
     // Wait for tree to load
     await page.waitForSelector('.tree-node-header', { timeout: 10000 });
 
-    // Find a visible page node - try root level 'overview' first, or any visible page
+    // Find a visible page link - try root level 'overview' first, or any visible page
     // Nested pages may be inside collapsed parent nodes, so we need to find a visible one
-    let pageNode = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"]');
-    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
-      // Try to find any visible page node at root level (not inside collapsed children)
-      pageNode = page.locator('.wiki-tree > .tree-node > .tree-node-header[data-has-page="true"]').first();
+    let pageLink = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"] a.tree-node-name');
+    if (!(await pageLink.isVisible({ timeout: 2000 }).catch(() => false))) {
+      // Try to find any visible page link at root level (not inside collapsed children)
+      pageLink = page.locator('.wiki-tree > .tree-node > .tree-node-header[data-has-page="true"] a.tree-node-name').first();
     }
-    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
+    if (!(await pageLink.isVisible({ timeout: 2000 }).catch(() => false))) {
       // Fallback: expand first parent node that has children
       const parentNode = page.locator('.tree-node-header[data-has-children="true"]').first();
       if (await parentNode.isVisible()) {
         await parentNode.locator('.tree-toggle').click();
         await page.waitForTimeout(300);
       }
-      pageNode = page.locator('.tree-node-header[data-has-page="true"]:visible').first();
+      pageLink = page.locator('.tree-node-header[data-has-page="true"]:visible a.tree-node-name').first();
     }
 
-    await pageNode.click();
+    await pageLink.click();
 
-    // Content should update - check for wiki-body with content or wiki-meta (which appears after load)
-    // Note: We check for .wiki-body or .wiki-meta because the markdown library may not be loaded in test env
+    // Navigation should occur - wait for URL to include the page path
+    await page.waitForURL(/\/wiki\/[^/]+\//, { timeout: 10000 });
+
+    // Content should be visible after navigation
     await expect(page.locator('#wiki-content .wiki-body, #wiki-content .wiki-meta').first()).toBeVisible({ timeout: 10000 });
   });
 
@@ -100,22 +102,22 @@ test.describe('Wiki Browser', () => {
     // Wait for tree to load
     await page.waitForSelector('.tree-node-header', { timeout: 10000 });
 
-    // Find a visible page node - try root level 'overview' first
-    let pageNode = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"]');
-    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
+    // Find a visible page link - try root level 'overview' first
+    let pageLink = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"] a.tree-node-name');
+    if (!(await pageLink.isVisible({ timeout: 2000 }).catch(() => false))) {
       // Expand first parent node to reveal nested pages
       const parentNode = page.locator('.tree-node-header[data-has-children="true"]').first();
       if (await parentNode.isVisible()) {
         await parentNode.locator('.tree-toggle').click();
         await page.waitForTimeout(300);
       }
-      pageNode = page.locator('.tree-node-header[data-has-page="true"]:visible').first();
+      pageLink = page.locator('.tree-node-header[data-has-page="true"]:visible a.tree-node-name').first();
     }
 
-    await pageNode.click();
+    await pageLink.click();
 
-    // Wait for content to load
-    await page.waitForSelector('.wiki-meta', { timeout: 10000 });
+    // Wait for navigation and content to load
+    await page.waitForURL(/\/wiki\/[^/]+\//, { timeout: 10000 });
 
     // Confidence should be shown
     await expect(page.locator('.wiki-meta')).toContainText('Confidence');
@@ -177,24 +179,30 @@ test.describe('Wiki Browser', () => {
     // Wait for tree to load
     await page.waitForSelector('.tree-node-header', { timeout: 10000 });
 
-    // Find a visible page node - try root level 'overview' first
-    let pageNode = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"]');
-    if (!(await pageNode.isVisible({ timeout: 2000 }).catch(() => false))) {
+    // Find a visible page link - try root level 'overview' first
+    let pageLink = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"] a.tree-node-name');
+    let pageHeader = page.locator('.tree-node-header[data-has-page="true"][data-path="overview"]');
+    if (!(await pageLink.isVisible({ timeout: 2000 }).catch(() => false))) {
       // Expand first parent node to reveal nested pages
       const parentNode = page.locator('.tree-node-header[data-has-children="true"]').first();
       if (await parentNode.isVisible()) {
         await parentNode.locator('.tree-toggle').click();
         await page.waitForTimeout(300);
       }
-      pageNode = page.locator('.tree-node-header[data-has-page="true"]:visible').first();
+      pageLink = page.locator('.tree-node-header[data-has-page="true"]:visible a.tree-node-name').first();
+      pageHeader = page.locator('.tree-node-header[data-has-page="true"]:visible').first();
     }
 
-    await pageNode.click();
+    // Get the path before clicking
+    const targetPath = await pageHeader.getAttribute('data-path');
 
-    // Wait for content to load
-    await page.waitForSelector('.wiki-meta', { timeout: 10000 });
+    await pageLink.click();
 
-    // The clicked node should have active class
-    await expect(pageNode).toHaveClass(/active/);
+    // Wait for navigation and content to load
+    await page.waitForURL(/\/wiki\/[^/]+\//, { timeout: 10000 });
+
+    // The node with the target path should have active class (server-rendered)
+    const activeNode = page.locator(`.tree-node-header[data-path="${targetPath}"]`);
+    await expect(activeNode).toHaveClass(/active/);
   });
 });
