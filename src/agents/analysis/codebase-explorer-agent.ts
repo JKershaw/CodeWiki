@@ -13,6 +13,7 @@ import {
   parseSection,
   parseListItemsWithFallback,
   parseConfidence,
+  extractProseContent,
   type ItemPattern,
 } from '../parsing/index.js';
 import { extractLinksFromContent } from '../../utils/link-extraction.js';
@@ -120,7 +121,7 @@ export class CodebaseExplorerAgent implements Agent {
       });
 
       // Parse the response
-      const analysis = this.parseResponse(completion.content);
+      const analysis = this.parseResponse(completion.content, targetPath);
 
       // All paths are verified since we pre-fetched them
       const verifiedPaths = new Set(keyFiles);
@@ -196,7 +197,7 @@ export class CodebaseExplorerAgent implements Agent {
     });
 
     // Parse the LLM response
-    const analysis = this.parseResponse(completion.content);
+    const analysis = this.parseResponse(completion.content, targetPath);
 
     // Extract verified paths from tool calls
     const verifiedPaths = extractVerifiedPaths(completion.toolCalls);
@@ -607,7 +608,7 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
 `;
   }
 
-  private parseResponse(response: string): ParsedAnalysis {
+  private parseResponse(response: string, targetPath?: string): ParsedAnalysis {
     const ctx = createParseContext('codebase-explorer', response);
 
     // Parse summary - try colon format first, then markdown heading format
@@ -617,6 +618,19 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
       const mdMatch = response.match(/##\s*SUMMARY\s*\n([\s\S]*?)(?=##\s*FINDINGS|##\s*WIKI|FINDINGS:|WIKI_PAGES:|CONFIDENCE:|$)/i);
       if (mdMatch && mdMatch[1]) {
         summary = mdMatch[1].trim();
+      }
+    }
+
+    // Last resort: extract prose content when LLM ignores format entirely
+    if (!summary || summary.length < 20) {
+      const proseContent = extractProseContent(response, {
+        maxParagraphs: 3,
+        excludeCodeBlocks: false,
+        minLength: 50,
+      });
+      if (proseContent) {
+        console.log('[codebase-explorer] Using prose fallback for summary');
+        summary = proseContent;
       }
     }
     summary = summary ?? '';
@@ -674,6 +688,24 @@ Remember: Call list_directory and read_file BEFORE writing any output above.
         if (path && content) {
           wikiPages.push({ path, title, content });
         }
+      }
+    }
+
+    // Last resort for wiki pages: if no pages parsed but we have prose content,
+    // create a wiki page from the response content
+    if (wikiPages.length === 0 && targetPath) {
+      const proseContent = extractProseContent(response, {
+        excludeCodeBlocks: false,
+        minLength: 100,
+      });
+      if (proseContent && proseContent.length >= 100) {
+        console.log('[codebase-explorer] Using prose fallback for wiki page');
+        const pagePath = targetPath.replace(/^\/+/, '').replace(/\/+$/, '') || 'overview';
+        wikiPages.push({
+          path: pagePath,
+          title: pathToTitle(pagePath),
+          content: proseContent,
+        });
       }
     }
 

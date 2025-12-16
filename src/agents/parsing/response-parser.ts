@@ -779,3 +779,112 @@ export function mapPriority(value: string): 'high' | 'medium' | 'low' {
   }
   return 'low';
 }
+
+/**
+ * Options for extracting prose content from unstructured responses.
+ */
+export interface ProseExtractionOptions {
+  /** Minimum length to consider valid content (default: 20) */
+  minLength?: number;
+  /** Maximum paragraphs to extract (default: unlimited) */
+  maxParagraphs?: number;
+  /** Whether to exclude code blocks (default: false) */
+  excludeCodeBlocks?: boolean;
+}
+
+/**
+ * Extract useful prose content from an unstructured LLM response.
+ *
+ * This is a "last resort" fallback when the LLM ignores all format instructions
+ * and outputs plain prose without any section markers. It attempts to extract
+ * the substantive content while filtering out boilerplate.
+ *
+ * Use this when:
+ * - All section parsing (SUMMARY:, ## SUMMARY, etc.) has failed
+ * - The response contains useful information but not in the expected format
+ * - You want to salvage content rather than returning empty/default values
+ *
+ * @param response - The raw LLM response
+ * @param options - Extraction options
+ * @returns Extracted prose content, or null if no valid content found
+ */
+export function extractProseContent(
+  response: string,
+  options: ProseExtractionOptions = {}
+): string | null {
+  const {
+    minLength = 20,
+    maxParagraphs,
+    excludeCodeBlocks = false,
+  } = options;
+
+  // Trim leading/trailing whitespace
+  let content = response.trim();
+
+  if (!content || content.length < minLength) {
+    return null;
+  }
+
+  // Remove code blocks if requested
+  if (excludeCodeBlocks) {
+    content = content.replace(/```[\s\S]*?```/g, '\n');
+  }
+
+  // Section markers that indicate structured content - stop before these
+  const sectionMarkers = [
+    /^SUMMARY:/m,
+    /^FINDINGS:/m,
+    /^WIKI_PAGES:/m,
+    /^WIKI_UPDATES:/m,
+    /^CONFIDENCE:/m,
+    /^TODO_ITEMS:/m,
+    /^REMEDIATION:/m,
+    /^DEBT_TREND:/m,
+    /^SECURITY_RELEVANCE:/m,
+    /^PAGE_TITLE:/m,
+    /^DECISION:/m,
+  ];
+
+  // Find the earliest section marker and truncate before it
+  let earliestMarkerIndex = content.length;
+  for (const marker of sectionMarkers) {
+    const match = content.match(marker);
+    if (match && match.index !== undefined && match.index < earliestMarkerIndex) {
+      earliestMarkerIndex = match.index;
+    }
+  }
+
+  if (earliestMarkerIndex < content.length) {
+    content = content.slice(0, earliestMarkerIndex).trim();
+  }
+
+  // If we cut everything, return null
+  if (!content || content.length < minLength) {
+    return null;
+  }
+
+  // Split into paragraphs (double newline separated)
+  const paragraphs = content
+    .split(/\n\n+/)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  if (paragraphs.length === 0) {
+    return null;
+  }
+
+  // Limit paragraphs if requested
+  const selectedParagraphs = maxParagraphs
+    ? paragraphs.slice(0, maxParagraphs)
+    : paragraphs;
+
+  // Rejoin paragraphs
+  const result = selectedParagraphs.join('\n\n').trim();
+
+  // Final length check
+  if (result.length < minLength) {
+    return null;
+  }
+
+  return result;
+}

@@ -21,6 +21,7 @@ export {
   type Severity,
   type Importance,
   type FlexibleParseOptions,
+  type ProseExtractionOptions,
 
   // Core functions
   createParseContext,
@@ -34,6 +35,9 @@ export {
   parseListItemsWithFallback,
   parseStringList,
   parseBlocks,
+
+  // Fallback extraction
+  extractProseContent,
 
   // Mapping utilities
   mapSeverity,
