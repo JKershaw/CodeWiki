@@ -463,5 +463,56 @@ describe('File Documentation Scores', () => {
       assert.strictEqual(scores.get('src/unique1.ts'), 200);
       assert.strictEqual(scores.get('src/unique2.ts'), 300);
     });
+
+    it('filters out directory paths from filesReferenced to prevent ancestor inheritance', () => {
+      // This test ensures directory paths (ending with '/') are filtered out.
+      // Without this fix, a directory like 'src/' in filesReferenced would cause
+      // ALL files under src/ to inherit coverage via calculateFileCoverage's
+      // ancestor lookup, resulting in 96%+ touchedFilesRatio with just a few pages.
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'The src/ directory contains the main code.',
+          filesReferenced: ['src/', 'src/agents/', 'src/index.ts'], // Mix of dirs and files
+          filesAccessed: [],
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Directory paths should NOT be in the scores map
+      assert.strictEqual(scores.get('src/'), undefined, 'Directory path src/ should not be scored');
+      assert.strictEqual(scores.get('src/agents/'), undefined, 'Directory path src/agents/ should not be scored');
+
+      // Only the actual file should have a score
+      assert.ok(scores.get('src/index.ts')! > 0, 'File src/index.ts should have a score');
+
+      // Only 1 file (src/index.ts) should be scored, getting full content score
+      assert.strictEqual(scores.size, 1, 'Only actual files should be scored');
+    });
+
+    it('falls back to filesAccessed but still filters directories', () => {
+      // When filesReferenced is empty, filesAccessed is used. Ensure directories
+      // are filtered there too (though unlikely, for defensive coding).
+      const wikiPages: WikiPageWithFileTracking[] = [
+        {
+          path: 'page1',
+          content: 'Documentation for this directory.',
+          filesReferenced: [], // Empty - will fall back to filesAccessed
+          filesAccessed: ['src/', 'src/utils.ts'], // Mix
+          targetPaths: ['src'],
+        },
+      ];
+
+      const scores = buildFileDocumentationScores(wikiPages);
+
+      // Directory path should NOT be scored
+      assert.strictEqual(scores.get('src/'), undefined, 'Directory path should not be scored');
+
+      // Only actual file should have score
+      assert.strictEqual(scores.size, 1);
+      assert.ok(scores.get('src/utils.ts')! > 0, 'File should have a score');
+    });
   });
 });

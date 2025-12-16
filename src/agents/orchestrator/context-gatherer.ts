@@ -206,7 +206,14 @@ export function buildFileDocumentationScores(
     // This addresses the Phase 2 stall bug: when prose fallback is used,
     // filesReferenced extraction often fails, but filesAccessed still tracks
     // which files were actually read by the agent.
-    const filesToScore = filesReferenced.length > 0 ? filesReferenced : filesAccessed;
+    //
+    // IMPORTANT: Filter out directory paths (ending with '/') to prevent
+    // the ancestor lookup in calculateFileCoverage from giving ALL files
+    // under a mentioned directory inherited coverage. This was causing
+    // touchedFilesRatio to spike to 96%+ when directories like 'src/'
+    // were mentioned in prose text.
+    const rawFilesToScore = filesReferenced.length > 0 ? filesReferenced : filesAccessed;
+    const filesToScore = rawFilesToScore.filter(f => !f.endsWith('/'));
 
     if (filesToScore.length === 0) {
       continue;
