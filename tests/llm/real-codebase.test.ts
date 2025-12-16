@@ -1068,5 +1068,186 @@ export type PostStatus = 'draft' | 'published' | 'archived' | 'deleted';
       assert.strictEqual(result.removedPaths?.length ?? 0, 0,
         `Paths were silently removed: ${result.removedPaths?.join(', ')}`);
     });
+
+    it('handles large directory (30+ files) triggering tool-based approach', async () => {
+      const repoId = 'large-directory-test';
+
+      // Create 35+ files to exceed MAX_FILES_TO_PREFETCH * 2 (30) threshold
+      // This forces the agent to use tool-based approach instead of pre-fetch
+      const files: Record<string, string> = {
+        'README.md': '# Large Directory Test\n\nThis repo has 35+ files to trigger tool-based exploration.',
+        'package.json': JSON.stringify({ name: 'large-test', version: '1.0.0' }, null, 2),
+      };
+
+      // Generate 35 handler files - this exceeds the 30 file threshold
+      for (let i = 1; i <= 35; i++) {
+        files[`src/handlers/handler-${i.toString().padStart(2, '0')}.ts`] = `
+/**
+ * Handler ${i} - Processes type ${i} requests.
+ * Part of the request handling pipeline.
+ */
+import type { Request, Response } from '../types.js';
+import { validateInput } from '../utils/validation.js';
+import { logRequest } from '../utils/logging.js';
+
+export interface Handler${i}Input {
+  id: string;
+  type: 'handler${i}';
+  payload: Record<string, unknown>;
+  timestamp: Date;
+}
+
+export interface Handler${i}Output {
+  success: boolean;
+  handlerId: ${i};
+  processedAt: Date;
+  result: unknown;
+}
+
+export class Handler${i} {
+  private readonly handlerId = ${i};
+
+  async handle(req: Request<Handler${i}Input>): Promise<Response<Handler${i}Output>> {
+    logRequest(req, 'Handler${i}');
+
+    const validation = validateInput(req.body);
+    if (!validation.valid) {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          handlerId: this.handlerId,
+          processedAt: new Date(),
+          result: { error: validation.error },
+        },
+      };
+    }
+
+    // Process the request
+    const result = await this.process(req.body);
+
+    return {
+      status: 200,
+      body: {
+        success: true,
+        handlerId: this.handlerId,
+        processedAt: new Date(),
+        result,
+      },
+    };
+  }
+
+  private async process(input: Handler${i}Input): Promise<unknown> {
+    // Simulate processing
+    return { processed: true, inputId: input.id };
+  }
+}
+
+export function createHandler${i}(): Handler${i} {
+  return new Handler${i}();
+}
+`;
+      }
+
+      // Add supporting files
+      files['src/types.ts'] = `
+export interface Request<T> {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: T;
+}
+
+export interface Response<T> {
+  status: number;
+  headers?: Record<string, string>;
+  body: T;
+}
+`;
+
+      files['src/utils/validation.ts'] = `
+export interface ValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+export function validateInput(input: unknown): ValidationResult {
+  if (!input || typeof input !== 'object') {
+    return { valid: false, error: 'Invalid input' };
+  }
+  return { valid: true };
+}
+`;
+
+      files['src/utils/logging.ts'] = `
+export function logRequest(req: unknown, handler: string): void {
+  console.log(\`[\${handler}] Processing request\`);
+}
+`;
+
+      files['src/utils/index.ts'] = `
+export * from './validation.js';
+export * from './logging.js';
+`;
+
+      files['src/handlers/index.ts'] = `
+${Array.from({ length: 35 }, (_, i) =>
+  `export { Handler${i + 1}, createHandler${i + 1} } from './handler-${(i + 1).toString().padStart(2, '0')}.js';`
+).join('\n')}
+`;
+
+      files['src/index.ts'] = `
+export * from './types.js';
+export * from './utils/index.js';
+export * from './handlers/index.js';
+`;
+
+      await createTestRepo(ctx, repoId, files);
+
+      const agent = new CodebaseExplorerAgent();
+      const agentCtx = await ctx.agentContext(repoId);
+
+      console.log(`\n📁 Created repo with ${Object.keys(files).length} files`);
+      console.log('   This should trigger tool-based approach (threshold: 30 files)');
+
+      // Explore the src directory - should trigger tool-based approach
+      const result = await agent.run(
+        { type: 'path', path: 'src' },
+        agentCtx
+      );
+
+      const health = checkParseHealth(result.parseStats);
+      console.log(formatParseHealth('Large directory (tool-based)', health));
+
+      // Log detailed metrics
+      console.log(`\nTool metrics:`);
+      console.log(`  Tool calls: ${result.toolMetrics?.toolCallCount ?? 0}`);
+      console.log(`  Files read: ${result.toolMetrics?.filesRead?.length ?? 0}`);
+
+      if (result.parseStats?.fallbacksUsed && result.parseStats.fallbacksUsed.length > 0) {
+        console.log(`\n⚠️  Fallbacks triggered:`);
+        result.parseStats.fallbacksUsed.forEach(f => console.log(`    - ${f}`));
+      }
+
+      if (result.removedPaths && result.removedPaths.length > 0) {
+        console.log(`\n⚠️  Paths removed: ${result.removedPaths.length}`);
+        console.log(`    ${result.removedPaths.slice(0, 10).join(', ')}${result.removedPaths.length > 10 ? '...' : ''}`);
+      }
+
+      logTestResult('Large directory parsing (tool-based)', {
+        passed: health.healthy && (result.removedPaths?.length ?? 0) === 0,
+        score: health.healthy ? 10 : Math.max(0, 10 - health.fallbacksUsed.length * 2),
+        reasoning: `Tool calls: ${result.toolMetrics?.toolCallCount ?? 0}, Fallbacks: ${health.fallbacksUsed.length}, Removed: ${result.removedPaths?.length ?? 0}`,
+        improvements: [
+          ...health.fallbacksUsed.map(f => `Fallback: ${f}`),
+          ...(result.removedPaths?.length ? [`${result.removedPaths.length} paths removed`] : []),
+        ],
+      });
+
+      // HARD ASSERTIONS - These SHOULD fail with tool-based approach
+      assertNoFallbacks(result.parseStats);
+      assert.strictEqual(result.removedPaths?.length ?? 0, 0,
+        `Paths were silently removed: ${result.removedPaths?.join(', ')}`);
+    });
   });
 });
