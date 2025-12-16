@@ -774,8 +774,10 @@ export function formatDate(date: Date): string {
         await import('../../src/utils/file-reference-extraction.js');
 
       // Also extract file references from generated wiki content (like production does)
+      // Pass targetPath to resolve bare filenames (this is the fix we're testing!)
+      const targetPath = 'src/services';
       const contentRefs = result.updates.flatMap(u =>
-        u.content ? extractFileReferencesFromContent(u.content) : []
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
       );
 
       const allReferences = collectAllReferences(
@@ -788,7 +790,7 @@ export function formatDate(date: Date): string {
 
       // Also report just content-extracted refs separately
       const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
-      console.log(formatFileReferenceMetrics('Content-extracted refs', contentMetrics));
+      console.log(formatFileReferenceMetrics('Content-extracted refs (with targetPath resolution)', contentMetrics));
 
       // Log the metrics
       console.log(formatFileReferenceMetrics('CodebaseExplorerAgent', metrics));
@@ -915,8 +917,9 @@ export function validateToken(token: string) { return true; }`,
       const { extractFileReferencesFromContent } =
         await import('../../src/utils/file-reference-extraction.js');
 
+      const targetPath = 'src/services';
       const contentRefs = result.updates.flatMap(u =>
-        u.content ? extractFileReferencesFromContent(u.content) : []
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
       );
 
       const allReferences = collectAllReferences(
@@ -928,7 +931,7 @@ export function validateToken(token: string) { return true; }`,
       const metrics = validateFileReferences(allReferences, sourceFileTree);
       const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
 
-      console.log(formatFileReferenceMetrics('Nested structure - Content refs', contentMetrics));
+      console.log(formatFileReferenceMetrics('Nested structure - Content refs (with resolution)', contentMetrics));
       console.log(formatFileReferenceMetrics('Nested structure - All refs', metrics));
 
       logTestResult('Nested directory reference accuracy', {
@@ -982,8 +985,9 @@ export const cache = {
       const { extractFileReferencesFromContent } =
         await import('../../src/utils/file-reference-extraction.js');
 
+      const targetPath = 'src/database';
       const contentRefs = result.updates.flatMap(u =>
-        u.content ? extractFileReferencesFromContent(u.content) : []
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
       );
 
       const allReferences = collectAllReferences(
@@ -1051,8 +1055,9 @@ ${Array.from({ length: 15 }, (_, i) => `export { Handler${i + 1} } from './handl
       const { extractFileReferencesFromContent } =
         await import('../../src/utils/file-reference-extraction.js');
 
+      const targetPath = 'src/handlers';
       const contentRefs = result.updates.flatMap(u =>
-        u.content ? extractFileReferencesFromContent(u.content) : []
+        u.content ? extractFileReferencesFromContent(u.content, targetPath) : []
       );
 
       const allReferences = collectAllReferences(
@@ -1064,7 +1069,7 @@ ${Array.from({ length: 15 }, (_, i) => `export { Handler${i + 1} } from './handl
       const metrics = validateFileReferences(allReferences, sourceFileTree);
       const contentMetrics = validateFileReferences(contentRefs, sourceFileTree);
 
-      console.log(formatFileReferenceMetrics('Large dir (16 files) - Content refs', contentMetrics));
+      console.log(formatFileReferenceMetrics('Large dir (16 files) - Content refs (with resolution)', contentMetrics));
       console.log(formatFileReferenceMetrics('Large dir (16 files) - All refs', metrics));
 
       // Categorize broken references
@@ -1114,8 +1119,9 @@ ${Array.from({ length: 15 }, (_, i) => `export { Handler${i + 1} } from './handl
       for (const path of paths) {
         const result = await agent.run({ type: 'path', path }, agentCtx);
 
+        // Pass the current path as targetPath for resolution
         const contentRefs = result.updates.flatMap(u =>
-          u.content ? extractFileReferencesFromContent(u.content) : []
+          u.content ? extractFileReferencesFromContent(u.content, path) : []
         );
         allContentRefs.push(...contentRefs);
         allToolRefs.push(...(result.toolMetrics?.filesRead ?? []));

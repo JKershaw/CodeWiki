@@ -160,6 +160,64 @@ Configuration is in config/settings.json file.
       assert.ok(refs.includes('src/services/api.ts'));
       assert.ok(refs.includes('config/settings.json'));
     });
+
+    describe('targetPath resolution', () => {
+      it('resolves bare filenames using targetPath', () => {
+        const content = 'Check `config.ts` and `utils.ts` for details.';
+        const refs = extractFileReferencesFromContent(content, 'src/core');
+
+        // Bare filenames should be prefixed with targetPath
+        assert.deepStrictEqual(refs, ['src/core/config.ts', 'src/core/utils.ts']);
+      });
+
+      it('does not modify paths that already contain a directory', () => {
+        const content = 'See `src/config.ts` and `lib/utils.ts` for details.';
+        const refs = extractFileReferencesFromContent(content, 'other/path');
+
+        // Full paths should remain unchanged
+        assert.deepStrictEqual(refs, ['src/config.ts', 'lib/utils.ts']);
+      });
+
+      it('handles mixed bare and full paths', () => {
+        const content = `
+Check \`src/index.ts\` for the entry point.
+The \`config.ts\` file handles settings.
+Also see \`helper.ts\` for utilities.
+`;
+        const refs = extractFileReferencesFromContent(content, 'src/core');
+
+        // src/index.ts should stay as-is, bare names should be prefixed
+        assert.ok(refs.includes('src/index.ts'));
+        assert.ok(refs.includes('src/core/config.ts'));
+        assert.ok(refs.includes('src/core/helper.ts'));
+      });
+
+      it('leaves bare filenames unchanged when no targetPath provided', () => {
+        const content = 'Check `config.ts` for settings.';
+        const refs = extractFileReferencesFromContent(content);
+
+        // Without targetPath, bare filename stays as-is
+        assert.deepStrictEqual(refs, ['config.ts']);
+      });
+
+      it('normalizes targetPath with trailing slash', () => {
+        const content = 'Check `config.ts` for settings.';
+        const refs = extractFileReferencesFromContent(content, 'src/core/');
+
+        // Trailing slash should be handled
+        assert.deepStrictEqual(refs, ['src/core/config.ts']);
+      });
+
+      it('works with extractFileReferencesAsSet as well', () => {
+        const content = '`config.ts` and `utils.ts` files';
+        const refs = extractFileReferencesAsSet(content, 'src/lib');
+
+        assert.ok(refs instanceof Set);
+        assert.strictEqual(refs.size, 2);
+        assert.ok(refs.has('src/lib/config.ts'));
+        assert.ok(refs.has('src/lib/utils.ts'));
+      });
+    });
   });
 
   describe('extractFileReferencesAsSet', () => {

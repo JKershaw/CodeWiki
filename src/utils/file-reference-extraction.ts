@@ -43,13 +43,15 @@ const KNOWN_CONFIG_FILES = [
  * - Extracts file-like paths from prose text
  * - Recognizes common file extensions and config files
  * - Normalizes paths (removes ./ prefix)
+ * - Resolves bare filenames using targetPath context
  * - Filters out URLs, commands, and variable names
  * - Deduplicates results
  *
  * @param content - Markdown content to extract file references from
+ * @param targetPath - Optional directory context for resolving bare filenames
  * @returns Array of unique file/folder paths
  */
-export function extractFileReferencesFromContent(content: string): string[] {
+export function extractFileReferencesFromContent(content: string, targetPath?: string): string[] {
   if (!content || content.trim().length === 0) {
     return [];
   }
@@ -65,8 +67,41 @@ export function extractFileReferencesFromContent(content: string): string[] {
   // Extract from prose text (path/to/file.ext without backticks)
   extractFromProseText(content, refs);
 
+  // Resolve bare filenames using targetPath context
+  const resolvedRefs = refs.map(ref => resolveBareFilename(ref, targetPath));
+
   // Deduplicate and return
-  return [...new Set(refs)];
+  return [...new Set(resolvedRefs)];
+}
+
+/**
+ * Resolve a bare filename to a full path using targetPath context.
+ *
+ * If the reference is a bare filename (no '/') and we have a targetPath,
+ * prefix the filename with the targetPath. This handles the common case
+ * where LLMs mention files like `config.ts` when documenting `src/core`,
+ * which should resolve to `src/core/config.ts`.
+ *
+ * @param ref - File reference (may be bare filename or full path)
+ * @param targetPath - Directory context for resolution
+ * @returns Resolved path
+ */
+function resolveBareFilename(ref: string, targetPath?: string): string {
+  // If no targetPath provided, return as-is
+  if (!targetPath) {
+    return ref;
+  }
+
+  // If ref already contains a path separator, it's not a bare filename
+  if (ref.includes('/')) {
+    return ref;
+  }
+
+  // Normalize targetPath (remove trailing slash)
+  const normalizedTarget = targetPath.replace(/\/+$/, '');
+
+  // Prefix bare filename with targetPath
+  return `${normalizedTarget}/${ref}`;
 }
 
 /**
@@ -74,10 +109,11 @@ export function extractFileReferencesFromContent(content: string): string[] {
  * Useful for quick existence checks.
  *
  * @param content - Markdown content to extract file references from
+ * @param targetPath - Optional directory context for resolving bare filenames
  * @returns Set of unique file/folder paths
  */
-export function extractFileReferencesAsSet(content: string): Set<string> {
-  return new Set(extractFileReferencesFromContent(content));
+export function extractFileReferencesAsSet(content: string, targetPath?: string): Set<string> {
+  return new Set(extractFileReferencesFromContent(content, targetPath));
 }
 
 /**

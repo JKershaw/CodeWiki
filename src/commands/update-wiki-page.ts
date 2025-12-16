@@ -82,7 +82,7 @@ export async function handleUpdateWikiPage(
         path: update.path,
         title: update.title ?? extractTitleWithFallback(update.content, update.path),
         content: update.content,
-        filesReferenced: extractFileReferencesFromContent(update.content),
+        filesReferenced: extractFileReferencesFromContent(update.content, update.targetPaths?.[0]),
       };
       if (update.sourceCommitId) {
         createParams.sourceCommitId = update.sourceCommitId;
@@ -153,7 +153,7 @@ export async function handleUpdateWikiPage(
         content: update.content,
         title: update.title ?? extractTitleWithFallback(update.content, update.path),
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
-        filesReferenced: extractFileReferencesFromContent(update.content),
+        filesReferenced: extractFileReferencesFromContent(update.content, update.targetPaths?.[0]),
       };
       if (update.sourceCommitId) {
         updateParams.sourceCommitId = update.sourceCommitId;
@@ -235,7 +235,7 @@ export async function handleUpdateWikiPage(
           path: update.path,
           title: update.title ?? extractTitleWithFallback(update.content, update.path),
           content: update.content,
-          filesReferenced: extractFileReferencesFromContent(update.content),
+          filesReferenced: extractFileReferencesFromContent(update.content, update.targetPaths?.[0]),
         };
         if (update.sourceCommitId) {
           createParams.sourceCommitId = update.sourceCommitId;
@@ -303,7 +303,7 @@ export async function handleUpdateWikiPage(
         content: mergedContent,
         title: extractTitleWithFallback(mergedContent, update.path),
         confidence: Math.min(1, existing.confidence + update.confidenceDelta),
-        filesReferenced: extractFileReferencesFromContent(mergedContent),
+        filesReferenced: extractFileReferencesFromContent(mergedContent, update.targetPaths?.[0]),
       };
       if (update.sourceCommitId) {
         mergeUpdateParams.sourceCommitId = update.sourceCommitId;
