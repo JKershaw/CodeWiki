@@ -949,6 +949,67 @@ export class PhasedOrchestrator implements Orchestrator {
   }
 
   /**
+   * Get unprocessed commits for a given agent type.
+   *
+   * Unlike context.recentCommits (limited to 10), this queries ALL unprocessed
+   * commits and returns the most recent ones up to the specified limit.
+   *
+   * @param repoId - Repository ID
+   * @param agentType - Agent type to check processing status for
+   * @param limit - Maximum number of commits to return
+   * @returns Array of unprocessed commits with SHA as id, sorted by date descending
+   */
+  private async getUnprocessedCommits(
+    repoId: string,
+    agentType: AgentType,
+    limit: number
+  ): Promise<Array<{ id: string; message: string; date: Date }>> {
+    const query = createListUnprocessedCommitsQuery(repoId, agentType);
+    const result = await handleListUnprocessedCommits(query, this.repos);
+    const commits = result.data || [];
+
+    // Sort by date descending (most recent first) and limit
+    return commits
+      .sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime())
+      .slice(0, limit)
+      .map(c => ({
+        id: c.sha,  // Use SHA as id for work item targets
+        message: c.message,
+        date: c.committedAt,
+      }));
+  }
+
+  /**
+   * Get completely unprocessed commits (not processed by ANY agent).
+   *
+   * Used in Maintenance phase to find commits that haven't been analyzed at all.
+   *
+   * @param repoId - Repository ID
+   * @param limit - Maximum number of commits to return
+   * @returns Array of unprocessed commits with SHA as id, sorted by date descending
+   */
+  private async getCompletelyUnprocessedCommits(
+    repoId: string,
+    limit: number
+  ): Promise<Array<{ id: string; message: string; date: Date }>> {
+    // Use code-change as the baseline - if not processed by code-change,
+    // it's essentially unprocessed. We could check all agents but this is faster.
+    const query = createListUnprocessedCommitsQuery(repoId, 'code-change');
+    const result = await handleListUnprocessedCommits(query, this.repos);
+    const commits = result.data || [];
+
+    // Sort by date descending (most recent first) and limit
+    return commits
+      .sort((a, b) => b.committedAt.getTime() - a.committedAt.getTime())
+      .slice(0, limit)
+      .map(c => ({
+        id: c.sha,
+        message: c.message,
+        date: c.committedAt,
+      }));
+  }
+
+  /**
    * Build phase context from orchestrator context.
    */
   private async buildPhaseContext(
@@ -1046,18 +1107,17 @@ export class PhasedOrchestrator implements Orchestrator {
    */
   private async generateReconnaissanceWork(
     repoId: string,
-    context: OrchestratorContext,
+    _context: OrchestratorContext,
     existingWorkKeys: Set<string>,
     maxItems: number
   ): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
 
     // Analyze recent commits with code-change and narrative
-    const recentUnprocessed = context.recentCommits.filter(
-      c => !c.processedBy.includes('code-change')
-    ).slice(0, 5);
+    // Use getUnprocessedCommits to query ALL unprocessed commits (not just recent 10)
+    const codeChangeUnprocessed = await this.getUnprocessedCommits(repoId, 'code-change', 5);
 
-    for (const commit of recentUnprocessed) {
+    for (const commit of codeChangeUnprocessed) {
       if (workItems.length >= maxItems) break;
 
       const key = `code-change:commit:${commit.id}`;
@@ -1074,9 +1134,7 @@ export class PhasedOrchestrator implements Orchestrator {
     }
 
     // Also analyze with narrative agent
-    const narrativeUnprocessed = context.recentCommits.filter(
-      c => !c.processedBy.includes('narrative')
-    ).slice(0, 3);
+    const narrativeUnprocessed = await this.getUnprocessedCommits(repoId, 'narrative', 3);
 
     for (const commit of narrativeUnprocessed) {
       if (workItems.length >= maxItems) break;
@@ -1133,13 +1191,11 @@ export class PhasedOrchestrator implements Orchestrator {
       ));
     }
 
-    // 20% recent commits
+    // 20% recent commits - query ALL unprocessed commits (not just recent 10)
     const commitSlots = Math.ceil(maxItems * 0.2);
-    const recentUnprocessed = context.recentCommits.filter(
-      c => !c.processedBy.includes('code-change')
-    ).slice(0, commitSlots);
+    const codeChangeUnprocessed = await this.getUnprocessedCommits(repoId, 'code-change', commitSlots);
 
-    for (const commit of recentUnprocessed) {
+    for (const commit of codeChangeUnprocessed) {
       if (workItems.length >= maxItems) break;
 
       const key = `code-change:commit:${commit.id}`;
@@ -1254,13 +1310,11 @@ export class PhasedOrchestrator implements Orchestrator {
       }
     }
 
-    // 20% commits
+    // 20% commits - query ALL unprocessed commits (not just recent 10)
     const commitSlots = Math.ceil(maxItems * 0.2);
-    const recentUnprocessed = context.recentCommits.filter(
-      c => !c.processedBy.includes('code-change')
-    ).slice(0, commitSlots);
+    const codeChangeUnprocessed = await this.getUnprocessedCommits(repoId, 'code-change', commitSlots);
 
-    for (const commit of recentUnprocessed) {
+    for (const commit of codeChangeUnprocessed) {
       if (workItems.length >= maxItems - 2) break; // Reserve 2 slots
 
       const key = `code-change:commit:${commit.id}`;
@@ -1377,14 +1431,13 @@ export class PhasedOrchestrator implements Orchestrator {
     }
 
     // 20% commits - expand to more agent types
+    // Query ALL unprocessed commits per agent (not just recent 10)
     const commitAgents: AgentType[] = ['code-change', 'security', 'dependency'];
 
     for (const agentType of commitAgents) {
       if (workItems.length >= maxItems - 1) break; // Reserve 1 slot
 
-      const unprocessed = context.recentCommits.filter(
-        c => !c.processedBy.includes(agentType)
-      ).slice(0, 2);
+      const unprocessed = await this.getUnprocessedCommits(repoId, agentType, 2);
 
       for (const commit of unprocessed) {
         if (workItems.length >= maxItems - 1) break;
@@ -1481,13 +1534,11 @@ export class PhasedOrchestrator implements Orchestrator {
       ));
     }
 
-    // 20% remaining commits
+    // 20% remaining commits - query ALL unprocessed commits per agent (not just recent 10)
     for (const agentType of ANALYSIS_AGENTS) {
       if (workItems.length >= maxItems) break;
 
-      const unprocessed = context.recentCommits.filter(
-        c => !c.processedBy.includes(agentType)
-      ).slice(0, 1);
+      const unprocessed = await this.getUnprocessedCommits(repoId, agentType, 1);
 
       for (const commit of unprocessed) {
         if (workItems.length >= maxItems) break;
@@ -1530,11 +1581,10 @@ export class PhasedOrchestrator implements Orchestrator {
     const maintenanceMax = Math.min(5, maxItems); // Allow up to 5 items
 
     // 1. Process new commits (highest priority - reactive to changes)
-    const recentUnprocessed = context.recentCommits.filter(
-      c => c.processedBy.length === 0
-    ).slice(0, 2);
+    // Query ALL unprocessed commits (not just recent 10)
+    const unprocessedCommits = await this.getCompletelyUnprocessedCommits(repoId, 2);
 
-    for (const commit of recentUnprocessed) {
+    for (const commit of unprocessedCommits) {
       if (workItems.length >= maintenanceMax) break;
 
       const key = `code-change:commit:${commit.id}`;
