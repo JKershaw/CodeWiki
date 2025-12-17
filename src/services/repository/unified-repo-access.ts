@@ -40,6 +40,14 @@ export interface UnifiedRepoAccess {
   getFileTree(ref?: string): Promise<string[]>;
 
   /**
+   * Get all files with their sizes in a single operation.
+   * More efficient than getFileTree() + individual getFileContent() calls.
+   * For GitHub repos, this uses the Git Tree API (single request).
+   * Returns file paths and sizes in bytes.
+   */
+  getFileTreeWithSizes(ref?: string): Promise<Array<{ path: string; size: number }>>;
+
+  /**
    * Check if a file exists.
    */
   fileExists(path: string, ref?: string): Promise<boolean>;
@@ -95,6 +103,10 @@ export function createLocalRepoAccess(
       return repoService.getFileTree(repo, ref);
     },
 
+    async getFileTreeWithSizes(ref?: string): Promise<Array<{ path: string; size: number }>> {
+      return repoService.getFileTreeWithSizes(repo, ref);
+    },
+
     async fileExists(path: string, ref?: string): Promise<boolean> {
       return repoService.fileExists(repo, path, ref);
     },
@@ -131,6 +143,10 @@ export function createGitHubRepoAccess(
 
     async getFileTree(ref?: string): Promise<string[]> {
       return repoService.getFileTree(repo, ref);
+    },
+
+    async getFileTreeWithSizes(ref?: string): Promise<Array<{ path: string; size: number }>> {
+      return repoService.getFileTreeWithSizes(repo, ref);
     },
 
     async fileExists(path: string, ref?: string): Promise<boolean> {

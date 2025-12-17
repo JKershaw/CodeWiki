@@ -71,6 +71,13 @@ export interface RepositoryService {
   getFileTree(repo: Repo, ref?: string): Promise<string[]>;
 
   /**
+   * Get all files with their sizes in a single operation.
+   * For GitHub repos, uses the Git Tree API (single request).
+   * Returns file paths and sizes in bytes.
+   */
+  getFileTreeWithSizes(repo: Repo, ref?: string): Promise<Array<{ path: string; size: number }>>;
+
+  /**
    * Check if a file exists.
    */
   fileExists(repo: Repo, path: string, ref?: string): Promise<boolean>;
@@ -201,6 +208,58 @@ function createGitHubRepositoryService(
       return files;
     },
 
+    async getFileTreeWithSizes(_repo: Repo, ref?: string): Promise<Array<{ path: string; size: number }>> {
+      // Get the default branch (or use provided ref)
+      let treeRef = ref;
+      if (!treeRef) {
+        treeRef = await githubService.getDefaultBranch(owner, repoName);
+      }
+
+      // Fetch .gitignore and .cwignore content (ignore 404s)
+      const [gitignoreContent, cwignoreContent] = await Promise.all([
+        githubService.getFileContent(owner, repoName, '.gitignore', treeRef).catch(() => null),
+        githubService.getFileContent(owner, repoName, '.cwignore', treeRef).catch(() => null),
+      ]);
+      const ignoreFilter = createIgnoreFilterFromContent(gitignoreContent, cwignoreContent);
+
+      // Use Git Tree API for efficient single-request retrieval with sizes
+      try {
+        const tree = await githubService.getTree(owner, repoName, treeRef, true);
+        return tree
+          .filter(entry => entry.type === 'blob' && !ignoreFilter.ignores(entry.path))
+          .map(entry => ({
+            path: entry.path,
+            size: entry.size ?? 0,
+          }));
+      } catch (treeError: unknown) {
+        // If tree API fails (e.g., truncated for large repos), fall back to directory traversal
+        if (treeError instanceof Error && treeError.message.includes('truncated')) {
+          console.warn(`[GitHub] Tree API truncated for ${owner}/${repoName}, falling back to directory traversal`);
+          const files: Array<{ path: string; size: number }> = [];
+          const dirsToVisit: string[] = [''];
+
+          while (dirsToVisit.length > 0) {
+            const currentDir = dirsToVisit.shift()!;
+            try {
+              const entries = await githubService.getDirectoryContents(owner, repoName, currentDir, treeRef);
+              for (const entry of entries) {
+                if (ignoreFilter.ignores(entry.path)) continue;
+                if (entry.type === 'dir') {
+                  dirsToVisit.push(entry.path);
+                } else if (entry.type === 'file') {
+                  files.push({ path: entry.path, size: entry.size });
+                }
+              }
+            } catch {
+              // Continue on directory errors
+            }
+          }
+          return files;
+        }
+        throw treeError;
+      }
+    },
+
     async fileExists(_repo: Repo, path: string, ref?: string): Promise<boolean> {
       try {
         await githubService.getFileContent(owner, repoName, path, ref);
@@ -308,6 +367,37 @@ function createLocalRepositoryService(
               continue;
             }
             files.push(normalizedPath);
+          }
+        }
+      }
+
+      await walkDir(repoPath);
+      return files;
+    },
+
+    async getFileTreeWithSizes(_repo: Repo, _ref?: string): Promise<Array<{ path: string; size: number }>> {
+      const files: Array<{ path: string; size: number }> = [];
+      const ignoreFilter = await createIgnoreFilter(repoPath);
+
+      async function walkDir(dir: string): Promise<void> {
+        const entries = await readdir(dir, { withFileTypes: true });
+
+        for (const entry of entries) {
+          const fullPath = join(dir, entry.name);
+          const relativePath = relative(repoPath, fullPath);
+          const normalizedPath = relativePath.split(sep).join('/');
+
+          if (entry.isDirectory()) {
+            if (ignoreFilter.ignores(normalizedPath + '/')) {
+              continue;
+            }
+            await walkDir(fullPath);
+          } else if (entry.isFile()) {
+            if (ignoreFilter.ignores(normalizedPath)) {
+              continue;
+            }
+            const stats = await stat(fullPath);
+            files.push({ path: normalizedPath, size: stats.size });
           }
         }
       }
