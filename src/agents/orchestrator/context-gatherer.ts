@@ -20,22 +20,28 @@ import {
   handleListWikiPages,
   createListAgentRunsQuery,
   handleListAgentRuns,
-  createCountPendingEditRequestsQuery,
-  handleCountPendingEditRequests,
 } from '../../queries/index.js';
 
 /**
  * Directory with undocumented files, for exploration targeting.
  * Uses file-level coverage to determine what's actually documented.
+ *
+ * Two coverage metrics:
+ * - untouched: Binary (coverage = 0) - for Phase 2 breadth work
+ * - undocumented: Graduated (coverage < 40%) - for later depth work
  */
 export interface UndocumentedDirectory {
   /** Relative path from repo root */
   path: string;
   /** Total files in this directory */
   totalFiles: number;
-  /** Number of files with < 50% coverage */
+  /** Number of files with coverage = 0 (never accessed) */
+  untouchedCount: number;
+  /** Ratio of untouched files (0-1) - for Phase 2 breadth */
+  untouchedRatio: number;
+  /** Number of files with coverage < 40% threshold */
   undocumentedCount: number;
-  /** Ratio of undocumented files (0-1) */
+  /** Ratio of undocumented files (0-1) - for depth phases */
   undocumentedRatio: number;
 }
 
@@ -80,7 +86,9 @@ export interface OrchestratorContext {
   pagesLackingExamples: number;
   pagesLackingExamplesList: string[];
 
-  // Key pages existence
+  // Key pages existence (by synthesisType - for phase progression)
+  // Synthesis agents now check internally whether to create or update pages,
+  // so we only need synthesisType checks for phase detection
   hasProjectOverview: boolean;
   hasGettingStarted: boolean;
   hasTestingGuide: boolean;
@@ -104,9 +112,6 @@ export interface OrchestratorContext {
 
   // Project overview content (truncated) for LLM context
   projectOverviewContent: string | null;
-
-  // Pending edit requests (from analysis agents, awaiting wiki-editor)
-  pendingEditRequests: number;
 }
 
 /**
@@ -331,26 +336,22 @@ export class ContextGatherer {
     const commitsQuery = createListCommitsQuery(repoId, { limit: 20 });
     const pagesQuery = createListWikiPagesQuery(wikiId);
     const runsQuery = createListAgentRunsQuery(repoId);
-    const pendingEditsQuery = createCountPendingEditRequestsQuery(wikiId);
 
     const [
       commitsResult,
       pagesResult,
       runsResult,
-      pendingEditsResult,
       totalCommits,
     ] = await Promise.all([
       handleListCommits(commitsQuery, this.repos),
       handleListWikiPages(pagesQuery, this.repos),
       handleListAgentRuns(runsQuery, this.repos),
-      handleCountPendingEditRequests(pendingEditsQuery, this.repos),
       this.repos.commits.countByRepo(repoId),
     ]);
 
     const commits = commitsResult.data || [];
     const wikiPages = pagesResult.data || [];
     const agentRuns = runsResult.data || [];
-    const pendingEditRequests = pendingEditsResult.data || 0;
 
     // Calculate commits by agent using database counts (accurate for all commits)
     const commitsByAgent: Record<string, { processed: number; pending: number }> = {};
@@ -456,10 +457,8 @@ export class ContextGatherer {
       .map(p => p.path);
     const pagesLackingExamples = pagesLackingExamplesList.length;
 
-    // Key pages existence - check synthesisType to avoid collision with category overviews
-    // The synthesisType field distinguishes actual synthesis-generated guide pages from
-    // regular exploration pages that happen to have similar paths (e.g., category overviews
-    // created at architecture/overview vs the ProjectOverviewAgent's synthesis page)
+    // Key pages existence - check synthesisType for phase progression
+    // Synthesis agents now check internally whether to create or update pages
     const hasProjectOverview = wikiPages.some(p => p.synthesisType === 'project-overview');
     const hasGettingStarted = wikiPages.some(p => p.synthesisType === 'getting-started');
     const hasTestingGuide = wikiPages.some(p => p.synthesisType === 'testing-guide');
@@ -519,7 +518,6 @@ export class ContextGatherer {
       touchedFiles,
       fileCoverageTree,
       projectOverviewContent,
-      pendingEditRequests,
     };
   }
 
@@ -572,7 +570,8 @@ export class ContextGatherer {
       }
 
       // Group files by directory and calculate coverage for each file
-      const dirStats = new Map<string, { total: number; lowCoverage: number }>();
+      // Track both binary (untouched) and graduated (lowCoverage) metrics
+      const dirStats = new Map<string, { total: number; untouched: number; lowCoverage: number }>();
       const lowCoverageFiles: Array<{ path: string; coverage: number; directory: string }> = [];
 
       // Track touched files for Phase 2 transition
@@ -595,11 +594,14 @@ export class ContextGatherer {
         }
 
         if (!dirStats.has(dirPath)) {
-          dirStats.set(dirPath, { total: 0, lowCoverage: 0 });
+          dirStats.set(dirPath, { total: 0, untouched: 0, lowCoverage: 0 });
         }
 
         const stats = dirStats.get(dirPath)!;
         stats.total++;
+        if (!isTouched) {
+          stats.untouched++;
+        }
         if (isLowCoverage) {
           stats.lowCoverage++;
           // Collect low-coverage files
@@ -615,6 +617,8 @@ export class ContextGatherer {
           undocumentedDirs.push({
             path,
             totalFiles: stats.total,
+            untouchedCount: stats.untouched,
+            untouchedRatio: stats.untouched / stats.total,
             undocumentedCount: stats.lowCoverage,
             undocumentedRatio: stats.lowCoverage / stats.total,
           });
@@ -714,14 +718,7 @@ export class ContextGatherer {
   formatForPrompt(ctx: OrchestratorContext): string {
     const lines: string[] = [];
 
-    // 1. IMMEDIATE ACTIONS
-    if (ctx.pendingEditRequests > 0) {
-      lines.push('## Immediate Action Required\n');
-      lines.push(`**Pending edit requests:** ${ctx.pendingEditRequests} - run wiki-editor agent FIRST!`);
-      lines.push('');
-    }
-
-    // 2. PROJECT CONTEXT
+    // 1. PROJECT CONTEXT
     if (ctx.projectOverviewContent) {
       lines.push('## Project Overview\n');
       lines.push(ctx.projectOverviewContent);

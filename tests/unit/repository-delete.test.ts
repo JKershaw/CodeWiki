@@ -33,7 +33,6 @@ function createMockRepos(): Repositories {
   const workQueue = new Map<string, unknown>();
   const selfImprovements = new Map<string, unknown>();
   const findings = new Map<string, unknown>();
-  const editRequests = new Map<string, unknown>();
   const conflicts = new Map<string, unknown>();
 
   const mockRepos: Repositories['repos'] = {
@@ -263,24 +262,6 @@ function createMockRepos(): Repositories {
     updateStatus: async () => {},
   };
 
-  const mockEditRequests: Repositories['editRequests'] = {
-    findById: async () => null,
-    findByWiki: async (wikiId) => {
-      return Array.from(editRequests.values()).filter((e: unknown) => (e as { wikiId: string }).wikiId === wikiId);
-    },
-    findByPage: async () => [],
-    findByStatus: async () => [],
-    findPending: async () => [],
-    save: async (e) => { editRequests.set((e as { id: string }).id, e); },
-    delete: async (id) => { editRequests.delete(id); },
-    deleteByWiki: async (wikiId) => {
-      for (const [id, e] of editRequests) {
-        if ((e as { wikiId: string }).wikiId === wikiId) editRequests.delete(id);
-      }
-    },
-    updateStatus: async () => {},
-  };
-
   const mockConflicts: Repositories['conflicts'] = {
     findById: async () => null,
     findByWiki: async (wikiId) => {
@@ -340,7 +321,6 @@ function createMockRepos(): Repositories {
     workQueue: mockWorkQueue,
     selfImprovements: mockSelfImprovements,
     findings: mockFindings,
-    editRequests: mockEditRequests,
     conflicts: mockConflicts,
     orchestratorRuns: mockOrchestratorRuns,
     iterations: mockIterations,
@@ -654,46 +634,6 @@ describe('DeleteRepository Command', () => {
       // Verify findings are deleted
       const findingsAfter = await mockRepos.findings.findByWiki(wikiId);
       assert.strictEqual(findingsAfter.length, 0);
-    });
-
-    it('deletes edit requests for each wiki', async () => {
-      const mockRepos = createMockRepos();
-      const repoId = uuid();
-      const wikiId = uuid();
-
-      const repo = createRepo({
-        id: repoId,
-        fullName: 'test/repo',
-        cloneUrl: '/path/to/repo',
-        defaultBranch: 'main',
-      });
-      await mockRepos.repos.save(repo);
-
-      const wiki = createWiki({ id: wikiId, repoId, name: 'Test Wiki' });
-      await mockRepos.wikis.save(wiki);
-
-      // Create edit request
-      await mockRepos.editRequests.save({
-        id: uuid(),
-        wikiId,
-        pageId: 'page-1',
-        requestedChanges: 'Update content',
-        status: 'pending',
-        createdAt: new Date(),
-      });
-
-      // Verify edit request exists
-      const requestsBefore = await mockRepos.editRequests.findByWiki(wikiId);
-      assert.strictEqual(requestsBefore.length, 1);
-
-      const command = createDeleteRepositoryCommand(repoId);
-      const result = await handleDeleteRepository(command, mockRepos);
-
-      assert.strictEqual(result.success, true);
-
-      // Verify edit requests are deleted
-      const requestsAfter = await mockRepos.editRequests.findByWiki(wikiId);
-      assert.strictEqual(requestsAfter.length, 0);
     });
 
     it('deletes conflicts for each wiki', async () => {

@@ -71,11 +71,8 @@ import {
   handleGetCommitBySha,
 } from '../queries/index.js';
 
-// Import EditRequest for routing analysis agent output
-import { createEditRequest, createCommitEditSource } from '../domain/edit-request.js';
-
 // Import agent type definitions from central registry
-import { ANALYSIS_AGENTS, type AgentType } from '../agents/registry.js';
+import type { AgentType } from '../agents/registry.js';
 
 // Import tool enforcement for verification
 import {
@@ -212,10 +209,6 @@ export class Executor {
               await new Promise(resolve => setTimeout(resolve, 2000));
               return null; // Will retry claiming
             }
-
-            // Edit requests are now processed synchronously after analysis agents complete,
-            // so we don't need to create separate wiki-editor work items here.
-            // See executeWorkItem() for the synchronous wiki-editor execution.
 
             // Try to claim existing work from the queue
             const claimResult = await handleClaimWorkItemOne(
@@ -386,31 +379,6 @@ export class Executor {
 
         console.log(`\n▶ Pool completed: ${poolResult.completed} successful, ${poolResult.failed} failed`);
 
-        // Process any remaining edits synchronously (e.g., pre-existing edits from previous runs)
-        // This handles edge cases where edits exist but weren't created by this run's agents
-        const postPoolEdits = await this.repos.editRequests.countPending(wikiId);
-        if (postPoolEdits > 0) {
-          console.log(`  📝 Processing ${postPoolEdits} remaining edit(s) synchronously...`);
-          const wikiEditorAgent = getAgent('wiki-editor');
-          if (wikiEditorAgent) {
-            const wikiEditorTarget = { type: 'wiki' as const };
-            const context: AgentContext = {
-              repoId,
-              wikiId,
-              repos: this.repos,
-              llm: this.llm,
-            };
-
-            try {
-              const result = await wikiEditorAgent.run(wikiEditorTarget, context);
-              console.log(`  ✓ wiki-editor processed remaining edits ($${result.costUsd.toFixed(4)})`);
-            } catch (error) {
-              const errorMsg = error instanceof Error ? error.message : String(error);
-              console.warn(`  ⚠️  wiki-editor failed: ${errorMsg}`);
-            }
-          }
-        }
-
         // Exit the main loop if work is exhausted
         if (workExhausted) {
           console.log('No more work to do');
@@ -516,9 +484,7 @@ export class Executor {
 
     // Translate SHA to internal commit ID if we have a target commit
     // The orchestrator returns Git SHAs, but agents expect internal UUIDs
-    // Also store the full commit for EditRequest creation
     let internalCommitId: string | undefined;
-    let commitData: { sha: string; committedAt: Date } | undefined;
     if (targetCommitId) {
       // Use CQRS query to find commit by SHA
       const commitQuery = createGetCommitByShaQuery(repoId, targetCommitId);
@@ -534,12 +500,6 @@ export class Executor {
         return { success: false, cost: 0, pagesCreated: 0, pagesUpdated: 0, durationMs: 0, agentRunId: null, error: errorMsg };
       }
       internalCommitId = commitResult.data.id;
-      commitData = {
-        sha: commitResult.data.sha,
-        committedAt: commitResult.data.committedAt instanceof Date
-          ? commitResult.data.committedAt
-          : new Date(commitResult.data.committedAt),
-      };
     }
 
     // Create agent run record via CQRS command
@@ -638,15 +598,14 @@ export class Executor {
         this.repos
       );
 
-      // Process wiki updates
-      // Analysis agents route through EditRequest queue for intelligent temporal handling
-      // Other agents (meta, synthesis) apply updates directly
+      // Process wiki updates - all agents apply updates directly
       let pagesCreated = 0;
       let pagesUpdated = 0;
-      let editRequestsQueued = 0;
 
-      const isAnalysisAgent = ANALYSIS_AGENTS.includes(agent.type as AgentType);
-      const shouldQueueEdits = isAnalysisAgent && commitData;
+      // DEBUG: Log update count
+      if (result.updates.length > 0) {
+        console.log(`  📄 Processing ${result.updates.length} update(s) from ${agent.type}`);
+      }
 
       for (const update of result.updates) {
         update.agentRunId = agentRunId;
@@ -660,132 +619,29 @@ export class Executor {
           update.targetPaths = [targetPath];
         }
 
-        if (shouldQueueEdits && update.type !== 'track') {
-          // Route analysis agent updates through EditRequest queue
-          // This enables the WikiEditorAgent to handle out-of-order commits intelligently
-          // Note: 'track' updates bypass the queue since they only update file tracking
-          const editRequestParams: Parameters<typeof createEditRequest>[0] = {
-            id: uuid(),
-            repoId,
-            wikiId,
-            source: createCommitEditSource(commitData!.sha, commitData!.committedAt),
-            sourceAgentType: agent.type as AgentType,
-            sourceAgentRunId: agentRunId,
-            workItemId: workItem.id, // Link to originating work item for provenance
-            targetPagePath: update.path,
-            proposedUpdateType: update.type,
-            proposedContent: update.content,
-            confidenceDelta: update.confidenceDelta,
-          };
+        // Apply updates directly to wiki
+        const updateResult = await handleUpdateWikiPage(
+          createUpdateWikiPageCommand(update),
+          this.repos,
+          wikiId
+        );
 
-          // Only add optional properties if they have values
-          if (update.title !== undefined) {
-            editRequestParams.targetPageTitle = update.title;
+        if (updateResult.success && updateResult.data) {
+          // Determine if it was a create or update based on page creation time
+          // Handle both Date objects and ISO strings (from JSON deserialization)
+          const createdAt = updateResult.data.createdAt instanceof Date
+            ? updateResult.data.createdAt
+            : new Date(updateResult.data.createdAt);
+          const pageAge = Date.now() - createdAt.getTime();
+          if (pageAge < 1000) {
+            // Created less than 1 second ago, likely new
+            pagesCreated++;
+          } else {
+            pagesUpdated++;
           }
-          if (update.redirectTo !== undefined) {
-            editRequestParams.redirectTo = update.redirectTo;
-          }
-          // Pass file tracking data for coverage calculation
-          if (update.filesAccessed && update.filesAccessed.length > 0) {
-            editRequestParams.filesAccessed = update.filesAccessed;
-          }
-          if (update.targetPaths && update.targetPaths.length > 0) {
-            editRequestParams.targetPaths = update.targetPaths;
-          }
-
-          const editRequest = createEditRequest(editRequestParams);
-          await this.repos.editRequests.save(editRequest);
-          editRequestsQueued++;
-        } else {
-          // Apply updates directly for meta/synthesis agents
-          const updateResult = await handleUpdateWikiPage(
-            createUpdateWikiPageCommand(update),
-            this.repos,
-            wikiId
-          );
-
-          if (updateResult.success && updateResult.data) {
-            // Determine if it was a create or update based on page creation time
-            // Handle both Date objects and ISO strings (from JSON deserialization)
-            const createdAt = updateResult.data.createdAt instanceof Date
-              ? updateResult.data.createdAt
-              : new Date(updateResult.data.createdAt);
-            const pageAge = Date.now() - createdAt.getTime();
-            if (pageAge < 1000) {
-              // Created less than 1 second ago, likely new
-              pagesCreated++;
-            } else {
-              pagesUpdated++;
-            }
-          }
-        }
-      }
-
-      if (editRequestsQueued > 0) {
-        console.log(`  📝 Queued ${editRequestsQueued} edit request(s) for wiki-editor`);
-
-        // Run wiki-editor synchronously to process the edits immediately
-        // This prevents duplicate task queuing and ensures edits are applied
-        // before the iteration completes
-        const wikiEditorAgent = getAgent('wiki-editor');
-        if (wikiEditorAgent) {
-          console.log(`  📝 Processing edit requests synchronously...`);
-          const wikiEditorTarget = { type: 'wiki' as const };
-
-          // Create agent run for wiki-editor (for tracking)
-          const wikiEditorRunId = uuid();
-          await handleCreateAgentRun(
-            createCreateAgentRunCommand({
-              id: wikiEditorRunId,
-              repoId,
-              wikiId,
-              agentType: 'wiki-editor',
-            }),
-            this.repos
-          );
-
-          try {
-            const wikiEditorResult = await wikiEditorAgent.run(wikiEditorTarget, context);
-
-            // Complete wiki-editor agent run
-            await handleCompleteAgentRun(
-              createCompleteAgentRunCommand(wikiEditorRunId, wikiEditorResult.result, 0, wikiEditorResult.costUsd),
-              this.repos
-            );
-
-            // Apply wiki updates from wiki-editor
-            const updateCount = wikiEditorResult.updates.length;
-            for (const wikiUpdate of wikiEditorResult.updates) {
-              wikiUpdate.agentRunId = wikiEditorRunId;
-              const updateResult = await handleUpdateWikiPage(
-                createUpdateWikiPageCommand(wikiUpdate),
-                this.repos,
-                wikiId
-              );
-
-              if (updateResult.success && updateResult.data) {
-                const createdAt = updateResult.data.createdAt instanceof Date
-                  ? updateResult.data.createdAt
-                  : new Date(updateResult.data.createdAt);
-                const pageAge = Date.now() - createdAt.getTime();
-                if (pageAge < 1000) {
-                  pagesCreated++;
-                } else {
-                  pagesUpdated++;
-                }
-              }
-            }
-
-            console.log(`  ✓ wiki-editor processed ${editRequestsQueued} edit(s), applied ${updateCount} page update(s) ($${wikiEditorResult.costUsd.toFixed(4)})`);
-          } catch (wikiEditorError) {
-            // Log but don't fail the main agent - wiki-editor can be retried
-            const errorMsg = wikiEditorError instanceof Error ? wikiEditorError.message : String(wikiEditorError);
-            console.warn(`  ⚠️  wiki-editor failed: ${errorMsg}`);
-            await handleFailAgentRun(
-              createFailAgentRunCommand(wikiEditorRunId, errorMsg, 0),
-              this.repos
-            );
-          }
+        } else if (!updateResult.success) {
+          // DEBUG: Log update failures
+          console.warn(`  ⚠️ Update failed for ${update.path}: ${updateResult.error}`);
         }
       }
 

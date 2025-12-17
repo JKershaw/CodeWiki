@@ -18,7 +18,6 @@ import { LinkAgent } from '../../src/agents/meta/link-agent.js';
 import { StructureAgent } from '../../src/agents/meta/structure-agent.js';
 import { QualityAgent } from '../../src/agents/meta/quality-agent.js';
 import { ConsistencyAgent } from '../../src/agents/meta/consistency-agent.js';
-import { WikiEditorAgent } from '../../src/agents/meta/wiki-editor-agent.js';
 import { OverviewAgent } from '../../src/agents/synthesis/overview-agent.js';
 import { WriterAgent } from '../../src/agents/synthesis/writer-agent.js';
 import { ProjectOverviewAgent } from '../../src/agents/synthesis/project-overview-agent.js';
@@ -52,7 +51,6 @@ describe('Agent.getSystemPrompt()', () => {
       { name: 'StructureAgent', agent: new StructureAgent(), expectedSubstring: 'Structure Agent' },
       { name: 'QualityAgent', agent: new QualityAgent(), expectedSubstring: 'Quality Agent' },
       { name: 'ConsistencyAgent', agent: new ConsistencyAgent(), expectedSubstring: 'Consistency Agent' },
-      { name: 'WikiEditorAgent', agent: new WikiEditorAgent(), expectedSubstring: 'Wiki Editor' },
       { name: 'OverviewAgent', agent: new OverviewAgent(), expectedSubstring: 'overview' },
       { name: 'WriterAgent', agent: new WriterAgent(), expectedSubstring: 'technical writer' },
       { name: 'ProjectOverviewAgent', agent: new ProjectOverviewAgent(), expectedSubstring: 'project overview' },

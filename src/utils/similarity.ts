@@ -69,11 +69,27 @@ export function calculateTitleSimilarity(title1: string, title2: string): number
  * Calculate similarity between two paths.
  * Considers path components (categories, segments).
  *
+ * Pages in different categories are penalized to avoid false matches like
+ * "modules/overview" being considered similar to "overview".
+ *
  * @param path1 - First path
  * @param path2 - Second path
  * @returns Similarity score between 0 and 1
  */
 export function calculatePathSimilarity(path1: string, path2: string): number {
+  // Extract category (first path segment) for each path
+  const getCategory = (path: string): string | null => {
+    const segments = path.split('/').filter(s => s.length > 0);
+    return segments.length > 1 ? segments[0]!.toLowerCase() : null;
+  };
+
+  const category1 = getCategory(path1);
+  const category2 = getCategory(path2);
+
+  // If paths are in different categories (or one is root-level), they're unlikely duplicates
+  // Apply a heavy penalty to prevent false matches like "modules/overview" vs "overview"
+  const differentCategories = category1 !== category2;
+
   // Split paths into components and sub-components
   const normalize = (path: string): Set<string> => {
     const parts = new Set<string>();
@@ -106,7 +122,15 @@ export function calculatePathSimilarity(path1: string, path2: string): number {
   }
 
   const union = parts1.size + parts2.size - intersection;
-  return intersection / union;
+  let similarity = intersection / union;
+
+  // Penalize cross-category matches to prevent false positives
+  // This ensures "modules/overview" won't match "overview" (0.5 * 0.5 = 0.25, below threshold)
+  if (differentCategories) {
+    similarity *= 0.5;
+  }
+
+  return similarity;
 }
 
 /**

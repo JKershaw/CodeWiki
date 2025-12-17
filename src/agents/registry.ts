@@ -22,7 +22,6 @@ import { LinkAgent } from './meta/link-agent.js';
 import { StructureAgent } from './meta/structure-agent.js';
 import { QualityAgent } from './meta/quality-agent.js';
 import { ConsistencyAgent } from './meta/consistency-agent.js';
-import { WikiEditorAgent } from './meta/wiki-editor-agent.js';
 import { SourceVerificationAgent } from './meta/source-verification-agent.js';
 import { CategoryAgent } from './meta/category-agent.js';
 
@@ -67,7 +66,6 @@ function initializeRegistry(): void {
   agentRegistry.set('structure', new StructureAgent());
   agentRegistry.set('quality', new QualityAgent());
   agentRegistry.set('consistency', new ConsistencyAgent());
-  agentRegistry.set('wiki-editor', new WikiEditorAgent());
   agentRegistry.set('source-verification', new SourceVerificationAgent());
   agentRegistry.set('category', new CategoryAgent());
 
@@ -153,7 +151,6 @@ export const ANALYSIS_AGENTS: AgentType[] = [
  * These run after analysis agents have created content.
  */
 export const META_AGENTS: AgentType[] = [
-  'wiki-editor',          // Process edit requests (runs first to apply pending edits)
   'link',                 // Cross-reference management
   'structure',            // Wiki organization analysis
   'quality',              // Content quality review

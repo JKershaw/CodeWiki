@@ -59,7 +59,6 @@ export type AgentType =
   | 'link'
   | 'quality'
   | 'consistency'
-  | 'wiki-editor'
   | 'source-verification'
   | 'category'
   // Synthesis agents - create higher-order content

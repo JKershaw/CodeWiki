@@ -335,22 +335,26 @@ export function getChildDirectories(
 /**
  * Check if a directory is "covered" (has sufficient documentation).
  *
- * Uses a simple binary threshold: a directory is covered if more than 50%
- * of its files have been touched (have any documentation).
+ * Two modes:
+ * - Binary (useBinaryCheck=true): Covered if >50% files have been touched (any coverage)
+ *   Used in Phase 2 to ensure breadth - touch everything once
+ * - Graduated (useBinaryCheck=false): Covered if >50% files have coverage >= 40%
+ *   Used in later phases for depth - ensure adequate documentation
  *
  * @param dir - Directory with coverage stats
+ * @param useBinaryCheck - If true, use untouchedRatio; if false, use undocumentedRatio
  * @param threshold - Coverage threshold (default 0.5 = 50%)
  * @returns true if directory is covered
  */
 export function isDirectoryCovered(
   dir: UndocumentedDirectory,
+  useBinaryCheck: boolean = false,
   threshold: number = 0.5
 ): boolean {
-  // Coverage = 1 - undocumentedRatio
-  // Covered if coverage > threshold
-  // Which means: (1 - undocumentedRatio) > threshold
-  // Or: undocumentedRatio < (1 - threshold)
-  return dir.undocumentedRatio < (1 - threshold);
+  // Use binary (touched) or graduated (40% threshold) metric
+  const ratio = useBinaryCheck ? dir.untouchedRatio : dir.undocumentedRatio;
+  // Covered if (1 - ratio) > threshold, i.e., ratio < (1 - threshold)
+  return ratio < (1 - threshold);
 }
 
 /**
@@ -359,12 +363,16 @@ export function isDirectoryCovered(
  * This approach:
  * 1. Identifies source roots (directories with no parent in the list)
  * 2. Traverses breadth-first, processing siblings before children
- * 3. Selects uncovered directories for work
- * 4. Descends into covered directories to find uncovered children
+ * 3. Uses BINARY coverage check (has file been touched at all?)
+ * 4. Selects untouched directories, descends into touched ones
  *
- * Benefits over the previous "focus strategy":
+ * Key insight: Phase 2 is about BREADTH - touch every file once.
+ * Once a directory's files have been accessed, move on to untouched areas.
+ * Later phases will return to improve coverage depth.
+ *
+ * Benefits:
  * - Naturally processes level-by-level (no round-robin problem)
- * - Simpler algorithm (~30 lines vs ~100+)
+ * - Binary check ensures we move on after first touch
  * - Deterministic ordering via alphabetical sort at each level
  *
  * @param directories - All directories with their coverage stats
@@ -414,13 +422,30 @@ export function selectDirectoriesForBreadthWork(
       continue;
     }
 
-    if (isDirectoryCovered(dir)) {
-      // Directory is covered - descend to children
+    // Use BINARY check for Phase 2: has this directory been touched?
+    // This ensures we move on after files have been accessed once
+    if (isDirectoryCovered(dir, true)) {
+      // Directory has been touched - descend to find untouched children
       const children = getChildDirectories(dirPath, allPaths);
       queue.push(...children);
     } else {
-      // Directory is NOT covered - select it for work
+      // Directory is untouched - select it for work
       selected.push(dirPath);
+    }
+  }
+
+  // FALLBACK: If BFS found nothing but untouched files remain,
+  // select directories with ANY untouched files, sorted by untouched count.
+  // This handles the "cleanup" phase where remaining untouched files are
+  // scattered across mostly-touched directories.
+  if (selected.length === 0) {
+    const dirsWithUntouched = directories
+      .filter(d => d.untouchedCount > 0)
+      .sort((a, b) => b.untouchedCount - a.untouchedCount);
+
+    for (const dir of dirsWithUntouched) {
+      if (selected.length >= maxDirectories) break;
+      selected.push(dir.path);
     }
   }
 
@@ -1322,6 +1347,8 @@ export class PhasedOrchestrator implements Orchestrator {
     }
 
     // 25% synthesis - key pages in priority order
+    // Only check synthesisType - if false, agent will CREATE or UPDATE as appropriate
+    // Synthesis agents now handle the create vs update logic internally
     const synthesisSlots = Math.ceil(maxItems * 0.25);
     const synthesisAgents: Array<{ agent: string; check: boolean }> = [
       { agent: 'project-overview', check: !context.hasProjectOverview },

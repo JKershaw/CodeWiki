@@ -2,7 +2,7 @@ import { v4 as uuid } from 'uuid';
 import type { Command, CommandResult } from './types.js';
 import { success, failure } from './types.js';
 import type { Repositories } from '../repositories/index.js';
-import { createWikiPage, type WikiPage, type WikiPageUpdate } from '../domain/wiki-page.js';
+import { createWikiPage, type WikiPage, type WikiPageUpdate, type SynthesisType } from '../domain/wiki-page.js';
 import {
   createWikiPageHistory,
   type WikiPageHistoryOperation,
@@ -149,6 +149,7 @@ export async function handleUpdateWikiPage(
         targetPaths?: string[];
         category?: string;
         categoryConfidence?: number;
+        synthesisType?: SynthesisType;
       } = {
         content: update.content,
         title: update.title ?? extractTitleWithFallback(update.content, update.path),
@@ -172,6 +173,9 @@ export async function handleUpdateWikiPage(
       }
       if (update.categoryConfidence !== undefined) {
         updateParams.categoryConfidence = update.categoryConfidence;
+      }
+      if (update.synthesisType) {
+        updateParams.synthesisType = update.synthesisType;
       }
       await repos.wikiPages.updateContent(existing.id, updateParams);
 
@@ -562,13 +566,10 @@ async function recordHistory(
     contentAfter: string | null;
     agentRunId?: string;
     workItemId?: string;
-    editRequestId?: string;
   }
 ): Promise<void> {
-  // Infer agent type from context (could be enhanced with more metadata)
-  const agentType: WikiPageHistoryAgentType = params.agentRunId
-    ? 'wiki-editor' // Default to wiki-editor when we have an agent run
-    : 'unknown';
+  // Agent type is unknown at this level - the actual agent type is stored in the AgentRun
+  const agentType: WikiPageHistoryAgentType = 'unknown';
 
   // Get the next sequence number for deterministic ordering
   const sequenceNumber = await repos.wikiPageHistory.getNextSequenceNumber(params.wikiId);
@@ -586,7 +587,6 @@ async function recordHistory(
     // Only include optional properties if defined (exactOptionalPropertyTypes)
     ...(params.agentRunId !== undefined && { agentRunId: params.agentRunId }),
     ...(params.workItemId !== undefined && { workItemId: params.workItemId }),
-    ...(params.editRequestId !== undefined && { editRequestId: params.editRequestId }),
   });
 
   await repos.wikiPageHistory.save(history);

@@ -9,7 +9,7 @@
  * - Quality tools: Quality benchmark analysis
  * - Wiki page tools: Wiki content reading and exploration
  * - Source tools: Source code exploration
- * - Provenance tools: Traceability from wiki content to orchestrator decisions
+ * - History tools: Wiki page history and change tracking
  */
 
 // Re-export types
@@ -48,15 +48,6 @@ export {
 export { validatePath } from '../base-tools.js';
 
 export {
-  getPageProvenanceTool,
-  getAgentContributionsTool,
-  getOrchestratorDecisionsTool,
-  getProvenanceTraceTool,
-  getWorkItemOutcomesTool,
-  provenanceTools,
-} from './provenance-tools.js';
-
-export {
   getPageEditHistoryTool,
   getAgentRunChangesTool,
   compareWikiVersionsTool,
@@ -69,7 +60,6 @@ import { benchmarkTools } from './benchmark-tools.js';
 import { qualityTools } from './quality-tools.js';
 import { wikiPageTools } from './wiki-page-tools.js';
 import { sourceTools } from './source-tools.js';
-import { provenanceTools } from './provenance-tools.js';
 import { historyTools } from './history-tools.js';
 
 import type { AnalysisToolDefinition } from './types.js';
@@ -82,6 +72,5 @@ export const analysisTools: AnalysisToolDefinition[] = [
   ...qualityTools,
   ...wikiPageTools,
   ...sourceTools,
-  ...provenanceTools,
   ...historyTools,
 ];

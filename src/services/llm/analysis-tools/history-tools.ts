@@ -302,9 +302,6 @@ export const getEditDetailsTool: AnalysisToolDefinition = {
     if (record.workItemId) {
       sections.push(`- **Work item**: ${record.workItemId}`);
     }
-    if (record.editRequestId) {
-      sections.push(`- **Edit request**: ${record.editRequestId}`);
-    }
     sections.push('');
 
     // Full content

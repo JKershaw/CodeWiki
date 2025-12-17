@@ -1,6 +1,6 @@
 import type { Collection, Db, Document } from 'mongodb';
 import type { WikiPageRepository } from '../interfaces/wiki-page-repository.js';
-import type { WikiPage } from '../../domain/wiki-page.js';
+import type { WikiPage, SynthesisType } from '../../domain/wiki-page.js';
 import { toEntity, toEntities, toDocument, byId } from './mongo-utils.js';
 
 export class MongoWikiPageRepository implements WikiPageRepository {
@@ -77,6 +77,7 @@ export class MongoWikiPageRepository implements WikiPageRepository {
       filesAccessed?: string[];
       filesReferenced?: string[];
       targetPaths?: string[];
+      synthesisType?: SynthesisType;
     }
   ): Promise<void> {
     const setFields: Record<string, unknown> = {
@@ -115,6 +116,10 @@ export class MongoWikiPageRepository implements WikiPageRepository {
     }
     if (updates.targetPaths) {
       addToSetFields.targetPaths = { $each: updates.targetPaths };
+    }
+    // Update synthesisType if provided (allows synthesis agents to claim pages)
+    if (updates.synthesisType !== undefined) {
+      setFields.synthesisType = updates.synthesisType;
     }
 
     const updateDoc: Record<string, unknown> = { $set: setFields };

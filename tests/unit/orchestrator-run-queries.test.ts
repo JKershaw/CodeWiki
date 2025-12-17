@@ -26,7 +26,6 @@ function createMockOrchestratorRun(
     costUsd?: number;
     durationMs?: number;
     wikiPages?: number;
-    pendingEditRequests?: number;
   }
 ): OrchestratorRun {
   return {
@@ -53,7 +52,6 @@ function createMockOrchestratorRun(
       hasTestingGuide: false,
       hasExtensionGuide: false,
       directoryCoverage: [],
-      pendingEditRequests: options?.pendingEditRequests ?? 0,
     },
     promptSent: 'Test prompt',
     rawResponse: 'Test response',
@@ -170,16 +168,15 @@ describe('Orchestrator Run Queries', () => {
     it('returns summary with correct fields', async () => {
       const runs = [
         createMockOrchestratorRun('run-1', 'repo-1', {
-          reasoning: 'Process pending edits first',
+          reasoning: 'Process code analysis',
           workItems: [
-            { agentType: 'wiki-editor', reason: 'Process edits' },
             { agentType: 'code-change', targetCommitId: 'abc123', reason: 'Analyze commit' },
+            { agentType: 'link', reason: 'Update links' },
           ],
           workItemsCreated: ['work-1', 'work-2'],
           costUsd: 0.0015,
           durationMs: 2000,
           wikiPages: 15,
-          pendingEditRequests: 5,
         }),
       ];
       const repos = createMockRepos(runs);
@@ -191,16 +188,15 @@ describe('Orchestrator Run Queries', () => {
       const summary = result.data?.[0];
       assert.ok(summary);
       assert.strictEqual(summary.id, 'run-1');
-      assert.strictEqual(summary.reasoning, 'Process pending edits first');
+      assert.strictEqual(summary.reasoning, 'Process code analysis');
       assert.strictEqual(summary.workItemsRequested, 2);
       assert.strictEqual(summary.workItemsCreated, 2);
       assert.strictEqual(summary.costUsd, 0.0015);
       assert.strictEqual(summary.durationMs, 2000);
       assert.strictEqual(summary.usedLLM, true);
       assert.strictEqual(summary.contextSnapshot.wikiPages, 15);
-      assert.strictEqual(summary.contextSnapshot.pendingEditRequests, 5);
       assert.strictEqual(summary.workItems.length, 2);
-      assert.strictEqual(summary.workItems[0].agentType, 'wiki-editor');
+      assert.strictEqual(summary.workItems[0].agentType, 'code-change');
     });
 
     it('handles repository errors gracefully', async () => {

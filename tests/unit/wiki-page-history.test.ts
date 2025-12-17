@@ -50,8 +50,7 @@ describe('WikiPageHistory Domain', () => {
         contentAfter: '# API Documentation\n\nUpdated content with more details.',
         agentRunId: 'run-2',
         workItemId: 'work-1',
-        editRequestId: 'edit-1',
-        agentType: 'wiki-editor',
+        agentType: 'unknown',
         sequenceNumber: 2,
       });
 
@@ -59,8 +58,7 @@ describe('WikiPageHistory Domain', () => {
       assert.strictEqual(history.contentBefore, '# API Documentation\n\nOld content.');
       assert.strictEqual(history.contentAfter, '# API Documentation\n\nUpdated content with more details.');
       assert.strictEqual(history.workItemId, 'work-1');
-      assert.strictEqual(history.editRequestId, 'edit-1');
-      assert.strictEqual(history.agentType, 'wiki-editor');
+      assert.strictEqual(history.agentType, 'unknown');
     });
 
     it('creates a history record for page deletion', () => {
@@ -73,7 +71,7 @@ describe('WikiPageHistory Domain', () => {
         contentBefore: '# Old Page\n\nThis page is being removed.',
         contentAfter: null,
         agentRunId: 'run-3',
-        agentType: 'wiki-editor',
+        agentType: 'unknown',
         sequenceNumber: 3,
       });
 
@@ -117,7 +115,6 @@ describe('WikiPageHistory Domain', () => {
 
       assert.strictEqual(history.agentRunId, undefined);
       assert.strictEqual(history.workItemId, undefined);
-      assert.strictEqual(history.editRequestId, undefined);
       assert.strictEqual(history.agentType, 'manual');
     });
 
@@ -131,7 +128,7 @@ describe('WikiPageHistory Domain', () => {
         operation: 'update',
         contentBefore: 'content',
         contentAfter: 'content v2',
-        agentType: 'wiki-editor',
+        agentType: 'unknown',
         sequenceNumber: 6,
       });
 
@@ -143,7 +140,6 @@ describe('WikiPageHistory Domain', () => {
     it('supports all expected agent types', () => {
       const agentTypes: Array<WikiPageHistory['agentType']> = [
         'bootstrap',
-        'wiki-editor',
         'manual',
         'unknown',
       ];
@@ -178,7 +174,7 @@ describe('WikiPageHistory Domain', () => {
           operation,
           contentBefore: operation === 'create' ? null : 'old',
           contentAfter: operation === 'delete' ? null : 'new',
-          agentType: 'wiki-editor',
+          agentType: 'unknown',
           sequenceNumber: 1,
         });
         assert.strictEqual(history.operation, operation);

@@ -439,7 +439,7 @@ CONFIDENCE: 0.85`);
       await createTestRepo(ctx, healthyRepoId);
       const wiki = await getOrCreateActiveWiki(healthyRepoId, ctx.repos);
 
-      // Create high-quality pages
+      // Create high-quality pages (500+ chars with code examples)
       for (let i = 1; i <= 3; i++) {
         await ctx.repos.wikiPages.save({
           id: `healthy-${i}`,
@@ -450,7 +450,26 @@ CONFIDENCE: 0.85`);
 
 This page has substantial content from commit abc${i}234 with proper
 references to source files like \`src/module${i}.ts\`. It provides
-comprehensive documentation that helps developers understand the system.`,
+comprehensive documentation that helps developers understand the system.
+
+## Implementation Details
+
+The module provides several key features that are essential for the system's
+operation. Here's how to use the main function:
+
+\`\`\`typescript
+import { mainFunction } from './module${i}';
+
+const result = await mainFunction({
+  option1: true,
+  option2: 'value',
+});
+\`\`\`
+
+## Configuration
+
+The module can be configured through environment variables or
+direct configuration options. See the source file for full details.`,
           confidence: 0.9,
           sourceCommits: [`abc${i}234`],
           links: [],

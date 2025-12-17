@@ -1,4 +1,4 @@
-import type { WikiPage } from '../../domain/wiki-page.js';
+import type { WikiPage, SynthesisType } from '../../domain/wiki-page.js';
 
 /**
  * Repository interface for managing wiki pages.
@@ -68,6 +68,8 @@ export interface WikiPageRepository {
     filesReferenced?: string[];
     /** Files/folders that agents were asked to analyze (accumulated) */
     targetPaths?: string[];
+    /** Synthesis type - identifies content created by synthesis agents */
+    synthesisType?: SynthesisType;
   }): Promise<void>;
 
   /**

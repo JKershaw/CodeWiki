@@ -80,109 +80,125 @@ describe('BFS Directory Selection', () => {
   });
 
   describe('isDirectoryCovered', () => {
-    it('returns true when >50% of files are touched', () => {
+    it('returns true when >50% of files are touched (binary check)', () => {
       const dir: UndocumentedDirectory = {
         path: 'src/agents',
         totalFiles: 10,
-        undocumentedCount: 4, // 6 documented = 60%
-        undocumentedRatio: 0.4,
-      };
-
-      assert.strictEqual(isDirectoryCovered(dir), true);
-    });
-
-    it('returns false when <=50% of files are touched', () => {
-      const dir: UndocumentedDirectory = {
-        path: 'src/agents',
-        totalFiles: 10,
-        undocumentedCount: 5, // 5 documented = 50%
-        undocumentedRatio: 0.5,
-      };
-
-      assert.strictEqual(isDirectoryCovered(dir), false);
-    });
-
-    it('returns false for completely undocumented directories', () => {
-      const dir: UndocumentedDirectory = {
-        path: 'src/new',
-        totalFiles: 10,
-        undocumentedCount: 10, // 0 documented = 0%
-        undocumentedRatio: 1.0,
-      };
-
-      assert.strictEqual(isDirectoryCovered(dir), false);
-    });
-
-    it('returns true for fully documented directories', () => {
-      const dir: UndocumentedDirectory = {
-        path: 'src/done',
-        totalFiles: 10,
-        undocumentedCount: 0, // 10 documented = 100%
-        undocumentedRatio: 0.0,
-      };
-
-      assert.strictEqual(isDirectoryCovered(dir), true);
-    });
-
-    it('uses 50% threshold by default', () => {
-      // Just at 50% - should be false (<=50%)
-      const at50: UndocumentedDirectory = {
-        path: 'src/half',
-        totalFiles: 10,
-        undocumentedCount: 5,
-        undocumentedRatio: 0.5,
-      };
-      assert.strictEqual(isDirectoryCovered(at50), false);
-
-      // Just above 50% - should be true (>50%)
-      const above50: UndocumentedDirectory = {
-        path: 'src/half',
-        totalFiles: 10,
+        untouchedCount: 4, // 6 touched = 60%
+        untouchedRatio: 0.4,
         undocumentedCount: 4,
         undocumentedRatio: 0.4,
       };
-      assert.strictEqual(isDirectoryCovered(above50), true);
+
+      // useBinaryCheck=true uses untouchedRatio
+      assert.strictEqual(isDirectoryCovered(dir, true), true);
+    });
+
+    it('returns false when <=50% of files are touched (binary check)', () => {
+      const dir: UndocumentedDirectory = {
+        path: 'src/agents',
+        totalFiles: 10,
+        untouchedCount: 5, // 5 touched = 50%
+        untouchedRatio: 0.5,
+        undocumentedCount: 5,
+        undocumentedRatio: 0.5,
+      };
+
+      assert.strictEqual(isDirectoryCovered(dir, true), false);
+    });
+
+    it('returns false for completely untouched directories', () => {
+      const dir: UndocumentedDirectory = {
+        path: 'src/new',
+        totalFiles: 10,
+        untouchedCount: 10,
+        untouchedRatio: 1.0,
+        undocumentedCount: 10,
+        undocumentedRatio: 1.0,
+      };
+
+      assert.strictEqual(isDirectoryCovered(dir, true), false);
+    });
+
+    it('returns true for fully touched directories', () => {
+      const dir: UndocumentedDirectory = {
+        path: 'src/done',
+        totalFiles: 10,
+        untouchedCount: 0,
+        untouchedRatio: 0.0,
+        undocumentedCount: 0,
+        undocumentedRatio: 0.0,
+      };
+
+      assert.strictEqual(isDirectoryCovered(dir, true), true);
+    });
+
+    it('uses graduated check when useBinaryCheck=false', () => {
+      // Directory is touched but has low coverage (< 40% threshold)
+      const dir: UndocumentedDirectory = {
+        path: 'src/shallow',
+        totalFiles: 10,
+        untouchedCount: 0, // All touched
+        untouchedRatio: 0.0,
+        undocumentedCount: 8, // But only 20% have good coverage
+        undocumentedRatio: 0.8,
+      };
+
+      // Binary check: covered (all files touched)
+      assert.strictEqual(isDirectoryCovered(dir, true), true);
+      // Graduated check: not covered (< 40% have good coverage)
+      assert.strictEqual(isDirectoryCovered(dir, false), false);
     });
   });
 
   describe('selectDirectoriesForBreadthWork', () => {
-    it('selects uncovered top-level directories first', () => {
+    // Helper to create directory with both binary and graduated coverage
+    const dir = (path: string, total: number, untouched: number, lowCov: number): UndocumentedDirectory => ({
+      path,
+      totalFiles: total,
+      untouchedCount: untouched,
+      untouchedRatio: untouched / total,
+      undocumentedCount: lowCov,
+      undocumentedRatio: lowCov / total,
+    });
+
+    it('selects untouched top-level directories first', () => {
       const directories: UndocumentedDirectory[] = [
-        { path: 'src', totalFiles: 5, undocumentedCount: 5, undocumentedRatio: 1.0 },
-        { path: 'src/agents', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/services', totalFiles: 8, undocumentedCount: 8, undocumentedRatio: 1.0 },
+        dir('src', 5, 5, 5),           // untouched
+        dir('src/agents', 10, 10, 10), // untouched
+        dir('src/services', 8, 8, 8),  // untouched
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
 
-      // Should select 'src' first (top-level, uncovered)
+      // Should select 'src' first (top-level, untouched)
       assert.strictEqual(result[0], 'src');
     });
 
-    it('descends into covered directories to find uncovered children', () => {
+    it('descends into touched directories to find untouched children', () => {
       const directories: UndocumentedDirectory[] = [
-        // src is covered (>50%)
-        { path: 'src', totalFiles: 10, undocumentedCount: 4, undocumentedRatio: 0.4 },
-        // children are not covered
-        { path: 'src/agents', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/services', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
+        // src is touched (>50% files accessed)
+        dir('src', 10, 4, 4),
+        // children are NOT touched
+        dir('src/agents', 10, 10, 10),
+        dir('src/services', 10, 10, 10),
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
 
-      // Should descend into src and select its uncovered children
+      // Should descend into src and select its untouched children
       assert.ok(result.includes('src/agents'));
       assert.ok(result.includes('src/services'));
-      assert.ok(!result.includes('src')); // src is covered, shouldn't be selected
+      assert.ok(!result.includes('src')); // src is touched, shouldn't be selected
     });
 
     it('respects MAX_FOCUS_DIRECTORIES limit', () => {
       const directories: UndocumentedDirectory[] = [
-        { path: 'src/a', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/b', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/c', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/d', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/e', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
+        dir('src/a', 10, 10, 10),
+        dir('src/b', 10, 10, 10),
+        dir('src/c', 10, 10, 10),
+        dir('src/d', 10, 10, 10),
+        dir('src/e', 10, 10, 10),
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
@@ -192,9 +208,9 @@ describe('BFS Directory Selection', () => {
 
     it('returns directories in BFS order (alphabetical at each level)', () => {
       const directories: UndocumentedDirectory[] = [
-        { path: 'src/zebra', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/alpha', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/beta', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
+        dir('src/zebra', 10, 10, 10),
+        dir('src/alpha', 10, 10, 10),
+        dir('src/beta', 10, 10, 10),
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
@@ -207,17 +223,17 @@ describe('BFS Directory Selection', () => {
 
     it('handles deeply nested structures', () => {
       const directories: UndocumentedDirectory[] = [
-        // All parent directories covered
-        { path: 'src', totalFiles: 10, undocumentedCount: 2, undocumentedRatio: 0.2 },
-        { path: 'src/agents', totalFiles: 10, undocumentedCount: 3, undocumentedRatio: 0.3 },
-        { path: 'src/agents/orchestrator', totalFiles: 10, undocumentedCount: 4, undocumentedRatio: 0.4 },
-        // Deep uncovered directory
-        { path: 'src/agents/orchestrator/deep', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
+        // All parent directories touched (>50%)
+        dir('src', 10, 2, 2),
+        dir('src/agents', 10, 3, 3),
+        dir('src/agents/orchestrator', 10, 4, 4),
+        // Deep untouched directory
+        dir('src/agents/orchestrator/deep', 10, 10, 10),
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
 
-      // Should descend through covered directories to find the uncovered one
+      // Should descend through touched directories to find the untouched one
       assert.ok(result.includes('src/agents/orchestrator/deep'));
     });
 
@@ -226,47 +242,59 @@ describe('BFS Directory Selection', () => {
       assert.deepStrictEqual(result, []);
     });
 
-    it('handles all directories being covered', () => {
+    it('handles all directories being mostly touched via fallback', () => {
       const directories: UndocumentedDirectory[] = [
-        { path: 'src', totalFiles: 10, undocumentedCount: 2, undocumentedRatio: 0.2 },
-        { path: 'src/agents', totalFiles: 10, undocumentedCount: 3, undocumentedRatio: 0.3 },
+        dir('src', 10, 2, 2),        // 80% touched but still has 2 untouched
+        dir('src/agents', 10, 3, 3), // 70% touched but still has 3 untouched
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
 
-      // No uncovered directories to select
+      // Fallback selects directories with ANY untouched files, sorted by count
+      assert.deepStrictEqual(result, ['src/agents', 'src']);
+    });
+
+    it('returns empty when all files are completely touched', () => {
+      const directories: UndocumentedDirectory[] = [
+        dir('src', 10, 0, 0),        // 100% touched, 0 untouched
+        dir('src/agents', 10, 0, 0), // 100% touched, 0 untouched
+      ];
+
+      const result = selectDirectoriesForBreadthWork(directories);
+
+      // No untouched files anywhere, return empty
       assert.deepStrictEqual(result, []);
     });
 
     it('handles mixed coverage at same level', () => {
       const directories: UndocumentedDirectory[] = [
-        // src is covered, should descend
-        { path: 'src', totalFiles: 10, undocumentedCount: 2, undocumentedRatio: 0.2 },
-        // src/agents is NOT covered, should select
-        { path: 'src/agents', totalFiles: 10, undocumentedCount: 8, undocumentedRatio: 0.8 },
-        // src/services is covered, should descend
-        { path: 'src/services', totalFiles: 10, undocumentedCount: 3, undocumentedRatio: 0.3 },
-        // src/services/api is NOT covered, should select
-        { path: 'src/services/api', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
+        // src is touched, should descend
+        dir('src', 10, 2, 2),
+        // src/agents is NOT touched, should select
+        dir('src/agents', 10, 8, 8),
+        // src/services is touched, should descend
+        dir('src/services', 10, 3, 3),
+        // src/services/api is NOT touched, should select
+        dir('src/services/api', 10, 10, 10),
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
 
-      // Should select uncovered ones from BFS traversal
+      // Should select untouched ones from BFS traversal
       assert.ok(result.includes('src/agents'));
       assert.ok(result.includes('src/services/api'));
     });
 
     it('processes siblings before children (true BFS)', () => {
       const directories: UndocumentedDirectory[] = [
-        // src is covered
-        { path: 'src', totalFiles: 10, undocumentedCount: 2, undocumentedRatio: 0.2 },
-        // src/agents is NOT covered
-        { path: 'src/agents', totalFiles: 10, undocumentedCount: 8, undocumentedRatio: 0.8 },
-        // src/agents has an uncovered child too
-        { path: 'src/agents/orchestrator', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        // src/services is NOT covered (sibling of src/agents)
-        { path: 'src/services', totalFiles: 10, undocumentedCount: 8, undocumentedRatio: 0.8 },
+        // src is touched
+        dir('src', 10, 2, 2),
+        // src/agents is NOT touched
+        dir('src/agents', 10, 8, 8),
+        // src/agents has an untouched child too
+        dir('src/agents/orchestrator', 10, 10, 10),
+        // src/services is NOT touched (sibling of src/agents)
+        dir('src/services', 10, 8, 8),
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);
@@ -291,9 +319,9 @@ describe('BFS Directory Selection', () => {
     it('identifies source roots correctly from directory paths', () => {
       // Directories without a common parent in the list
       const directories: UndocumentedDirectory[] = [
-        { path: 'src/agents', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'src/services', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
-        { path: 'lib/utils', totalFiles: 10, undocumentedCount: 10, undocumentedRatio: 1.0 },
+        dir('src/agents', 10, 10, 10),
+        dir('src/services', 10, 10, 10),
+        dir('lib/utils', 10, 10, 10),
       ];
 
       const result = selectDirectoriesForBreadthWork(directories);

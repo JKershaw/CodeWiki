@@ -52,17 +52,19 @@ export class TestingGuideAgent implements Agent {
       };
     }
 
-    // Check if guide already exists
-    const hasGuide = pages.some(p =>
+    // Check if a proper synthesis guide already exists (has synthesisType)
+    // If an exploration page exists at the path but without synthesisType, we should UPDATE it
+    const existingGuide = pages.find(p =>
       p.path === this.GUIDE_PATH ||
       p.path === 'guides/tests' ||
       p.path === 'guides/testing-guide'
     );
+    const hasSynthesisGuide = existingGuide?.synthesisType === 'testing-guide';
 
-    if (hasGuide) {
+    if (hasSynthesisGuide) {
       return {
         result: createAgentResult({
-          summary: 'Testing guide already exists',
+          summary: 'Testing guide already exists with proper synthesis',
           findings: [],
           confidence: 1.0,
         }),
@@ -70,6 +72,9 @@ export class TestingGuideAgent implements Agent {
         costUsd: 0,
       };
     }
+
+    // Determine if we're creating or updating
+    const isUpdate = !!existingGuide;
 
     // Set up codebase exploration tools (works with both local and GitHub repos)
     const toolExecutor = createCodebaseToolExecutor(context);
@@ -102,7 +107,7 @@ export class TestingGuideAgent implements Agent {
     const links = extractLinksFromContent(content);
 
     const update: WikiPageUpdate = {
-      type: 'create',
+      type: isUpdate ? 'update' : 'create',
       path: this.GUIDE_PATH,
       title,
       content,
@@ -113,13 +118,14 @@ export class TestingGuideAgent implements Agent {
       synthesisType: 'testing-guide' as SynthesisType,
     };
 
+    const action = isUpdate ? 'Updated' : 'Created';
     return {
       result: createAgentResult({
-        summary: `Created testing guide from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
+        summary: `${action} testing guide from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
         findings: [
           createFinding({
             type: 'SYNTHESIS',
-            description: 'Generated testing guide documenting test frameworks, patterns, and conventions',
+            description: `${action} testing guide documenting test frameworks, patterns, and conventions`,
             relatedPaths: [this.GUIDE_PATH],
             importance: 'high',
           }),

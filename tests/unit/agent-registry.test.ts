@@ -28,7 +28,7 @@ describe('Agent Registry', () => {
     it('should return agents for all standard types', () => {
       const standardTypes = [
         'code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency',
-        'codebase-explorer', 'link', 'structure', 'quality', 'consistency', 'wiki-editor',
+        'codebase-explorer', 'link', 'structure', 'quality', 'consistency',
         'consolidation', 'overview', 'writer', 'project-overview', 'getting-started',
         'testing-guide', 'extension-guide', 'bootstrap', 'wiki-index', 'toc',
       ];
@@ -45,7 +45,7 @@ describe('Agent Registry', () => {
     it('should return an array of agents', () => {
       const agents = getAllAgents();
       assert.ok(Array.isArray(agents), 'Should return an array');
-      assert.ok(agents.length >= 22, `Should have at least 22 agents, got ${agents.length}`);
+      assert.ok(agents.length >= 21, `Should have at least 21 agents, got ${agents.length}`);
     });
 
     it('should include all standard agent types', () => {
@@ -54,7 +54,7 @@ describe('Agent Registry', () => {
 
       const expectedTypes = [
         'code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency',
-        'codebase-explorer', 'link', 'structure', 'quality', 'consistency', 'wiki-editor',
+        'codebase-explorer', 'link', 'structure', 'quality', 'consistency',
         'consolidation', 'overview', 'writer', 'project-overview', 'getting-started',
         'testing-guide', 'extension-guide', 'bootstrap', 'wiki-index', 'toc',
       ];

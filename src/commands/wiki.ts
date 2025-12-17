@@ -129,7 +129,6 @@ export async function handleDeleteWiki(
     await repos.wikiPages.deleteByWiki(command.wikiId);
     await repos.wikiPageHistory.deleteByWiki(command.wikiId);
     await repos.findings.deleteByWiki(command.wikiId);
-    await repos.editRequests.deleteByWiki(command.wikiId);
     await repos.conflicts.deleteByWiki(command.wikiId);
     await repos.benchmarks.deleteByWiki(command.wikiId);
     await repos.qualityBenchmarks.deleteByWiki(command.wikiId);

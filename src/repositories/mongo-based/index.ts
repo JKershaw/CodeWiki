@@ -22,7 +22,6 @@ export * from './mongo-processing-run-repository.js';
 export * from './mongo-iteration-repository.js';
 export * from './mongo-findings-repository.js';
 export * from './mongo-benchmark-repository.js';
-export * from './mongo-edit-request-repository.js';
 export * from './mongo-quality-benchmark-repository.js';
 export * from './mongo-self-improvement-repository.js';
 export * from './mongo-chat-session-repository.js';
@@ -43,7 +42,6 @@ import { MongoProcessingRunRepository } from './mongo-processing-run-repository.
 import { MongoIterationRepository } from './mongo-iteration-repository.js';
 import { MongoFindingsRepository } from './mongo-findings-repository.js';
 import { MongoBenchmarkRepository } from './mongo-benchmark-repository.js';
-import { MongoEditRequestRepository } from './mongo-edit-request-repository.js';
 import { MongoQualityBenchmarkRepository } from './mongo-quality-benchmark-repository.js';
 import { MongoSelfImprovementRepository } from './mongo-self-improvement-repository.js';
 import { MongoChatSessionRepository } from './mongo-chat-session-repository.js';
@@ -71,7 +69,6 @@ export function createMongoRepositories(db: Db): Repositories {
     iterations: new MongoIterationRepository(db),
     findings: new MongoFindingsRepository(db),
     benchmarks: new MongoBenchmarkRepository(db),
-    editRequests: new MongoEditRequestRepository(db),
     qualityBenchmarks: new MongoQualityBenchmarkRepository(db),
     selfImprovements: new MongoSelfImprovementRepository(db),
     chatSessions: new MongoChatSessionRepository(db),
@@ -187,16 +184,6 @@ export async function createMongoIndexes(db: Db): Promise<void> {
     { key: { wikiId: 1, startedAt: -1 } },
     { key: { repoId: 1, status: 1 } },
     { key: { wikiId: 1, status: 1 } },
-  ]);
-
-  // Edit requests collection
-  await db.collection('edit-requests').createIndexes([
-    { key: { wikiId: 1 } },
-    { key: { wikiId: 1, status: 1 } },
-    { key: { wikiId: 1, status: 1, commitTimestamp: 1 } },
-    { key: { wikiId: 1, pagePath: 1 } },
-    { key: { repoId: 1, commitSha: 1 } },
-    { key: { sourceAgentRunId: 1 } },
   ]);
 
   // Quality benchmarks collection

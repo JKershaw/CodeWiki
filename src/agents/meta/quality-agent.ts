@@ -24,7 +24,9 @@ export class QualityAgent implements Agent {
   readonly type: AgentType = 'quality';
 
   // Thresholds
+  // MIN_CONTENT_LENGTH aligned with context-gatherer's shallow page threshold (500)
   private readonly MIN_CONTENT_LENGTH = 100;
+  private readonly SHALLOW_CONTENT_LENGTH = 500;  // Pages < this need depth work
   private readonly LOW_CONFIDENCE_THRESHOLD = 0.5;
   private readonly MAX_PAGES_PER_RUN = 10;
 
@@ -141,8 +143,11 @@ export class QualityAgent implements Agent {
       score += 1;
     }
 
-    // Short content = might be incomplete
+    // Very short content = might be incomplete
     if (page.content.length < this.MIN_CONTENT_LENGTH) {
+      score += 3;  // Highest priority for extremely short
+    } else if (page.content.length < this.SHALLOW_CONTENT_LENGTH) {
+      // Shallow content (100-500 chars) = needs depth work
       score += 2;
     }
 
@@ -154,6 +159,11 @@ export class QualityAgent implements Agent {
     // No source citations
     if (!this.hasSourceCitations(page.content)) {
       score += 1;
+    }
+
+    // No code examples (critical for actionability)
+    if (!this.hasCodeExamples(page.content)) {
+      score += 2;
     }
 
     return score;
@@ -179,6 +189,14 @@ export class QualityAgent implements Agent {
           pagePath: page.path,
           type: 'too_short',
           description: `Page "${page.title}" has very little content (${page.content.length} chars)`,
+          severity: 'high',
+        });
+      } else if (page.content.length < this.SHALLOW_CONTENT_LENGTH) {
+        // Check for shallow content (100-500 chars) - needs depth
+        issues.push({
+          pagePath: page.path,
+          type: 'shallow',
+          description: `Page "${page.title}" is shallow (${page.content.length} chars) and needs more depth`,
           severity: 'medium',
         });
       }
@@ -190,6 +208,16 @@ export class QualityAgent implements Agent {
           type: 'no_citations',
           description: `Page "${page.title}" has no source citations (commit refs or file paths)`,
           severity: 'low',
+        });
+      }
+
+      // Check for missing code examples in non-overview pages
+      if (!page.path.includes('overview') && !this.hasCodeExamples(page.content)) {
+        issues.push({
+          pagePath: page.path,
+          type: 'no_examples',
+          description: `Page "${page.title}" has no code examples - this reduces actionability`,
+          severity: 'medium',
         });
       }
 
@@ -220,6 +248,11 @@ export class QualityAgent implements Agent {
     const hasCitation = /\*(?:Source|From|Updated from|Captured from)/.test(content);
 
     return hasCommitRef || hasFilePath || hasCitation;
+  }
+
+  private hasCodeExamples(content: string): boolean {
+    // Look for fenced code blocks (```language or just ```)
+    return /```[\s\S]*?```/.test(content);
   }
 
   private buildPrompt(pages: WikiPage[], quickIssues: QualityIssue[]): string {

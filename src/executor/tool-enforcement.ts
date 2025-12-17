@@ -72,7 +72,6 @@ export const DEFAULT_TOOL_REQUIREMENTS: Partial<Record<AgentType, ToolEnforcemen
   // Meta agents - NO enforcement (they work on wiki content, not code)
   'quality': { minToolCalls: 0 },
   'link': { minToolCalls: 0 },
-  'wiki-editor': { minToolCalls: 0 },
   'structure': { minToolCalls: 0 },
   'consistency': { minToolCalls: 0 },
 };

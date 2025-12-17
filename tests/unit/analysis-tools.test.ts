@@ -16,14 +16,9 @@ import {
   readSourceFileTool,
   searchSourceFilesTool,
   listSourceDirectoryTool,
-  getPageProvenanceTool,
-  getAgentContributionsTool,
-  getOrchestratorDecisionsTool,
   getAgentPromptTool,
   type AnalysisToolContext,
 } from '../../src/services/llm/analysis-tools.js';
-import type { OrchestratorRun } from '../../src/domain/orchestrator-run.js';
-import type { EditRequest } from '../../src/domain/edit-request.js';
 import type { BenchmarkRun } from '../../src/domain/benchmark.js';
 import type { QualityBenchmarkRun } from '../../src/domain/quality-benchmark.js';
 import type { WikiPage } from '../../src/domain/wiki-page.js';
@@ -108,45 +103,10 @@ function createFilesystemRepoAccess(basePath: string): UnifiedRepoAccess {
   };
 }
 
-// Helper to create a mock edit request
-function createMockEditRequest(
-  id: string,
-  pagePath: string,
-  agentType: string,
-  status: 'pending' | 'applied' | 'merged-to-history' | 'skipped' = 'applied'
-): EditRequest {
-  return {
-    id,
-    repoId: 'test-repo',
-    wikiId: 'test-wiki',
-    sourceCommitSha: 'abc123',
-    sourceCommitTimestamp: new Date(),
-    sourceAgentType: agentType as EditRequest['sourceAgentType'],
-    sourceAgentRunId: `run-${id}`,
-    targetPagePath: pagePath,
-    proposedUpdateType: 'update',
-    proposedContent: 'Test content',
-    confidenceDelta: 0.1,
-    status,
-    createdAt: new Date(),
-    processedAt: new Date(),
-    processingNotes: null,
-    processedByAgentRunId: null,
-  };
-}
-
 // Helper to create mock context
 function createMockContext(overrides: Partial<AnalysisToolContext> = {}): AnalysisToolContext {
-  // Default mock editRequests repository
-  const mockEditRequests = {
-    findByPagePath: async () => [] as EditRequest[],
-    findByStatus: async () => [] as EditRequest[],
-  };
-
   return {
-    repos: {
-      editRequests: mockEditRequests,
-    } as unknown as Repositories,
+    repos: {} as unknown as Repositories,
     repoId: 'test-repo',
     wikiId: 'test-wiki',
     benchmarkRuns: [],
@@ -256,61 +216,6 @@ function createMockPage(path: string, title: string, content: string, confidence
   };
 }
 
-// Helper to create a mock orchestrator run
-function createMockOrchestratorRun(
-  id: string,
-  repoId: string,
-  options?: {
-    reasoning?: string;
-    workItems?: Array<{ agentType: string; reason: string; targetCommitId?: string; targetPath?: string }>;
-    workItemsCreated?: string[];
-    usedLLM?: boolean;
-    costUsd?: number;
-    durationMs?: number;
-    wikiPages?: number;
-    pendingEditRequests?: number;
-  }
-): OrchestratorRun {
-  return {
-    id,
-    repoId,
-    timestamp: new Date('2024-01-15T10:00:00Z'),
-    context: {
-      totalCommits: 50,
-      commitsByAgent: {},
-      recentCommits: [],
-      wikiPages: options?.wikiPages ?? 10,
-      categoryCounts: {},
-      categoriesWithOverview: [],
-      categoriesWithoutOverview: [],
-      pagesNeedingRewrite: 2,
-      avgConfidence: 0.75,
-      lowConfidencePages: 1,
-      recentRuns: [],
-      pagesWithoutLinks: 3,
-      hasProjectOverview: true,
-      hasGettingStarted: false,
-      hasTestingGuide: false,
-      hasExtensionGuide: false,
-      directoryCoverage: [],
-      pendingEditRequests: options?.pendingEditRequests ?? 0,
-    },
-    promptSent: 'Test prompt',
-    rawResponse: 'Test response',
-    decision: {
-      reasoning: options?.reasoning ?? 'Test reasoning',
-      workItems: options?.workItems ?? [
-        { agentType: 'code-change', targetCommitId: 'abc123', reason: 'Process recent commit' },
-      ],
-    },
-    workItemsCreated: options?.workItemsCreated ?? ['work-1'],
-    model: 'claude-3-haiku',
-    costUsd: options?.costUsd ?? 0.001,
-    durationMs: options?.durationMs ?? 1500,
-    usedLLM: options?.usedLLM ?? true,
-  };
-}
-
 describe('Analysis Tools', () => {
   describe('analysisTools export', () => {
     it('exports all expected tools', () => {
@@ -328,13 +233,6 @@ describe('Analysis Tools', () => {
       assert.ok(toolNames.includes('read_source_file'));
       assert.ok(toolNames.includes('search_source_files'));
       assert.ok(toolNames.includes('list_source_directory'));
-      // Provenance tools
-      assert.ok(toolNames.includes('get_page_provenance'));
-      assert.ok(toolNames.includes('get_agent_contributions'));
-      assert.ok(toolNames.includes('get_provenance_trace'));
-      assert.ok(toolNames.includes('get_work_item_outcomes'));
-      // Orchestrator tools
-      assert.ok(toolNames.includes('get_orchestrator_decisions'));
     });
 
     it('all tools have required properties', () => {
@@ -945,326 +843,6 @@ describe('Analysis Tools', () => {
     });
   });
 
-  describe('get_page_provenance', () => {
-    it('returns message when page not found', async () => {
-      const context = createMockContext({
-        wikiPages: [
-          createMockPage('architecture/overview', 'Overview', 'Content'),
-        ],
-      });
-
-      const result = await getPageProvenanceTool.execute({ page_path: 'unknown/page' }, context);
-      assert.ok(result.includes('not found'));
-    });
-
-    it('returns message when no edit history', async () => {
-      const context = createMockContext({
-        wikiPages: [
-          createMockPage('architecture/overview', 'Overview', 'Content'),
-        ],
-      });
-
-      const result = await getPageProvenanceTool.execute({ page_path: 'architecture/overview' }, context);
-      assert.ok(result.includes('No edit history'));
-    });
-
-    it('returns provenance with edit history', async () => {
-      const editRequests = [
-        createMockEditRequest('1', 'architecture/overview', 'code-change', 'applied'),
-        createMockEditRequest('2', 'architecture/overview', 'security', 'applied'),
-        createMockEditRequest('3', 'architecture/overview', 'code-change', 'skipped'),
-      ];
-
-      const context = createMockContext({
-        wikiPages: [
-          createMockPage('architecture/overview', 'Architecture Overview', 'Content'),
-        ],
-        repos: {
-          editRequests: {
-            findByPagePath: async () => editRequests,
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getPageProvenanceTool.execute({ page_path: 'architecture/overview' }, context);
-
-      assert.ok(result.includes('Page Provenance'));
-      assert.ok(result.includes('Architecture Overview'));
-      assert.ok(result.includes('code-change'));
-      assert.ok(result.includes('security'));
-      assert.ok(result.includes('Contributions by Agent'));
-    });
-  });
-
-  describe('get_agent_contributions', () => {
-    it('returns message when no contributions found', async () => {
-      const context = createMockContext();
-
-      const result = await getAgentContributionsTool.execute({ agent_type: 'unknown-agent' }, context);
-      assert.ok(result.includes('No contributions found'));
-    });
-
-    it('returns contributions summary', async () => {
-      const editRequests = [
-        createMockEditRequest('1', 'architecture/overview', 'code-change', 'applied'),
-        createMockEditRequest('2', 'architecture/patterns', 'code-change', 'applied'),
-        createMockEditRequest('3', 'security/auth', 'code-change', 'applied'),
-      ];
-
-      const context = createMockContext({
-        repos: {
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async (wikiId: string, status: string) => {
-              if (status === 'applied') return editRequests;
-              return [];
-            },
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getAgentContributionsTool.execute({ agent_type: 'code-change' }, context);
-
-      assert.ok(result.includes('Agent Contributions: code-change'));
-      assert.ok(result.includes('Total successful edits: 3'));
-      assert.ok(result.includes('Pages affected: 3'));
-      assert.ok(result.includes('architecture/overview'));
-      assert.ok(result.includes('security/auth'));
-    });
-  });
-
-  describe('get_orchestrator_decisions', () => {
-    it('returns message when no orchestrator runs found', async () => {
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async () => [],
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getOrchestratorDecisionsTool.execute({}, context);
-      assert.ok(result.includes('No orchestrator decisions found'));
-    });
-
-    it('returns formatted decision history', async () => {
-      const runs = [
-        createMockOrchestratorRun('run-1', 'test-repo', {
-          reasoning: 'Process pending edits first, then run code-change on recent commits',
-          workItems: [
-            { agentType: 'wiki-editor', reason: 'Process 5 pending edits' },
-            { agentType: 'code-change', targetCommitId: 'abc123def', reason: 'Recent commit with API changes' },
-          ],
-          workItemsCreated: ['work-1', 'work-2'],
-          costUsd: 0.0015,
-          durationMs: 2000,
-          wikiPages: 15,
-          pendingEditRequests: 5,
-        }),
-      ];
-
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async () => runs,
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getOrchestratorDecisionsTool.execute({}, context);
-
-      // Check summary section
-      assert.ok(result.includes('Orchestrator Decisions'));
-      assert.ok(result.includes('1 runs'));
-      assert.ok(result.includes('LLM-powered'));
-      assert.ok(result.includes('Total cost:'));
-      assert.ok(result.includes('Total work items created: 2'));
-
-      // Check work item aggregation
-      assert.ok(result.includes('Work Items by Agent Type'));
-      assert.ok(result.includes('wiki-editor: 1'));
-      assert.ok(result.includes('code-change: 1'));
-
-      // Check individual decision
-      assert.ok(result.includes('Decision History'));
-      assert.ok(result.includes('Process pending edits first'));
-      assert.ok(result.includes('15 pages'));
-      assert.ok(result.includes('5 pending edits'));
-      assert.ok(result.includes('2 of 2 items created'));
-    });
-
-    it('respects limit parameter', async () => {
-      const runs = [
-        createMockOrchestratorRun('run-1', 'test-repo', { reasoning: 'First decision' }),
-        createMockOrchestratorRun('run-2', 'test-repo', { reasoning: 'Second decision' }),
-        createMockOrchestratorRun('run-3', 'test-repo', { reasoning: 'Third decision' }),
-      ];
-
-      let capturedLimit: number | undefined;
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async (_repoId: string, options?: { limit?: number }) => {
-              capturedLimit = options?.limit;
-              return runs.slice(0, options?.limit ?? runs.length);
-            },
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      await getOrchestratorDecisionsTool.execute({ limit: 2 }, context);
-      assert.strictEqual(capturedLimit, 2);
-    });
-
-    it('shows work items with targets', async () => {
-      const runs = [
-        createMockOrchestratorRun('run-1', 'test-repo', {
-          reasoning: 'Diverse work items',
-          workItems: [
-            { agentType: 'code-change', targetCommitId: 'abc123def456789', reason: 'Analyze commit' },
-            { agentType: 'codebase-explorer', targetPath: 'src/services/llm', reason: 'Document undocumented code' },
-            { agentType: 'wiki-editor', reason: 'Process edits' },
-          ],
-        }),
-      ];
-
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async () => runs,
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getOrchestratorDecisionsTool.execute({}, context);
-
-      // Check that targets are shown correctly
-      assert.ok(result.includes('commit:abc123de'));
-      assert.ok(result.includes('path:src/services/llm'));
-      assert.ok(result.includes('wiki-wide'));
-    });
-
-    it('handles repository errors gracefully', async () => {
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async () => { throw new Error('Database error'); },
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getOrchestratorDecisionsTool.execute({}, context);
-      assert.ok(result.includes('Failed to list orchestrator runs'));
-    });
-
-    it('does not filter by usedLLM to show all orchestrator decisions', async () => {
-      let capturedUsedLLM: boolean | undefined;
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async (_repoId: string, options?: { usedLLM?: boolean }) => {
-              capturedUsedLLM = options?.usedLLM;
-              return [];
-            },
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      await getOrchestratorDecisionsTool.execute({}, context);
-      // Should NOT filter by usedLLM - show all orchestrator decisions (LLM and phased)
-      assert.strictEqual(capturedUsedLLM, undefined);
-    });
-
-    it('shows both LLM and phase-based runs with correct summary', async () => {
-      const runs = [
-        createMockOrchestratorRun('run-1', 'test-repo', {
-          reasoning: 'LLM decision',
-          usedLLM: true,
-        }),
-        createMockOrchestratorRun('run-2', 'test-repo', {
-          reasoning: 'Phase 2 (Breadth): 15 pages, 5 dirs covered. Scheduling: 3 codebase-explorer',
-          usedLLM: false,
-        }),
-      ];
-
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async () => runs,
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getOrchestratorDecisionsTool.execute({}, context);
-
-      // Should show mixed summary
-      assert.ok(result.includes('2 runs'));
-      assert.ok(result.includes('1 LLM-powered'));
-      assert.ok(result.includes('1 phase-based'));
-      // Should include both reasonings
-      assert.ok(result.includes('LLM decision'));
-      assert.ok(result.includes('Phase 2 (Breadth)'));
-    });
-
-    it('truncates long reason text', async () => {
-      const longReason = 'A'.repeat(100);
-      const runs = [
-        createMockOrchestratorRun('run-1', 'test-repo', {
-          workItems: [
-            { agentType: 'code-change', targetCommitId: 'abc123', reason: longReason },
-          ],
-        }),
-      ];
-
-      const context = createMockContext({
-        repos: {
-          orchestratorRuns: {
-            findByRepo: async () => runs,
-          },
-          editRequests: {
-            findByPagePath: async () => [],
-            findByStatus: async () => [],
-          },
-        } as unknown as Repositories,
-      });
-
-      const result = await getOrchestratorDecisionsTool.execute({}, context);
-
-      // Reason should be truncated to 80 chars + ...
-      assert.ok(result.includes('...'));
-      assert.ok(!result.includes(longReason)); // Full reason should not appear
-    });
-  });
-
   describe('getAgentPromptTool', () => {
     it('should return prompt for agents with LLM', async () => {
       const context = createMockContext();
@@ -1347,7 +925,7 @@ describe('Analysis Tools', () => {
           timestamp: new Date('2024-01-15'),
           contentBefore: 'Old content',
           contentAfter: 'New content',
-          agentType: 'wiki-editor' as const,
+          agentType: 'unknown' as const,
           agentRunId: 'run-1',
         },
         {
@@ -1379,7 +957,7 @@ describe('Analysis Tools', () => {
       assert.ok(result.includes('Total changes: 2'));
       assert.ok(result.includes('UPDATE'));
       assert.ok(result.includes('CREATE'));
-      assert.ok(result.includes('wiki-editor'));
+      assert.ok(result.includes('unknown'));
       assert.ok(result.includes('bootstrap'));
     });
   });
@@ -1410,7 +988,7 @@ describe('Analysis Tools', () => {
           timestamp: new Date('2024-01-15'),
           contentBefore: 'Old',
           contentAfter: 'New content here',
-          agentType: 'wiki-editor' as const,
+          agentType: 'unknown' as const,
           agentRunId: 'run-1',
         },
         {
@@ -1422,7 +1000,7 @@ describe('Analysis Tools', () => {
           timestamp: new Date('2024-01-15'),
           contentBefore: null,
           contentAfter: 'New page',
-          agentType: 'wiki-editor' as const,
+          agentType: 'unknown' as const,
           agentRunId: 'run-1',
         },
       ];
@@ -1482,7 +1060,7 @@ describe('Analysis Tools', () => {
           timestamp: new Date('2024-01-15'),
           contentBefore: '# Old Content\n\nOld text here.',
           contentAfter: '# New Content\n\nNew text here with more details.',
-          agentType: 'wiki-editor' as const,
+          agentType: 'unknown' as const,
           agentRunId: 'run-1',
         },
       ];

@@ -26,7 +26,7 @@ export const ORCHESTRATOR_SYSTEM_PROMPT = `You are the orchestrator for CodeWiki
 - project-overview, getting-started, testing-guide, extension-guide, overview, writer
 
 **Meta** (no target):
-- wiki-editor, link, quality, consistency, structure
+- link, quality, consistency, structure
 
 **Commit Analysis** (requires targetCommitId):
 - code-change, narrative, security, technical-debt, pattern, dependency
@@ -57,9 +57,6 @@ export function buildUserPrompt(ctx: OrchestratorContext, contextString: string,
   // Action guidance based on current state
   const actionItems: string[] = [];
 
-  if (ctx.pendingEditRequests > 0) {
-    actionItems.push(`- Run wiki-editor agent FIRST (${ctx.pendingEditRequests} pending requests)`);
-  }
   if (ctx.undocumentedDirectories.length > 0) {
     const topDir = ctx.undocumentedDirectories[0]!;
     actionItems.push(`- Explore undocumented directories (${ctx.undocumentedDirectories.length} dirs, top: ${topDir.path})`);
@@ -112,7 +109,7 @@ export interface OrchestratorDecision {
 // Agent types the LLM can output
 const EXPLORATION_AGENTS = ['codebase-explorer'];
 const ANALYSIS_AGENTS = ['code-change', 'narrative', 'security', 'technical-debt', 'pattern', 'dependency'];
-const META_AGENTS = ['wiki-editor', 'link', 'structure', 'quality', 'consistency', 'source-verification', 'category'];
+const META_AGENTS = ['link', 'structure', 'quality', 'consistency', 'source-verification', 'category'];
 const SYNTHESIS_AGENTS = ['overview', 'project-overview', 'getting-started', 'testing-guide', 'extension-guide', 'writer', 'wiki-index', 'toc'];
 const ALL_AGENTS = [...EXPLORATION_AGENTS, ...ANALYSIS_AGENTS, ...META_AGENTS, ...SYNTHESIS_AGENTS];
 

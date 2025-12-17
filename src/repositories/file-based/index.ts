@@ -19,7 +19,6 @@ export * from './file-processing-run-repository.js';
 export * from './file-iteration-repository.js';
 export * from './file-findings-repository.js';
 export * from './file-benchmark-repository.js';
-export * from './file-edit-request-repository.js';
 export * from './file-quality-benchmark-repository.js';
 export * from './file-self-improvement-repository.js';
 export * from './file-chat-session-repository.js';
@@ -41,7 +40,6 @@ import { FileProcessingRunRepository } from './file-processing-run-repository.js
 import { FileIterationRepository } from './file-iteration-repository.js';
 import { FileFindingsRepository } from './file-findings-repository.js';
 import { FileBenchmarkRepository } from './file-benchmark-repository.js';
-import { FileEditRequestRepository } from './file-edit-request-repository.js';
 import { FileQualityBenchmarkRepository } from './file-quality-benchmark-repository.js';
 import { FileSelfImprovementRepository } from './file-self-improvement-repository.js';
 import { FileChatSessionRepository } from './file-chat-session-repository.js';
@@ -70,7 +68,6 @@ export function createFileRepositories(baseDir = '.codewiki-data'): Repositories
     iterations: new FileIterationRepository(baseDir),
     findings: new FileFindingsRepository(baseDir),
     benchmarks: new FileBenchmarkRepository(baseDir),
-    editRequests: new FileEditRequestRepository(baseDir),
     qualityBenchmarks: new FileQualityBenchmarkRepository(baseDir),
     selfImprovements: new FileSelfImprovementRepository(baseDir),
     chatSessions: new FileChatSessionRepository(baseDir),

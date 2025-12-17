@@ -234,7 +234,7 @@ function populateAgentTypeFilter() {
   // Common agent types
   const agentTypes = [
     'bootstrap', 'code-change', 'narrative', 'security', 'technical-debt',
-    'pattern', 'dependency', 'exploration', 'wiki-editor', 'link', 'structure',
+    'pattern', 'dependency', 'exploration', 'link', 'structure',
     'quality', 'consistency', 'project-overview', 'getting-started', 'testing-guide',
     'extension-guide', 'writer', 'overview'
   ];

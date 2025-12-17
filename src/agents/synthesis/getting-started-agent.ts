@@ -52,17 +52,19 @@ export class GettingStartedAgent implements Agent {
       };
     }
 
-    // Check if guide already exists
-    const hasGuide = pages.some(p =>
+    // Check if a proper synthesis guide already exists (has synthesisType)
+    // If an exploration page exists at the path but without synthesisType, we should UPDATE it
+    const existingGuide = pages.find(p =>
       p.path === this.GUIDE_PATH ||
       p.path === 'guides/quickstart' ||
       p.path === 'guides/index'
     );
+    const hasSynthesisGuide = existingGuide?.synthesisType === 'getting-started';
 
-    if (hasGuide) {
+    if (hasSynthesisGuide) {
       return {
         result: createAgentResult({
-          summary: 'Getting started guide already exists',
+          summary: 'Getting started guide already exists with proper synthesis',
           findings: [],
           confidence: 1.0,
         }),
@@ -70,6 +72,9 @@ export class GettingStartedAgent implements Agent {
         costUsd: 0,
       };
     }
+
+    // Determine if we're creating or updating
+    const isUpdate = !!existingGuide;
 
     // Set up codebase exploration tools (works with both local and GitHub repos)
     const toolExecutor = createCodebaseToolExecutor(context);
@@ -102,7 +107,7 @@ export class GettingStartedAgent implements Agent {
     const links = extractLinksFromContent(content);
 
     const update: WikiPageUpdate = {
-      type: 'create',
+      type: isUpdate ? 'update' : 'create',
       path: this.GUIDE_PATH,
       title,
       content,
@@ -113,13 +118,14 @@ export class GettingStartedAgent implements Agent {
       synthesisType: 'getting-started' as SynthesisType,
     };
 
+    const action = isUpdate ? 'Updated' : 'Created';
     return {
       result: createAgentResult({
-        summary: `Created getting started guide from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
+        summary: `${action} getting started guide from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
         findings: [
           createFinding({
             type: 'SYNTHESIS',
-            description: 'Generated getting started guide for new developers',
+            description: `${action} getting started guide for new developers`,
             relatedPaths: [this.GUIDE_PATH],
             importance: 'high',
           }),

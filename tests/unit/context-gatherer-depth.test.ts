@@ -485,9 +485,11 @@ describe('ContextGatherer Project Overview Content', () => {
     assert.ok(context.projectOverviewContent.includes('[... truncated ...]'));
   });
 
-  it('should return null when no page has synthesisType project-overview', async () => {
-    // Page exists but without synthesisType - should not be detected as project overview
-    const categoryOverview = createMockWikiPage('architecture/overview', 'Category overview');
+  it('should report hasProjectOverview false when page exists without synthesisType', async () => {
+    // Page exists at target path but without synthesisType
+    // hasProjectOverview should be false - this triggers the synthesis agent
+    // The synthesis agent will UPDATE the page (adding synthesisType)
+    const pathOverview = createMockWikiPage('architecture/overview', 'Category overview');
 
     const repos = {
       repos: {
@@ -499,7 +501,7 @@ describe('ContextGatherer Project Overview Content', () => {
         countProcessedByAgent: mock.fn(async () => 0),
       },
       wikiPages: {
-        findByWiki: mock.fn(async () => [categoryOverview]),
+        findByWiki: mock.fn(async () => [pathOverview]),
       },
       agentRuns: {
         findByRepo: mock.fn(async () => []),
@@ -512,7 +514,7 @@ describe('ContextGatherer Project Overview Content', () => {
     const gatherer = new ContextGatherer(repos);
     const context = await gatherer.gather('repo-1', 'wiki-1');
 
-    // Category overview pages should NOT be detected as project overview
+    // hasProjectOverview false (no synthesisType) - synthesis agent will run and UPDATE
     assert.strictEqual(context.hasProjectOverview, false);
     assert.strictEqual(context.projectOverviewContent, null);
   });

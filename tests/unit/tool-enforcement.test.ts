@@ -266,7 +266,7 @@ describe('Tool Enforcement', () => {
     });
 
     it('has no requirements for meta agents', () => {
-      const metaAgents = ['quality', 'link', 'wiki-editor', 'structure', 'consistency'];
+      const metaAgents = ['quality', 'link', 'structure', 'consistency'];
 
       for (const agent of metaAgents) {
         const config = DEFAULT_TOOL_REQUIREMENTS[agent as keyof typeof DEFAULT_TOOL_REQUIREMENTS];

@@ -271,8 +271,6 @@ export async function handleDeleteRepository(
       await repos.wikiPages.deleteByWiki(wiki.id);
       // Delete findings
       await repos.findings.deleteByWiki(wiki.id);
-      // Delete edit requests
-      await repos.editRequests.deleteByWiki(wiki.id);
       // Delete conflicts
       await repos.conflicts.deleteByWiki(wiki.id);
     }

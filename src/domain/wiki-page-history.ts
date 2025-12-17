@@ -13,7 +13,7 @@ export type WikiPageHistoryOperation = 'create' | 'update' | 'delete';
 /**
  * Type of agent that caused the mutation.
  */
-export type WikiPageHistoryAgentType = 'bootstrap' | 'wiki-editor' | 'manual' | 'unknown';
+export type WikiPageHistoryAgentType = 'bootstrap' | 'manual' | 'unknown';
 
 /**
  * Historical record of a wiki page mutation.
@@ -42,8 +42,6 @@ export interface WikiPageHistory {
   agentRunId?: string;
   /** WorkItem that led to this change (optional) */
   workItemId?: string;
-  /** EditRequest that was applied (optional - wiki-editor path) */
-  editRequestId?: string;
   /** Type of agent that made the change */
   agentType: WikiPageHistoryAgentType;
   /** Monotonically increasing sequence number per wiki for deterministic ordering */
@@ -63,7 +61,6 @@ export interface CreateWikiPageHistoryParams {
   contentAfter: string | null;
   agentRunId?: string;
   workItemId?: string;
-  editRequestId?: string;
   agentType: WikiPageHistoryAgentType;
   timestamp?: Date;
   sequenceNumber: number;
@@ -89,7 +86,6 @@ export function createWikiPageHistory(params: CreateWikiPageHistoryParams): Wiki
   // Only include optional properties if defined (exactOptionalPropertyTypes)
   if (params.agentRunId !== undefined) result.agentRunId = params.agentRunId;
   if (params.workItemId !== undefined) result.workItemId = params.workItemId;
-  if (params.editRequestId !== undefined) result.editRequestId = params.editRequestId;
 
   return result;
 }

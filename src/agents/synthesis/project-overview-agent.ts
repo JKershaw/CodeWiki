@@ -60,16 +60,18 @@ export class ProjectOverviewAgent implements Agent {
       };
     }
 
-    // Check if overview already exists
-    const hasOverview = pages.some(p =>
+    // Check if a proper synthesis overview already exists (has synthesisType)
+    // If an exploration page exists at the path but without synthesisType, we should UPDATE it
+    const existingOverview = pages.find(p =>
       p.path === this.OVERVIEW_PATH ||
       p.path === 'architecture/index'
     );
+    const hasSynthesisOverview = existingOverview?.synthesisType === 'project-overview';
 
-    if (hasOverview) {
+    if (hasSynthesisOverview) {
       return {
         result: createAgentResult({
-          summary: 'Project overview already exists',
+          summary: 'Project overview already exists with proper synthesis',
           findings: [],
           confidence: 1.0,
         }),
@@ -77,6 +79,9 @@ export class ProjectOverviewAgent implements Agent {
         costUsd: 0,
       };
     }
+
+    // Determine if we're creating or updating
+    const isUpdate = !!existingOverview;
 
     // Gather information for the overview
     const projectContext = this.gatherProjectContext(pages);
@@ -101,7 +106,7 @@ export class ProjectOverviewAgent implements Agent {
 
     // Use the LLM output directly as markdown content
     const content = completion.content.trim();
-    const update = this.generateDirectUpdate(content, pages);
+    const update = this.generateDirectUpdate(content, pages, isUpdate);
 
     // Include tool usage in findings
     const toolUsageFinding = completion.toolCalls.length > 0
@@ -116,13 +121,14 @@ export class ProjectOverviewAgent implements Agent {
         })]
       : [];
 
+    const action = isUpdate ? 'Updated' : 'Created';
     return {
       result: createAgentResult({
-        summary: `Created project overview from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
+        summary: `${action} project overview from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
         findings: [
           createFinding({
             type: 'SYNTHESIS',
-            description: 'Generated project-level overview page',
+            description: `${action} project-level overview page`,
             relatedPaths: [this.OVERVIEW_PATH],
             importance: 'high',
           }),
@@ -207,7 +213,7 @@ Output ONLY the markdown content. No explanations before or after.
 `;
   }
 
-  private generateDirectUpdate(content: string, pages: WikiPage[]): WikiPageUpdate {
+  private generateDirectUpdate(content: string, pages: WikiPage[], isUpdate: boolean = false): WikiPageUpdate {
     // Extract title from the content or use default
     const titleMatch = content.match(/^#\s+(.+)$/m);
     const title = titleMatch ? titleMatch[1]! : 'Project Overview';
@@ -228,7 +234,7 @@ Output ONLY the markdown content. No explanations before or after.
     const links = extractLinksFromContent(finalContent);
 
     return {
-      type: 'create',
+      type: isUpdate ? 'update' : 'create',
       path: this.OVERVIEW_PATH,
       title,
       content: finalContent,

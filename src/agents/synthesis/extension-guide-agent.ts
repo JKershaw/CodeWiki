@@ -53,18 +53,20 @@ export class ExtensionGuideAgent implements Agent {
       };
     }
 
-    // Check if guide already exists
-    const hasGuide = pages.some(p =>
+    // Check if a proper synthesis guide already exists (has synthesisType)
+    // If an exploration page exists at the path but without synthesisType, we should UPDATE it
+    const existingGuide = pages.find(p =>
       p.path === this.GUIDE_PATH ||
       p.path === 'guides/extending' ||
       p.path === 'guides/adding-features' ||
       p.path === 'guides/patterns'
     );
+    const hasSynthesisGuide = existingGuide?.synthesisType === 'extension-guide';
 
-    if (hasGuide) {
+    if (hasSynthesisGuide) {
       return {
         result: createAgentResult({
-          summary: 'Extension patterns guide already exists',
+          summary: 'Extension patterns guide already exists with proper synthesis',
           findings: [],
           confidence: 1.0,
         }),
@@ -72,6 +74,9 @@ export class ExtensionGuideAgent implements Agent {
         costUsd: 0,
       };
     }
+
+    // Determine if we're creating or updating
+    const isUpdate = !!existingGuide;
 
     // Set up codebase exploration tools (works with both local and GitHub repos)
     const toolExecutor = createCodebaseToolExecutor(context);
@@ -104,7 +109,7 @@ export class ExtensionGuideAgent implements Agent {
     const links = extractLinksFromContent(content);
 
     const update: WikiPageUpdate = {
-      type: 'create',
+      type: isUpdate ? 'update' : 'create',
       path: this.GUIDE_PATH,
       title,
       content,
@@ -115,13 +120,14 @@ export class ExtensionGuideAgent implements Agent {
       synthesisType: 'extension-guide' as SynthesisType,
     };
 
+    const action = isUpdate ? 'Updated' : 'Created';
     return {
       result: createAgentResult({
-        summary: `Created extension patterns guide from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
+        summary: `${action} extension patterns guide from ${pages.length} wiki pages and ${completion.toolCalls.length} source file reads`,
         findings: [
           createFinding({
             type: 'SYNTHESIS',
-            description: 'Generated extension patterns guide documenting how to add new features',
+            description: `${action} extension patterns guide documenting how to add new features`,
             relatedPaths: [this.GUIDE_PATH],
             importance: 'high',
           }),

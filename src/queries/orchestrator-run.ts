@@ -60,7 +60,6 @@ export interface OrchestratorRunSummary {
   /** Key context metrics at decision time */
   contextSnapshot: {
     wikiPages: number;
-    pendingEditRequests: number;
     pagesNeedingRewrite: number;
     avgConfidence: number;
   };
@@ -94,7 +93,6 @@ export async function handleListOrchestratorRuns(
       workItems: run.decision.workItems,
       contextSnapshot: {
         wikiPages: run.context.wikiPages ?? 0,
-        pendingEditRequests: run.context.pendingEditRequests ?? 0,
         pagesNeedingRewrite: run.context.pagesNeedingRewrite ?? 0,
         avgConfidence: run.context.avgConfidence ?? 0,
       },

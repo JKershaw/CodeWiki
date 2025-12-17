@@ -8,8 +8,46 @@ import {
   calculateCost,
 } from './llm-service.js';
 import type { RequestInit as UndiciRequestInit } from 'undici';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+/**
+ * Directory for LLM call logs.
+ */
+const LLM_LOG_DIR = join(process.cwd(), '.codewiki-data', 'llm-logs');
+
+/**
+ * Log an LLM call with full context for debugging.
+ */
+function logLLMCall(entry: {
+  timestamp: string;
+  callId: string;
+  model: string;
+  type: 'complete' | 'completeWithTools';
+  system: string | undefined;
+  messages: Array<{ role: string; content: string | null }>;
+  tools?: Array<{ name: string; description: string }>;
+  response: string;
+  toolCalls?: Array<{ name: string; input: unknown; result: string }>;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  finishReason: string | undefined;
+  toolRounds?: number;
+}): void {
+  try {
+    if (!existsSync(LLM_LOG_DIR)) {
+      mkdirSync(LLM_LOG_DIR, { recursive: true });
+    }
+    const filename = `${entry.timestamp.replace(/[:.]/g, '-')}_${entry.callId}.json`;
+    const filepath = join(LLM_LOG_DIR, filename);
+    writeFileSync(filepath, JSON.stringify(entry, null, 2));
+  } catch (error) {
+    console.warn('[LLM] Failed to write log:', error);
+  }
+}
 
 /**
  * Retry configuration for OpenRouter API calls.
@@ -554,6 +592,22 @@ export class OpenRouterLLMService extends BaseLLMService {
         truncated: response.choices[0]?.finish_reason === 'length',
       };
 
+      // Log the LLM call for debugging
+      const callId = Math.random().toString(36).slice(2, 10);
+      logLLMCall({
+        timestamp: new Date().toISOString(),
+        callId,
+        model: this.model,
+        type: 'complete',
+        system: options.system,
+        messages: options.messages.map(m => ({ role: m.role, content: m.content })),
+        response: content,
+        inputTokens,
+        outputTokens,
+        costUsd: result.costUsd,
+        finishReason: response.choices[0]?.finish_reason,
+      });
+
       this.trackUsage(result);
       return result;
     } catch (error) {
@@ -782,6 +836,25 @@ export class OpenRouterLLMService extends BaseLLMService {
         toolCalls: allToolCalls,
         toolRounds,
       };
+
+      // Log the LLM call for debugging
+      const callId = Math.random().toString(36).slice(2, 10);
+      logLLMCall({
+        timestamp: new Date().toISOString(),
+        callId,
+        model: this.model,
+        type: 'completeWithTools',
+        system: options.system,
+        messages: options.messages.map(m => ({ role: m.role, content: m.content })),
+        tools: options.tools.map(t => ({ name: t.name, description: t.description })),
+        response: finalContent,
+        toolCalls: allToolCalls,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        costUsd: result.costUsd,
+        finishReason: undefined, // Multiple API calls in tool loop - no single finish reason
+        toolRounds,
+      });
 
       this.trackUsage(result);
       return result;

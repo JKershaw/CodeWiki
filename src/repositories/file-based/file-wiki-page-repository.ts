@@ -1,5 +1,5 @@
 import type { WikiPageRepository } from '../interfaces/wiki-page-repository.js';
-import type { WikiPage } from '../../domain/wiki-page.js';
+import type { WikiPage, SynthesisType } from '../../domain/wiki-page.js';
 import { createDateNormalizer, getTime } from '../../domain/date-utils.js';
 import { FileStore } from './file-store.js';
 
@@ -74,6 +74,7 @@ export class FileWikiPageRepository implements WikiPageRepository {
     filesAccessed?: string[];
     filesReferenced?: string[];
     targetPaths?: string[];
+    synthesisType?: SynthesisType;
   }): Promise<void> {
     const page = await this.store.get(id);
     if (page) {
@@ -128,6 +129,10 @@ export class FileWikiPageRepository implements WikiPageRepository {
             page.targetPaths.push(path);
           }
         }
+      }
+      // Update synthesisType if provided (allows synthesis agents to claim pages)
+      if (updates.synthesisType !== undefined) {
+        page.synthesisType = updates.synthesisType;
       }
       await this.store.set(page);
     }

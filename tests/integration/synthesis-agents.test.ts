@@ -31,7 +31,7 @@ describe('Synthesis Agents', () => {
    */
   async function createWikiPages(
     wikiId: string,
-    pages: Array<{ path: string; title: string; content: string; links?: string[] }>
+    pages: Array<{ path: string; title: string; content: string; links?: string[]; synthesisType?: string }>
   ): Promise<void> {
     for (const page of pages) {
       await ctx.repos.wikiPages.save({
@@ -46,6 +46,7 @@ describe('Synthesis Agents', () => {
         backlinks: [],
         createdAt: new Date(),
         updatedAt: new Date(),
+        synthesisType: page.synthesisType,
       });
     }
   }
@@ -701,7 +702,7 @@ Check out the documentation pages for more details.`);
         assert.strictEqual(result.costUsd, 0, 'Should not make LLM call');
       });
 
-      it('skips when getting started guide already exists', async () => {
+      it('skips when getting started guide already exists with synthesisType', async () => {
         const repoId = 'getting-started-exists';
 
         await createTestRepo(ctx, repoId, {
@@ -710,9 +711,10 @@ Check out the documentation pages for more details.`);
 
         const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
 
-        // Create 10+ pages including existing getting-started
-        const pages = [
-          { path: 'guides/getting-started', title: 'Getting Started', content: '# Getting Started\n\nExisting guide.' },
+        // Create 10+ pages including existing getting-started WITH synthesisType
+        // The agent should skip if a proper synthesis guide exists (has synthesisType)
+        const pages: Array<{ path: string; title: string; content: string; synthesisType?: string }> = [
+          { path: 'guides/getting-started', title: 'Getting Started', content: '# Getting Started\n\nExisting guide.', synthesisType: 'getting-started' },
         ];
         for (let i = 0; i < 10; i++) {
           pages.push({
