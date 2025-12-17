@@ -205,6 +205,7 @@ export function createCoverageRoutes(deps: CoverageDependencies): Router {
 
 /**
  * Get source files from repository.
+ * Uses getFileTreeWithSizes() for efficient single-API-call retrieval.
  */
 async function getSourceFiles(
   repoAccessFactory: UnifiedRepoAccessFactory,
@@ -212,13 +213,16 @@ async function getSourceFiles(
 ): Promise<FileData[]> {
   try {
     const repoAccess = await repoAccessFactory.create(repoId);
-    const files = await repoAccess.getFileTree();
+
+    // Use efficient single-request method that returns sizes
+    // For GitHub repos, this uses the Git Tree API (1 API call vs N)
+    const filesWithSizes = await repoAccess.getFileTreeWithSizes();
 
     // Filter to source files (TypeScript, JavaScript)
     const sourceExtensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
     const sourceFiles: FileData[] = [];
 
-    for (const filePath of files) {
+    for (const { path: filePath, size } of filesWithSizes) {
       const ext = filePath.substring(filePath.lastIndexOf('.'));
       if (sourceExtensions.includes(ext)) {
         // Skip test files and node_modules
@@ -231,15 +235,10 @@ async function getSourceFiles(
           continue;
         }
 
-        // Get file content to count LOC
-        try {
-          const content = await repoAccess.getFileContent(filePath);
-          const loc = countLinesOfCode(content);
-          sourceFiles.push({ path: filePath, loc });
-        } catch {
-          // File might not exist or be binary, skip it
-          sourceFiles.push({ path: filePath, loc: 0 });
-        }
+        // Estimate LOC from file size (~35 bytes per line of code)
+        // This avoids fetching file content for each file
+        const loc = estimateLocFromSize(size);
+        sourceFiles.push({ path: filePath, loc });
       }
     }
 
@@ -250,11 +249,13 @@ async function getSourceFiles(
 }
 
 /**
- * Count lines of code (non-empty lines).
+ * Estimate lines of code from file size.
+ * Assumes ~35 bytes per line (typical for source code).
  */
-function countLinesOfCode(content: string): number {
-  if (!content) return 0;
-  return content.split('\n').filter(line => line.trim().length > 0).length;
+function estimateLocFromSize(sizeBytes: number): number {
+  if (sizeBytes <= 0) return 0;
+  // Average line length is ~35 bytes including newline
+  return Math.max(1, Math.round(sizeBytes / 35));
 }
 
 /**
