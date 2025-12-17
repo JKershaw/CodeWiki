@@ -253,6 +253,180 @@ export function prioritizeDirectoriesForPhase(
  */
 type LowCoverageFile = { path: string; coverage: number; directory: string };
 
+// ============================================================================
+// BFS Directory Selection (Phase 2 Breadth)
+// ============================================================================
+
+/**
+ * Get immediate child directories of a parent path.
+ *
+ * This function extracts children by analyzing path structure - a child
+ * is a directory that starts with the parent path and has exactly one
+ * additional path segment.
+ *
+ * For root (parentPath=''), finds directories that have no parent in the list.
+ * This handles cases where we have ['src/agents', 'src/services'] but no 'src'.
+ *
+ * @param parentPath - Parent directory path (empty string for root)
+ * @param allDirectories - All known directory paths
+ * @returns Sorted array of immediate child directory paths
+ */
+export function getChildDirectories(
+  parentPath: string,
+  allDirectories: string[]
+): string[] {
+  const allDirsSet = new Set(allDirectories);
+
+  if (parentPath === '') {
+    // Root case: find directories with no parent in the list
+    const roots = new Set<string>();
+
+    for (const dir of allDirectories) {
+      const segments = dir.split('/');
+
+      // Walk up the path to find the topmost ancestor in the list
+      // or the directory itself if no ancestor exists
+      let root = dir;
+      for (let i = 1; i < segments.length; i++) {
+        const prefix = segments.slice(0, i).join('/');
+        if (allDirsSet.has(prefix)) {
+          root = prefix;
+          break;
+        }
+      }
+
+      // If no shorter prefix exists in list, this dir (or its first segment) is a root
+      if (root === dir) {
+        // Check if first segment exists
+        const firstSeg = segments[0];
+        if (firstSeg && allDirsSet.has(firstSeg)) {
+          roots.add(firstSeg);
+        } else {
+          roots.add(dir);
+        }
+      } else {
+        roots.add(root);
+      }
+    }
+
+    return Array.from(roots).sort();
+  }
+
+  // Non-root case: find immediate children
+  const children: string[] = [];
+  const prefix = parentPath + '/';
+
+  for (const dir of allDirectories) {
+    if (!dir.startsWith(prefix)) {
+      continue;
+    }
+
+    const remainder = dir.slice(prefix.length);
+
+    // Immediate child has no slash in remainder
+    if (!remainder.includes('/')) {
+      children.push(dir);
+    }
+  }
+
+  return children.sort();
+}
+
+/**
+ * Check if a directory is "covered" (has sufficient documentation).
+ *
+ * Uses a simple binary threshold: a directory is covered if more than 50%
+ * of its files have been touched (have any documentation).
+ *
+ * @param dir - Directory with coverage stats
+ * @param threshold - Coverage threshold (default 0.5 = 50%)
+ * @returns true if directory is covered
+ */
+export function isDirectoryCovered(
+  dir: UndocumentedDirectory,
+  threshold: number = 0.5
+): boolean {
+  // Coverage = 1 - undocumentedRatio
+  // Covered if coverage > threshold
+  // Which means: (1 - undocumentedRatio) > threshold
+  // Or: undocumentedRatio < (1 - threshold)
+  return dir.undocumentedRatio < (1 - threshold);
+}
+
+/**
+ * Select directories for Phase 2 breadth work using BFS traversal.
+ *
+ * This approach:
+ * 1. Identifies source roots (directories with no parent in the list)
+ * 2. Traverses breadth-first, processing siblings before children
+ * 3. Selects uncovered directories for work
+ * 4. Descends into covered directories to find uncovered children
+ *
+ * Benefits over the previous "focus strategy":
+ * - Naturally processes level-by-level (no round-robin problem)
+ * - Simpler algorithm (~30 lines vs ~100+)
+ * - Deterministic ordering via alphabetical sort at each level
+ *
+ * @param directories - All directories with their coverage stats
+ * @param maxDirectories - Maximum directories to select (default MAX_FOCUS_DIRECTORIES)
+ * @returns Array of directory paths to explore
+ */
+export function selectDirectoriesForBreadthWork(
+  directories: UndocumentedDirectory[],
+  maxDirectories: number = MAX_FOCUS_DIRECTORIES
+): string[] {
+  if (directories.length === 0) {
+    return [];
+  }
+
+  // Build a map for quick coverage lookup
+  const coverageMap = new Map<string, UndocumentedDirectory>();
+  const allPaths: string[] = [];
+  for (const dir of directories) {
+    coverageMap.set(dir.path, dir);
+    allPaths.push(dir.path);
+  }
+
+  // Find source roots (directories with no parent in the list)
+  const roots = getChildDirectories('', allPaths);
+
+  // BFS traversal
+  const queue: string[] = [...roots];
+  const selected: string[] = [];
+  const visited = new Set<string>();
+
+  while (queue.length > 0 && selected.length < maxDirectories) {
+    const dirPath = queue.shift()!;
+
+    if (visited.has(dirPath)) {
+      continue;
+    }
+    visited.add(dirPath);
+
+    const dir = coverageMap.get(dirPath);
+
+    // If we don't have coverage info for this directory, skip it
+    // (it might be a parent directory not in the original list)
+    if (!dir) {
+      // Still add children to explore
+      const children = getChildDirectories(dirPath, allPaths);
+      queue.push(...children);
+      continue;
+    }
+
+    if (isDirectoryCovered(dir)) {
+      // Directory is covered - descend to children
+      const children = getChildDirectories(dirPath, allPaths);
+      queue.push(...children);
+    } else {
+      // Directory is NOT covered - select it for work
+      selected.push(dirPath);
+    }
+  }
+
+  return selected;
+}
+
 /**
  * Create an exploration work item with priority files.
  *
@@ -509,31 +683,53 @@ export class PhasedOrchestrator implements Orchestrator {
     inputs.push('**Phase Transition Logic:**');
     inputs.push(this.explainPhaseTransition(phase, phaseCtx));
 
-    // Directory prioritization (if we have context)
+    // Directory selection (if we have context)
     if (context && context.undocumentedDirectories.length > 0) {
       inputs.push('');
-      inputs.push('**Directory Prioritization:**');
-      const phaseThreshold = this.getPhaseThreshold(phase);
-      inputs.push(`- Phase threshold: ${((1 - phaseThreshold) * 100).toFixed(0)}% coverage (undocRatio ≤ ${phaseThreshold})`);
+      inputs.push('**Directory Selection:**');
 
-      const prioritized = prioritizeDirectoriesForPhase(
-        context.undocumentedDirectories,
-        phaseThreshold
-      );
-      const inProgress = prioritized.filter(d => d.undocumentedRatio < 1.0);
-      const notStarted = prioritized.filter(d => d.undocumentedRatio === 1.0);
+      if (phase === Phase.Breadth) {
+        // Phase 2 uses BFS
+        inputs.push(`- Algorithm: BFS traversal`);
+        inputs.push(`- Coverage threshold: >50% files touched = covered`);
 
-      inputs.push(`- In-progress directories: ${inProgress.length}`);
-      inputs.push(`- Not-started directories: ${notStarted.length}`);
+        const selectedPaths = selectDirectoriesForBreadthWork(
+          context.undocumentedDirectories,
+          MAX_FOCUS_DIRECTORIES
+        );
 
-      // Show top prioritized directories
-      const topDirs = prioritized.slice(0, MAX_FOCUS_DIRECTORIES);
-      if (topDirs.length > 0) {
-        inputs.push(`- Selected for work (max ${MAX_FOCUS_DIRECTORIES}):`);
-        for (const dir of topDirs) {
-          const status = dir.undocumentedRatio < 1.0 ? 'in-progress' : 'not-started';
-          const coveragePct = ((1 - dir.undocumentedRatio) * 100).toFixed(1);
-          inputs.push(`  - ${dir.path}: ${coveragePct}% coverage (${status})`);
+        if (selectedPaths.length > 0) {
+          inputs.push(`- Selected via BFS (max ${MAX_FOCUS_DIRECTORIES}):`);
+          for (const path of selectedPaths) {
+            const dir = context.undocumentedDirectories.find(d => d.path === path);
+            const coveragePct = dir ? ((1 - dir.undocumentedRatio) * 100).toFixed(1) : '?';
+            inputs.push(`  - ${path}: ${coveragePct}% coverage`);
+          }
+        }
+      } else {
+        // Other phases use focus strategy
+        const phaseThreshold = this.getPhaseThreshold(phase);
+        inputs.push(`- Phase threshold: ${((1 - phaseThreshold) * 100).toFixed(0)}% coverage (undocRatio ≤ ${phaseThreshold})`);
+
+        const prioritized = prioritizeDirectoriesForPhase(
+          context.undocumentedDirectories,
+          phaseThreshold
+        );
+        const inProgress = prioritized.filter(d => d.undocumentedRatio < 1.0);
+        const notStarted = prioritized.filter(d => d.undocumentedRatio === 1.0);
+
+        inputs.push(`- In-progress directories: ${inProgress.length}`);
+        inputs.push(`- Not-started directories: ${notStarted.length}`);
+
+        // Show top prioritized directories
+        const topDirs = prioritized.slice(0, MAX_FOCUS_DIRECTORIES);
+        if (topDirs.length > 0) {
+          inputs.push(`- Selected for work (max ${MAX_FOCUS_DIRECTORIES}):`);
+          for (const dir of topDirs) {
+            const status = dir.undocumentedRatio < 1.0 ? 'in-progress' : 'not-started';
+            const coveragePct = ((1 - dir.undocumentedRatio) * 100).toFixed(1);
+            inputs.push(`  - ${dir.path}: ${coveragePct}% coverage (${status})`);
+          }
         }
       }
     }
@@ -953,8 +1149,12 @@ export class PhasedOrchestrator implements Orchestrator {
   }
 
   /**
-   * Phase 2: Breadth - Cover all directories to 30% threshold.
-   * Focus on MAX_FOCUS_DIRECTORIES at a time for depth-first behavior.
+   * Phase 2: Breadth - Cover all directories using BFS traversal.
+   *
+   * Uses breadth-first search to:
+   * 1. Process directories level-by-level (siblings before children)
+   * 2. Descend into covered directories to find uncovered children
+   * 3. Naturally avoid the "round-robin" problem without complex prioritization
    */
   private async generateBreadthWork(
     repoId: string,
@@ -965,45 +1165,34 @@ export class PhasedOrchestrator implements Orchestrator {
   ): Promise<WorkItem[]> {
     const workItems: WorkItem[] = [];
 
-    // Phase 2→3 requires 30% coverage (undocumentedRatio <= 0.70)
-    const phaseThreshold = 0.70;
-
-    // Prioritize in-progress directories, limit to MAX_FOCUS_DIRECTORIES
-    // This ensures we complete directories to threshold before starting new ones
-    const allPrioritized = prioritizeDirectoriesForPhase(
+    // Use BFS to select directories for exploration
+    const selectedPaths = selectDirectoriesForBreadthWork(
       context.undocumentedDirectories,
-      phaseThreshold
+      MAX_FOCUS_DIRECTORIES
     );
-    const prioritizedDirs = allPrioritized.slice(0, MAX_FOCUS_DIRECTORIES);
 
-    // Debug: Show prioritization results
+    // Debug: Show BFS selection results
     if (isDebugEnabled()) {
-      debugSection('Phase 2 (Breadth) Directory Prioritization');
-      debugLog(`Phase threshold: ${((1 - phaseThreshold) * 100).toFixed(0)}% coverage (undocRatio <= ${phaseThreshold})`);
-      debugLog(`Total directories needing work: ${allPrioritized.length}`);
+      debugSection('Phase 2 (Breadth) BFS Directory Selection');
+      debugLog(`Total directories in context: ${context.undocumentedDirectories.length}`);
+      debugLog(`Coverage threshold: >50% files touched = covered`);
+      debugLog(`\nSelected directories via BFS (max ${MAX_FOCUS_DIRECTORIES}):`);
 
-      // Show in-progress vs not-started
-      const inProgress = allPrioritized.filter(d => d.undocumentedRatio < 1.0);
-      const notStarted = allPrioritized.filter(d => d.undocumentedRatio === 1.0);
-      debugLog(`In-progress (some coverage): ${inProgress.length}`);
-      debugLog(`Not started (0% coverage): ${notStarted.length}`);
-
-      debugLog(`\nSelected directories (max ${MAX_FOCUS_DIRECTORIES}):`);
-      for (let i = 0; i < prioritizedDirs.length; i++) {
-        const dir = prioritizedDirs[i]!;
-        const status = dir.undocumentedRatio < 1.0 ? 'IN-PROGRESS' : 'NOT-STARTED';
-        const coveragePct = ((1 - dir.undocumentedRatio) * 100).toFixed(1);
-        debugLog(`  ${i + 1}. [${status}] ${dir.path} → ${coveragePct}% coverage`);
+      for (let i = 0; i < selectedPaths.length; i++) {
+        const dirPath = selectedPaths[i]!;
+        const dir = context.undocumentedDirectories.find(d => d.path === dirPath);
+        const coveragePct = dir ? ((1 - dir.undocumentedRatio) * 100).toFixed(1) : '?';
+        debugLog(`  ${i + 1}. ${dirPath} → ${coveragePct}% coverage`);
 
         // Show priority files for this directory
         const dirFiles = context.lowCoverageFiles
-          .filter(f => f.directory === dir.path)
+          .filter(f => f.directory === dirPath)
           .slice(0, 5);
         if (dirFiles.length > 0) {
           for (const file of dirFiles) {
             debugLog(`       └─ ${file.coverage.toFixed(0)}% ${file.path.split('/').pop()}`);
           }
-          const remaining = context.lowCoverageFiles.filter(f => f.directory === dir.path).length - 5;
+          const remaining = context.lowCoverageFiles.filter(f => f.directory === dirPath).length - 5;
           if (remaining > 0) {
             debugLog(`       └─ ... and ${remaining} more files`);
           }
@@ -1011,10 +1200,11 @@ export class PhasedOrchestrator implements Orchestrator {
       }
     }
 
-    for (const dir of prioritizedDirs) {
-      if (workItems.length >= maxItems - 2) break; // Reserve slots for quality work
+    // Create exploration work items for selected directories
+    for (const dirPath of selectedPaths) {
+      if (workItems.length >= maxItems - 2) break; // Reserve slots for commits/structure
 
-      const key = `codebase-explorer:path:${dir.path}`;
+      const key = `codebase-explorer:path:${dirPath}`;
       if (existingWorkKeys.has(key)) {
         if (isDebugEnabled()) {
           debugLog(`SKIPPED (already pending): ${key}`);
@@ -1025,7 +1215,7 @@ export class PhasedOrchestrator implements Orchestrator {
 
       // Use helper that includes priorityFiles for coverage-aware exploration
       const workItem = createExplorationWorkItem(
-        dir.path,
+        dirPath,
         repoId,
         context.lowCoverageFiles
       );
@@ -1035,7 +1225,7 @@ export class PhasedOrchestrator implements Orchestrator {
         const priorityFiles = workItem.target.type === 'path' && 'priorityFiles' in workItem.target
           ? (workItem.target as { priorityFiles?: string[] }).priorityFiles ?? []
           : [];
-        debugLog(`CREATED: codebase-explorer → ${dir.path} (${priorityFiles.length} priority files)`);
+        debugLog(`CREATED: codebase-explorer → ${dirPath} (${priorityFiles.length} priority files)`);
       }
     }
 
