@@ -22,6 +22,9 @@ function initDebugListeners() {
   document.getElementById('debug-refresh-agents')?.addEventListener('click', () => {
     if (debugCurrentRepoId) loadAgentRuns(debugCurrentRepoId);
   });
+  document.getElementById('debug-refresh-coverage')?.addEventListener('click', () => {
+    if (debugCurrentRepoId) loadCoverageData(debugCurrentRepoId);
+  });
 
   // Filter controls
   document.getElementById('debug-filter-llm')?.addEventListener('change', () => {
@@ -63,6 +66,7 @@ async function initDebugPage() {
     loadDebugSummary(repoId),
     loadOrchestratorRuns(repoId),
     loadAgentRuns(repoId),
+    loadCoverageData(repoId),
   ]);
 
   // Populate agent type filter
@@ -406,4 +410,157 @@ function formatRelativeTime(timestamp) {
   if (diffDay < 7) return `${diffDay}d ago`;
 
   return date.toLocaleDateString();
+}
+
+// ============================================================================
+// Coverage Tab Functions
+// ============================================================================
+
+// Track expanded coverage tree nodes
+const expandedCoverageNodes = new Set();
+
+/**
+ * Load and display coverage data.
+ */
+async function loadCoverageData(repoId) {
+  const container = document.getElementById('coverage-tree-container');
+  container.innerHTML = '<p class="loading">Loading coverage data...</p>';
+
+  try {
+    const data = await api(`/repos/${repoId}/coverage`);
+
+    // Update summary cards
+    document.getElementById('coverage-total-files').textContent = data.summary.totalFiles;
+    document.getElementById('coverage-documented-files').textContent = data.summary.documentedFiles;
+    document.getElementById('coverage-low-files').textContent = data.summary.lowCoverageFiles;
+    document.getElementById('coverage-threshold').textContent = data.thresholds.lowCoverage;
+    document.getElementById('coverage-average').textContent = `${Math.round(data.summary.averageCoverage)}%`;
+
+    // Render tree
+    if (!data.tree) {
+      container.innerHTML = '<p class="placeholder">No source files found.</p>';
+      return;
+    }
+
+    container.innerHTML = renderCoverageTree(data.tree, data.thresholds.lowCoverage);
+
+    // Add click handlers for tree expansion
+    container.querySelectorAll('.coverage-node-toggle').forEach(toggle => {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const path = toggle.dataset.path;
+        toggleCoverageNode(path);
+      });
+    });
+
+  } catch (error) {
+    container.innerHTML = `<p class="placeholder">Error: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+/**
+ * Render coverage tree as HTML.
+ */
+function renderCoverageTree(node, lowThreshold, level = 0) {
+  const isExpanded = level === 0 || expandedCoverageNodes.has(node.path);
+  const hasChildren = (node.children && node.children.length > 0) || (node.files && node.files.length > 0);
+
+  let html = '';
+
+  if (node.type === 'directory') {
+    const coverageClass = getCoverageClass(node.coveragePercent, lowThreshold);
+    const toggleIcon = hasChildren ? (isExpanded ? '▼' : '▶') : '';
+
+    html += `
+      <div class="coverage-node coverage-directory" data-path="${escapeHtml(node.path)}">
+        <div class="coverage-node-header">
+          ${hasChildren ? `<span class="coverage-node-toggle" data-path="${escapeHtml(node.path)}">${toggleIcon}</span>` : '<span class="coverage-node-spacer"></span>'}
+          <span class="coverage-node-icon">📁</span>
+          <span class="coverage-node-name">${escapeHtml(node.name)}/</span>
+          <span class="coverage-percent ${coverageClass}">${Math.round(node.coveragePercent)}%</span>
+          <span class="coverage-bar-container">
+            <span class="coverage-bar ${coverageClass}" style="width: ${node.coveragePercent}%"></span>
+          </span>
+          <span class="coverage-meta">${node.totalFileCount} files, ${node.totalLoc} loc</span>
+          ${node.coveragePercent < lowThreshold ? '<span class="coverage-warning">⚠️</span>' : ''}
+        </div>
+        <div class="coverage-children ${isExpanded ? 'expanded' : ''}" data-path="${escapeHtml(node.path)}">
+    `;
+
+    // Render files first (sorted by priority - lowest coverage first for visibility)
+    if (node.files && node.files.length > 0) {
+      const sortedFiles = [...node.files].sort((a, b) => a.coveragePercent - b.coveragePercent);
+      for (const file of sortedFiles) {
+        html += renderCoverageFileNode(file, lowThreshold);
+      }
+    }
+
+    // Render child directories
+    if (node.children && node.children.length > 0) {
+      const sortedChildren = [...node.children].sort((a, b) => a.coveragePercent - b.coveragePercent);
+      for (const child of sortedChildren) {
+        html += renderCoverageTree(child, lowThreshold, level + 1);
+      }
+    }
+
+    html += `
+        </div>
+      </div>
+    `;
+  }
+
+  return html;
+}
+
+/**
+ * Render a file node in the coverage tree.
+ */
+function renderCoverageFileNode(file, lowThreshold) {
+  const coverageClass = getCoverageClass(file.coveragePercent, lowThreshold);
+
+  return `
+    <div class="coverage-node coverage-file" data-path="${escapeHtml(file.path)}">
+      <div class="coverage-node-header">
+        <span class="coverage-node-spacer"></span>
+        <span class="coverage-node-icon">📄</span>
+        <span class="coverage-node-name">${escapeHtml(file.name)}</span>
+        ${file.isEntryPoint ? '<span class="coverage-badge entry-point">★ entry</span>' : ''}
+        <span class="coverage-percent ${coverageClass}">${Math.round(file.coveragePercent)}%</span>
+        <span class="coverage-bar-container">
+          <span class="coverage-bar ${coverageClass}" style="width: ${file.coveragePercent}%"></span>
+        </span>
+        <span class="coverage-meta">${file.loc} loc</span>
+        ${file.coveragePercent < lowThreshold ? '<span class="coverage-warning">⚠️</span>' : ''}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Get CSS class for coverage level.
+ */
+function getCoverageClass(coveragePercent, lowThreshold) {
+  if (coveragePercent >= 70) return 'coverage-high';
+  if (coveragePercent >= lowThreshold) return 'coverage-medium';
+  return 'coverage-low';
+}
+
+/**
+ * Toggle expansion of a coverage tree node.
+ */
+function toggleCoverageNode(path) {
+  const childrenContainer = document.querySelector(`.coverage-children[data-path="${CSS.escape(path)}"]`);
+  const toggle = document.querySelector(`.coverage-node-toggle[data-path="${CSS.escape(path)}"]`);
+
+  if (!childrenContainer) return;
+
+  if (expandedCoverageNodes.has(path)) {
+    expandedCoverageNodes.delete(path);
+    childrenContainer.classList.remove('expanded');
+    if (toggle) toggle.textContent = '▶';
+  } else {
+    expandedCoverageNodes.add(path);
+    childrenContainer.classList.add('expanded');
+    if (toggle) toggle.textContent = '▼';
+  }
 }

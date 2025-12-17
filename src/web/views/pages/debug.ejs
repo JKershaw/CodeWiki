@@ -56,6 +56,7 @@
           <div class="debug-tabs">
             <button class="debug-tab active" data-tab="orchestrator">Orchestrator Decisions</button>
             <button class="debug-tab" data-tab="agents">Agent Runs</button>
+            <button class="debug-tab" data-tab="coverage">Coverage</button>
           </div>
 
           <!-- Orchestrator Decisions Tab -->
@@ -88,6 +89,37 @@
             </div>
             <div id="debug-agents-list" class="debug-list">
               <p class="placeholder">Loading agent runs...</p>
+            </div>
+          </div>
+
+          <!-- Coverage Tab -->
+          <div id="debug-coverage-tab" class="debug-tab-content">
+            <div class="coverage-summary">
+              <div class="summary-card">
+                <h4>Total Files</h4>
+                <div class="summary-value" id="coverage-total-files">0</div>
+              </div>
+              <div class="summary-card">
+                <h4>Documented</h4>
+                <div class="summary-value" id="coverage-documented-files">0</div>
+              </div>
+              <div class="summary-card">
+                <h4>Low Coverage</h4>
+                <div class="summary-value" id="coverage-low-files">0</div>
+                <div class="summary-breakdown">
+                  <span>Below <span id="coverage-threshold">40</span>%</span>
+                </div>
+              </div>
+              <div class="summary-card">
+                <h4>Average Coverage</h4>
+                <div class="summary-value" id="coverage-average">0%</div>
+              </div>
+            </div>
+            <div class="debug-controls">
+              <button id="debug-refresh-coverage" class="btn secondary small">Refresh</button>
+            </div>
+            <div id="coverage-tree-container" class="coverage-tree-container">
+              <p class="placeholder">Loading coverage data...</p>
             </div>
           </div>
 

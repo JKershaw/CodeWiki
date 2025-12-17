@@ -4489,6 +4489,158 @@ body.side-panel-open {
 }
 
 /* ===========================================
+   Coverage Tree Styles
+   =========================================== */
+
+.coverage-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: var(--space-md);
+	margin-bottom: var(--space-md);
+}
+
+.coverage-tree-container {
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: var(--space-md);
+	max-height: 600px;
+	overflow-y: auto;
+}
+
+.coverage-node {
+	font-family: monospace;
+	font-size: 0.85rem;
+}
+
+.coverage-node-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-xs);
+	padding: 4px 8px;
+	border-radius: 4px;
+	transition: background 0.15s;
+}
+
+.coverage-node-header:hover {
+	background: var(--bg-elevated);
+}
+
+.coverage-node-toggle {
+	cursor: pointer;
+	width: 16px;
+	text-align: center;
+	color: var(--text-tertiary);
+	user-select: none;
+}
+
+.coverage-node-toggle:hover {
+	color: var(--text-primary);
+}
+
+.coverage-node-spacer {
+	width: 16px;
+}
+
+.coverage-node-icon {
+	font-size: 0.9rem;
+}
+
+.coverage-node-name {
+	color: var(--text-primary);
+	flex-shrink: 0;
+}
+
+.coverage-directory > .coverage-node-header .coverage-node-name {
+	font-weight: 500;
+}
+
+.coverage-percent {
+	font-size: 0.75rem;
+	padding: 2px 6px;
+	border-radius: 4px;
+	min-width: 40px;
+	text-align: center;
+}
+
+.coverage-percent.coverage-high {
+	background: rgba(63, 185, 80, 0.2);
+	color: var(--success);
+}
+
+.coverage-percent.coverage-medium {
+	background: rgba(210, 153, 34, 0.2);
+	color: var(--warning);
+}
+
+.coverage-percent.coverage-low {
+	background: rgba(248, 81, 73, 0.2);
+	color: var(--error);
+}
+
+.coverage-bar-container {
+	flex: 1;
+	max-width: 100px;
+	height: 6px;
+	background: var(--bg-elevated);
+	border-radius: 3px;
+	overflow: hidden;
+}
+
+.coverage-bar {
+	height: 100%;
+	border-radius: 3px;
+	transition: width 0.3s;
+}
+
+.coverage-bar.coverage-high {
+	background: var(--success);
+}
+
+.coverage-bar.coverage-medium {
+	background: var(--warning);
+}
+
+.coverage-bar.coverage-low {
+	background: var(--error);
+}
+
+.coverage-meta {
+	color: var(--text-tertiary);
+	font-size: 0.75rem;
+	margin-left: auto;
+}
+
+.coverage-warning {
+	margin-left: var(--space-xs);
+}
+
+.coverage-badge {
+	font-size: 0.7rem;
+	padding: 2px 6px;
+	border-radius: 4px;
+	background: rgba(88, 166, 255, 0.2);
+	color: var(--link);
+}
+
+.coverage-badge.entry-point {
+	background: rgba(210, 153, 34, 0.2);
+	color: var(--warning);
+}
+
+.coverage-children {
+	display: none;
+	flex-direction: column;
+	padding-left: 20px;
+	border-left: 1px solid var(--border);
+	margin-left: 8px;
+}
+
+.coverage-children.expanded {
+	display: flex;
+}
+
+/* ===========================================
    Graph Visualization Styles
    =========================================== */
 

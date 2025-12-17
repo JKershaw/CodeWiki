@@ -25,6 +25,8 @@ import { createSelfImprovementRoutes } from './self-improvement.js';
 import { createConfigRoutes } from './config.js';
 import { createObservabilityRoutes } from './observability.js';
 import { createAutoBenchmarksRoutes } from './auto-benchmarks.js';
+import { createCoverageRoutes } from './coverage.js';
+import { createUnifiedRepoAccessFactory } from '../../services/repository/unified-repo-access.js';
 
 /**
  * Dependencies required by route handlers.
@@ -64,6 +66,16 @@ export function createApiRoutes(deps: Dependencies): Router {
   router.use('/api/repos/:id/self-improvements', createSelfImprovementRoutes(deps.repos, deps.createLLM(), deps.git, deps.repoServiceFactory));
   router.use(createConfigRoutes());
 
+  // Coverage routes (requires UnifiedRepoAccessFactory)
+  if (deps.repoServiceFactory) {
+    const repoAccessFactory = createUnifiedRepoAccessFactory({
+      repos: deps.repos,
+      repoServiceFactory: deps.repoServiceFactory,
+      gitService: deps.git,
+    });
+    router.use(createCoverageRoutes({ repos: deps.repos, repoAccessFactory }));
+  }
+
   return router;
 }
 
@@ -79,3 +91,4 @@ export { createQualityBenchmarksRoutes } from './quality-benchmarks.js';
 export { createAutoBenchmarksRoutes } from './auto-benchmarks.js';
 export { createSelfImprovementRoutes } from './self-improvement.js';
 export { createConfigRoutes } from './config.js';
+export { createCoverageRoutes } from './coverage.js';
