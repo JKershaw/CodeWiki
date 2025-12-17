@@ -115,7 +115,7 @@ test.describe('Coverage Feature', () => {
       expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
       // Navigate to debug page
-      await page.goto(`/repos/${repos[0].id}/debug`);
+      await page.goto(`/debug/${repos[0].id}`);
 
       // Check that the coverage tab button exists
       const coverageTab = page.locator('.debug-tab[data-tab="coverage"]');
@@ -137,7 +137,7 @@ test.describe('Coverage Feature', () => {
       expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
       // Navigate to debug page
-      await page.goto(`/repos/${repos[0].id}/debug`);
+      await page.goto(`/debug/${repos[0].id}`);
 
       // Coverage tab content should be hidden initially
       const coverageTabContent = page.locator('#debug-coverage-tab');
@@ -170,7 +170,7 @@ test.describe('Coverage Feature', () => {
       expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
       // Navigate to debug page
-      await page.goto(`/repos/${repos[0].id}/debug`);
+      await page.goto(`/debug/${repos[0].id}`);
 
       // Click coverage tab
       await page.click('.debug-tab[data-tab="coverage"]');
@@ -210,7 +210,7 @@ test.describe('Coverage Feature', () => {
       expect(repos.length, 'Test requires at least one repository').toBeGreaterThan(0);
 
       // Navigate to debug page
-      await page.goto(`/repos/${repos[0].id}/debug`);
+      await page.goto(`/debug/${repos[0].id}`);
 
       // Click coverage tab
       await page.click('.debug-tab[data-tab="coverage"]');
