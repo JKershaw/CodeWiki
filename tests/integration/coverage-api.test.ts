@@ -197,6 +197,110 @@ describe('Coverage API', () => {
         assert.ok(srcDir.coveragePercent < 100, 'src/a should not have full coverage');
       }
     });
+
+    it('includes touched metrics for directories and summary', async () => {
+      const repoId = 'coverage-touched-metrics';
+      await createTestRepo(ctx, repoId, {
+        'src/api/routes.ts': 'export const routes = [];',
+        'src/api/handlers.ts': 'export const handlers = {};',
+        'src/api/middleware.ts': 'export const middleware = {};',
+        'src/utils/format.ts': 'export function format() {}',
+        'src/utils/parse.ts': 'export function parse() {}',
+      });
+
+      // Create wiki and add a page that references only some files
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+      await ctx.repos.wikiPages.save({
+        id: uuid(),
+        wikiId: wiki.id,
+        path: 'api/overview',
+        title: 'API Overview',
+        content: '# API Overview\n\nThis documents the API routes.',
+        confidence: 0.8,
+        sourceCommits: [],
+        links: [],
+        backlinks: [],
+        filesAccessed: ['src/api/routes.ts', 'src/api/handlers.ts'],
+        filesReferenced: ['src/api/routes.ts'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await fetch(`${baseUrl}/api/repos/${repoId}/coverage`);
+      assert.strictEqual(response.status, 200);
+
+      const data = await response.json();
+
+      // Summary should include touched metrics
+      assert.ok('touchedFiles' in data.summary, 'Summary should have touchedFiles');
+      assert.strictEqual(data.summary.touchedFiles, 2, 'Should have 2 touched files');
+      assert.strictEqual(data.summary.totalFiles, 5, 'Should have 5 total files');
+
+      // Find the src/api directory
+      const srcDir = data.tree.children?.find((d: any) => d.name === 'src');
+      const apiDir = srcDir?.children?.find((d: any) => d.name === 'api') ||
+                     data.tree.children?.find((d: any) => d.name === 'api');
+
+      if (apiDir) {
+        // Directory should have touched count and ratio
+        assert.ok('touchedCount' in apiDir, 'Directory should have touchedCount');
+        assert.ok('touchedRatio' in apiDir, 'Directory should have touchedRatio');
+        assert.strictEqual(apiDir.touchedCount, 2, 'api dir should have 2 touched files');
+        assert.strictEqual(apiDir.totalFileCount, 3, 'api dir should have 3 total files');
+        assert.ok(apiDir.touchedRatio > 0.6 && apiDir.touchedRatio < 0.7,
+          `api dir touchedRatio should be ~0.67, got ${apiDir.touchedRatio}`);
+      }
+
+      // Find the src/utils directory - should have 0 touched
+      const utilsDir = srcDir?.children?.find((d: any) => d.name === 'utils') ||
+                       data.tree.children?.find((d: any) => d.name === 'utils');
+
+      if (utilsDir) {
+        assert.strictEqual(utilsDir.touchedCount, 0, 'utils dir should have 0 touched files');
+        assert.strictEqual(utilsDir.touchedRatio, 0, 'utils dir touchedRatio should be 0');
+      }
+    });
+
+    it('includes touched flag for individual files', async () => {
+      const repoId = 'coverage-touched-files';
+      await createTestRepo(ctx, repoId, {
+        'src/documented.ts': 'export const documented = 1;',
+        'src/undocumented.ts': 'export const undocumented = 2;',
+      });
+
+      // Document only one file
+      const wiki = await getOrCreateActiveWiki(repoId, ctx.repos);
+      await ctx.repos.wikiPages.save({
+        id: uuid(),
+        wikiId: wiki.id,
+        path: 'documented',
+        title: 'Documented Module',
+        content: '# Documented\n\nThis file is documented.',
+        confidence: 0.9,
+        sourceCommits: [],
+        links: [],
+        backlinks: [],
+        filesAccessed: ['src/documented.ts'],
+        filesReferenced: ['src/documented.ts'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await fetch(`${baseUrl}/api/repos/${repoId}/coverage`);
+      const data = await response.json();
+
+      const files = collectFilesFromTree(data.tree);
+
+      const docFile = files.find((f: any) => f.name === 'documented.ts');
+      const undocFile = files.find((f: any) => f.name === 'undocumented.ts');
+
+      assert.ok(docFile, 'Should find documented.ts');
+      assert.ok(undocFile, 'Should find undocumented.ts');
+
+      assert.ok('isTouched' in docFile, 'File should have isTouched flag');
+      assert.strictEqual(docFile.isTouched, true, 'documented.ts should be touched');
+      assert.strictEqual(undocFile.isTouched, false, 'undocumented.ts should not be touched');
+    });
   });
 });
 

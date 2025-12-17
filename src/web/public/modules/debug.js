@@ -431,10 +431,16 @@ async function loadCoverageData(repoId) {
 
     // Update summary cards
     document.getElementById('coverage-total-files').textContent = data.summary.totalFiles;
-    document.getElementById('coverage-documented-files').textContent = data.summary.documentedFiles;
+    document.getElementById('coverage-documented-files').textContent = data.summary.touchedFiles;
     document.getElementById('coverage-low-files').textContent = data.summary.lowCoverageFiles;
     document.getElementById('coverage-threshold').textContent = data.thresholds.lowCoverage;
     document.getElementById('coverage-average').textContent = `${Math.round(data.summary.averageCoverage)}%`;
+
+    // Update touched ratio
+    const touchedRatio = data.summary.totalFiles > 0
+      ? Math.round((data.summary.touchedFiles / data.summary.totalFiles) * 100)
+      : 0;
+    document.getElementById('coverage-touched-ratio').textContent = `${touchedRatio}%`;
 
     // Render tree
     if (!data.tree) {
@@ -481,7 +487,7 @@ function renderCoverageTree(node, lowThreshold, level = 0) {
           <span class="coverage-bar-container">
             <span class="coverage-bar ${coverageClass}" style="width: ${node.coveragePercent}%"></span>
           </span>
-          <span class="coverage-meta">${node.totalFileCount} files, ${node.totalLoc} loc</span>
+          <span class="coverage-meta">${node.touchedCount}/${node.totalFileCount} touched, ${node.totalLoc} loc</span>
           ${node.coveragePercent < lowThreshold ? '<span class="coverage-warning">⚠️</span>' : ''}
         </div>
         <div class="coverage-children ${isExpanded ? 'expanded' : ''}" data-path="${escapeHtml(node.path)}">
@@ -517,6 +523,9 @@ function renderCoverageTree(node, lowThreshold, level = 0) {
  */
 function renderCoverageFileNode(file, lowThreshold) {
   const coverageClass = getCoverageClass(file.coveragePercent, lowThreshold);
+  const touchedBadge = file.isTouched
+    ? '<span class="coverage-badge touched">✓</span>'
+    : '<span class="coverage-badge untouched">○</span>';
 
   return `
     <div class="coverage-node coverage-file" data-path="${escapeHtml(file.path)}">
@@ -524,6 +533,7 @@ function renderCoverageFileNode(file, lowThreshold) {
         <span class="coverage-node-spacer"></span>
         <span class="coverage-node-icon">📄</span>
         <span class="coverage-node-name">${escapeHtml(file.name)}</span>
+        ${touchedBadge}
         ${file.isEntryPoint ? '<span class="coverage-badge entry-point">★ entry</span>' : ''}
         <span class="coverage-percent ${coverageClass}">${Math.round(file.coveragePercent)}%</span>
         <span class="coverage-bar-container">
