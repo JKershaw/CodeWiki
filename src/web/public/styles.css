@@ -4628,6 +4628,16 @@ body.side-panel-open {
 	color: var(--warning);
 }
 
+.coverage-badge.touched {
+	background: rgba(63, 185, 80, 0.2);
+	color: var(--success);
+}
+
+.coverage-badge.untouched {
+	background: rgba(139, 148, 158, 0.2);
+	color: var(--text-secondary);
+}
+
 .coverage-children {
 	display: none;
 	flex-direction: column;

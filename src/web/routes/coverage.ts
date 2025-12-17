@@ -31,6 +31,8 @@ export interface CoverageDependencies {
 export interface FileNodeDTO extends Omit<FileNode, 'score'> {
   priorityScore: number;
   isEntryPoint: boolean;
+  /** Whether the file has any documentation (coverage > 0) */
+  isTouched: boolean;
 }
 
 /**
@@ -47,6 +49,10 @@ export interface DirectoryNodeDTO {
   coveragePercent: number;
   undocumentedCount: number;
   undocumentedRatio: number;
+  /** Number of files with any documentation (coverage > 0) */
+  touchedCount: number;
+  /** Ratio of touched files (0-1) */
+  touchedRatio: number;
 }
 
 /**
@@ -57,6 +63,8 @@ export interface CoverageResponse {
   summary: {
     totalFiles: number;
     documentedFiles: number;
+    /** Number of files with any documentation (same as documentedFiles, explicit alias) */
+    touchedFiles: number;
     lowCoverageFiles: number;
     averageCoverage: number;
   };
@@ -115,6 +123,7 @@ export function createCoverageRoutes(deps: CoverageDependencies): Router {
           summary: {
             totalFiles: 0,
             documentedFiles: 0,
+            touchedFiles: 0,
             lowCoverageFiles: 0,
             averageCoverage: 0,
           },
@@ -185,6 +194,7 @@ export function createCoverageRoutes(deps: CoverageDependencies): Router {
         summary: {
           totalFiles: sourceFiles.length,
           documentedFiles,
+          touchedFiles: documentedFiles, // Same as documentedFiles - explicit alias for clarity
           lowCoverageFiles,
           averageCoverage: Math.round(averageCoverage * 100) / 100,
         },
@@ -266,7 +276,7 @@ function transformTreeToDTO(
   documentationScores: Map<string, number>,
   maxScore: number
 ): DirectoryNodeDTO {
-  // Transform files
+  // Transform files with isTouched flag
   const filesDTO: FileNodeDTO[] = node.files.map(file => {
     const coverage = calculateFileCoverage(file.path, documentationScores, maxScore);
     return {
@@ -277,6 +287,7 @@ function transformTreeToDTO(
       coveragePercent: coverage,
       priorityScore: calculatePriorityScoreWithEntryPoint(coverage, file.loc, file.path),
       isEntryPoint: isEntryPoint(file.path),
+      isTouched: coverage > 0,
     };
   });
 
@@ -298,6 +309,11 @@ function transformTreeToDTO(
   const totalFileCount = filesDTO.length + childrenDTO.reduce((sum, c) => sum + c.totalFileCount, 0);
   const undocumentedRatio = totalFileCount > 0 ? undocumentedCount / totalFileCount : 0;
 
+  // Calculate touched count (files with any documentation)
+  const touchedCount = filesDTO.filter(f => f.isTouched).length +
+    childrenDTO.reduce((sum, c) => sum + c.touchedCount, 0);
+  const touchedRatio = totalFileCount > 0 ? touchedCount / totalFileCount : 0;
+
   return {
     type: 'directory',
     name: node.name,
@@ -309,5 +325,7 @@ function transformTreeToDTO(
     coveragePercent: node.coveragePercent,
     undocumentedCount,
     undocumentedRatio,
+    touchedCount,
+    touchedRatio,
   };
 }
