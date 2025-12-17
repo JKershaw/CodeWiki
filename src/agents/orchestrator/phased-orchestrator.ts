@@ -444,7 +444,7 @@ export class PhasedOrchestrator implements Orchestrator {
 
     // Record orchestrator decision
     if (workItems.length > 0) {
-      const reasoning = this.buildPhaseReasoning(phase, phaseCtx, workItems);
+      const reasoning = this.buildPhaseReasoning(phase, phaseCtx, workItems, context);
       await this.recordOrchestratorRun(
         repoId,
         context,
@@ -461,42 +461,155 @@ export class PhasedOrchestrator implements Orchestrator {
 
   /**
    * Build human-readable reasoning for the phase-based decision.
+   * Includes comprehensive decision inputs for debugging/observability.
    */
   private buildPhaseReasoning(
     phase: Phase,
     phaseCtx: PhaseContext,
-    workItems: WorkItem[]
+    workItems: WorkItem[],
+    context?: OrchestratorContext
   ): string {
     const phaseName = Phase[phase];
-    const metrics = [
+
+    // Build summary line
+    const summaryMetrics = [
       `${phaseCtx.pages} pages`,
       `${phaseCtx.directoriesWithAnyCoverage} dirs covered`,
       `${(phaseCtx.avgConfidence * 100).toFixed(0)}% avg confidence`,
     ];
+    const workSummary = this.summarizeWorkItems(workItems);
+    const summary = `Phase ${phase} (${phaseName}): ${summaryMetrics.join(', ')}. Scheduling: ${workSummary}`;
 
-    // Add phase-specific metrics
-    if (phase === Phase.Breadth || phase === Phase.Skeleton) {
-      metrics.push(`touched files: ${(phaseCtx.touchedFilesRatio * 100).toFixed(0)}%`);
-    }
-    if (phase === Phase.DepthAndGuides) {
-      const missing = [];
-      if (!phaseCtx.hasProjectOverview) missing.push('project-overview');
-      if (!phaseCtx.hasGettingStarted) missing.push('getting-started');
-      if (!phaseCtx.hasTestingGuide) missing.push('testing-guide');
-      if (!phaseCtx.hasExtensionGuide) missing.push('extension-guide');
-      if (missing.length > 0) {
-        metrics.push(`missing: ${missing.join(', ')}`);
+    // Build decision inputs section
+    const inputs: string[] = [];
+    inputs.push('');
+    inputs.push('**Decision Inputs:**');
+    inputs.push(`- Pages: ${phaseCtx.pages}`);
+    inputs.push(`- Directories with coverage: ${phaseCtx.directoriesWithAnyCoverage}`);
+    inputs.push(`- Lowest directory coverage: ${phaseCtx.lowestDirectoryCoverage.toFixed(1)}%`);
+    inputs.push(`- Touched files: ${(phaseCtx.touchedFilesRatio * 100).toFixed(1)}% (threshold: ${(TOUCHED_FILES_THRESHOLD * 100).toFixed(0)}%)`);
+    inputs.push(`- Avg confidence: ${(phaseCtx.avgConfidence * 100).toFixed(1)}%`);
+    inputs.push(`- Low confidence ratio: ${(phaseCtx.lowConfidenceRatio * 100).toFixed(1)}%`);
+    inputs.push(`- Open findings: ${phaseCtx.openFindings}`);
+
+    // Key pages status
+    const keyPages = [];
+    if (phaseCtx.hasProjectOverview) keyPages.push('project-overview ✓');
+    else keyPages.push('project-overview ✗');
+    if (phaseCtx.hasGettingStarted) keyPages.push('getting-started ✓');
+    else keyPages.push('getting-started ✗');
+    if (phaseCtx.hasTestingGuide) keyPages.push('testing-guide ✓');
+    else keyPages.push('testing-guide ✗');
+    if (phaseCtx.hasExtensionGuide) keyPages.push('extension-guide ✓');
+    else keyPages.push('extension-guide ✗');
+    inputs.push(`- Key pages: ${keyPages.join(', ')}`);
+
+    // Phase transition explanation
+    inputs.push('');
+    inputs.push('**Phase Transition Logic:**');
+    inputs.push(this.explainPhaseTransition(phase, phaseCtx));
+
+    // Directory prioritization (if we have context)
+    if (context && context.undocumentedDirectories.length > 0) {
+      inputs.push('');
+      inputs.push('**Directory Prioritization:**');
+      const phaseThreshold = this.getPhaseThreshold(phase);
+      inputs.push(`- Phase threshold: ${((1 - phaseThreshold) * 100).toFixed(0)}% coverage (undocRatio ≤ ${phaseThreshold})`);
+
+      const prioritized = prioritizeDirectoriesForPhase(
+        context.undocumentedDirectories,
+        phaseThreshold
+      );
+      const inProgress = prioritized.filter(d => d.undocumentedRatio < 1.0);
+      const notStarted = prioritized.filter(d => d.undocumentedRatio === 1.0);
+
+      inputs.push(`- In-progress directories: ${inProgress.length}`);
+      inputs.push(`- Not-started directories: ${notStarted.length}`);
+
+      // Show top prioritized directories
+      const topDirs = prioritized.slice(0, MAX_FOCUS_DIRECTORIES);
+      if (topDirs.length > 0) {
+        inputs.push(`- Selected for work (max ${MAX_FOCUS_DIRECTORIES}):`);
+        for (const dir of topDirs) {
+          const status = dir.undocumentedRatio < 1.0 ? 'in-progress' : 'not-started';
+          const coveragePct = ((1 - dir.undocumentedRatio) * 100).toFixed(1);
+          inputs.push(`  - ${dir.path}: ${coveragePct}% coverage (${status})`);
+        }
       }
     }
-    if (phase === Phase.Polish) {
-      metrics.push(`${(phaseCtx.lowConfidenceRatio * 100).toFixed(0)}% low confidence`);
-      metrics.push(`${phaseCtx.openFindings} findings`);
+
+    return summary + inputs.join('\n');
+  }
+
+  /**
+   * Explain why the current phase was selected and what blocks transition to the next.
+   */
+  private explainPhaseTransition(phase: Phase, ctx: PhaseContext): string {
+    switch (phase) {
+      case Phase.Reconnaissance:
+        return `- Current: Phase 0 (Reconnaissance) - pages === 0\n- Blocked by: No wiki pages exist yet`;
+
+      case Phase.Skeleton:
+        if (ctx.pages < 10) {
+          return `- Current: Phase 1 (Skeleton) - pages (${ctx.pages}) < 10\n- Blocked by: Need ${10 - ctx.pages} more pages to advance`;
+        }
+        return `- Current: Phase 1 (Skeleton) - dirs (${ctx.directoriesWithAnyCoverage}) < 3\n- Blocked by: Need ${3 - ctx.directoriesWithAnyCoverage} more directories with coverage`;
+
+      case Phase.Breadth: {
+        const blockers = [];
+        if (ctx.touchedFilesRatio < TOUCHED_FILES_THRESHOLD) {
+          blockers.push(`touched files ${(ctx.touchedFilesRatio * 100).toFixed(1)}% < ${(TOUCHED_FILES_THRESHOLD * 100).toFixed(0)}%`);
+        }
+        if (ctx.pages < 25) {
+          blockers.push(`pages (${ctx.pages}) < 25`);
+        }
+        return `- Current: Phase 2 (Breadth)\n- Blocked by: ${blockers.join(', ')}`;
+      }
+
+      case Phase.DepthAndGuides: {
+        const missing = [];
+        if (!ctx.hasProjectOverview) missing.push('project-overview');
+        if (!ctx.hasGettingStarted) missing.push('getting-started');
+        if (!ctx.hasTestingGuide) missing.push('testing-guide');
+        if (!ctx.hasExtensionGuide) missing.push('extension-guide');
+        const blockers = [];
+        if (missing.length > 0) blockers.push(`missing key pages: ${missing.join(', ')}`);
+        if (ctx.avgConfidence < 0.65) blockers.push(`avg confidence ${(ctx.avgConfidence * 100).toFixed(1)}% < 65%`);
+        return `- Current: Phase 3 (Depth & Guides)\n- Blocked by: ${blockers.join('; ') || 'none (advancing soon)'}`;
+      }
+
+      case Phase.Polish: {
+        const blockers = [];
+        if (ctx.lowConfidenceRatio > 0.10) blockers.push(`low confidence ratio ${(ctx.lowConfidenceRatio * 100).toFixed(1)}% > 10%`);
+        if (ctx.openFindings > 5) blockers.push(`open findings (${ctx.openFindings}) > 5`);
+        return `- Current: Phase 4 (Polish)\n- Blocked by: ${blockers.join('; ') || 'none (advancing soon)'}`;
+      }
+
+      case Phase.Maintenance:
+        return `- Current: Phase 5 (Maintenance) - wiki is mature\n- Status: Active maintenance mode, processing new commits and quality improvements`;
+
+      default:
+        return `- Current: Phase ${phase}`;
     }
+  }
 
-    // Summarize work items by type
-    const workSummary = this.summarizeWorkItems(workItems);
-
-    return `Phase ${phase} (${phaseName}): ${metrics.join(', ')}. Scheduling: ${workSummary}`;
+  /**
+   * Get the undocumented ratio threshold for a phase.
+   * Returns the max undocumentedRatio to consider a directory "done" for that phase.
+   */
+  private getPhaseThreshold(phase: Phase): number {
+    switch (phase) {
+      case Phase.Skeleton:
+      case Phase.Breadth:
+        return 0.70; // 30% coverage target
+      case Phase.DepthAndGuides:
+        return 0.40; // 60% coverage target
+      case Phase.Polish:
+      case Phase.Maintenance:
+        return 0.20; // 80% coverage target
+      default:
+        return 1.0; // No threshold for reconnaissance
+    }
   }
 
   /**
