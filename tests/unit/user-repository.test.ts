@@ -3,22 +3,30 @@
  * Tests user storage, querying, and token management.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileUserRepository } from '../../src/repositories/file-based/file-user-repository.js';
+import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
+import type { UserRepository } from '../../src/repositories/interfaces/user-repository.js';
 import { createUser, type User } from '../../src/domain/user.js';
 import { mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
 describe('UserRepository', () => {
-  let repo: FileUserRepository;
+  let repo: UserRepository;
   let tempDir: string;
+  let connection: RepositoryConnection;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'user-repo-test-'));
-    repo = new FileUserRepository(tempDir);
+    connection = await createRepositories({ fileBasePath: tempDir });
+    repo = connection.repositories.users;
+  });
+
+  afterEach(async () => {
+    await connection.close();
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   /**

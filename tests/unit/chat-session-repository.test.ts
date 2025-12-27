@@ -3,10 +3,11 @@
  * Tests chat session storage, querying, and message management.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileChatSessionRepository } from '../../src/repositories/file-based/file-chat-session-repository.js';
+import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
+import type { ChatSessionRepository } from '../../src/repositories/interfaces/chat-session-repository.js';
 import {
   createChatSession,
   createChatMessage,
@@ -18,12 +19,19 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 describe('ChatSessionRepository', () => {
-  let repo: FileChatSessionRepository;
+  let repo: ChatSessionRepository;
   let tempDir: string;
+  let connection: RepositoryConnection;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'chat-session-test-'));
-    repo = new FileChatSessionRepository(tempDir);
+    connection = await createRepositories({ fileBasePath: tempDir });
+    repo = connection.repositories.chatSessions;
+  });
+
+  afterEach(async () => {
+    await connection.close();
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   /**

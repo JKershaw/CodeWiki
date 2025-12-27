@@ -3,10 +3,11 @@
  * Tests wiki page history storage and querying.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileWikiPageHistoryRepository } from '../../src/repositories/file-based/file-wiki-page-history-repository.js';
+import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
+import type { WikiPageHistoryRepository } from '../../src/repositories/interfaces/wiki-page-history-repository.js';
 import {
   createWikiPageHistory,
   type WikiPageHistory,
@@ -16,15 +17,22 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 describe('WikiPageHistoryRepository', () => {
-  let repo: FileWikiPageHistoryRepository;
+  let repo: WikiPageHistoryRepository;
   let tempDir: string;
+  let connection: RepositoryConnection;
 
   let sequenceCounter = 0;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'wiki-page-history-test-'));
-    repo = new FileWikiPageHistoryRepository(tempDir);
+    connection = await createRepositories({ fileBasePath: tempDir });
+    repo = connection.repositories.wikiPageHistory;
     sequenceCounter = 0;
+  });
+
+  afterEach(async () => {
+    await connection.close();
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   /**

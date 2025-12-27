@@ -3,7 +3,7 @@
  * Tests that wiki mutations are correctly tracked in WikiPageHistory.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
 import {
@@ -12,19 +12,25 @@ import {
 } from '../../src/commands/update-wiki-page.js';
 import { createWikiPage, type WikiPage, type WikiPageUpdate } from '../../src/domain/wiki-page.js';
 import type { WikiPageHistory } from '../../src/domain/wiki-page-history.js';
-import type { Repositories } from '../../src/repositories/index.js';
+import { createRepositories, type Repositories, type RepositoryConnection } from '../../src/repositories/index.js';
 import { mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createFileRepositories } from '../../src/repositories/file-based/index.js';
 
 describe('Wiki Page History Capture', () => {
   let repos: Repositories;
   let tempDir: string;
+  let connection: RepositoryConnection;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'wiki-page-history-capture-test-'));
-    repos = createFileRepositories(tempDir);
+    connection = await createRepositories({ fileBasePath: tempDir });
+    repos = connection.repositories;
+  });
+
+  afterEach(async () => {
+    await connection.close();
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   describe('create operation', () => {
