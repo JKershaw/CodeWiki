@@ -2,21 +2,20 @@
  * Repository module for CodeWiki.
  *
  * Storage is abstracted behind repository interfaces.
- * Two implementations exist:
- * - MongoDB: Used in production, staging, and CI/CD tests
- * - File-based: Used in local development and restricted environments
+ * Two backends are supported:
+ * - MongoDB: Used when MONGODB_URI is set (production, CI)
+ * - MangoDB: File-based MongoDB-compatible storage (development)
  *
- * The application auto-detects which to use based on environment configuration.
+ * Both backends use the same repository implementations.
  */
 
-import { MongoClient } from 'mongodb';
+import { MongoClient, type Db } from 'mongodb';
+import { MangoClient } from 'mangodb';
 
 export * from './interfaces/index.js';
-export { createFileRepositories } from './file-based/index.js';
 export { createMongoRepositories, createMongoIndexes } from './mongo-based/index.js';
 
 import type { Repositories } from './interfaces/index.js';
-import { createFileRepositories } from './file-based/index.js';
 import { createMongoRepositories, createMongoIndexes } from './mongo-based/index.js';
 
 /**
@@ -53,10 +52,12 @@ export interface RepositoryConnection {
  * Auto-detects based on environment if config not provided.
  *
  * Returns a RepositoryConnection with a close() method for cleanup.
- * For file-based storage, close() is a no-op.
  */
 export async function createRepositories(config?: RepositoryConfig): Promise<RepositoryConnection> {
   const effectiveConfig = { ...detectConfig(), ...config };
+
+  let db: Db;
+  let closeFunc: () => Promise<void>;
 
   if (effectiveConfig.type === 'mongodb') {
     if (!effectiveConfig.mongoUri) {
@@ -67,30 +68,34 @@ export async function createRepositories(config?: RepositoryConfig): Promise<Rep
     await client.connect();
 
     const dbName = effectiveConfig.mongoDbName ?? 'codewiki';
-    const db = client.db(dbName);
+    db = client.db(dbName);
+    closeFunc = async () => {
+      await client.close();
+    };
+  } else {
+    // Use MangoDB for file-based storage
+    const dataPath = effectiveConfig.fileBasePath ?? '.codewiki-data';
+    const mangoClient = new MangoClient(dataPath);
+    await mangoClient.connect();
 
-    // Create indexes by default
-    if (effectiveConfig.createIndexes !== false) {
-      await createMongoIndexes(db);
-    }
-
-    const repositories = createMongoRepositories(db);
-
-    return {
-      repositories,
-      close: async () => {
-        await client.close();
-      },
+    const dbName = effectiveConfig.mongoDbName ?? 'codewiki';
+    // Type assertion: MangoDb is API-compatible with MongoDB's Db
+    db = mangoClient.db(dbName) as unknown as Db;
+    closeFunc = async () => {
+      await mangoClient.close();
     };
   }
 
-  const repositories = createFileRepositories(effectiveConfig.fileBasePath);
+  // Create indexes (works with both backends)
+  if (effectiveConfig.createIndexes !== false) {
+    await createMongoIndexes(db);
+  }
+
+  const repositories = createMongoRepositories(db);
 
   return {
     repositories,
-    close: async () => {
-      // No-op for file-based storage
-    },
+    close: closeFunc,
   };
 }
 

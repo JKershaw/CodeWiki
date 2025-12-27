@@ -1,28 +1,36 @@
 /**
  * Unit tests for AgentRunRepository.complete() toolMetrics parameter.
- * Verifies that both implementations accept and handle the optional toolMetrics parameter.
+ * Verifies that the repository accepts and handles the optional toolMetrics parameter.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
 import { mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import type { Collection, Document } from 'mongodb';
-import { FileAgentRunRepository } from '../../src/repositories/file-based/file-agent-run-repository.js';
+import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
+import type { AgentRunRepository } from '../../src/repositories/interfaces/agent-run-repository.js';
 import { MongoAgentRunRepository } from '../../src/repositories/mongo-based/mongo-agent-run-repository.js';
 import { createAgentRun } from '../../src/domain/agent-run.js';
 import type { AgentResult, ToolMetrics, AgentRun } from '../../src/domain/agent-run.js';
 
 describe('AgentRunRepository.complete() toolMetrics parameter', () => {
-  describe('FileAgentRunRepository', () => {
-    let repo: FileAgentRunRepository;
+  describe('via createRepositories factory', () => {
+    let repo: AgentRunRepository;
     let tempDir: string;
+    let connection: RepositoryConnection;
 
     beforeEach(async () => {
       tempDir = await mkdtemp(join(tmpdir(), 'agent-run-test-'));
-      repo = new FileAgentRunRepository(tempDir);
+      connection = await createRepositories({ fileBasePath: tempDir });
+      repo = connection.repositories.agentRuns;
+    });
+
+    afterEach(async () => {
+      await connection.close();
+      await rm(tempDir, { recursive: true, force: true });
     });
 
     it('stores toolMetrics when provided', async () => {
@@ -205,46 +213,4 @@ describe('AgentRunRepository.complete() toolMetrics parameter', () => {
     });
   });
 
-  describe('Implementation parity', () => {
-    it('both implementations have the same complete() signature', async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), 'agent-run-parity-'));
-      const fileRepo = new FileAgentRunRepository(tempDir);
-
-      const mockDb = {
-        collection: () => ({
-          findOne: async () => null,
-          updateOne: async () => ({}),
-          replaceOne: async () => ({}),
-        }),
-      };
-      const mongoRepo = new MongoAgentRunRepository(mockDb as any);
-
-      const result: AgentResult = {
-        summary: 'Test',
-        findings: [],
-        confidence: 1,
-      };
-
-      const toolMetrics: ToolMetrics = {
-        toolCallCount: 5,
-        toolsUsed: { read_file: 3, list_directory: 2 },
-        filesRead: ['src/index.ts'],
-      };
-
-      // Both should accept the same parameters
-      type FileCompleteSignature = typeof fileRepo.complete;
-      type MongoCompleteSignature = typeof mongoRepo.complete;
-
-      // TypeScript will error if signatures don't match
-      const fileComplete: FileCompleteSignature = mongoRepo.complete.bind(mongoRepo);
-      const mongoComplete: MongoCompleteSignature = fileRepo.complete.bind(fileRepo);
-
-      // Verify both accept the toolMetrics parameter
-      assert.ok(fileComplete);
-      assert.ok(mongoComplete);
-
-      // Clean up
-      await rm(tempDir, { recursive: true, force: true });
-    });
-  });
 });

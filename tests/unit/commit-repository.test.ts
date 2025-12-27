@@ -3,22 +3,30 @@
  * Tests commit storage, querying, and processing record management.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { v4 as uuid } from 'uuid';
-import { FileCommitRepository } from '../../src/repositories/file-based/file-commit-repository.js';
+import { createRepositories, type RepositoryConnection } from '../../src/repositories/index.js';
+import type { CommitRepository } from '../../src/repositories/interfaces/commit-repository.js';
 import { createCommit, type AgentProcessingRecord } from '../../src/domain/commit.js';
 import { mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
 describe('CommitRepository', () => {
-  let repo: FileCommitRepository;
+  let repo: CommitRepository;
   let tempDir: string;
+  let connection: RepositoryConnection;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'commit-test-'));
-    repo = new FileCommitRepository(tempDir);
+    connection = await createRepositories({ fileBasePath: tempDir });
+    repo = connection.repositories.commits;
+  });
+
+  afterEach(async () => {
+    await connection.close();
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   describe('addProcessingRecord', () => {

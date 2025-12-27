@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "mangodb": "file:/tmp/mangodb",
     "@octokit/rest": "^22.0.1",
     "cookie-parser": "^1.4.7",
     "diff": "^8.0.2",
